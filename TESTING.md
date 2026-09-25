@@ -8,7 +8,7 @@ Five layers, four commands and one by hand:
 | Static analysis | `npm run lint`, `npm run knip` | Type-aware lint rules; dead exports/files/dependencies | No |
 | Mutation (Stryker) | `npm run mutation` | Whether the suite actually notices logic changes | No |
 | Smoke (integration) | `npm run test:smoke` | The real plugin inside the real app | Yes |
-| Manual (by hand) | `manual-tests/0 - How to use.md` | 25 theme sheets run as live notes: rendering, popups, feel; `compat-tests/` for other plugins | Yes |
+| Manual (by hand) | `manual-tests/0 - How to use.md` | The theme sheets in `manual-tests/`, run as live notes for what only a human can judge: rendering, popups, feel, the phone; `compat-tests/` for other plugins | Yes |
 
 ## Unit tests — `npm test`
 
