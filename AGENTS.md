@@ -15,7 +15,7 @@ Jason's standing rulings for this repo. Each one was made after the thing went w
 - **Commit at every green checkpoint, without asking** (2026-07-16): one completed thought per commit, a fix with its test, a feature milestone, a refactor with the suite green. If describing the working tree needs the word "and", a commit is overdue. Stage deliberately and check `git status` for Jason's own uncommitted files first. Push only when Jason asks.
 - **Work on this checkout, branch master** (2026-07-13), with absolute paths and `git -C` even when a session anchors in a worktree: his vault hot-reloads from here, so he can work alongside.
 - **Commits carry no AI attribution** (2026-07-13): the plugin is public. The global Claude settings strip the trailer; add none by hand.
-- **`docs/architecture.html` is the source of the "Footnote Shortcut Anatomy" artifact** (2026-09-09). Edit the repo file, derive the artifact by stripping the document wrapper with a script, republish to the same URL, and refresh the counts on the page from the filesystem.
+- **`docs/architecture.html` is the source of the "Footnote Shortcut Anatomy" artifact** (2026-09-09). Edit the repo file, derive the artifact with `npm run architecture -- <output.html>` (scripts/architecture-artifact.mjs strips the document wrapper), republish to the same URL, and refresh the counts on the page from the filesystem.
 - **Writes into Jason's personal vault** (the "Second Brain" vault, used for sweep verification notes) follow that vault's own `AGENTS.md` at its root.
 
 ## Verification

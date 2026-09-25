@@ -8,6 +8,7 @@
     "build": "tsc -noEmit && node esbuild.config.mjs production",
     "lint": "eslint src test",
     "knip": "knip",
+    "architecture": "node scripts/architecture-artifact.mjs",
     "mutation": "cross-env FC_NUM_RUNS=25 stryker run",
     "test": "vitest",
     "coverage": "vitest run --coverage",
