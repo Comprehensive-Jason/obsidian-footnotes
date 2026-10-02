@@ -24,9 +24,9 @@
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@types/node": "^22.20.1",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.11",
     "cross-env": "^10.1.0",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "eslint": "^9.39.5",
     "eslint-plugin-obsidianmd": "^0.4.1",
     "fast-check": "^4.9.0",
@@ -39,7 +39,7 @@
     "obsidian": "^1.13.1",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.64.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "knip": {
     "entry": [
