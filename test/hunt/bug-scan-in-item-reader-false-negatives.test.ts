@@ -1,0 +1,55 @@
+import { describe, expect, it } from "vitest";
+
+import { inItemDefinitionLabels } from "../../src/parsing/list-item-definitions";
+import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+
+// BUG (wrong output): the reader for list-item definitions misses two
+// definitions that sit inside a list item, so the lint moves them out of
+// the item.
+//
+// What the user would see: a list item holds a closed code fence, and
+// directly under the fence's closing line, at the item's margin, sits
+// "  [^x]: def". That definition belongs to the list item. The plugin
+// reads it as a definition at the top level of the note instead, so the
+// lint moves it to the bottom, against Jason's ruling that list-item
+// definitions are never moved. The same happens when an unindented lazy
+// line ("lazy" under "- item") keeps the item open and a definition
+// follows after a blank line.
+//
+// Needs a Reading-view check for the lazy-line face only: the fence face
+// follows from CommonMark directly.
+//
+// Hunt 2026-10-02, round 2, lens context. Cluster X13.
+//
+// Source of truth: Jason's ruling 1 of 2026-09-20 (list-item definitions
+// stay where they are, never moved) and CommonMark 5.2 (a line indented to
+// the item's content column belongs to the item; a lazy continuation line
+// keeps the item's paragraph, and so the item, open).
+//
+// Cause: inItemDefinitionLabels works out the open list item on its own,
+// and its model disagrees with the scanner's list model on these two
+// shapes.
+
+// What the plugin reads in `doc`: the list-item definitions and which lines start a top-level definition.
+function facts(doc: string) {
+    const lines = doc.split("\n");
+    const scan = scanDocument(lines);
+    const masked = maskProtectedLines(lines, scan);
+    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+    const inItem = inItemDefinitionLabels(lines, scan, masked, starts);
+    return { starts, inItem };
+}
+
+describe("in-item labels the reader misses", () => {
+    it.fails("a label directly under a fence closed inside the item is an in-item definition, not a document-level block", () => {
+        const f = facts("- item\n\n  ```\n  code\n  ```\n  [^x]: def\n\nuse[^x]");
+        expect(f.inItem.map((h) => h.line)).toEqual([5]);
+        expect(f.starts[5]).toBe(false);
+    });
+
+    it.fails("a column-0 lazy line keeps the item open, so a margin label after the blank is in the item", () => {
+        const f = facts("- item\nlazy\n\n  [^x]: def\n\nuse[^x]");
+        expect(f.inItem.map((h) => h.line)).toEqual([3]);
+        expect(f.starts[3]).toBe(false);
+    });
+});
