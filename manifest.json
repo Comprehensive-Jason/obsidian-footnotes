@@ -3,7 +3,7 @@
   "name": "Footnote Shortcut",
   "version": "0.2.0",
   "minAppVersion": "1.13.0",
-  "description": "Footnotes without the mouse: insert, navigate, and popup-edit them where you're typing, with a built-in linter that keeps numbering and placement tidy.",
+  "description": "Create, edit, move, and tidy footnotes in Obsidian without leaving the keyboard.",
   "author": "Alexis Rondeau, Micha Brugger, Jason Qin",
   "authorUrl": "https://github.com/Comprehensive-Jason",
   "fundingUrl": "https://ko-fi.com/comprehensivejason",
