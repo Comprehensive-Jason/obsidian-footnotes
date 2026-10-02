@@ -30,7 +30,7 @@ Jason's standing rulings for this repo. Each one was made after the thing went w
 
 ### Issue tracker
 
-Issues live in this repo's GitHub Issues (`MichaBrugger/obsidian-footnotes`), driven through the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues live in this repo's GitHub Issues (`Comprehensive-Jason/obsidian-footnotes`), driven through the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

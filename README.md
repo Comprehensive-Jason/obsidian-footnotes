@@ -1,6 +1,6 @@
 # Footnote Shortcut
 
-![Obsidian Downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%27obsidian-footnotes%27%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json) [![Active Development](https://img.shields.io/badge/Maintenance%20Level-Actively%20Developed-brightgreen.svg)](https://gist.github.com/cheerfulstoic/d107229326a01ff0f333a1d3476e068d) ![Release Version](https://img.shields.io/github/v/release/MichaBrugger/obsidian-footnotes)
+![Obsidian Downloads](https://img.shields.io/badge/dynamic/json?logo=obsidian&color=%23483699&label=downloads&query=%24%5B%27obsidian-footnotes%27%5D.downloads&url=https%3A%2F%2Fraw.githubusercontent.com%2Fobsidianmd%2Fobsidian-releases%2Fmaster%2Fcommunity-plugin-stats.json) [![Active Development](https://img.shields.io/badge/Maintenance%20Level-Actively%20Developed-brightgreen.svg)](https://gist.github.com/cheerfulstoic/d107229326a01ff0f333a1d3476e068d) ![Release Version](https://img.shields.io/github/v/release/Comprehensive-Jason/obsidian-footnotes)
 
 Create, navigate, and edit Obsidian footnotes all from the keyboard:
 
@@ -21,7 +21,7 @@ If this plugin has made your writing a little smoother, you can [buy me a coffee
 
 [![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/comprehensivejason)
 
-Bug reports and feature ideas on the [issue tracker](https://github.com/MichaBrugger/obsidian-footnotes/issues) are just as welcome.
+Bug reports and feature ideas on the [issue tracker](https://github.com/Comprehensive-Jason/obsidian-footnotes/issues) are just as welcome.
 
 ## FIRST: set up your hotkeys
 
@@ -205,9 +205,9 @@ Notes without the property keep normal `[^1]`, `[^2]`, … numbering. A prefix f
 ## More info
 
 - If you're new to footnotes, [+1creator's video tutorial](https://www.youtube.com/watch?v=HapgV7Y52dY) covers footnotes in Obsidian and includes a full walkthrough of the 0.1.3 version of this plugin. <!-- recorded on 0.1.x; popup/linting not shown -->
-- [Plugin wiki](https://github.com/MichaBrugger/obsidian-footnotes/wiki)
-  - [How footnotes work in Obsidian](https://github.com/MichaBrugger/obsidian-footnotes/wiki/Footnote-Functionality)
-  - [Debug guide](https://github.com/MichaBrugger/obsidian-footnotes/wiki/Debug-Guide)
+- [Plugin wiki](https://github.com/Comprehensive-Jason/obsidian-footnotes/wiki)
+  - [How footnotes work in Obsidian](https://github.com/Comprehensive-Jason/obsidian-footnotes/wiki/Footnote-Functionality)
+  - [Debug guide](https://github.com/Comprehensive-Jason/obsidian-footnotes/wiki/Debug-Guide)
 
 ## Background
 

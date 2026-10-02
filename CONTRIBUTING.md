@@ -6,7 +6,7 @@ ideas, and pull requests are all welcome.
 ## Reporting bugs
 
 Open an issue at
-[github.com/MichaBrugger/obsidian-footnotes/issues](https://github.com/MichaBrugger/obsidian-footnotes/issues)
+[github.com/Comprehensive-Jason/obsidian-footnotes/issues](https://github.com/Comprehensive-Jason/obsidian-footnotes/issues)
 with:
 
 - what you did (the command/hotkey and where your cursor was)
@@ -20,7 +20,7 @@ the issue makes that test, and therefore the fix, much faster to write.
 ## Development setup
 
 ```bash
-git clone https://github.com/MichaBrugger/obsidian-footnotes.git
+git clone https://github.com/Comprehensive-Jason/obsidian-footnotes.git
 cd obsidian-footnotes
 npm install
 npm run dev    # esbuild watch mode, rebuilds main.js on save
