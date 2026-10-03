@@ -12,13 +12,53 @@
 
 import { MarkdownNode, normalizeLineBreaks, parseObsidianMarkdown } from "./obsidian-markdown";
 
-/** A definition: its name as written, where its label starts, and the last line of its block. */
-interface DefinitionFact {
+/**
+ * What holds a definition, counted from the outside in: how many quotes or
+ * callouts, how many list items, and how many other footnotes' definitions
+ * it sits inside. All three are 0 for a definition at the top level of the
+ * note.
+ */
+interface DefinitionContainer {
+    quotes: number;
+    listItems: number;
+    footnotes: number;
+}
+
+/**
+ * A definition: its name as written, the line of its label and the last
+ * line of its body, where its label sits on its line, and what holds it.
+ */
+export interface DefinitionFact {
     name: string;
-    line: number;
+    /** The line of the label. */
+    start: number;
+    /** The last line of the definition's body, its continuation lines included. */
+    end: number;
     /** The column of the label's "[". */
-    column: number;
-    lastLine: number;
+    labelStart: number;
+    /** The column just past the label's ":". */
+    labelEnd: number;
+    container: DefinitionContainer;
+    /**
+     * Whether the lines start to end belong to this definition alone, so a
+     * rule may move them or cut them out whole: the definition sits at the
+     * top level of the note, and nothing but indentation comes before its
+     * label. A definition in a quote, a list item, or another footnote stays
+     * where its container put it, and so does one whose label follows other
+     * text on its line, such as the "%%" that closes a comment, since moving
+     * that line would take the other text with it (Jason's ruling 1, option
+     * a, 2026-10-03).
+     */
+    movable: boolean;
+    /**
+     * Whether the lines start to end can be cut out whole without touching
+     * anything but this definition and the markers of its own quote or list
+     * item: nothing but indentation, quote markers, and list markers comes
+     * before its label. False for a label on a callout's title line or after
+     * a "%%" closer, where cutting the line would take the title or the
+     * comment's end with it.
+     */
+    removable: boolean;
 }
 
 /** A reference "[^name]": where it sits (end is exclusive) and whether it is live. */
@@ -66,6 +106,15 @@ export interface FootnoteFacts {
 
 /** Node types that hold blocks; a child of one of these is a block itself, anything deeper is inline. */
 const BlockContainers = new Set(["root", "blockquote", "list", "listItem", "footnoteDefinition", "calloutTitle"]);
+
+/**
+ * What may come before a label on its line for the line to be cut out with
+ * the definition: indentation, quote markers ">", and list markers ("-",
+ * "*", "+", "1.", "1)", each followed by a space or a tab) with a task box
+ * "[ ]" or "[x]" after one. So "---" (a frontmatter closer) and "%%" do not
+ * qualify.
+ */
+const ContainerMarkersOnly = /^(?:[ \t]*(?:>|(?:[-+*]|\d{1,9}[.)])(?:[ \t]+\[[ xX]\])?(?=[ \t])))*[ \t]*$/;
 
 /** The 0-based last line a node covers: an end at the very start of a later line stops on the line before. */
 function lastLineOf(node: MarkdownNode): number {
@@ -120,7 +169,7 @@ function factsOfTree(doc: string, tree: MarkdownNode): FootnoteFacts {
         protectedSpans.push({ kind, block, from, to, startLine: lineAt(from), endLine: lineAt(to) });
     };
 
-    const walk = (node: MarkdownNode, parentType: string, inInlineNote: boolean): void => {
+    const walk = (node: MarkdownNode, parentType: string, inInlineNote: boolean, container: DefinitionContainer): void => {
         const block = BlockContainers.has(parentType);
         const from = node.position.start.offset;
         const to = node.position.end.offset;
@@ -129,7 +178,21 @@ function factsOfTree(doc: string, tree: MarkdownNode): FootnoteFacts {
                 // the node starts at the line's indentation; the label's "[" comes after it
                 let label = from;
                 while (doc[label] === " " || doc[label] === "\t") label++;
-                definitions.push({ name: node.label ?? "", line: node.position.start.line - 1, column: node.position.start.column - 1 + (label - from), lastLine: lastLineOf(node) });
+                const name = node.label ?? "";
+                const labelStart = node.position.start.column - 1 + (label - from);
+                const before = doc.slice(lineStarts[lineAt(label)], label);
+                const topLevel = container.quotes === 0 && container.listItems === 0 && container.footnotes === 0;
+                definitions.push({
+                    name,
+                    start: node.position.start.line - 1,
+                    end: lastLineOf(node),
+                    labelStart,
+                    // "[^", the name, "]:"
+                    labelEnd: labelStart + name.length + 4,
+                    container: { ...container },
+                    movable: topLevel && /^[ \t]*$/.test(before),
+                    removable: ContainerMarkersOnly.test(before),
+                });
                 break;
             }
             case "footnoteReference":
@@ -174,9 +237,18 @@ function factsOfTree(doc: string, tree: MarkdownNode): FootnoteFacts {
                 protect("linkDestination", false, afterLabel(doc, from, to), to);
                 break;
         }
-        for (const child of node.children ?? []) walk(child, node.type, inInlineNote || node.type === "footnote");
+        // what holds this node's children: one more quote, list item, or footnote when the node is one
+        const inner =
+            node.type === "blockquote"
+                ? { ...container, quotes: container.quotes + 1 }
+                : node.type === "listItem"
+                  ? { ...container, listItems: container.listItems + 1 }
+                  : node.type === "footnoteDefinition"
+                    ? { ...container, footnotes: container.footnotes + 1 }
+                    : container;
+        for (const child of node.children ?? []) walk(child, node.type, inInlineNote || node.type === "footnote", inner);
     };
-    walk(tree, "", false);
+    walk(tree, "", false, { quotes: 0, listItems: 0, footnotes: 0 });
     return { definitions, references, protectedSpans };
 }
 

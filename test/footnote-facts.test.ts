@@ -18,7 +18,7 @@ function spans(text: string): [string, boolean, string][] {
 describe("footnoteFacts: definitions", () => {
     it("gives the column of the label's bracket, after a container's prefix or the line's indentation", () => {
         const facts = footnoteFacts("> [^q]: quoted\n\n   [^i]: indented\n\n- [^l]: in an item\n\n-\t[^t]: after a tab\n");
-        expect(facts.definitions.map((d) => [d.name, d.line, d.column])).toEqual([
+        expect(facts.definitions.map((d) => [d.name, d.start, d.labelStart])).toEqual([
             ["q", 0, 2],
             ["i", 2, 3],
             ["l", 4, 2],
@@ -29,7 +29,7 @@ describe("footnoteFacts: definitions", () => {
 
     it("ends a definition on its last line holding text, its continuation included", () => {
         const facts = footnoteFacts("[^a]: first\n    continued\n\n    second paragraph\n\nafter[^a]\n");
-        expect(facts.definitions).toEqual([{ name: "a", line: 0, column: 0, lastLine: 3 }]);
+        expect(facts.definitions.map((d) => [d.name, d.start, d.end])).toEqual([["a", 0, 3]]);
     });
 
     it("keeps the name as written", () => {
@@ -57,7 +57,7 @@ describe("footnoteFacts: references", () => {
     it("reports lines of the note with Windows line breaks as the plugin counts them", () => {
         const facts = footnoteFacts("a[^1]\r\n\r\n[^1]: d\r\n");
         expect(facts.references.map((r) => [r.line, r.start])).toEqual([[0, 1]]);
-        expect(facts.definitions.map((d) => [d.line, d.lastLine])).toEqual([[2, 2]]);
+        expect(facts.definitions.map((d) => [d.start, d.end])).toEqual([[2, 2]]);
     });
 });
 

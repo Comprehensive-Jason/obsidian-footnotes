@@ -26,7 +26,7 @@ export function readerFacts(text: string): ReaderFacts {
         for (let line = span.startLine; line <= span.endLine; line++) if (lineKinds[line] === "") lineKinds[line] = span.kind;
     }
     return {
-        definitions: facts.definitions.map((d) => ({ name: d.name, kind: "block", line: d.line, end: d.lastLine })),
+        definitions: facts.definitions.map((d) => ({ name: d.name, kind: "block", line: d.start, end: d.end })),
         references: facts.references.filter((r) => r.live).map((r) => ({ name: r.name, line: r.line, column: r.start })),
         lineKinds,
     };
