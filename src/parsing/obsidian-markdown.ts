@@ -131,8 +131,8 @@ function lineEnd(value: string, from: number): number {
 }
 
 /**
- * "%%" comments (rules F1 to F4 and D5). A line whose text, after at most
- * three spaces, starts with "%%" and holds no other "%" at all opens a block
+ * "%%" comments (rules F1 to F5 and D5). A line whose text, after any
+ * spaces, starts with "%%" and holds no other "%" at all opens a block
  * comment: "%%" and "%% note" open one, while "%%%", "%% 50%", and
  * "%% a %%" are ordinary paragraphs (F1). The block runs through the first
  * "%%" anywhere on a later line, or to the end of its container (the note,
@@ -142,14 +142,21 @@ function lineEnd(value: string, from: number): number {
  * which is what Obsidian's parser says).
  *
  * A block comment's opener interrupts a paragraph, a quote, and a list item,
- * and is never a lazy line of a quote or an item (F4). It does not end a
+ * and is never a lazy line of a quote or an item (F4). An opener indented
+ * four spaces, too shallow for the list item above it, still ends that
+ * item and is then read as indented code (F5: the overnight oracle run of
+ * 2026-10-03 explained fuzz note 1463 with it). It does not end a
  * footnote definition (D5): the footnote plugin is registered before this
  * reader, so "%%" is not in the definition's interrupt list.
  */
 function percentComments(tables: ParserTables): void {
     const block: Tokenizer = function (eat, value, silent) {
         let start = 0;
-        while (start < 3 && value.charCodeAt(start) === 32) start++;
+        // any number of spaces may come first (F5): a line indented four or
+        // more is read as indented code before this reader is asked, so the
+        // difference shows only where a list asks whether a line may end an
+        // item
+        while (value.charCodeAt(start) === 32) start++;
         if (!value.startsWith("%%", start)) return undefined;
         const openerEnd = lineEnd(value, start);
         // any other "%" on the opener's own line, a lone one included, makes

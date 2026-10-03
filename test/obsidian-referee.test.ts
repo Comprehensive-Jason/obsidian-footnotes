@@ -40,9 +40,6 @@ const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "
 
 /** Notes on which the reader and Obsidian still disagree, by id, with the reason. */
 const KnownDisagreements: Record<string, string> = {
-    "fuzz:20261003-1463":
-        'Obsidian ends [^1] at its label line and makes the "    %%" line after it a top-level indented code block, outside the list; no rule in obsidian-rules.md predicts that (reduced: probe j1-1463).',
-    "probe:j1-1463": 'The reduced fuzz note 1463: "1. p / 10. %% / x / [^1]: def / %%". Obsidian ends [^1] on line 4; a 4-space line is inside the item by rule B2, and "%%" lines do not end definitions (D5).',
     "probe:e3-empty": 'Obsidian lists a reference with an empty name at the empty inline footnote "^[]" of "a^[] [^1]", as if it were a reference with no name; harmless, and not a reference the plugin should count.',
     "probe:e3-caret-ref-name": 'Obsidian reads no reference at all in "a[^^[x]]"; remark-footnotes reads one named "^[x".',
 };
