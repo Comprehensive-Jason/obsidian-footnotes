@@ -338,5 +338,13 @@
 {"id":"night:k1463-inner-dash","text":"1. p\n  -       %%\n          x\n    [^1]: def\n    %%\n\nuse[^1] use[^2] use[^3]\n","defs":[["1",3,4,4]],"refs":[["1",6,3],["2",6,11],["3",6,19]],"code":[]},
 {"id":"night:k1463-label-in-inner","text":"1. p\n  10.     %%\n          x\n          [^1]: def\n    %%\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",6,3],["2",6,11],["3",6,19]],"code":[[4,4]]},
 {"id":"night:k1463-pct-x","text":"1. p\n  10.     %%\n          x\n    [^1]: def\n    %% y\n\nuse[^1] use[^2] use[^3]\n","defs":[["1",3,4,3]],"refs":[["1",6,3],["2",6,11],["3",6,19]],"code":[[4,4]]},
-{"id":"night:k1463-pct-two","text":"1. p\n  10.     %%\n          x\n    [^1]: def\n    %%\n    z[^2]\n\nuse[^1] use[^2] use[^3]\n","defs":[["1",3,4,3]],"refs":[["1",7,3],["2",7,11],["3",7,19]],"code":[[4,5]]}
+{"id":"night:k1463-pct-two","text":"1. p\n  10.     %%\n          x\n    [^1]: def\n    %%\n    z[^2]\n\nuse[^1] use[^2] use[^3]\n","defs":[["1",3,4,3]],"refs":[["1",7,3],["2",7,11],["3",7,19]],"code":[[4,5]]},
+{"id":"night:c-caret-bracket-nodef","text":"a[^^[x]] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["^[x",0,1],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:c-bracket-name","text":"a[^[x] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["[x",0,1],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:c-caret-inline-in-ref","text":"a[^x^[y]] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["x^[y",0,1],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:c-inline-in-brackets","text":"a[^[x]] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["[x",0,1],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:c-caret-bracket-closed","text":"a[^^[x]] b [^1]\n\n[^1]: def\n\nuse[^1] use[^2] use[^3]\n","defs":[["1",2,0,2]],"refs":[["^[x",0,1],["1",0,11],["1",4,3],["2",4,11],["3",4,19]],"code":[]},
+{"id":"night:c-two-brackets","text":"a[^[[x] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["[[x",0,1],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:c-bracket-mid","text":"a[^x[y] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["x[y",0,1],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:c-bracket-and-space","text":"a[^x [y] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]}
 ]

@@ -23,7 +23,8 @@ const isInline = (name) => name === null || /^\[inline\d+\]?$/.test(name);
 function namesIn(note) {
     const names = [];
     const seen = new Set();
-    for (const m of note.matchAll(/\[\^([^[\]\n]+)\]/g)) {
+    // as in inapp-parse.js: the usual names, then names holding a "[" but no whitespace
+    for (const m of [...note.matchAll(/\[\^([^[\]\n]+)\]/g), ...note.matchAll(/\[\^([^\]\s]*\[[^\]\s]*)\]/g)]) {
         if (seen.has(fold(m[1]))) continue;
         seen.add(fold(m[1]));
         names.push(m[1]);

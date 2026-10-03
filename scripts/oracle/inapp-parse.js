@@ -37,7 +37,13 @@
             const defined = new Set(first.footnotes.map((f) => f[0].toLowerCase()));
             const names = [];
             const seen = new Set();
-            for (const m of text.matchAll(/\[\^([^[\]\n]+)\]/g)) {
+            // Reference names: the usual ones, and also names holding a "["
+            // but no whitespace ("[^^[x]"), which a footnote name may hold;
+            // without the second pattern such a name never got a probe
+            // definition, so a live reference to it looked dead (the
+            // overnight oracle run, 2026-10-03).
+            const candidates = [...text.matchAll(/\[\^([^[\]\n]+)\]/g), ...text.matchAll(/\[\^([^\]\s]*\[[^\]\s]*)\]/g)];
+            for (const m of candidates) {
                 const folded = m[1].toLowerCase();
                 if (defined.has(folded) || seen.has(folded)) continue;
                 seen.add(folded);

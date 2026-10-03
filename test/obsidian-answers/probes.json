@@ -530,7 +530,7 @@
 {"id":"probe:e3-empty","text":"a^[] [^1]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["",0,1],["1",0,5],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
 {"id":"probe:e3-in-codespan","text":"`a^[x` [^1]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",0,7],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
 {"id":"probe:e3-ref-then-note","text":"a[^1]^[n [^2]]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",0,1],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
-{"id":"probe:e3-caret-ref-name","text":"a[^^[x]]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"probe:e3-caret-ref-name","text":"a[^^[x]]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["^[x",0,1],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
 {"id":"probe:e3-math","text":"a^[x $[^1]$ y] w[^2]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["2",0,16],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
 {"id":"probe:e3-pct","text":"a^[x %% [^1] %% y] w[^2]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["2",0,20],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
 {"id":"probe:f1-top","text":"%%\n[^1]: def\n%%\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",1,0],["1",4,3],["2",4,11],["3",4,19]],"code":[]},
