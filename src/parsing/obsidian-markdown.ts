@@ -392,6 +392,25 @@ function doubleDollarMath(tables: ParserTables): void {
 }
 
 /**
+ * A speed-up with no change to the reading: the stock HTML block reader
+ * builds a new regular expression from its whole list of tag names every
+ * time it is asked, which is at the start of every block and, to check
+ * whether a line may interrupt a paragraph, at every line of every
+ * paragraph; it was about a sixth of a long note's parse (the runtime swap,
+ * 2026-10-03). It only ever takes a line whose first character after any
+ * spaces or tabs is "<", so it is asked only then.
+ */
+function htmlBlockPrecheck(tables: ParserTables): void {
+    const stockHtml = tables.blockTokenizers.html;
+    tables.blockTokenizers.html = function (eat, value, silent) {
+        let i = 0;
+        while (value[i] === " " || value[i] === "\t") i++;
+        if (value[i] !== "<") return undefined;
+        return stockHtml.call(this, eat, value, silent);
+    };
+}
+
+/**
  * The parser class, built once: remark-parse 8 with its own copy of the
  * reader tables (so registering readers never changes the stock Parser),
  * the math and footnote plugins, then Obsidian's readers.
@@ -423,6 +442,7 @@ function buildParser(): ParserConstructor {
     calloutTitles(tables);
     listLazyLines(tables);
     tablePipeStyles(tables);
+    htmlBlockPrecheck(tables);
     wikilinks(tables);
     frontmatter(tables);
     doubleDollarMath(tables);
