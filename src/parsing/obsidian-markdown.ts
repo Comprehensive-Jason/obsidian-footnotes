@@ -313,14 +313,20 @@ function wikilinks(tables: ParserTables): void {
     tables.inlineMethods.splice(tables.inlineMethods.indexOf("link"), 0, "wikiLink");
 }
 
-/** Frontmatter: "---" alone on the note's first line, up to the next line that is exactly "---" (D2). */
-const Frontmatter = /^---\n(?:[^\n]*\n)*?---(?=\n|$)/;
+/** Frontmatter: "---" alone on the note's first line, up to the three dashes that start a later line (D2). */
+const Frontmatter = /^---\n(?:[^\n]*\n)*?---/;
 
 /**
  * Frontmatter (rule D2): a YAML section at the very top of the note. Inside
- * it labels define nothing and references are dead. Without an exact closing
- * "---" line there is no frontmatter, and the lines read as ordinary
- * Markdown (a thematic break, setext headings, paragraphs). A byte order
+ * it labels define nothing and references are dead. The first line must be
+ * exactly "---". The section closes at the first later line that starts
+ * with three dashes, and ends right after them: whatever follows on that
+ * line is ordinary Markdown again, so "---[^2]: two" closes the section and
+ * defines [^2], "--- # H" closes it and starts a heading, and "---x" closes
+ * it and starts a paragraph (the overnight oracle run of 2026-10-03: 27
+ * notes, and a family of 38 closer and opener shapes). Without such a
+ * line there is no frontmatter, and the lines read as ordinary Markdown (a
+ * thematic break, setext headings, paragraphs). A byte order
  * mark before the first "---" changes nothing (recorded fact from commit
  * bca376c); remark-parse skips it, so the note's text then starts at offset 1.
  */
