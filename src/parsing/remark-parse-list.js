@@ -2,7 +2,7 @@
 // lib/util/remove-indentation.js), MIT licensed, license below.
 //
 // This is remark-parse 8's list tokenizer with ONE change, so that it reads
-// list items the way Obsidian does (obsidian-rules.md, rule B3; Jason,
+// list items the way Obsidian does (docs/obsidian-reading-rules.md, rule B3; Jason,
 // 2026-10-03: implement Obsidian's rules through remark-parse 8's own
 // extension points, vendoring a tokenizer only where one must change).
 //

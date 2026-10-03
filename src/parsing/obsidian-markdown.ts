@@ -11,9 +11,9 @@
 // Obsidian's own code is closed, so none of it is copied here. Every rule
 // below was written "clean room": from Obsidian's observed answers on test
 // notes. The rules carry the letter and number (A1, B3, ...) they have in
-// the research notes of 2026-10-03 (obsidian-rules.md, kept outside the
-// repo), and the notes behind them are in test/obsidian-answers/probes.json,
-// with Obsidian's answers. The rules hook into remark-parse 8
+// docs/obsidian-reading-rules.md, which says each one in plain sentences,
+// and the notes behind them are in test/obsidian-answers/, with Obsidian's
+// answers. The rules hook into remark-parse 8
 // through its own extension points: the tables of block and inline readers
 // ("tokenizers") and the lists of readers allowed to interrupt a paragraph,
 // a list, or a quote. The one stock reader that had to change, the list

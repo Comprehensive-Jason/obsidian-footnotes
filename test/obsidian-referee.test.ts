@@ -19,7 +19,7 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 // - recorded-facts and pins: the facts recorded in commit messages and the
 //   premises of the bug pins in test/hunt/, as notes;
 // - probes: the families written to pin down each rule in
-//   obsidian-rules.md (callouts, lists, tables, Obsidian-only syntax, the
+//   docs/obsidian-reading-rules.md (callouts, lists, tables, Obsidian-only syntax, the
 //   footnote reader, "%%" comments, list indentation, and the Reading-view
 //   sample);
 // - broad-20261004: notes of the overnight run of 2026-10-03, 20,000 notes

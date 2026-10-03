@@ -208,7 +208,9 @@ the two always judge alike. It is TypeScript that Node runs directly, which
 needs Node 22.18 or later.
 
 With `--reader`, either command compares Obsidian with the remark-parse 8
-reader (`reader-facts.ts`) instead of the scanner. With `--answers
+reader (`reader-facts.ts`) instead of the scanner. The rules the oracle has
+found so far, which the reader's code cites by letter and number, are in
+`docs/obsidian-reading-rules.md`. With `--answers
 <file>`, `check` also saves Obsidian's answers in the packed form of
 `test/obsidian-answers/`: add the file to `AnswerFiles` in
 `test/obsidian-referee.test.ts` to make those notes part of the referee.
