@@ -22,7 +22,7 @@ import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after
 // checking that the result starts a line with "[^name]:".
 
 describe("placement 'before' and a line-initial colon", () => {
-    it.fails("a reference after a line-initial colon must not become a definition label", () => {
+    it("a reference after a line-initial colon must not become a definition label", () => {
         const doc = "Intro[^1].\n\n:[^1] colon first\n\n[^1]: one";
         const out = footnoteAfterPunctuation(doc, "before");
         // Today the third line becomes "[^1]: colon first".

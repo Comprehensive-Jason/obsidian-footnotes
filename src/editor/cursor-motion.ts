@@ -2,7 +2,7 @@ import { Editor, EditorChange, EditorPosition } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { safeInsertionCh } from "./insertion-liveness";
-import { FootnotePlacement, linkLikeEndAt, referenceLandingAfter, TrailingPunctuationChars } from "../parsing/markdown-scan";
+import { FootnotePlacement, linkLikeEndAt, punctuationAt, referenceLandingAfter } from "../parsing/markdown-scan";
 import {
     EditorWithCm,
     VaultWithConfig,
@@ -178,7 +178,7 @@ export function endOfWordForSelection(text: string, offset: number, placement: F
     // after it: under "before" or "don't move" the reference goes in front
     // of the mark, so the mark stays outside the selection (T5, 2026-09-21)
     if (placement !== "after") return end;
-    return end < text.length && TrailingPunctuationChars.includes(text[end]) ? end + 1 : end;
+    return punctuationAt(text, end) ? end + 1 : end;
 }
 
 /**

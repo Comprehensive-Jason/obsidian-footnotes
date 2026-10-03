@@ -28,13 +28,13 @@ import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after
 // asking what sits in front of it, here the backslash that escaped it.
 
 describe("placement 'before' moves a reference onto a backslash", () => {
-    it.fails("an escaped period: the reference must stay live", () => {
+    it("an escaped period: the reference must stay live", () => {
         const out = footnoteAfterPunctuation("Version 2\\.[^1] shipped\n\n[^1]: one", "before");
         // Today: "Version 2\[^1]. shipped" - the backslash now escapes the reference.
         expect(out).not.toContain("\\[^1]");
     });
 
-    it.fails("lint twice under 'before' with Delete orphaned definitions on keeps the definitions", () => {
+    it("lint twice under 'before' with Delete orphaned definitions on keeps the definitions", () => {
         const options: LintOptions = { placement: "before", removeOrphanedDefinitions: true };
         const doc = "Version 2\\.[^1] shipped\\![^2] ok\n\n[^1]: one\n[^2]: two";
         const once = lintFootnotes(doc, options);

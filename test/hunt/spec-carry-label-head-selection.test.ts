@@ -2,31 +2,30 @@ import { describe, expect, it } from "vitest";
 
 import { carriedDefinitions } from "../../src/commands/carry-footnotes";
 
-// spec question: when a selection ends after only the "[^" of a
-// definition's label, should copy and cut carry that definition?
+// Settled behaviour: a selection that takes only the "[^" of a
+// definition's label carries that definition.
 //
-// What it does now: the note is "a[^1]", "", "[^1]: one". The selection
-// runs from the start of the note to just after the "[^" that opens the
-// label line "[^1]: one". carriedDefinitions treats the definition as
-// travelling with the text, because the selection reaches its first
-// line, so it carries nothing. The clipboard holds "a[^1]", a blank
-// line, and a stray "[^", and no definition.
-// What a user might expect: the definition carried after the text, as it
-// is when the selection stops one line earlier, since the selection holds
-// none of the definition's text besides two characters of its label.
-// Why it is a question and not a bug: this selection cuts through a
-// definition (it takes part of the label and leaves the rest), and
-// selections that cut through a definition are out of scope for the
-// first version of carrying. What it should do there is Jason's call:
-// carry it, carry nothing, or treat the cut-through as plain text.
+// The note is "a[^1]", "", "[^1]: one". The selection runs from the
+// start of the note to just after the "[^" that opens the label line
+// "[^1]: one". A definition travels with the selected text only when the
+// selection holds its whole label, "[^1]:". This selection holds two
+// characters of it, so the definition is carried after the text: the
+// clipboard holds "a[^1]", a blank line, the stray "[^", and the intact
+// "[^1]: one". A cut removes only what was selected, so the damaged line
+// "1]: one" stays in the note for the user to see and fix.
 //
-// Hunt 2026-10-02, round 1, lens carry-sel. Cluster C1b (the '[^'-only
-// variant of C1, the line-wise selection boundary).
+// This started as an open spec question from the hunt (2026-10-02, round
+// 1, lens carry-sel, cluster C1b, the "[^"-only variant of C1, the
+// line-wise selection boundary): the old code treated the definition as
+// travelling with the text because the selection reached its first
+// line, so the clipboard got no definition. Commit 558f786 settled it
+// with one rule for copy and cut: containment is judged by character,
+// by whether the selection holds the whole label (selectionHolds in
+// src/commands/carry-footnotes.ts).
 //
-// Source of truth: the docstring of carriedDefinitions: "A block whose
-// first line the selection contains travels with the text and is not
-// carried again." Here the selection touches that line but does not
-// contain it.
+// Source of truth: the docstring of carriedDefinitions: "A block travels
+// with the text, and is not carried again, exactly when the selection
+// holds its whole label".
 
 /** carriedDefinitions on a note given as lines. */
 const carry = (lines: string[], from: { line: number; ch: number }, to: { line: number; ch: number }) =>

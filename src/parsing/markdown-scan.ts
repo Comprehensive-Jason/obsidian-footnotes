@@ -39,6 +39,22 @@ const DefinitionStart = /^ {0,3}\[\^([^[\]\s]+)\]:/;
 export const TrailingPunctuationChars = ".,;:!?\u2026。，、；：！？．｡､⋯‥‼⁇⁈⁉";
 
 /**
+ * Whether the character at `i` is punctuation in the sense every walk
+ * uses: one of TrailingPunctuationChars, and not escaped by a backslash.
+ * An escaped mark such as the "\." in "Version 2\." is a literal
+ * character of the word, not punctuation (CommonMark's backslash
+ * escapes). This matters because a reference moved in front of an escaped
+ * mark lands right after the backslash, which then escapes the
+ * reference's own bracket and turns it into plain text. Every walk asks
+ * this one question, so none of them can disagree about what a
+ * punctuation run is (hunt 2026-10-02, pin
+ * bug-placement-before-onto-backslash).
+ */
+export function punctuationAt(text: string, i: number): boolean {
+    return i >= 0 && i < text.length && TrailingPunctuationChars.includes(text[i]) && !escapedAt(text, i);
+}
+
+/**
  * Where a footnote reference goes relative to the punctuation after a word
  * (T5 of the 2026-09 feature round; Jason's ruling 2026-09-20: one global
  * setting, no per-language table). "after" is today's behaviour and the
@@ -108,15 +124,15 @@ export function referenceLandingAfter(text: string, end: number, placement: Foot
             at = close + 1;
             continue;
         }
-        if (!ClosingMarkChars.includes(c) && !TrailingPunctuationChars.includes(c)) return at;
-        if (placement === "before" && TrailingPunctuationChars.includes(c)) {
+        if (!ClosingMarkChars.includes(c) && !punctuationAt(text, at)) return at;
+        if (placement === "before" && punctuationAt(text, at)) {
             // "before": the run of punctuation from here is stepped over
             // only when a closing mark follows it (the period inside
             // "quoted." or 「句子。」), and that mark must be a real closer,
             // not glued to the next word; otherwise the reference stops in
             // front of the punctuation
             let runEnd = at;
-            while (runEnd < text.length && TrailingPunctuationChars.includes(text[runEnd])) runEnd++;
+            while (punctuationAt(text, runEnd)) runEnd++;
             if (
                 runEnd >= text.length ||
                 !ClosingMarkChars.includes(text[runEnd]) ||

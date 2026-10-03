@@ -1,6 +1,6 @@
 import { inItemDefinitionLabels } from "../../parsing/list-item-definitions";
 import { inlineFootnoteSpans, referenceOccurrences } from "../../parsing/footnote-grammar";
-import { ClosingMarkChars, definitionLabelIn, FootnotePlacement, referenceLandingAfter, TrailingPunctuationChars } from "../../parsing/markdown-scan";
+import { ClosingMarkChars, definitionLabelIn, FootnotePlacement, punctuationAt, referenceLandingAfter } from "../../parsing/markdown-scan";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
@@ -8,20 +8,10 @@ import { FootnoteRule } from "../rule";
 // here as a pure function: text in, text out. What it should and should not
 // do is pinned by test/footnote-after-punctuation.test.ts.
 
-// The ONE set of punctuation characters used across the plugin. The insert
-// commands' end-of-word adjustment uses the same list
-// (TrailingPunctuationChars: the ASCII punctuation plus the CJK fullwidth
-// forms). It is escaped here so it can go inside a regular expression's
-// square brackets.
-const PunctuationClass = TrailingPunctuationChars.replace(
-    /[.*+?^${}()|[\]\\-]/g,
-    "\\$&",
-);
-// A reference that already sits after punctuation OR after a closing mark
-// (a quote, a bracket, an emphasis marker) is where the convention puts it.
-const AlreadyPlacedAfter = new RegExp(
-    `[${PunctuationClass}${ClosingMarkChars.replace(/[.*+?^${}()|[\]\\-]/g, "\\$&")}]`,
-);
+// What counts as punctuation is asked of punctuationAt, the ONE definition
+// the insert commands' end-of-word adjustment uses too: the characters of
+// TrailingPunctuationChars (the ASCII punctuation plus the CJK fullwidth
+// forms), minus any a backslash escapes.
 
 // A stretch of text the rule moves as one thing: a "[^x]" reference, or a
 // whole "^[...]" inline footnote.
@@ -90,6 +80,24 @@ function swapInSegment(
         const end = units[last].end;
         const loneReference = last === k && units[k].reference;
         k = last + 1;
+        // Whether this run, written at `at` with the character `next` right
+        // after it, is a definition label: a SINGLE reference followed by
+        // ":" with nothing but whitespace, quote markers, or dead text
+        // before it. Such a label can only sit after a blank line or at the
+        // top of the note; the same shape directly under prose is lazy
+        // paragraph text, a live reference before a colon. A RUN of two or
+        // more references is never a label, and neither is a reference at
+        // the start of a definition's BODY: "[^1][^2]: x" is two live
+        // references and a literal colon to Obsidian, and "[^1]: [^2]: x" a
+        // definition whose body starts with a reference (Kimi hunt cycle 4,
+        // probed 2026-09-16). Both directions of the move ask it, so a
+        // label is never moved and a move never makes one.
+        const labelAt = (at: number, next: string | undefined) =>
+            loneReference &&
+            !insideBody &&
+            mayBeLabel &&
+            next === ":" &&
+            masked.slice(0, at).replace(/[>%\0\s]/g, "") === "";
         // The run of punctuation AND closing marks immediately after it,
         // the same walk the insert commands use (referenceLandingAfter:
         // "bravo[^1]". becomes "bravo".[^1], **bold[^1]** becomes
@@ -107,9 +115,14 @@ function swapInSegment(
             // "句子。[^1]" becomes "句子[^1]。" (T5, 2026-09-21). A run after
             // a closing mark stays: the marker belongs outside the quote in
             // every convention found, punctuation inside the quote or not.
-            if (placement !== "before" || start === 0 || !TrailingPunctuationChars.includes(masked[start - 1])) continue;
+            if (placement !== "before" || !punctuationAt(masked, start - 1)) continue;
             let punctuationStart = start;
-            while (punctuationStart > 0 && TrailingPunctuationChars.includes(masked[punctuationStart - 1])) punctuationStart--;
+            while (punctuationAt(masked, punctuationStart - 1)) punctuationStart--;
+            // A reference moved in front of a line-initial colon would
+            // become a label: ":[^1] text" would turn into "[^1]: text", a
+            // second definition of footnote 1 (hunt 2026-10-02, pin
+            // bug-placement-before-colon-makes-label).
+            if (labelAt(punctuationStart, masked[punctuationStart])) continue;
             out +=
                 original.slice(copied, punctuationStart) +
                 original.slice(start, end) +
@@ -117,37 +130,19 @@ function swapInSegment(
             copied = end;
             continue;
         }
-        // A SINGLE reference followed by ":" with nothing but whitespace,
-        // quote markers, or dead text before it is a label the label reader
-        // did not claim: one indented past three spaces inside a list item
-        // ("    [^113]: def", a definition to Obsidian that the plugin does
-        // not model yet), or one after a "%%" that is not a block's
-        // closer. Swapping its colon would turn it into ":[^113]" for
-        // good (Claude sweep 2026-09-13). Such a label can only sit after a
-        // blank line or at the top of the note; the same shape directly
-        // under prose is lazy paragraph text, a live reference before a
-        // colon, and crosses it. A RUN of two or more references
-        // is never a label, and neither is a reference at the start of a
-        // definition's BODY: "[^1][^2]: x" is two live references and a
-        // literal colon to Obsidian, and "[^1]: [^2]: x" a definition whose
-        // body starts with a reference (Kimi hunt cycle 4, probed
-        // 2026-09-16); both cross the colon like any punctuation.
-        if (
-            loneReference &&
-            !insideBody &&
-            mayBeLabel &&
-            masked[end] === ":" &&
-            masked.slice(0, start).replace(/[>%\0\s]/g, "") === ""
-        ) {
-            continue;
-        }
+        // A label the label reader did not claim stays where it is: one
+        // indented past three spaces inside a list item ("    [^113]: def",
+        // a definition to Obsidian that the plugin does not model yet), or
+        // one after a "%%" that is not a block's closer. Swapping its colon
+        // would turn it into ":[^113]" for good (Claude sweep 2026-09-13).
+        if (labelAt(start, masked[end])) continue;
         // A run of references that already comes AFTER punctuation or a
         // closing mark is where it should be. Any punctuation after it
         // belongs to the next clause, and moving the references again
         // would walk them further and further from the words they belong
         // to. Under "before" the forward move only ever carries a run out
         // of a quote, which is right wherever the run started.
-        if (placement === "after" && start > 0 && AlreadyPlacedAfter.test(masked[start - 1])) continue;
+        if (placement === "after" && start > 0 && (punctuationAt(masked, start - 1) || ClosingMarkChars.includes(masked[start - 1]))) continue;
         out +=
             original.slice(copied, start) +
             original.slice(end, punctuationEnd) +
