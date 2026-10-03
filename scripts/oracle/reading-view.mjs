@@ -43,13 +43,24 @@ export function renderText(note, definedFolded) {
     // Obsidian skips it; the top paragraph goes in after it
     const bom = note.startsWith("\uFEFF") ? "\uFEFF" : "";
     const lines = note.slice(bom.length).split("\n");
-    // the frontmatter has to stay on the first line
+    // The frontmatter has to stay on the first line. It opens with a line
+    // that is exactly "---" and closes at the first later line that starts
+    // with "---" (rule D2, the overnight oracle run of 2026-10-03), and the
+    // top paragraph goes in after that line. When the closing line holds
+    // more than the dashes, the rest is ordinary Markdown that the next line
+    // may continue, so nothing can go in between: the paragraph goes at the
+    // end of the note instead, behind a blank line.
+    const noteLines = lines.length - (note.endsWith("\n") ? 1 : 0);
     let insertAt = 0;
-    if (/^---\s*$/.test(lines[0])) {
-        const close = lines.findIndex((l, i) => i > 0 && /^---\s*$/.test(l));
-        if (close > 0) insertAt = close + 1;
+    let atEnd = false;
+    if (/^---\r?$/.test(lines[0])) {
+        const close = lines.findIndex((l, i) => i > 0 && l.startsWith("---"));
+        if (close > 0) {
+            atEnd = lines[close].slice(3).trim() !== "";
+            insertAt = atEnd ? noteLines : close + 1;
+        }
     }
-    const top = names.length > 0 ? [names.map((n) => `[^${n}]`).join(" "), ""] : [];
+    const top = names.length > 0 ? [...(atEnd ? [""] : []), names.map((n) => `[^${n}]`).join(" "), ""] : [];
     const body = bom + [...lines.slice(0, insertAt), ...top, ...lines.slice(insertAt)].join("\n");
     const undefinedNames = names.filter((n) => !definedFolded.has(fold(n)));
     const base = body.endsWith("\n") ? body : `${body}\n`;
