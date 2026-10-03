@@ -2,7 +2,8 @@ import { EditorView } from "@codemirror/view";
 import { Editor, EditorChange, EditorPosition, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
-import { docLines } from "../editor/doc-context";
+import { contextOfLines, docLines, insideDefinition } from "../editor/doc-context";
+import { simulateChanges } from "../editor/insertion-liveness";
 import { showNotice } from "../editor/notice";
 import { codeMirrorViewOf, readingViewActive, viewEditor } from "../editor/obsidian-internals";
 import { activeTableCellEditor } from "../editor/table-cursor";
@@ -265,14 +266,25 @@ function landCarriedText(
     carried: CarriedDefinition[],
     missing: string[],
 ): void {
-    const plan = planCarriedPaste(doc.getValue(), body, carried);
-    const edits = [{ from, to, text: plan.body }];
+    const lines = docLines(doc);
+    // The paste is planned against the note as it reads once the selection
+    // is gone. A definition the paste deletes is then not one the note
+    // "already has" to reuse, and a name only the deleted text used is free
+    // again (hunt 2026-10-02, pin
+    // bug-carry-paste-over-selection-holding-definitions: Ctrl+A and paste
+    // pointed the pasted reference at the definition it was deleting).
+    const cleared = simulateChanges(lines, [{ from, to, text: "" }]);
+    const plan = planCarriedPaste(cleared.join("\n"), body, carried);
+    const { text, after } = asOwnParagraph(cleared, from, plan.body);
+    // a blank line after the text goes in as an edit of its own, so the
+    // caret can land at the end of the text, before it
+    const edits: EditorChange[] = after ? [{ from, to, text }, { from: to, text: after }] : [{ from, to, text }];
     let changes: EditorChange[] = edits;
-    const bodyLines = plan.body.split("\n");
+    const textLines = text.split("\n");
     let end: EditorPosition =
-        bodyLines.length === 1
-            ? { line: from.line, ch: from.ch + plan.body.length }
-            : { line: from.line + bodyLines.length - 1, ch: bodyLines[bodyLines.length - 1].length };
+        textLines.length === 1
+            ? { line: from.line, ch: from.ch + text.length }
+            : { line: from.line + textLines.length - 1, ch: textLines[textLines.length - 1].length };
     if (plan.definitions.length > 0) {
         // where a creation press would put a definition, seeded with the
         // first carried block's body and extended with the rest, planned
@@ -282,7 +294,7 @@ function landCarriedText(
         // bug-carry-paste-caret-before-append)
         const [first, ...rest] = plan.definitions;
         const append = planDefinitionAppend({
-            lines: docLines(doc),
+            lines,
             edits,
             footnoteId: first.name,
             plugin,
@@ -321,6 +333,44 @@ function landCarriedText(
     if (lintAfterFootnoteCreation(plugin, false) === null && !plugin.settings.lintOnFootnoteCreation) {
         noticeLintAlerts(plugin, doc.getValue());
     }
+}
+
+/**
+ * `text`, as it should be pasted at `at` into `lines` so that it stays its
+ * own paragraph next to the definitions around it.
+ *
+ * Above: a paste on the empty line right under a definition would read as
+ * that definition's lazy continuation (a line that carries on the
+ * paragraph above it without being indented), so the text vanishes into
+ * the footnote and the references in it are nested (hunt 2026-10-02, pin
+ * bug-carry-paste-below-last-definition-lazy; ADR 0001). The text then
+ * gets a blank line in front: the paste-shaped twin of the blank line a
+ * new definition gets when text follows it (the A4 bug, 2026-07-20). A
+ * paste made inside a definition, and a pasted text that starts with a
+ * definition label of its own, are where the user put them and get
+ * nothing.
+ *
+ * Below: a definition label right under the pasted text would read as
+ * more of its paragraph (a lazy label), and that footnote would lose its
+ * definition. The text then gets a blank line after it too (2026-10-03,
+ * the same paste on the empty line between two definitions).
+ *
+ * Returns the text with any blank line in front already added, and in
+ * `after` the blank line to add after it ("" for none).
+ */
+function asOwnParagraph(lines: string[], at: EditorPosition, text: string): { text: string; after: string } {
+    const before = contextOfLines(lines);
+    const landed = (pasted: string) => contextOfLines(simulateChanges(lines, [{ from: at, text: pasted }]));
+    if (!insideDefinition(before, at.line)) {
+        const joined = landed(text);
+        if (insideDefinition(joined, at.line) && !joined.definitionStarts()[at.line]) text = "\n" + text;
+    }
+    const below = at.line + 1;
+    const demotes =
+        below < lines.length &&
+        before.definitionStarts()[below] &&
+        !landed(text).definitionStarts()[below + text.split("\n").length - 1];
+    return { text, after: demotes ? "\n" : "" };
 }
 
 /** A carried block's text after its label, continuation lines joined with newlines, the way seedDefinitionBody wants a body. */

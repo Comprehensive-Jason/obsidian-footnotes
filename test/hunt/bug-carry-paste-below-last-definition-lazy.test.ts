@@ -64,7 +64,7 @@ beforeEach(() => {
 });
 
 describe("paste on the empty line right below the last definition", () => {
-    it.fails("the pasted paragraph does not become the new definition's lazy continuation", () => {
+    it("the pasted paragraph does not become the new definition's lazy continuation", () => {
         const dest = editor(["x[^1]", "", "[^1]: one", ""], { line: 3, ch: 0 });
         handlePaste(fakePlugin({ carryFootnotesOnCopy: true }, dest), clipboardEvent("b[^n] para\n\n[^n]: en") as never, dest);
         // The pasted body line must not sit directly under a definition

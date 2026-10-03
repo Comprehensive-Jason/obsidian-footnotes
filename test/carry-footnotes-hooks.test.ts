@@ -147,6 +147,20 @@ describe("paste", () => {
         expect(taken.lines).toEqual(["p"]);
     });
 
+    it("a paste on the empty line between two definitions stays its own paragraph and leaves both definitions live", () => {
+        // Below the paste, "[^2]: two" directly under the pasted line
+        // would read as more of its paragraph (a lazy label), so [^2]
+        // would lose its definition; above it, the pasted line directly
+        // under "[^1]: one" would read as footnote 1's text. The pasted
+        // text gets a blank line on each side (2026-10-03, the neighbour of
+        // the hunt pin bug-carry-paste-below-last-definition-lazy).
+        const destination = editor(["x[^1][^2]", "", "[^1]: one", "", "[^2]: two"], { line: 3, ch: 0 });
+        handlePaste(fakePlugin({ carryFootnotesOnCopy: true }, destination), clipboardEvent("b[^n] para\n\n[^n]: en") as never, destination);
+        expect(destination.lines).toEqual(["x[^1][^2]", "", "[^1]: one", "", "b[^n] para", "", "[^2]: two", "[^n]: en"]);
+        // the caret sits right after the pasted text
+        expect(destination.cursor).toEqual({ line: 4, ch: "b[^n] para".length });
+    });
+
     it("says which references travelled without a definition", () => {
         const source = editor(["a[^gone]"], { line: 0, ch: 0 }, { line: 0, ch: 8 });
         handleCopy(fakePlugin({ carryFootnotesOnCopy: true }, source), clipboardEvent() as never);

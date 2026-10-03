@@ -103,7 +103,7 @@ beforeEach(() => {
 });
 
 describe("paste over a selection that holds the destination's definitions", () => {
-    it.fails("select-all and paste: the reused definition is the one the paste deletes", () => {
+    it("select-all and paste: the reused definition is the one the paste deletes", () => {
         const source = editor(["a[^1] text", "", "[^1]: one"], { line: 0, ch: 0 }, { line: 0, ch: 10 });
         handleCopy(fakePlugin(on, source), clipboardEvent() as never);
         // Ctrl+A in a note whose own [^1] has the same text as the copy's.
