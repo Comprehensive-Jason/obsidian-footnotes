@@ -10,131 +10,126 @@ import { verifyLiveFootnoteInsertion } from "../src/editor/insertion-liveness";
 // sites were tested: the definition must start at EXACTLY the given
 // label line AND claim every seeded body line, and EVERY reference must
 // parse at EXACTLY its anchor under EXACTLY the given name.
+//
+// Since 2026-10-03 the verdict reads the note exactly as the transaction
+// leaves it (planDefinitionAppend works that out), so each case below
+// spells out that final note: "alpha bravo", "", "tail" with "[^1]"
+// written after "alpha" and "\n\n[^1]: " appended after "tail", the
+// label on line 4. The cases are the ones the change-list version had.
 
-const LINES = ["alpha bravo", "", "tail"];
-// appends "\n\n[^1]: " after "tail" - label lands on simulated line 4
-const DEFINITION_APPEND = { from: { line: 2, ch: 4 }, text: "\n\n[^1]: " };
+const FINAL = ["alpha[^1] bravo", "", "tail", "", "[^1]: "];
 
 describe("verifyLiveFootnoteInsertion", () => {
-    it("a live reference with its live definition verifies, anchor exact", () => {
-        const verified = verifyLiveFootnoteInsertion({
-            lines: LINES,
-            changes: [
-                { from: { line: 0, ch: 5 }, text: "[^1]" },
-                DEFINITION_APPEND,
-            ],
-            referenceChangeIndices: [0],
-            footnoteId: "1",
-            definitionLabelLine: 4,
-        });
-        expect(verified).not.toBeNull();
-        expect(verified?.anchors).toEqual([{ line: 0, ch: 5 }]);
+    it("a live reference with its live definition verifies", () => {
+        expect(
+            verifyLiveFootnoteInsertion({
+                lines: FINAL,
+                anchors: [{ line: 0, ch: 5 }],
+                footnoteId: "1",
+                definitionLabelLine: 4,
+            }),
+        ).toBe("live");
     });
 
     it("refuses when no definition block starts at the given label line", () => {
-        const verified = verifyLiveFootnoteInsertion({
-            lines: LINES,
-            changes: [
-                { from: { line: 0, ch: 5 }, text: "[^1]" },
-                DEFINITION_APPEND,
-            ],
-            referenceChangeIndices: [0],
-            footnoteId: "1",
-            // the label really lands on line 4 - a block that merely ENDS
-            // past line 3 must not count as starting there
-            definitionLabelLine: 3,
-        });
-        expect(verified).toBeNull();
+        expect(
+            verifyLiveFootnoteInsertion({
+                lines: FINAL,
+                anchors: [{ line: 0, ch: 5 }],
+                footnoteId: "1",
+                // the label really sits on line 4 - a block that merely
+                // ENDS past line 3 must not count as starting there
+                definitionLabelLine: 3,
+            }),
+        ).toBe("dead");
     });
 
     it("a seeded continuation line claimed by the block verifies", () => {
-        const verified = verifyLiveFootnoteInsertion({
-            lines: LINES,
-            changes: [
-                { from: { line: 0, ch: 5 }, text: "[^1]" },
-                { from: { line: 2, ch: 4 }, text: "\n\n[^1]: one\n    two" },
-            ],
-            referenceChangeIndices: [0],
-            footnoteId: "1",
-            definitionLabelLine: 4,
-            definitionBodyExtraLines: 1,
-        });
-        expect(verified).not.toBeNull();
+        expect(
+            verifyLiveFootnoteInsertion({
+                lines: ["alpha[^1] bravo", "", "tail", "", "[^1]: one", "    two"],
+                anchors: [{ line: 0, ch: 5 }],
+                footnoteId: "1",
+                definitionLabelLine: 4,
+                definitionBodyExtraLines: 1,
+            }),
+        ).toBe("live");
     });
 
     it("refuses when a seeded body line falls OUT of the block", () => {
-        const verified = verifyLiveFootnoteInsertion({
-            lines: LINES,
-            changes: [
-                { from: { line: 0, ch: 5 }, text: "[^1]" },
+        expect(
+            verifyLiveFootnoteInsertion({
                 // the second body line is a heading, which no definition
                 // block can claim - the block ends on the label line
-                { from: { line: 2, ch: 4 }, text: "\n\n[^1]: one\n# two" },
-            ],
-            referenceChangeIndices: [0],
-            footnoteId: "1",
-            definitionLabelLine: 4,
-            definitionBodyExtraLines: 1,
-        });
-        expect(verified).toBeNull();
+                lines: ["alpha[^1] bravo", "", "tail", "", "[^1]: one", "# two"],
+                anchors: [{ line: 0, ch: 5 }],
+                footnoteId: "1",
+                definitionLabelLine: 4,
+                definitionBodyExtraLines: 1,
+            }),
+        ).toBe("dead");
     });
 
     it("refuses a reference landing inside inline code", () => {
-        const verified = verifyLiveFootnoteInsertion({
-            lines: ["alpha `code` bravo", "", "tail"],
-            changes: [
-                { from: { line: 0, ch: 8 }, text: "[^1]" },
-                DEFINITION_APPEND,
-            ],
-            referenceChangeIndices: [0],
-            footnoteId: "1",
-            definitionLabelLine: 4,
-        });
-        expect(verified).toBeNull();
+        expect(
+            verifyLiveFootnoteInsertion({
+                lines: ["alpha `c[^1]ode` bravo", "", "tail", "", "[^1]: "],
+                anchors: [{ line: 0, ch: 8 }],
+                footnoteId: "1",
+                definitionLabelLine: 4,
+            }),
+        ).toBe("dead");
     });
 
     it("one dead landing refuses the lot - EVERY reference must be live", () => {
-        const verified = verifyLiveFootnoteInsertion({
-            lines: ["alpha bravo", "`code x`", "tail"],
-            changes: [
-                { from: { line: 0, ch: 5 }, text: "[^1]" },
-                { from: { line: 1, ch: 3 }, text: "[^1]" },
-                DEFINITION_APPEND,
-            ],
-            referenceChangeIndices: [0, 1],
-            footnoteId: "1",
-            definitionLabelLine: 4,
-        });
-        expect(verified).toBeNull();
+        expect(
+            verifyLiveFootnoteInsertion({
+                lines: ["alpha[^1] bravo", "`co[^1]de x`", "tail", "", "[^1]: "],
+                anchors: [
+                    { line: 0, ch: 5 },
+                    { line: 1, ch: 3 },
+                ],
+                footnoteId: "1",
+                definitionLabelLine: 4,
+            }),
+        ).toBe("dead");
     });
 
     it("refuses when the occurrence does not sit EXACTLY at its anchor", () => {
-        const verified = verifyLiveFootnoteInsertion({
-            lines: LINES,
-            changes: [
-                // leading space: the reference parses one column past the
-                // change's anchor, which is not the insertion promised
-                { from: { line: 0, ch: 5 }, text: " [^1]" },
-                DEFINITION_APPEND,
-            ],
-            referenceChangeIndices: [0],
-            footnoteId: "1",
-            definitionLabelLine: 4,
-        });
-        expect(verified).toBeNull();
+        expect(
+            verifyLiveFootnoteInsertion({
+                // a leading space: the reference parses one column past the
+                // anchor, which is not the insertion promised
+                lines: ["alpha [^1] bravo", "", "tail", "", "[^1]: "],
+                anchors: [{ line: 0, ch: 5 }],
+                footnoteId: "1",
+                definitionLabelLine: 4,
+            }),
+        ).toBe("dead");
     });
 
     it("refuses when the parsed name is not the promised id", () => {
-        const verified = verifyLiveFootnoteInsertion({
-            lines: LINES,
-            changes: [
-                { from: { line: 0, ch: 5 }, text: "[^2]" },
-                DEFINITION_APPEND,
-            ],
-            referenceChangeIndices: [0],
-            footnoteId: "1",
-            definitionLabelLine: 4,
-        });
-        expect(verified).toBeNull();
+        expect(
+            verifyLiveFootnoteInsertion({
+                lines: ["alpha[^2] bravo", "", "tail", "", "[^1]: "],
+                anchors: [{ line: 0, ch: 5 }],
+                footnoteId: "1",
+                definitionLabelLine: 4,
+            }),
+        ).toBe("dead");
+    });
+
+    it("a live reference that landed inside another definition is nested, not live (ADR 0001)", () => {
+        // the empty line under "[^1]: one" was filled by the reference, so
+        // it reads as footnote 1's lazy continuation, prose and all (hunt
+        // 2026-10-02, pin bug-press-blank-line-under-definition-nests)
+        expect(
+            verifyLiveFootnoteInsertion({
+                lines: ["Text[^1] here.", "", "[^1]: one", "[^2]", "More prose.", "", "[^2]: "],
+                anchors: [{ line: 3, ch: 0 }],
+                footnoteId: "2",
+                definitionLabelLine: 6,
+            }),
+        ).toBe("nested");
     });
 });

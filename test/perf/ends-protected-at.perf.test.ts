@@ -4,6 +4,7 @@ import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 
 import { buildDefinitionAppend } from "../../src/commands/definition-append";
+import { docContext } from "../../src/editor/doc-context";
 
 // Timing pin for review B2 (2026-09-09): the definition append's walk up
 // from EOF, when the note ends inside an unclosed fence, comment, or math
@@ -23,7 +24,7 @@ describe("the append above an unclosed opener near the top of a long note", () =
         for (let i = 0; i < 3000; i++) lines.push(`hidden line ${i}`);
         const doc = fakeEditor(lines, { cursor: { line: 0, ch: 0 }, wholeDoc: true });
         const started = performance.now();
-        const { change } = buildDefinitionAppend(doc, "1", false, fakePlugin());
+        const { change } = buildDefinitionAppend(docContext(doc), "1", false, fakePlugin());
         const took = performance.now() - started;
         expect(change.from).toEqual({ line: 0, ch: "prose[^9]?".length });
         expect(took).toBeLessThan(150);

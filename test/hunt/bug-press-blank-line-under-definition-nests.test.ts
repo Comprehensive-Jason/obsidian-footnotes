@@ -84,7 +84,7 @@ function noNesting(before: string[], after: string[]): boolean {
 beforeEach(resetNotices);
 
 describe("a press on the empty line under a definition", () => {
-    it.fails("numbered press on the empty line right under the LAST definition keeps the reference and the prose below out of it", async () => {
+    it("numbered press on the empty line right under the LAST definition keeps the reference and the prose below out of it", async () => {
         const lines = ["Text[^1] here.", "", "[^1]: one", "", "More prose."];
         const doc = ed(lines, 3, 0);
         await insertAutonumFootnote(pl(doc));
@@ -93,7 +93,7 @@ describe("a press on the empty line under a definition", () => {
         expect(noNesting(lines, doc.lines)).toBe(true);
     });
 
-    it.fails("numbered press on the empty line between two definitions does not nest the reference in the first", async () => {
+    it("numbered press on the empty line between two definitions does not nest the reference in the first", async () => {
         const lines = ["Text[^n] and[^1] here.", "", "[^n]: named def", "    continued line", "", "[^1]: one"];
         const doc = ed(lines, 4, 0);
         await insertAutonumFootnote(pl(doc));
@@ -102,7 +102,7 @@ describe("a press on the empty line under a definition", () => {
         expect(noNesting(lines, doc.lines)).toBe(true);
     });
 
-    it.fails("inline press on the empty line right under a definition does not nest an inline footnote in it", async () => {
+    it("inline press on the empty line right under a definition does not nest an inline footnote in it", async () => {
         const lines = ["Text[^1] here.", "", "[^1]: one", "", "More prose."];
         const doc = ed(lines, 3, 0);
         await insertInlineFootnote(pl(doc));
@@ -110,7 +110,7 @@ describe("a press on the empty line under a definition", () => {
         expect(noNesting(lines, doc.lines)).toBe(true);
     });
 
-    it.fails("numbered press on the note's trailing empty line under its definitions keeps the reference out of the new definition", async () => {
+    it("numbered press on the note's trailing empty line under its definitions keeps the reference out of the new definition", async () => {
         const lines = ["Text[^1] here.", "", "[^1]: one", ""];
         const doc = ed(lines, 3, 0);
         await insertAutonumFootnote(pl(doc));
@@ -118,7 +118,7 @@ describe("a press on the empty line under a definition", () => {
         expect(noNesting(lines, doc.lines)).toBe(true);
     });
 
-    it.fails("two carets, one on the empty line under the definitions: that reference stays out of the new definition", async () => {
+    it("two carets, one on the empty line under the definitions: that reference stays out of the new definition", async () => {
         const lines = ["Alpha bravo", "", "[^1]: one", ""];
         const doc = fakeEditor(lines, {
             carets: [

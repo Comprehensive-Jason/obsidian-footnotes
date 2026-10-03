@@ -8,10 +8,11 @@ import {
     createFootnoteReference,
     createMatchingFootnoteDefinition,
     insertInTableCell,
+    refusedCreation,
 } from "./create-footnote";
 import { DocContext, docContext, referenceOccurrenceAtCursor } from "../editor/doc-context";
-import { insertionLandsIntact, readInlineFootnoteFromClipboard } from "./inline-footnotes";
-import { ProtectedCreationNotice, simulatedMaskedLine } from "../editor/insertion-liveness";
+import { bareInsertionVerdict, readInlineFootnoteFromClipboard } from "./inline-footnotes";
+import { ProtectedCreationNotice, simulatedContext } from "../editor/insertion-liveness";
 import { shouldJumpFromDefinitionToReference, shouldJumpFromReferenceToDefinition } from "./navigation";
 import { propertiesWidgetOwnsFocus, readingViewActive, viewEditor } from "../editor/obsidian-internals";
 import { warnTableEdgeCaretIfOutside, caretGuardsHandled, warnDefinitionCaretIfInside, warnProtectedCaretIfInside } from "./press-guards";
@@ -255,16 +256,14 @@ function insertInlineText(
         // the numbered and named keys run)
         if (lineText.includes("|") && warnTableEdgeCaretIfOutside(null, cursorPosition, docContext(doc))) return;
         const at = adjustFootnotePosition(cursorPosition, doc, lineText, plugin);
-        // born-dead check (see simulatedMaskedLine). "Born-dead" means an
+        // born-dead check (see bareInsertionVerdict). "Born-dead" means an
         // insertion that would not be a live footnote the moment it lands.
         // The "^[…]" must still read as an inline footnote on the masked
         // result, because text it carries (pasted inline code, say) can mask
-        // INSIDE the brackets.
-        const masked = simulatedMaskedLine(doc, at, text);
-        if (!insertionLandsIntact(masked, at.ch, text)) {
-            showNotice(ProtectedCreationNotice, 8000);
-            return;
-        }
+        // INSIDE the brackets. And it must not land inside a definition,
+        // which an empty line right under one does once it is filled.
+        const verdict = bareInsertionVerdict(simulatedContext(doc, at, text), [at], text);
+        if (refusedCreation(verdict, ProtectedCreationNotice)) return;
         const newCursorPos = { line: at.line, ch: at.ch + caretOffsetInText };
         moveCursorAndSetJumpPoint(doc, cursorPosition, newCursorPos, plugin, [
             { from: at, text },

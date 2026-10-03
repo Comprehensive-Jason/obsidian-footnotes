@@ -4,6 +4,7 @@ import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 
 import { buildDefinitionAppend } from "../../src/commands/definition-append";
+import { docContext } from "../../src/editor/doc-context";
 import { fixLazyDefinitions } from "../../src/linting/rules/fix-lazy-definitions";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
@@ -158,7 +159,7 @@ describe("where a block comment ends", () => {
 describe("appending and gathering never land inside an unclosed block comment", () => {
     it("the definition append lands above the opener line, like an unclosed HTML comment", () => {
         const doc = fakeEditor(["alpha[^1].", "", "%% open", "hidden"]);
-        const { change } = buildDefinitionAppend(doc, "2", false, fakePlugin());
+        const { change } = buildDefinitionAppend(docContext(doc), "2", false, fakePlugin());
         expect(change).toEqual({
             from: { line: 0, ch: "alpha[^1].".length },
             text: "\n\n[^2]: ",

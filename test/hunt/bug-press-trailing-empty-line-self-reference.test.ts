@@ -80,7 +80,7 @@ function acceptable(before: string[], after: string[]): boolean {
 beforeEach(resetNotices);
 
 describe("a numbered press on the note's trailing empty line", () => {
-    it.fails("keeps the reference out of its own definition", async () => {
+    it("keeps the reference out of its own definition", async () => {
         const lines = ["Alpha bravo, charlie.", ""];
         const doc = ed(lines, 1, 0);
         await insertAutonumFootnote(pl(doc));
@@ -88,7 +88,7 @@ describe("a numbered press on the note's trailing empty line", () => {
         expect(acceptable(lines, doc.lines)).toBe(true);
     });
 
-    it.fails("on the middle of two trailing empty lines keeps the reference out of its own definition", async () => {
+    it("on the middle of two trailing empty lines keeps the reference out of its own definition", async () => {
         const lines = ["Alpha", "", ""];
         const doc = ed(lines, 1, 0);
         await insertAutonumFootnote(pl(doc));
@@ -96,7 +96,7 @@ describe("a numbered press on the note's trailing empty line", () => {
         expect(acceptable(lines, doc.lines)).toBe(true);
     });
 
-    it.fails("two carets, one of them on the trailing empty line: no reference ends up inside the definition", async () => {
+    it("two carets, one of them on the trailing empty line: no reference ends up inside the definition", async () => {
         const lines = ["Alpha bravo", ""];
         const doc = fakeEditor(lines, {
             carets: [

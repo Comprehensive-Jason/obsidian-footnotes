@@ -1,8 +1,8 @@
-import { Editor, EditorChange, EditorPosition } from "obsidian";
+import { EditorChange, EditorPosition } from "obsidian";
 
 import type FootnotePlugin from "../main";
-import { comparePositions } from "../editor/cursor-motion";
-import { DocContext, docContext } from "../editor/doc-context";
+import { contextOfLines, DocContext, definitionNames } from "../editor/doc-context";
+import { composeChanges, mapPosition, simulateChanges, simulatedAnchors } from "../editor/insertion-liveness";
 import { definitionLabel } from "../parsing/footnote-grammar";
 import { findLineRunEnd, scanDocument } from "../parsing/markdown-scan";
 
@@ -45,46 +45,19 @@ function addFootnoteSectionHeader(plugin: FootnotePlugin): string {
 // first footnote it also adds a blank line and, if enabled, the section
 // heading.
 //
-// It comes back as plain data so that the calling code can put it and the
-// reference insertion into one single edit (see moveCursorAndSetJumpPoint).
+// It comes back as plain data, measured against the lines of `ctx`.
+// Every caller goes through planDefinitionAppend below, which hands this
+// the note as it reads AFTER the caller's own edit and puts the two into
+// one single transaction.
 export function buildDefinitionAppend(
-    doc: Editor,
+    ctx: DocContext,
     footnoteId: string,
     isFirstFootnote: boolean,
     plugin: FootnotePlugin,
-    ctx: DocContext = docContext(doc),
-    // The stretch of text a conversion is about to replace in this same
-    // edit. Two things follow from that. The definition must not land
-    // inside it, or the two edits would overlap. And a section heading
-    // that the selection is swallowing is no place to put the definition
-    // under (found by a property test, 2026-09-09: dragging across a
-    // "# Footnotes" heading with the setting on wrote the definition into
-    // the middle of the selection and glued the rest of the paragraph onto
-    // it).
-    //
-    // Only two of the four places a definition can go could ever fall
-    // inside this stretch, and both consult it: the slot under the heading,
-    // which is skipped when the heading is being swallowed, and the walk
-    // upward from a note ending inside an unclosed region. The other two
-    // cannot land inside it, because the calling code refuses a selection
-    // that overlaps a definition block, and the append at the end of the
-    // note sits at or after where the selection ends.
-    avoid?: { from: EditorPosition; to: EditorPosition },
 ): { change: EditorChange; cursor: EditorPosition; prepend?: EditorChange } {
-    // Read everything through `ctx`, never through `doc`. The table-cell
-    // path writes into the cell between building the context and calling
-    // this, so reading the document from two places is exactly how the two
-    // pictures of it come to disagree (second review 2026-09-09).
     const lines = ctx.lines;
     const isProtected = ctx.scan.isProtected;
     const blocks = ctx.blocks();
-    // Whether inserting at the END of `line` would land strictly inside
-    // the stretch `avoid` names.
-    const endInsideAvoid = (line: number): boolean => {
-        if (!avoid) return false;
-        const at = { line, ch: lines[line].length };
-        return comparePositions(avoid.from, at) < 0 && comparePositions(at, avoid.to) < 0;
-    };
     // A line with text on it directly below the new definition gets pulled
     // INTO the definition, because Obsidian carries a definition on into
     // the next line. So when there is content below, add a blank line
@@ -140,16 +113,7 @@ export function buildDefinitionAppend(
         // would keep changing the note instead of settling.
         const headingLines = plugin.settings.footnoteSectionHeading.split("\n");
         const anchorEnd = findLineRunEnd(lines, isProtected, headingLines, ctx.scan.inCommentBlock);
-        // A heading the selection overlaps is about to be converted away
-        // along with the rest of the selection. A drag that stops at
-        // character 0 of the heading's line leaves the heading intact.
-        const headingSwallowed =
-            anchorEnd !== -1 &&
-            avoid !== undefined &&
-            anchorEnd >= avoid.from.line &&
-            (anchorEnd - headingLines.length + 1 < avoid.to.line ||
-                (anchorEnd - headingLines.length + 1 === avoid.to.line && avoid.to.ch > 0));
-        if (anchorEnd !== -1 && !headingSwallowed) {
+        if (anchorEnd !== -1) {
             let fromLine = anchorEnd;
             let slotText = `\n\n[^${footnoteId}]: `;
             // If a blank line already sits between the heading and what
@@ -187,13 +151,8 @@ export function buildDefinitionAppend(
         // The trailing-blank trimming must not run in this case, because
         // its range reaches to the end of the note and would delete the
         // unclosed region itself.
-        while (
-            fromLine >= 0 &&
-            (ctx.scan.endsProtectedAt[fromLine] || endInsideAvoid(fromLine))
-        ) {
-            fromLine--;
-        }
-        while (fromLine >= 0 && (lines[fromLine].trim() === "" || endInsideAvoid(fromLine))) fromLine--;
+        while (fromLine >= 0 && ctx.scan.endsProtectedAt[fromLine]) fromLine--;
+        while (fromLine >= 0 && lines[fromLine].trim() === "") fromLine--;
         if (fromLine < 0) {
             // The unclosed region starts at line 0, so there is nowhere
             // above it to walk to. Put the definition at the very top,
@@ -293,7 +252,7 @@ export function buildDefinitionAppend(
  * at a continuation line instead (review A4; Jason confirmed it live on
  * 2026-09-08, where the conversion was wrongly refused as protected text).
  */
-export function seedDefinitionBody(
+function seedDefinitionBody(
     definition: {
         change: EditorChange;
         cursor: EditorPosition;
@@ -328,5 +287,97 @@ export function seedDefinitionBody(
                       line: definition.cursor.line + bodyLines.length - 1,
                       ch: bodyLines[bodyLines.length - 1].length,
                   },
+    };
+}
+
+/** What planDefinitionAppend works out. Every position is a position in `final`. */
+export interface DefinitionAppendPlan {
+    /** The changes for ONE transaction, measured against the note as it is now: the caller's edits and the definition together, so that applying them gives `final` exactly. */
+    changes: EditorChange[];
+    /** The note as the transaction leaves it. */
+    final: string[];
+    /** Where the text of each of the caller's edits begins and ends, in the order the caller gave them. */
+    edits: { start: EditorPosition; end: EditorPosition }[];
+    /** The new definition's label line. */
+    labelLine: number;
+    /** Where the caret goes in the new definition: the end of its label, or the end of the seeded body. */
+    cursor: EditorPosition;
+}
+
+/**
+ * The one way a definition is added: plan it against the note as it will
+ * read AFTER the caller's own edits (`edits`, measured against `lines`, the
+ * note as it is now), and hand back both as one transaction.
+ *
+ * Every creation and the carried paste make two edits at once: one at the
+ * caret (a reference, a converted selection, a pasted text) and the
+ * definition. The definition used to be planned against the note BEFORE
+ * the caret's edit, and whenever that edit changed what the definition
+ * should see, the two collided: the trailing-blank trim ran over the caret
+ * and the reference landed inside its own definition, a definition went
+ * into the blank line the reference filled and was read as more of that
+ * paragraph, a section heading lost the blank line it needs above it, and
+ * a paste over a selection reused a definition the paste itself deleted
+ * (hunt 2026-10-02, clusters R1, I1, I2, O1, C8, C12, C13, C28). Planned
+ * against the note after the edit, every rule in buildDefinitionAppend
+ * sees the real neighbours, and its positions are already the final ones.
+ *
+ * Whether this is the note's first footnote is read from that same note,
+ * so a paste that replaces every definition gets the section heading a
+ * first footnote gets, and a pasted text that brings the heading with it
+ * keeps the one it brought. "First" means the first DEFINITION, the way
+ * the named command and the move-to-bottom rule count it: a note whose
+ * only footnote is an orphaned reference still gets the heading
+ * (2026-08-11 review, bug #8).
+ *
+ * `body` is the definition's text, filled in after the label (a
+ * conversion, a carried definition), and `moreDefinitionLines` are whole
+ * definition lines added right under it (the other carried or converted
+ * definitions). Leave both out for an empty definition.
+ */
+export function planDefinitionAppend(opts: {
+    lines: string[];
+    edits: EditorChange[];
+    footnoteId: string;
+    plugin: FootnotePlugin;
+    body?: string;
+    moreDefinitionLines?: string[];
+}): DefinitionAppendPlan {
+    const middle = simulateChanges(opts.lines, opts.edits);
+    const editStarts = simulatedAnchors(opts.lines, opts.edits, opts.edits.map((_, i) => i), middle);
+    const ctx = contextOfLines(middle);
+    const body = opts.body ?? "";
+    const bodyExtraLines = body.split("\n").length - 1;
+    const seeded = seedDefinitionBody(
+        buildDefinitionAppend(ctx, opts.footnoteId, definitionNames(ctx).length === 0, opts.plugin),
+        opts.footnoteId,
+        body,
+    );
+    const text = seeded.change.text.split("\n");
+    text.splice(seeded.labelLineOffset + bodyExtraLines + 1, 0, ...(opts.moreDefinitionLines ?? []));
+    const change = { ...seeded.change, text: text.join("\n") };
+    const append = seeded.prepend ? [seeded.prepend, change] : [change];
+    const final = simulateChanges(middle, append);
+    // An edit's text starts after anything the append inserts right where
+    // it starts (the prepended blank line at the top of the note), and
+    // ends before anything the append inserts right where it ends (the
+    // definition, written straight after a reference that ends the note).
+    const edits = editStarts.map((start, i) => {
+        const editLines = opts.edits[i].text.split("\n");
+        const end =
+            editLines.length === 1
+                ? { line: start.line, ch: start.ch + editLines[0].length }
+                : { line: start.line + editLines.length - 1, ch: editLines[editLines.length - 1].length };
+        return {
+            start: mapPosition(middle, append, start, 1, final),
+            end: mapPosition(middle, append, end, -1, final),
+        };
+    });
+    return {
+        changes: composeChanges(opts.lines, opts.edits, append),
+        final,
+        edits,
+        labelLine: seeded.cursor.line - bodyExtraLines,
+        cursor: seeded.cursor,
     };
 }

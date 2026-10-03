@@ -3,7 +3,7 @@ import { EditorChange, EditorPosition } from "obsidian";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
-import { simulateChanges, simulatedAnchor } from "../src/editor/insertion-liveness";
+import { composeChanges, mapPosition, simulateChanges, simulatedAnchor } from "../src/editor/insertion-liveness";
 
 // Differential spec (review D5, 2026-09-09): simulateChanges is the
 // plugin's model of how CodeMirror applies one transaction's changes, and
@@ -135,5 +135,76 @@ describe("simulateChanges against a real CodeMirror ChangeSet", () => {
             .apply(Text.of(lines))
             .toString();
         expect(simulateChanges(lines, changes).join("\n")).toBe(expected);
+    });
+});
+
+// composeChanges and mapPosition (2026-10-03) carry a creation's edit and
+// the definition planned against the note AFTER that edit into one
+// transaction (planDefinitionAppend). The same referee checks them: a
+// real ChangeSet composed from the two change sets, and its mapPos.
+describe("composeChanges and mapPosition against a real CodeMirror ChangeSet", () => {
+    /** A document, a first change set on it, and a second change set on what the first produces. */
+    const twoStepArb = docArb
+        .chain((lines) => fc.tuple(fc.constant(lines), spansArb(lines.join("\n").length)))
+        .chain(([lines, first]) => {
+            const middle = ChangeSet.of(
+                first.map((s) => ({ from: s.from, to: s.to, insert: s.text })),
+                lines.join("\n").length,
+            )
+                .apply(Text.of(lines))
+                .toString();
+            return fc.tuple(fc.constant(lines), fc.constant(first), fc.constant(middle.split("\n")), spansArb(middle.length));
+        });
+
+    it("one composed change list lands exactly what the two steps land", () => {
+        fc.assert(
+            fc.property(twoStepArb, ([lines, first, middle, second]) => {
+                const original = Text.of(lines);
+                const firstSet = ChangeSet.of(
+                    first.map((s) => ({ from: s.from, to: s.to, insert: s.text })),
+                    original.length,
+                );
+                const secondSet = ChangeSet.of(
+                    second.map((s) => ({ from: s.from, to: s.to, insert: s.text })),
+                    middle.join("\n").length,
+                );
+                const expected = firstSet.compose(secondSet).apply(original).toString();
+                const composed = composeChanges(lines, toEditorChanges(lines, first), toEditorChanges(middle, second));
+                expect(simulateChanges(lines, composed).join("\n")).toBe(expected);
+                // and CodeMirror itself accepts the composed list as one
+                // transaction (in order, no overlaps) and lands the same
+                const offsets = composed.map((change) => ({
+                    from: original.line(change.from.line + 1).from + change.from.ch,
+                    to: change.to ? original.line(change.to.line + 1).from + change.to.ch : undefined,
+                    insert: change.text,
+                }));
+                expect(ChangeSet.of(offsets, original.length).apply(original).toString()).toBe(expected);
+            }),
+        );
+    });
+
+    it("maps a position the way CodeMirror's mapPos does, on either side", () => {
+        fc.assert(
+            fc.property(
+                docArb.chain((lines) =>
+                    fc.tuple(
+                        fc.constant(lines),
+                        spansArb(lines.join("\n").length),
+                        fc.nat(lines.join("\n").length),
+                        fc.constantFrom(-1 as const, 1 as const),
+                    ),
+                ),
+                ([lines, spans, offset, assoc]) => {
+                    const original = Text.of(lines);
+                    const changeSet = ChangeSet.of(
+                        spans.map((s) => ({ from: s.from, to: s.to, insert: s.text })),
+                        original.length,
+                    );
+                    const applied = changeSet.apply(original);
+                    const mapped = mapPosition(lines, toEditorChanges(lines, spans), positionOf(lines, offset), assoc);
+                    expect(applied.line(mapped.line + 1).from + mapped.ch).toBe(changeSet.mapPos(offset, assoc));
+                },
+            ),
+        );
     });
 });

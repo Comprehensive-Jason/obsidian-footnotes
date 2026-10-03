@@ -1,15 +1,8 @@
 import { Editor, EditorChange, EditorPosition } from "obsidian";
 import { NoFootnoteCreated } from "./notice";
 
-import { docLines } from "./doc-context";
+import { contextOfLines, DocContext, docLines, insideDefinition } from "./doc-context";
 import { escapedAt, referenceOccurrences } from "../parsing/footnote-grammar";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskedLineAt,
-    maskProtectedLines,
-    scanDocument,
-} from "../parsing/markdown-scan";
 
 // The born-dead safety kit. One question: once the text lands, will it
 // still MEAN what it says?
@@ -61,30 +54,20 @@ export function safeInsertionCh(lineText: string, ch: number): number {
 }
 
 /**
- * The caret line's masked twin (a copy of the line with protected text
- * blanked out) as it WOULD look after replacing the columns from
- * `position.ch` up to `toCh` with `insert`. Leave `toCh` out for a plain
- * insertion.
+ * The shared view of the note as it WOULD read after writing `insert` at
+ * `position`: the way a single insertion with no definition alongside it
+ * (an inline footnote, a placeholder) is checked.
  *
- * This is how a single-change edit is checked for liveness. An insertion
- * can COMPLETE a construct around itself and so be masked into it at birth:
- * the case found was a "$…$" math pair whose contents previously had a
- * space at the edge (command-press property suite, 2026-08-12). A selection
- * REPLACEMENT (issue #35) can also do the opposite and un-close a construct
- * by deleting its closer. The simulation runs against the whole document,
- * so region state spanning several lines is honored.
+ * An insertion can COMPLETE a construct around itself and so be masked
+ * into it at birth: the case found was a "$...$" math pair whose contents
+ * previously had a space at the edge (command-press property suite,
+ * 2026-08-12). And one that fills the empty line under a definition joins
+ * that definition (hunt 2026-10-02, cluster R2). The simulation runs
+ * against the whole document, so region state spanning several lines is
+ * honored.
  */
-export function simulatedMaskedLine(
-    doc: Editor,
-    position: EditorPosition,
-    insert: string,
-    toCh: number = position.ch,
-): string {
-    const lines = docLines(doc);
-    const lineText = lines[position.line];
-    lines[position.line] =
-        lineText.slice(0, position.ch) + insert + lineText.slice(toCh);
-    return maskedLineAt(lines, position.line);
+export function simulatedContext(doc: Editor, position: EditorPosition, insert: string): DocContext {
+    return contextOfLines(simulateChanges(docLines(doc), [{ from: position, text: insert }]));
 }
 
 // Shared by simulateChanges and simulatedAnchor: how many characters into
@@ -215,6 +198,134 @@ export function simulatedAnchors(
     });
 }
 
+// The line and column of character `offset` in `lines`, counting the lines
+// as joined by a single "\n". The reverse of offsetIn.
+function positionAt(lines: string[], offset: number): EditorPosition {
+    let line = 0;
+    while (line < lines.length - 1 && offset > lines[line].length) {
+        offset -= lines[line].length + 1;
+        line++;
+    }
+    return { line, ch: offset };
+}
+
+/**
+ * One list of changes that does what `first` and then `second` do, as a
+ * single transaction. `first` is measured against `lines`, the way every
+ * transaction is; `second` is measured against the text `first` produces.
+ * The result is measured against `lines` again, so it can go to the editor
+ * in one transaction, one undo.
+ *
+ * Why it exists: a creation press writes a reference at the caret and a
+ * definition at the bottom in one edit, and the definition has to be
+ * planned against the note as it reads AFTER the reference is in. Planned
+ * against the note before it, the two halves collided: the trailing-blank
+ * trim ran over the caret and wrote the reference into its own definition,
+ * and an empty line filled by the reference joined the definition above it
+ * (hunt 2026-10-02, clusters R1, R2, I1, I2, O1, C12, C13).
+ *
+ * How it works: every change of both lists is a stretch of the text in the
+ * middle (after `first`, before `second`). Stretches that touch or overlap
+ * are merged into one change, whose text is read straight off the final
+ * result; a stretch that touches nothing is passed through as it is. So a
+ * reference with nothing near it stays its own small edit, and one that
+ * the definition lands right after becomes one edit with it. Different
+ * merged changes never touch, so no tie rule decides their order, and the
+ * result is exact by construction (pinned against CodeMirror's own
+ * ChangeSet.compose in test/simulate-changes-differential.test.ts).
+ */
+export function composeChanges(
+    lines: string[],
+    first: EditorChange[],
+    second: EditorChange[],
+): EditorChange[] {
+    const text = lines.join("\n");
+    const firstResolved = resolveChanges(lines, first);
+    const middleBuilt = applyResolvedChanges(text, firstResolved);
+    const middleLines = middleBuilt.out.split("\n");
+    const secondResolved = resolveChanges(middleLines, second);
+    const finalBuilt = applyResolvedChanges(middleBuilt.out, secondResolved);
+    // every change as a stretch of the middle text, with how much longer
+    // it makes the text it belongs to (`first`'s or `second`'s)
+    const stretches = [
+        ...firstResolved.map((change) => ({
+            start: middleBuilt.landing[change.index],
+            end: middleBuilt.landing[change.index] + change.text.length,
+            grows: change.text.length - (change.to - change.from),
+            isFirst: true,
+        })),
+        ...secondResolved.map((change) => ({
+            start: change.from,
+            end: change.to,
+            grows: change.text.length - (change.to - change.from),
+            isFirst: false,
+        })),
+    ].sort((a, b) => a.start - b.start || a.end - b.end);
+    const composed: EditorChange[] = [];
+    // how much the changes already passed have grown each text
+    let firstGrew = 0;
+    let secondGrew = 0;
+    let k = 0;
+    while (k < stretches.length) {
+        // one group: every stretch that touches the group so far
+        const start = stretches[k].start;
+        let end = stretches[k].end;
+        let groupFirstGrew = 0;
+        let groupSecondGrew = 0;
+        while (k < stretches.length && stretches[k].start <= end) {
+            end = Math.max(end, stretches[k].end);
+            if (stretches[k].isFirst) groupFirstGrew += stretches[k].grows;
+            else groupSecondGrew += stretches[k].grows;
+            k++;
+        }
+        composed.push({
+            from: positionAt(lines, start - firstGrew),
+            to: positionAt(lines, end - firstGrew - groupFirstGrew),
+            text: finalBuilt.out.slice(start + secondGrew, end + secondGrew + groupSecondGrew),
+        });
+        firstGrew += groupFirstGrew;
+        secondGrew += groupSecondGrew;
+    }
+    return composed;
+}
+
+/**
+ * Where position `pos` of `lines` ends up once `changes` land. Text
+ * inserted exactly at `pos` goes after it when `assoc` is -1 and before it
+ * when `assoc` is 1, so the start of a stretch of text is carried with 1
+ * and its end with -1. A position inside replaced text moves to the start
+ * (-1) or the end (1) of the replacement. This is CodeMirror's mapPos, for
+ * the change lists the plugin builds.
+ */
+export function mapPosition(
+    lines: string[],
+    changes: EditorChange[],
+    pos: EditorPosition,
+    assoc: -1 | 1,
+    mapped: string[] = simulateChanges(lines, changes),
+): EditorPosition {
+    const offset = offsetIn(lines, pos);
+    let grew = 0;
+    for (const change of resolveChanges(lines, changes)) {
+        const grows = change.text.length - (change.to - change.from);
+        if (change.to < offset) {
+            grew += grows;
+        } else if (change.from > offset) {
+            break;
+        } else if (change.from === change.to) {
+            // an insert right at the position
+            if (assoc > 0) grew += grows;
+        } else if (change.to === offset) {
+            // a replacement that ends right at the position
+            grew += grows;
+        } else if (change.from < offset) {
+            // inside the replaced text
+            return positionAt(mapped, change.from + grew + (assoc > 0 ? change.text.length : 0));
+        }
+    }
+    return positionAt(mapped, offset + grew);
+}
+
 /** Whether `ch` sits STRICTLY inside a masked span (the run of NULs that
  * stands in for protected text), meaning the characters on both sides of it
  * are claimed. The edges are fine: just before an opener, or just after a
@@ -233,65 +344,63 @@ export function caretInsideMaskedSpan(
 }
 
 /**
+ * What a creation's result means once it lands: "live" when it reads as
+ * the footnote it promised; "dead" when something died (the caller shows
+ * ProtectedCreationNotice and refuses); "nested" when a reference landed
+ * inside a definition (the caller shows NestedFootnoteNotice and refuses).
+ */
+export type InsertionVerdict = "live" | "dead" | "nested";
+
+/**
  * The shared born-dead verdict for any insertion that comes with a
- * definition. The single-caret insert, the multi-caret press, and the
- * selection conversion each had their own copy of this block before
- * 2026-08-25.
+ * definition: the single-caret insert, the multi-caret press, and the
+ * selection conversion (one copy since 2026-08-25).
  *
- * It judges the SIMULATED result, and two things must hold. Every reference
- * the press writes must still read as a live "[^id]" at its shifted landing
- * spot (simulatedAnchor: a definition appended ABOVE the caret pushes later
- * lines down, and a selection collapsing pulls the lines below it up). And
- * the definition must read as a live definition block that starts at
- * `definitionLabelLine` and claims every continuation line seeded under it.
+ * It judges the note exactly as the transaction will leave it (`lines`,
+ * from planDefinitionAppend), and three things must hold. The definition
+ * must read as a live definition block that starts at `definitionLabelLine`
+ * and claims every continuation line seeded under it. Every reference the
+ * press writes must read as a live "[^id]" at its spot in `anchors`. And no
+ * such reference may sit inside any definition: an empty line the
+ * reference fills can join the definition above it, as its lazy
+ * continuation, and the plugin never creates a nested footnote (ADR 0001;
+ * hunt 2026-10-02, pin bug-press-blank-line-under-definition-nests).
  *
- * Null means something died. The caller then shows ProtectedCreationNotice
- * and refuses the whole press: one dead landing refuses the lot. Every
- * failure mode this guards against was found by the command-press property
- * suite (2026-08-12).
- *
- * Pass `simulated` when you have already simulated (to work out the label
- * line); otherwise it is computed here.
+ * One dead or nested landing refuses the whole press. Every "dead" failure
+ * mode was found by the command-press property suite (2026-08-12).
  */
 export function verifyLiveFootnoteInsertion(opts: {
+    /** the note as the transaction leaves it */
     lines: string[];
-    changes: EditorChange[];
-    /** which entries of `changes` write a "[^id]" reference */
-    referenceChangeIndices: number[];
+    /** where each reference the press writes begins, in `lines` */
+    anchors: EditorPosition[];
     footnoteId: string;
-    /** the definition label's line number, counted in the document AFTER
-     * the changes land */
+    /** the definition label's line in `lines` */
     definitionLabelLine: number;
     /** how many continuation lines are seeded under the label, for a
      * definition whose body runs over several lines */
     definitionBodyExtraLines?: number;
-    simulated?: string[];
-}): { anchors: EditorPosition[] } | null {
-    const simulated = opts.simulated ?? simulateChanges(opts.lines, opts.changes);
-    const simulatedScan = scanDocument(simulated);
+}): InsertionVerdict {
+    const ctx = contextOfLines(opts.lines);
     const bodyExtraLines = opts.definitionBodyExtraLines ?? 0;
-    const definitionLive = findDefinitionBlocks(simulated, simulatedScan).some(
+    const definitionLive = ctx.blocks().some(
         (block) =>
             block.start === opts.definitionLabelLine &&
             block.end >= opts.definitionLabelLine + bodyExtraLines,
     );
-    if (!definitionLive) return null;
-    const anchors = simulatedAnchors(opts.lines, opts.changes, opts.referenceChangeIndices, simulated);
-    // build the masked twin once from the scan already taken: maskedLineAt
-    // would re-scan the whole simulated document once per reference
-    // (review B4)
-    const simulatedMasked = maskProtectedLines(simulated, simulatedScan);
-    const simulatedStarts = definitionStartLines(simulated, simulatedScan, (i) => simulatedMasked[i]);
-    const everyReferenceLive = anchors.every((anchor) =>
+    if (!definitionLive) return "dead";
+    const starts = ctx.definitionStarts();
+    const everyReferenceLive = opts.anchors.every((anchor) =>
         referenceOccurrences(
-            simulated[anchor.line],
-            simulatedMasked[anchor.line],
-            simulatedStarts[anchor.line],
+            opts.lines[anchor.line],
+            ctx.maskedLine(anchor.line),
+            starts[anchor.line],
         ).some(
             (occurrence) =>
                 occurrence.start === anchor.ch &&
                 occurrence.name === opts.footnoteId,
         ),
     );
-    return everyReferenceLive ? { anchors } : null;
+    if (!everyReferenceLive) return "dead";
+    return opts.anchors.some((anchor) => insideDefinition(ctx, anchor.line)) ? "nested" : "live";
 }

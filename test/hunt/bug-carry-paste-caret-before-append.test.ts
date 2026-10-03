@@ -64,7 +64,7 @@ beforeEach(() => {
 });
 
 describe("the caret after a paste whose definition lands above the paste point", () => {
-    it.fails("lands after the pasted body when the definition is appended ABOVE the paste point (definitions mid-note, issue #55 layout)", () => {
+    it("lands after the pasted body when the definition is appended ABOVE the paste point (definitions mid-note, issue #55 layout)", () => {
         const dest = editor(["Intro[^1]", "", "[^1]: one", "", "More text here"], { line: 4, ch: 14 });
         handlePaste(fakePlugin(on, dest), clipboardEvent("c[^7]\n\n[^7]: seven") as never, dest);
         // The text itself lands right: the definition joins the others,
@@ -74,7 +74,7 @@ describe("the caret after a paste whose definition lands above the paste point",
         expect(dest.cursor).toEqual({ line: 5, ch: 19 });
     });
 
-    it.fails("lands after the pasted body when the first-footnote append adds a line at the top", () => {
+    it("lands after the pasted body when the first-footnote append adds a line at the top", () => {
         const heading = { enableFootnoteSectionHeading: true, footnoteSectionHeading: "---\n# Footnotes" };
         const dest = editor(["---", "Text"], { line: 1, ch: 4 });
         handlePaste(fakePlugin({ ...on, ...heading }, dest), clipboardEvent("c[^7]\n\n[^7]: seven") as never, dest);

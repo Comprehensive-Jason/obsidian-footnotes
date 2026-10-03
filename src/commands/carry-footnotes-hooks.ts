@@ -1,8 +1,8 @@
 import { EditorView } from "@codemirror/view";
-import { Editor, EditorPosition, MarkdownView } from "obsidian";
+import { Editor, EditorChange, EditorPosition, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
-import { docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
+import { docLines } from "../editor/doc-context";
 import { showNotice } from "../editor/notice";
 import { codeMirrorViewOf, readingViewActive, viewEditor } from "../editor/obsidian-internals";
 import { activeTableCellEditor } from "../editor/table-cursor";
@@ -19,7 +19,7 @@ import {
     splitCarriedText,
     withCarriedText,
 } from "./carry-footnotes";
-import { buildDefinitionAppend, seedDefinitionBody } from "./definition-append";
+import { planDefinitionAppend } from "./definition-append";
 
 // The editor side of carrying footnote definitions on copy, cut, and paste
 // (issue #59; Jason's rulings 2026-09-21 and 2026-09-22). The pure pieces
@@ -50,7 +50,7 @@ import { buildDefinitionAppend, seedDefinitionBody } from "./definition-append";
 // Copy with Footnotes clipboard), the plugin takes the paste over and
 // lands the body plus the carried definitions in one transaction, merged
 // and renamed to fit the destination (planCarriedPaste), where a creation
-// press would put them (buildDefinitionAppend). Then the lint-on-creation
+// press would put them (planDefinitionAppend). Then the lint-on-creation
 // trigger runs, as after every press that creates a footnote.
 
 /** What the last copy or cut from this window took with it. */
@@ -265,34 +265,33 @@ function landCarriedText(
     carried: CarriedDefinition[],
     missing: string[],
 ): void {
-    const ctx = docContext(doc);
     const plan = planCarriedPaste(doc.getValue(), body, carried);
+    const edits = [{ from, to, text: plan.body }];
+    let changes: EditorChange[] = edits;
     const bodyLines = plan.body.split("\n");
-    const changes = [{ from, to, text: plan.body }];
-    if (plan.definitions.length > 0) {
-        // where a creation press would put a definition, seeded with the
-        // first carried block's body and extended with the rest, all in
-        // the same transaction as the body
-        const first = plan.definitions[0];
-        const isFirstFootnote = listExistingFootnoteDefinitions(doc, ctx).length === 0;
-        const definition = seedDefinitionBody(
-            buildDefinitionAppend(doc, first.name, isFirstFootnote, plugin, ctx, { from, to }),
-            first.name,
-            blockBody(first),
-        );
-        const textLines = definition.change.text.split("\n");
-        textLines.splice(
-            definition.labelLineOffset + blockBody(first).split("\n").length,
-            0,
-            ...plan.definitions.slice(1).flatMap((block) => block.lines),
-        );
-        if (definition.prepend) changes.push(definition.prepend as { from: EditorPosition; to: EditorPosition; text: string });
-        changes.push({ ...definition.change, to: definition.change.to ?? definition.change.from, text: textLines.join("\n") });
-    }
-    const end: EditorPosition =
+    let end: EditorPosition =
         bodyLines.length === 1
             ? { line: from.line, ch: from.ch + plan.body.length }
             : { line: from.line + bodyLines.length - 1, ch: bodyLines[bodyLines.length - 1].length };
+    if (plan.definitions.length > 0) {
+        // where a creation press would put a definition, seeded with the
+        // first carried block's body and extended with the rest, planned
+        // against the note with the text already pasted, all in the same
+        // transaction as the text; the caret goes right after the pasted
+        // text, wherever the definitions pushed it (hunt 2026-10-02, pin
+        // bug-carry-paste-caret-before-append)
+        const [first, ...rest] = plan.definitions;
+        const append = planDefinitionAppend({
+            lines: docLines(doc),
+            edits,
+            footnoteId: first.name,
+            plugin,
+            body: blockBody(first),
+            moreDefinitionLines: rest.flatMap((block) => block.lines),
+        });
+        changes = append.changes;
+        end = append.edits[0].end;
+    }
     doc.transaction({ changes, selection: { from: end } });
 
     // The counts read in a fixed order, added, reused, matched, renamed,

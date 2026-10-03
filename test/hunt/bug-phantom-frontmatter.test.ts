@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import FootnotePlugin from "../../src/main";
 import { buildDefinitionAppend } from "../../src/commands/definition-append";
+import { docContext } from "../../src/editor/doc-context";
 import { lintFootnotes } from "../../src/linting/linter";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 
@@ -79,7 +80,7 @@ describe("phantom frontmatter from a leading thematic break", () => {
                 footnoteSectionHeading: HEADING,
             },
         } as unknown as FootnotePlugin;
-        const definition = buildDefinitionAppend(doc, "1", true, plugin);
+        const definition = buildDefinitionAppend(docContext(doc), "1", true, plugin);
         expect(definition.prepend).toEqual({
             from: { line: 0, ch: 0 },
             text: "\n",
@@ -103,6 +104,6 @@ describe("phantom frontmatter from a leading thematic break", () => {
                 footnoteSectionHeading: "## Footnotes",
             },
         } as unknown as FootnotePlugin;
-        expect(buildDefinitionAppend(doc, "1", true, plugin).prepend).toBeUndefined();
+        expect(buildDefinitionAppend(docContext(doc), "1", true, plugin).prepend).toBeUndefined();
     });
 });

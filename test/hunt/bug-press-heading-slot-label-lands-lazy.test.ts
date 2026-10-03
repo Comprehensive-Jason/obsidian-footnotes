@@ -114,7 +114,7 @@ beforeEach(() => {
 });
 
 describe("a numbered press on the blank line under an existing section heading", () => {
-    it.fails("makes a live definition, or refuses without claiming protected text", async () => {
+    it("makes a live definition, or refuses without claiming protected text", async () => {
         const lines = ["Intro.", "", "## Notes", "", "More prose."];
         const doc = fakeEditor(lines, { cursor: { line: 3, ch: 0 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(settings(), doc));
@@ -122,14 +122,14 @@ describe("a numbered press on the blank line under an existing section heading",
         expect(acceptable(lines, doc.lines)).toBe(true);
     });
 
-    it.fails("on the trailing blank line under a heading that ends the note", async () => {
+    it("on the trailing blank line under a heading that ends the note", async () => {
         const lines = ["Intro.", "", "## Notes", ""];
         const doc = fakeEditor(lines, { cursor: { line: 3, ch: 0 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(settings(), doc));
         expect(acceptable(lines, doc.lines)).toBe(true);
     });
 
-    it.fails("two carets, one of them on the blank line under the heading", async () => {
+    it("two carets, one of them on the blank line under the heading", async () => {
         const lines = ["Alpha bravo", "", "## Notes", "", "More prose."];
         const doc = fakeEditor(lines, {
             carets: [
@@ -146,7 +146,7 @@ describe("a numbered press on the blank line under an existing section heading",
 });
 
 describe("a carried paste on the blank line under an existing section heading", () => {
-    it.fails("the carried definition lands live, not glued under the pasted paragraph", () => {
+    it("the carried definition lands live, not glued under the pasted paragraph", () => {
         const lines = ["Intro.", "", "## Notes", "", "More prose."];
         const at = { line: 3, ch: 0 };
         const doc = fakeEditor(lines, { wholeDoc: true, edits: true, cursor: at, selection: { anchor: at, head: at }, words: true });

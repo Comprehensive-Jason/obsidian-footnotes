@@ -4,6 +4,7 @@ import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 
 import { buildDefinitionAppend } from "../../src/commands/definition-append";
+import { docContext } from "../../src/editor/doc-context";
 import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
 
 // BUG: when the note already has a definition, the append goes straight
@@ -62,7 +63,7 @@ describe("bug: the append after the last definition block ignores an unclosed re
         it("the new definition lands outside that region and is a real definition", () => {
             const lines = noteEndingInsideAnOpener(opener);
             const doc = fakeEditor(lines, { edits: true });
-            const { change } = buildDefinitionAppend(doc, "2", false, fakePlugin());
+            const { change } = buildDefinitionAppend(docContext(doc), "2", false, fakePlugin());
             doc.transaction({ changes: [change] });
             const after = doc.lines;
             const names = findDefinitionBlocks(after, scanDocument(after)).map((b) => b.name);

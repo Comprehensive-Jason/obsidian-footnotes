@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { buildDefinitionAppend } from "../../src/commands/definition-append";
+import { docContext } from "../../src/editor/doc-context";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 
 // spec question: when a note has the section heading in the MIDDLE of it
@@ -53,7 +54,7 @@ const appendSlotLine = (...tail: string[]) => {
         enableFootnoteSectionHeading: true,
         footnoteSectionHeading: HEADING,
     });
-    return buildDefinitionAppend(editor, "1", true, plugin).change.from.line;
+    return buildDefinitionAppend(docContext(editor), "1", true, plugin).change.from.line;
 };
 
 describe("a mid-note heading with an unclosed code fence at the end", () => {

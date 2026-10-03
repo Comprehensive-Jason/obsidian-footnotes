@@ -11,11 +11,11 @@ import {
 } from "../parsing/footnote-grammar";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
 import { adjustFootnotePosition, comparePositions } from "../editor/cursor-motion";
-import { buildDefinitionAppend } from "./definition-append";
-import { DocContext, docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
+import { planDefinitionAppend } from "./definition-append";
+import { contextOfLines, DocContext, docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
 import {
+    bareInsertionVerdict,
     inlineFootnoteSpanAt,
-    insertionLandsIntact,
     readInlineFootnoteFromClipboard,
 } from "./inline-footnotes";
 import {
@@ -24,11 +24,11 @@ import {
     simulatedAnchors,
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
-import { maskProtectedLines, scanDocument } from "../parsing/markdown-scan";
 import {
     autonumFootnoteId,
     createMatchingFootnoteDefinition,
     landDefinitionBackedInsertion,
+    refusedCreation,
 } from "./create-footnote";
 import {
     caretGuardsHandled,
@@ -375,39 +375,28 @@ function insertReferenceAtEveryCaret(
     const footnoteId = autonumFootnoteId(plugin, doc, ctx);
     if (footnoteId === null) return;
     const footnoteReference = referenceText(footnoteId);
-    const isFirstFootnote = listExistingFootnoteDefinitions(doc, ctx).length === 0;
-
-    const definition = buildDefinitionAppend(doc, footnoteId, isFirstFootnote, plugin, ctx);
-    const changes: EditorChange[] = targets.map((pos) => ({
-        from: pos,
-        text: footnoteReference,
-    }));
-    changes.push(definition.change);
-    if (definition.prepend) changes.push(definition.prepend);
-
-    const verified = verifyLiveFootnoteInsertion({
+    const plan = planDefinitionAppend({
         lines: ctx.lines,
-        changes,
-        referenceChangeIndices: targets.map((_, index) => index),
+        edits: targets.map((pos) => ({ from: pos, text: footnoteReference })),
         footnoteId,
-        definitionLabelLine: definition.cursor.line,
+        plugin,
     });
-    if (!verified) {
-        showNotice(ProtectedCreationNotice, 8000);
-        return;
-    }
+    const verdict = verifyLiveFootnoteInsertion({
+        lines: plan.final,
+        anchors: plan.edits.map((edit) => edit.start),
+        footnoteId,
+        definitionLabelLine: plan.labelLine,
+    });
+    if (refusedCreation(verdict, ProtectedCreationNotice)) return;
 
     landDefinitionBackedInsertion({
         plugin,
         doc,
-        changes,
+        changes: plan.changes,
         origin: targets[0],
         footnoteId,
-        definitionCursor: definition.cursor,
-        afterReference: {
-            line: verified.anchors[0].line,
-            ch: verified.anchors[0].ch + footnoteReference.length,
-        },
+        definitionCursor: plan.cursor,
+        afterReference: plan.edits[0].end,
         // The landing runs the after-creation lint, the same as every other
         // creation press (Jason asked for that parity on 2026-08-25). That
         // works here because reindexing renames every newly minted reference
@@ -438,19 +427,13 @@ function insertSkeletonAtEveryCaret(
 ): void {
     const changes: EditorChange[] = targets.map((pos) => ({ from: pos, text }));
     const simulated = simulateChanges(ctx.lines, changes);
-    // Work out all the positions in one pass and build one masked twin for
-    // all of them, the way verifyLiveFootnoteInsertion does. The old
+    // Work out all the positions in one pass and judge them on one view of
+    // the result, the way verifyLiveFootnoteInsertion does. The old
     // one-position-at-a-time version re-resolved and rescanned the whole
     // note once per caret (second review 2026-09-09).
     const anchors = simulatedAnchors(ctx.lines, changes, targets.map((_, index) => index), simulated);
-    const simulatedMasked = maskProtectedLines(simulated, scanDocument(simulated));
-    const everyLive = anchors.every((anchor) =>
-        insertionLandsIntact(simulatedMasked[anchor.line], anchor.ch, text),
-    );
-    if (!everyLive) {
-        showNotice(ProtectedCreationNotice, 8000);
-        return;
-    }
+    const verdict = bareInsertionVerdict(contextOfLines(simulated), anchors, text);
+    if (refusedCreation(verdict, ProtectedCreationNotice)) return;
     // The targets arrive in the order they appear in the note, so
     // anchors[0] is the first footnote.
     const landed = land === "first" ? anchors.slice(0, 1) : anchors;

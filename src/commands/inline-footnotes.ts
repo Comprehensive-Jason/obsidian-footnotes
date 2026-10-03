@@ -2,7 +2,8 @@ import { Editor, EditorPosition, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
 
-import { docLines } from "../editor/doc-context";
+import { DocContext, docLines, insideDefinition } from "../editor/doc-context";
+import { InsertionVerdict } from "../editor/insertion-liveness";
 import { maskInlineRegions, maskedLineAt } from "../parsing/markdown-scan";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
@@ -112,6 +113,22 @@ export function insertionLandsIntact(masked: string, at: number, text: string): 
     return text.startsWith("^[")
         ? inlineWrapLandsIntact(masked, at, text.length)
         : masked.slice(at, at + text.length) === text;
+}
+
+/**
+ * The verdict for `text` written with no definition alongside it (an
+ * inline footnote, the empty "[^]" placeholder) at every one of `anchors`,
+ * judged on `after`, the note as the edit leaves it. "dead" when one of
+ * them would not read as itself (insertionLandsIntact), "nested" when one
+ * lands on a line that belongs to a definition, which is what filling the
+ * empty line right under a definition does (ADR 0001; hunt 2026-10-02,
+ * pin bug-press-blank-line-under-definition-nests), otherwise "live". The
+ * same three answers verifyLiveFootnoteInsertion gives a reference that
+ * comes with its definition.
+ */
+export function bareInsertionVerdict(after: DocContext, anchors: EditorPosition[], text: string): InsertionVerdict {
+    if (!anchors.every((at) => insertionLandsIntact(after.maskedLine(at.line), at.ch, text))) return "dead";
+    return anchors.some((at) => insideDefinition(after, at.line)) ? "nested" : "live";
 }
 
 /**

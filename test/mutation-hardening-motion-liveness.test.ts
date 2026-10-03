@@ -11,7 +11,7 @@ import {
     caretInsideMaskedSpan,
     safeInsertionCh,
     simulateChanges,
-    simulatedMaskedLine,
+    simulatedContext,
 } from "../src/editor/insertion-liveness";
 
 // Kills Stryker survivors from the 2026-08-12 re-baseline on the two editor
@@ -492,7 +492,12 @@ describe("safeInsertionCh", () => {
     });
 });
 
-describe("simulatedMaskedLine", () => {
+// simulatedMaskedLine became simulatedContext on 2026-10-03 (the inline
+// and placeholder presses now also ask the simulated note whether the
+// line landed inside a definition); these read its masked line. Its
+// `toCh` replacement form had no caller left and went with it, and so did
+// the test of that form.
+describe("simulatedContext", () => {
     const docOf = (lines: string[]): Editor =>
         ({
             lineCount: () => lines.length,
@@ -504,32 +509,23 @@ describe("simulatedMaskedLine", () => {
     // line 66 MethodExpression "lineText.slice(toCh)" -> "lineText": the
     // tail would be the WHOLE line instead of the part after the caret.
     it("splices an insertion at the caret and keeps only the tail after it", () => {
-        expect(simulatedMaskedLine(docOf(["ab"]), { line: 0, ch: 1 }, "X")).toBe(
+        expect(simulatedContext(docOf(["ab"]), { line: 0, ch: 1 }, "X").maskedLine(0)).toBe(
             "aXb",
-        );
-    });
-
-    it("a replacement consumes the range up to toCh (issue #35 selections)", () => {
-        // deleting the closing "$" un-closes the math span: what was masked
-        // comes back live
-        const doc = docOf(["$a$ b"]);
-        expect(simulatedMaskedLine(doc, { line: 0, ch: 2 }, "Z", 3)).toBe(
-            "$aZ b",
         );
     });
 
     it("reports an insertion that COMPLETES a math pair as masked at birth", () => {
         const doc = docOf(["$a $"]);
         // untouched, the trailing space keeps "$a $" out of math…
-        expect(simulatedMaskedLine(doc, { line: 0, ch: 3 }, "")).toBe("$a $");
+        expect(simulatedContext(doc, { line: 0, ch: 3 }, "").maskedLine(0)).toBe("$a $");
         // …but filling that space closes the pair, and the insertion lands
         // inside it
-        expect(simulatedMaskedLine(doc, { line: 0, ch: 3 }, "b")).toBe(NUL(5));
+        expect(simulatedContext(doc, { line: 0, ch: 3 }, "b").maskedLine(0)).toBe(NUL(5));
     });
 
     it("honors whole-document region state: a line inside a fence masks fully", () => {
         const doc = docOf(["```", "code", "```"]);
-        expect(simulatedMaskedLine(doc, { line: 1, ch: 0 }, "[^1]")).toBe(
+        expect(simulatedContext(doc, { line: 1, ch: 0 }, "[^1]").maskedLine(1)).toBe(
             NUL("[^1]code".length),
         );
     });

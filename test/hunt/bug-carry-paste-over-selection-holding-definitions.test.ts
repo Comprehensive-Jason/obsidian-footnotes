@@ -114,7 +114,7 @@ describe("paste over a selection that holds the destination's definitions", () =
         expect(resolveAll(dest.lines).texts).toEqual(["one"]);
     });
 
-    it.fails("lands a live definition (not a lazy label glued to the body) when the selection runs to the end of the last definition", () => {
+    it("lands a live definition (not a lazy label glued to the body) when the selection runs to the end of the last definition", () => {
         const dest = editor(["a[^1]", "", "[^1]: one"], { line: 0, ch: 5 }, { line: 2, ch: 9 });
         handlePaste(fakePlugin(on, dest), clipboardEvent("c[^7]\n\n[^7]: seven") as never, dest);
         // The [^7]: label must not sit directly under a paragraph line.
@@ -123,7 +123,7 @@ describe("paste over a selection that holds the destination's definitions", () =
         expect(dest.lines[label - 1].trim() === "" || /^\[\^[^\]]+\]:/.test(dest.lines[label - 1])).toBe(true);
     });
 
-    it.fails("does not overlap the replaced range with the append when the selection swallows the end of the last definition", () => {
+    it("does not overlap the replaced range with the append when the selection swallows the end of the last definition", () => {
         // The selection runs from inside "[^1]: one" (after "[^1") to
         // inside "tail" (before "il").
         const dest = editor(["a[^1]", "", "[^1]: one", "", "tail"], { line: 2, ch: 3 }, { line: 4, ch: 2 });

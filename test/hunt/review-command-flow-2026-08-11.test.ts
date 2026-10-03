@@ -123,11 +123,11 @@ describe("bug #8: the section heading belongs to the first DEFINITION", () => {
                 footnoteSectionHeading: "# Footnotes",
             }),
         );
-        const texts = doc.appliedChanges.map((c) => c.text);
-        expect(texts).toContain("[^2]");
-        expect(
-            texts.some((t) => t.includes("# Footnotes") && t.includes("[^2]: ")),
-        ).toBe(true);
+        // Read off the note, not the change list: since 2026-10-03 a
+        // reference and a definition that land side by side go out as one
+        // merged change (composeChanges), so "[^2]" is no longer a change
+        // of its own here.
+        expect(doc.lines).toEqual(["orphan[^1] text[^2]", "", "# Footnotes", "", "[^2]: "]);
     });
 });
 

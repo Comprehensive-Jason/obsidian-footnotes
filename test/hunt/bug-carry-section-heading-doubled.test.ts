@@ -61,7 +61,7 @@ beforeEach(() => {
 });
 
 describe("a whole note with its section heading, pasted into an empty note", () => {
-    it.fails("2d: a whole note pasted into an empty one does not get a second section heading", () => {
+    it("2d: a whole note pasted into an empty one does not get a second section heading", () => {
         const doc = editor([""], { line: 0, ch: 0 });
         const plugin = fakePlugin({ ...on, enableFootnoteSectionHeading: true, footnoteSectionHeading: "# Footnotes" }, doc);
         handlePaste(plugin, clipboardEvent("text[^1]\n\n# Footnotes\n\n[^1]: one") as never, doc);

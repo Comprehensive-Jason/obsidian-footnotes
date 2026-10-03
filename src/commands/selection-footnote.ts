@@ -1,4 +1,4 @@
-import { Editor, EditorChange, EditorPosition } from "obsidian";
+import { Editor, EditorPosition } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { ValidatedTextModal } from "./validated-text-modal";
@@ -16,18 +16,16 @@ import {
     startOfWordOffset,
 } from "../editor/cursor-motion";
 import { commandHotkeys } from "../editor/obsidian-internals";
-import { buildDefinitionAppend, seedDefinitionBody } from "./definition-append";
-import { DocContext, docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
-import { inlineFootnoteSpanAt, insertionLandsIntact, sanitizeInlineFootnoteContent } from "./inline-footnotes";
+import { planDefinitionAppend } from "./definition-append";
+import { contextOfLines, DocContext, docContext, docLines, listExistingFootnoteDefinitions } from "../editor/doc-context";
+import { bareInsertionVerdict, inlineFootnoteSpanAt, sanitizeInlineFootnoteContent } from "./inline-footnotes";
 import {
     caretInsideMaskedSpan,
     simulateChanges,
-    simulatedAnchor,
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
 import {
     maskInlineRegions,
-    maskedLineAt,
     quotedDefinitionLabelAbove,
     scanDocument,
 } from "../parsing/markdown-scan";
@@ -35,6 +33,7 @@ import {
     autonumFootnoteId,
     landCellDefinitionAppend,
     landDefinitionBackedInsertion,
+    refusedCreation,
     replaceInTableCell,
 } from "./create-footnote";
 import {
@@ -770,7 +769,14 @@ function replacementReclassifiesDoc(
         // opener of a fence, its closer now opens a new fence instead. The
         // line looks equally protected either way, but it is a different
         // construct, so this counts as a change too.
-        before.startsInFence[i] !== after.startsInFence[j];
+        before.startsInFence[i] !== after.startsInFence[j] ||
+        // A "%%" block comment hides its lines without protecting them
+        // (a reference inside still binds), so it has a flag of its own.
+        // A selection that takes one of its two "%%" lines un-closes it,
+        // and every line below disappears into it (hunt 2026-10-03: the
+        // old append, planned before the edit, happened to refuse this
+        // case on its own; pin bug-cut-comment-delimiter-wrong-toast).
+        before.inCommentBlock[i] !== after.inCommentBlock[j];
     for (let i = 0; i < from.line; i++) {
         if (changed(i, i)) return true;
     }
@@ -957,14 +963,8 @@ function convertMainSelectionToInline(
     ctx: DocContext,
 ): void {
     const text = `^[${sanitizeInlineFootnoteContent(selection.text)}]`;
-    const simulated = simulateChanges(ctx.lines, [
-        { from: selection.from, to: selection.to, text },
-    ]);
-    const masked = maskedLineAt(simulated, selection.from.line);
-    if (!insertionLandsIntact(masked, selection.from.ch, text)) {
-        showNotice(ProtectedSelectionNotice, 8000);
-        return;
-    }
+    const simulated = contextOfLines(simulateChanges(ctx.lines, [{ from: selection.from, to: selection.to, text }]));
+    if (refusedCreation(bareInsertionVerdict(simulated, [selection.from], text), ProtectedSelectionNotice)) return;
     const after = { line: selection.from.line, ch: selection.from.ch + text.length };
     moveCursorAndSetJumpPoint(doc, selection.from, after, plugin, [
         { from: selection.from, to: selection.to, text },
@@ -995,77 +995,44 @@ function convertMainSelection(
 ): void {
     if (footnoteId === null) return;
     const footnoteReference = referenceText(footnoteId);
-    const isFirstFootnote = listExistingFootnoteDefinitions(doc, ctx).length === 0;
 
     // A selection spanning lines becomes a body with several paragraphs:
     // continuation lines indented four spaces under the label
     // (2026-08-19).
     const body = indentDefinitionBody(selection.text);
-    const bodyExtraLines = body.split("\n").length - 1;
-    const definition = seedDefinitionBody(
-        buildDefinitionAppend(doc, footnoteId, isFirstFootnote, plugin, ctx, {
-            from: selection.from,
-            to: selection.to,
-        }),
+    // The definition is planned against the note with the selection
+    // already replaced (see planDefinitionAppend), so a section heading
+    // the selection swallows is simply gone, and nothing the append does
+    // can land inside the replaced stretch (the property-test find of
+    // 2026-09-09, a drag across "# Footnotes", used to need a rule of its
+    // own for that).
+    const plan = planDefinitionAppend({
+        lines: ctx.lines,
+        edits: [{ from: selection.from, to: selection.to, text: footnoteReference }],
         footnoteId,
+        plugin,
         body,
-    );
-    const changes: EditorChange[] = [
-        { from: selection.from, to: selection.to, text: footnoteReference },
-        definition.change,
-    ];
-    if (definition.prepend) changes.push(definition.prepend);
-
+    });
     // The same verification createAutonumFootnote does, widened to cover a
     // body that was filled in ahead of time and may span lines: the new
     // definition block has to claim every one of those continuation lines.
-    //
-    // Order is load-bearing. The label's line number is worked out through
-    // simulatedAnchor FIRST, because two things can shift line numbers.
-    // A definition appended ABOVE the selection pushes every later line
-    // down (found in the entry corpus, 2026-08-12). And a selection
-    // spanning lines collapsing to "[^name]" pulls every line below it up,
-    // the appended definition included (2026-08-19). Only then does the
-    // shared verifyLiveFootnoteInsertion run, reusing the same simulated
-    // document.
-    const simulated = simulateChanges(ctx.lines, changes);
-    const definitionAnchor = simulatedAnchor(ctx.lines, changes, 1, simulated);
-    // The label's line comes from the seeding step, which found it before
-    // the body could contribute a label-shaped string of its own and
-    // confuse the search (review A4).
-    const labelLine = definitionAnchor.line + definition.labelLineOffset;
-    // Where the caret should end up once the edit has been applied: the
-    // end of the body, in the simulated document's line numbers.
-    const definitionCursor = {
-        line: labelLine + bodyExtraLines,
-        ch: definition.cursor.ch,
-    };
-    const verified = verifyLiveFootnoteInsertion({
-        lines: ctx.lines,
-        changes,
-        referenceChangeIndices: [0],
+    const verdict = verifyLiveFootnoteInsertion({
+        lines: plan.final,
+        anchors: [plan.edits[0].start],
         footnoteId,
-        definitionLabelLine: labelLine,
-        definitionBodyExtraLines: bodyExtraLines,
-        simulated,
+        definitionLabelLine: plan.labelLine,
+        definitionBodyExtraLines: body.split("\n").length - 1,
     });
-    if (!verified) {
-        showNotice(ProtectedSelectionNotice, 8000);
-        return;
-    }
+    if (refusedCreation(verdict, ProtectedSelectionNotice)) return;
 
-    const referenceAnchor = verified.anchors[0];
     landDefinitionBackedInsertion({
         plugin,
         doc,
-        changes,
+        changes: plan.changes,
         origin: selection.from,
         footnoteId,
-        definitionCursor,
-        afterReference: {
-            line: referenceAnchor.line,
-            ch: referenceAnchor.ch + footnoteReference.length,
-        },
+        definitionCursor: plan.cursor,
+        afterReference: plan.edits[0].end,
         // A conversion creates a footnote, so the landing runs the same
         // after-creation lint that every other creation press gets (Jason
         // asked for that parity on 2026-08-25). The seeded body is how the
@@ -1095,9 +1062,7 @@ function convertCellSelection(
     footnoteId: string | null,
 ): void {
     if (footnoteId === null) return;
-    const ctx = docContext(doc);
     const footnoteReference = referenceText(footnoteId);
-    const isFirstFootnote = listExistingFootnoteDefinitions(doc, ctx).length === 0;
     if (
         !replaceInTableCell(cell, footnoteReference, selection.from, selection.to, footnoteReference.length)
     ) {
@@ -1109,20 +1074,14 @@ function convertCellSelection(
     // append landed inside the new one, splitting the reference and the
     // row (Kimi hunt cycle 3, 2026-09-16; the numbered cell press had the
     // same bug, sheet 05). So the note is read again here.
-    const definition = seedDefinitionBody(
-        buildDefinitionAppend(doc, footnoteId, isFirstFootnote, plugin, docContext(doc)),
-        footnoteId,
-        selection.text,
-    );
+    const plan = planDefinitionAppend({ lines: docLines(doc), edits: [], footnoteId, plugin, body: selection.text });
     landCellDefinitionAppend({
         plugin,
         doc,
-        definitionChanges: definition.prepend
-            ? [definition.prepend, definition.change]
-            : [definition.change],
+        definitionChanges: plan.changes,
         origin: cursorPosition ?? doc.getCursor(),
         footnoteId,
-        definitionCursor: definition.cursor,
+        definitionCursor: plan.cursor,
     });
 }
 

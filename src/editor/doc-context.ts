@@ -8,6 +8,7 @@ import {
     findDefinitionBlocks,
     maskLineWithScan,
     maskProtectedLines,
+    quotedDefinitionLabelAbove,
     scanDocument,
 } from "../parsing/markdown-scan";
 import {
@@ -48,8 +49,11 @@ export function docLines(doc: Editor): string[] {
  * the whole masked twin is built and remembered the first time something
  * needs all of it.
  *
- * The context is built strictly BEFORE any edit the press makes. Creation
- * steps edit last, so it can never go stale within one press.
+ * The press's own context is built strictly BEFORE any edit the press
+ * makes. Creation steps edit last, so it can never go stale within one
+ * press. contextOfLines builds the same view over any lines, which is how
+ * a creation reads the note as it will be AFTER its edit (see
+ * planDefinitionAppend).
  */
 export interface DocContext {
     lines: string[];
@@ -74,7 +78,12 @@ export interface DocContext {
 export function listExistingFootnoteDefinitions(
     doc: Editor,
     ctx: DocContext = docContext(doc),
-) {
+): string[] {
+    return definitionNames(ctx);
+}
+
+/** The same list, read from a context alone, for a note that is not in an editor yet (the note as a creation will leave it). */
+export function definitionNames(ctx: DocContext): string[] {
     const definitionNames: string[] = [];
 
     // walk every line looking for definition labels, both the ones at
@@ -101,7 +110,11 @@ export function listExistingFootnoteDefinitions(
 }
 
 export function docContext(doc: Editor): DocContext {
-    const lines = docLines(doc);
+    return contextOfLines(docLines(doc));
+}
+
+/** The shared view over `lines`, which need not be in any editor. */
+export function contextOfLines(lines: string[]): DocContext {
     const scan = scanDocument(lines);
     const perLine: (string | undefined)[] = new Array<string | undefined>(
         lines.length,
@@ -126,6 +139,25 @@ export function docContext(doc: Editor): DocContext {
     const blocksOf = (): DefinitionBlock[] =>
         blocks ?? (blocks = findDefinitionBlocks(lines, scan, undefined, definitionStarts()));
     return { lines, scan, maskedLine, maskedLines, definitionStarts, blocks: blocksOf };
+}
+
+/**
+ * Whether line `line` belongs to some footnote's definition: a column-0
+ * definition block, or a quoted definition, which forms no block but owns
+ * its label line and its quoted continuation lines all the same, or any
+ * other definition label line (one after a "%%" closer, say), where a
+ * reference in the body nests just the same (Kimi hunt cycle 3,
+ * 2026-09-16, the second found by its property). A footnote written on
+ * such a line would be nested, which the plugin never creates (ADR 0001).
+ * The caret guard asks it of the note before a press, and the liveness
+ * check of the note after it (hunt 2026-10-02, cluster R2).
+ */
+export function insideDefinition(ctx: DocContext, line: number): boolean {
+    return (
+        ctx.definitionStarts()[line] ||
+        ctx.blocks().some((block) => line >= block.start && line <= block.end) ||
+        quotedDefinitionLabelAbove(ctx.lines, ctx.scan, ctx.definitionStarts(), (j) => ctx.maskedLine(j), line) >= 0
+    );
 }
 
 /**

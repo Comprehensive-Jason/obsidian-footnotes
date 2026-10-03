@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { buildDefinitionAppend } from "../../src/commands/definition-append";
+import { docContext } from "../../src/editor/doc-context";
 import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
 
 // BUG (wrong output): when the last definition's body opens a code block,
@@ -50,7 +51,7 @@ describe("the append above an unclosed region keeps the region with its own foot
             const lines = ["alpha[^1].", "", "[^1]: one", opener, "    hidden"];
             expect(owner(lines, "hidden")).toBe("1");
             const doc = fakeEditor([...lines], { edits: true });
-            const { change } = buildDefinitionAppend(doc, "2", false, fakePlugin());
+            const { change } = buildDefinitionAppend(docContext(doc), "2", false, fakePlugin());
             doc.transaction({ changes: [change] });
             // Today: "2", the region now continues the new definition.
             expect(owner(doc.lines, "hidden")).toBe("1");

@@ -30,7 +30,7 @@ import { noticeLintAlerts } from "../linting/lint-alerts";
 import { lintAfterFootnoteCreation, withEmptySectionHeadingRemoved } from "../linting/linter";
 import { computeNextFootnoteNumber, definitionLabel, nameForBody, quotedReference } from "../parsing/footnote-grammar";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
-import { buildDefinitionAppend, seedDefinitionBody } from "./definition-append";
+import { planDefinitionAppend } from "./definition-append";
 import { withEditableEditor } from "./insert-or-navigate-footnotes";
 
 // Converting a note's footnotes between the two styles (T6 of the 2026-09
@@ -357,27 +357,22 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
 
     // the reference replacements, plus the definitions as ONE append: the
     // creation press's own append for the first id, seeded with its body,
-    // then the other labels on the lines after it
-    const changes: EditorChange[] = spans.map((span) => ({
+    // then the other labels on the lines after it, planned against the
+    // note with the references already in (see planDefinitionAppend)
+    const edits: EditorChange[] = spans.map((span) => ({
         from: { line: span.line, ch: span.open },
         to: { line: span.line, ch: span.close + 1 },
         text: `[^${idOf.get(span.body) as string}]`,
     }));
-    const isFirstFootnote = listExistingFootnoteDefinitions(doc, ctx).length === 0;
-    const definition = seedDefinitionBody(
-        buildDefinitionAppend(doc, ids[0], isFirstFootnote, plugin, ctx),
-        ids[0],
-        bodies[0],
-    );
-    const textLines = definition.change.text.split("\n");
-    textLines.splice(
-        definition.labelLineOffset + 1,
-        0,
-        ...ids.slice(1).map((id, k) => `${definitionLabel(id)} ${bodies[k + 1]}`),
-    );
-    if (definition.prepend) changes.push(definition.prepend);
-    changes.push({ ...definition.change, text: textLines.join("\n") });
-    doc.transaction({ changes });
+    const plan = planDefinitionAppend({
+        lines,
+        edits,
+        footnoteId: ids[0],
+        plugin,
+        body: bodies[0],
+        moreDefinitionLines: ids.slice(1).map((id, k) => `${definitionLabel(id)} ${bodies[k + 1]}`),
+    });
+    doc.transaction({ changes: plan.changes });
 
     const result: ConversionToNormal = {
         converted: spans.length,

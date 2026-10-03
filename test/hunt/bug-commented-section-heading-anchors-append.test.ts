@@ -4,6 +4,7 @@ import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 
 import { buildDefinitionAppend } from "../../src/commands/definition-append";
+import { docContext } from "../../src/editor/doc-context";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 import { scanDocument } from "../../src/parsing/markdown-scan";
 
@@ -46,7 +47,7 @@ describe("bug: a commented-out section heading still anchors the definition appe
     it("the first definition is not written inside the %% comment block", () => {
         const lines = ["alpha[^1].", "", "%%", "# Footnotes", "%%", "", "tail"];
         const doc = fakeEditor(lines, { wholeDoc: true });
-        const { change } = buildDefinitionAppend(doc, "1", true, headingPlugin(), undefined);
+        const { change } = buildDefinitionAppend(docContext(doc), "1", true, headingPlugin());
         expect(scanDocument(lines).inCommentBlock[change.from.line]).toBe(false);
     });
 
@@ -63,7 +64,7 @@ describe("bug: a commented-out section heading still anchors the definition appe
     it("an HTML-commented heading is skipped and the append goes to the end of the note", () => {
         const lines = ["alpha[^1].", "", "<!--", "# Footnotes", "-->", "", "tail"];
         const doc = fakeEditor(lines, { wholeDoc: true });
-        const { change } = buildDefinitionAppend(doc, "1", true, headingPlugin(), undefined);
+        const { change } = buildDefinitionAppend(docContext(doc), "1", true, headingPlugin());
         expect(change).toEqual({
             from: { line: 6, ch: "tail".length },
             text: "\n\n# Footnotes\n\n[^1]: ",

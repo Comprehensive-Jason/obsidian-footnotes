@@ -74,7 +74,7 @@ beforeEach(() => {
 });
 
 describe("a divider section heading in a note that holds only the new text", () => {
-    it.fails("paste into an empty note with a divider heading: the pasted paragraph does not become a setext heading", () => {
+    it("paste into an empty note with a divider heading: the pasted paragraph does not become a setext heading", () => {
         const doc = emptyNote([""]);
         handlePaste(fakePlugin(settings("---\n## Footnotes"), doc), clipboardEvent("a[^1] b\n\n[^1]: one") as never, doc);
         // "a[^1] b" directly above "---" would be an H2.
@@ -82,7 +82,7 @@ describe("a divider section heading in a note that holds only the new text", () 
         expect(doc.lines[i - 1]).toBe("");
     });
 
-    it.fails("press in an empty note with a divider heading: the reference line does not become a setext heading", async () => {
+    it("press in an empty note with a divider heading: the reference line does not become a setext heading", async () => {
         const doc = emptyNote([""]);
         await insertAutonumFootnote(fakePlugin(settings("---\n## Notes"), doc));
         // Today: ["[^1]", "---", "## Notes", "", "[^1]: "].

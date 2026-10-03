@@ -20,18 +20,20 @@ import { openFootnotePopup, popupEditingAvailable } from "./footnote-popup";
 import { jumpToFootnoteDefinition } from "./navigation";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
 import { adjustFootnotePosition, endOfWordOffset, moveCursorAndSetJumpPoint } from "../editor/cursor-motion";
-import { buildDefinitionAppend } from "./definition-append";
+import { planDefinitionAppend } from "./definition-append";
 import {
     DocContext,
     docContext,
+    docLines,
     listExistingFootnoteDefinitions,
     referenceOccurrenceAtCursor,
 } from "../editor/doc-context";
-import { insertionLandsIntact } from "./inline-footnotes";
+import { bareInsertionVerdict, insertionLandsIntact } from "./inline-footnotes";
 import {
+    InsertionVerdict,
     ProtectedCreationNotice,
     safeInsertionCh,
-    simulatedMaskedLine,
+    simulatedContext,
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
 import { lintAfterFootnoteCreation } from "../linting/linter";
@@ -39,7 +41,22 @@ import { maskInlineRegions, maskedLineAt } from "../parsing/markdown-scan";
 import { warnDefinitionCaretIfInside, warnTableEdgeCaretIfOutside, warnProtectedCaretIfInside } from "./press-guards";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
-import { showNotice } from "../editor/notice";
+import { NestedFootnoteNotice, showNotice } from "../editor/notice";
+
+/**
+ * The refusal for a creation whose result is not "live" (see
+ * verifyLiveFootnoteInsertion): a reference that would land inside a
+ * definition gets the nesting notice, the same one a caret inside a
+ * definition gets, and anything else that would be born dead gets
+ * `deadNotice`. Shared by every press that writes a reference with its
+ * definition. True means the press was refused.
+ */
+export function refusedCreation(verdict: InsertionVerdict, deadNotice: string): boolean {
+    if (verdict === "live") return false;
+    showNotice(verdict === "nested" ? NestedFootnoteNotice : deadNotice, 8000);
+    return true;
+}
+
 // The creation steps of the cascade. The cascade is the ordered list of
 // steps a press falls through, each one either handling the press or
 // passing it along. These are the steps that make a footnote: mint a
@@ -449,13 +466,6 @@ export function createAutonumFootnote(
     if (footnoteId === null) return true;
     const footnoteReference = referenceText(footnoteId);
 
-    // "The first footnote" means the first DEFINITION, which is how the
-    // named command and the move-to-bottom rule both count it. The old
-    // test, "&& currentMax === 1", skipped the section heading when the
-    // only footnote thing in the note was an orphaned reference
-    // (2026-08-11 review, bug #8).
-    const isFirstFootnote = listExistingFootnoteDefinitions(doc, ctx).length === 0;
-
     if (cell) {
         // The reference is written through the cell's own editor, never
         // the main editor, because a main-editor write races the cell's
@@ -475,74 +485,64 @@ export function createAutonumFootnote(
         // the row's new end - inside the reference - and the table widget
         // then normalised the mess away (Jason's report, sheet 05,
         // 2026-09-09: "only [^ is inserted and the last pipe disappears").
-        // So the note is read again here.
-        const definition = buildDefinitionAppend(doc, footnoteId, isFirstFootnote, plugin, docContext(doc));
-        // The blank line that keeps a "---" first line from reading as
-        // frontmatter travels in the same edit (see buildDefinitionAppend).
-        // It is inserted above the table, outside the cell's own editor,
-        // so it is safe under the issue #28 rule.
+        // So the note is read again here. The blank line that keeps a
+        // "---" first line from reading as frontmatter travels in the same
+        // edit (see buildDefinitionAppend); it is inserted above the
+        // table, outside the cell's own editor, so it is safe under the
+        // issue #28 rule.
+        const plan = planDefinitionAppend({ lines: docLines(doc), edits: [], footnoteId, plugin });
         landCellDefinitionAppend({
             plugin,
             doc,
-            definitionChanges: definition.prepend
-                ? [definition.prepend, definition.change]
-                : [definition.change],
+            definitionChanges: plan.changes,
             origin: cursorPosition,
             footnoteId,
-            definitionCursor: definition.cursor,
+            definitionCursor: plan.cursor,
         });
         return true;
     }
 
     cursorPosition = adjustFootnotePosition(cursorPosition, doc, lineText, plugin);
-    const definition = buildDefinitionAppend(doc, footnoteId, isFirstFootnote, plugin, ctx);
-    const changes: EditorChange[] = [
-        { from: cursorPosition, text: footnoteReference },
-        definition.change,
-    ];
-    // The blank line that keeps a "---" first line from reading as
-    // frontmatter travels in the same edit (see buildDefinitionAppend).
-    // Remember that it pushes every line down by one once applied.
-    if (definition.prepend) changes.push(definition.prepend);
-
-    // The insertion itself can change how Obsidian reads the note. Two
-    // real cases, both found by the command-press property suite on
-    // 2026-08-12. Putting "[^N]" at character 0 of a quoted line pushes
-    // the quote marker over, so the line is no longer quoted, and if that
-    // line opened a region, the region now swallows everything below it,
-    // including the definition this very edit is appending. And a
-    // reference dropped between two stray dollar signs can close them into
-    // inline math, which then swallows the reference.
-    //
-    // verifyLiveFootnoteInsertion does the simulating and the checking,
-    // including finding the reference again through simulatedAnchor, which
-    // is needed because a definition appended above the caret shifts it
-    // down. If anything came out dead, refuse the press the same way the
-    // protected-caret guard does.
-    const verified = verifyLiveFootnoteInsertion({
+    // The definition is planned against the note as it reads with the
+    // reference already in (see planDefinitionAppend), and the two go out
+    // as one transaction.
+    const plan = planDefinitionAppend({
         lines: ctx.lines,
-        changes,
-        referenceChangeIndices: [0],
+        edits: [{ from: cursorPosition, text: footnoteReference }],
         footnoteId,
-        definitionLabelLine: definition.cursor.line,
+        plugin,
     });
-    if (!verified) {
-        showNotice(ProtectedCreationNotice, 8000);
-        return true;
-    }
 
-    const referenceAnchor = verified.anchors[0];
+    // The insertion itself can change how Obsidian reads the note. Real
+    // cases, found by the command-press property suite on 2026-08-12 and
+    // the bug hunt of 2026-10-02. Putting "[^N]" at character 0 of a
+    // quoted line pushes the quote marker over, so the line is no longer
+    // quoted, and if that line opened a region, the region now swallows
+    // everything below it, including the definition this very edit is
+    // appending. A reference dropped between two stray dollar signs can
+    // close them into inline math, which then swallows the reference. And
+    // a reference that fills the empty line under a definition becomes
+    // that definition's text, a nested footnote.
+    //
+    // verifyLiveFootnoteInsertion checks the note exactly as the
+    // transaction leaves it, and anything that came out wrong refuses the
+    // press with the notice that says why.
+    const verdict = verifyLiveFootnoteInsertion({
+        lines: plan.final,
+        anchors: [plan.edits[0].start],
+        footnoteId,
+        definitionLabelLine: plan.labelLine,
+    });
+    if (refusedCreation(verdict, ProtectedCreationNotice)) return true;
+
     landDefinitionBackedInsertion({
         plugin,
         doc,
-        changes,
+        changes: plan.changes,
         origin: cursorPosition,
         footnoteId,
-        definitionCursor: definition.cursor,
-        afterReference: {
-            line: referenceAnchor.line,
-            ch: referenceAnchor.ch + footnoteReference.length,
-        },
+        definitionCursor: plan.cursor,
+        afterReference: plan.edits[0].end,
     });
     return true;
 }
@@ -602,18 +602,14 @@ export function createMatchingFootnoteDefinition(
     // serves a "[^Note]" reference. The press has to jump to that
     // definition rather than create a duplicate one.
     if (!idListIncludes(list, footnoteId)) {
-        const definition = buildDefinitionAppend(doc, footnoteId, list.length === 0, plugin, ctx);
-        // The blank line that keeps a "---" first line from reading as
-        // frontmatter travels in the same edit (see buildDefinitionAppend).
+        const plan = planDefinitionAppend({ lines: ctx.lines, edits: [], footnoteId, plugin });
         landDefinitionBackedInsertion({
             plugin,
             doc,
-            changes: definition.prepend
-                ? [definition.prepend, definition.change]
-                : [definition.change],
+            changes: plan.changes,
             origin: cursorPosition,
             footnoteId,
-            definitionCursor: definition.cursor,
+            definitionCursor: plan.cursor,
             // No afterReference here. This press adds a definition for a
             // reference the caret is already inside, so there is no newly
             // inserted reference to park the caret behind.
@@ -726,15 +722,13 @@ export function createFootnoteReference(
     if (prefix === null) return true;
     const emptyReference = referenceText(prefix);
     cursorPosition = adjustFootnotePosition(cursorPosition, doc, lineText, plugin);
-    // The born-dead check (see simulatedMaskedLine). If the placeholder
+    // The born-dead check (see bareInsertionVerdict). If the placeholder
     // landed inside protected text, it would not be a real footnote, and
     // you would be left typing a name into something that can never
-    // become one, with nothing to tell you so.
-    const masked = simulatedMaskedLine(doc, cursorPosition, emptyReference);
-    if (!insertionLandsIntact(masked, cursorPosition.ch, emptyReference)) {
-        showNotice(ProtectedCreationNotice, 8000);
-        return true;
-    }
+    // become one, with nothing to tell you so. Nor may it land inside a
+    // definition, where the footnote you name would be nested.
+    const verdict = bareInsertionVerdict(simulatedContext(doc, cursorPosition, emptyReference), [cursorPosition], emptyReference);
+    if (refusedCreation(verdict, ProtectedCreationNotice)) return true;
     const newCursorPos = {
         line: cursorPosition.line,
         ch: cursorPosition.ch + 2 + prefix.length,

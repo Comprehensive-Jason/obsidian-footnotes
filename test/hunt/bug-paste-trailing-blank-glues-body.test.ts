@@ -79,12 +79,12 @@ beforeEach(() => {
 });
 
 describe("paste at the end of a note with no definitions yet", () => {
-    it.fails("paste on the trailing blank line: the body is not glued to the definition", () => {
+    it("paste on the trailing blank line: the body is not glued to the definition", () => {
         // Today: ["intro", "", "[^1]: onea[^1] b"].
         expect(paste(["intro", ""], { line: 1, ch: 0 }, text)).toEqual(["intro", "a[^1] b", "", "[^1]: one"]);
     });
 
-    it.fails("two trailing blank lines, caret on the middle one: the pasted body is kept, outside the definition", () => {
+    it("two trailing blank lines, caret on the middle one: the pasted body is kept, outside the definition", () => {
         const out = paste(["intro", "", ""], { line: 1, ch: 0 }, text);
         expect(out.join("\n")).toContain("a[^1] b");
         expect(out.some((l) => l.startsWith("[^1]: one") && l !== "[^1]: one")).toBe(false);

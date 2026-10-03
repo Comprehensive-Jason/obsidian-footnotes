@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildDefinitionAppend } from "../src/commands/definition-append";
+import { docContext } from "../src/editor/doc-context";
 
 import { fakeEditor } from "./helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "./helpers/fake-plugin";
@@ -24,7 +25,7 @@ function fakePlugin(enabled: boolean, heading: string) {
 function firstFootnoteText(enabled: boolean, heading: string): string {
     // a one-line note, so the whole heading policy shows up in the change text
     const { change } = buildDefinitionAppend(
-        fakeEditor(["Alpha"]),
+        docContext(fakeEditor(["Alpha"])),
         "1",
         true,
         fakePlugin(enabled, heading),
