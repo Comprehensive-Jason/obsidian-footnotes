@@ -241,9 +241,18 @@ function listLazyLines(tables: ParserTables): void {
     tables.blockTokenizers.list = listTokenizer;
 }
 
-/** Whether a line starts with "|", after any spaces or tabs: a table row's "pipe style". */
+/**
+ * Whether a line's very first character is "|": a table row's "pipe style".
+ * A line indented by even one space counts as not starting with a pipe, so
+ * " | a | b |" over "| --- | --- |" is no table, and " | c | d |" under a
+ * piped table is not one of its rows (C1, C2; the overnight oracle run of
+ * 2026-10-03: 45 notes, and a family of 55 with every indentation of the
+ * header, the delimiter row, and a body row). The line here is what the
+ * containers leave, so in a quote or a list item it starts after the
+ * quote marker or at the item's content column.
+ */
 function startsWithPipe(line: string): boolean {
-    return /^[ \t]*\|/.test(line);
+    return line.startsWith("|");
 }
 
 /** Whether `line` is a body row of a table of the given pipe style (C2). */
