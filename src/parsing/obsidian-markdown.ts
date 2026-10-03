@@ -132,10 +132,11 @@ function lineEnd(value: string, from: number): number {
 
 /**
  * "%%" comments (rules F1 to F4 and D5). A line whose text, after at most
- * three spaces, starts with "%%" and holds no second "%%" opens a block
- * comment. The block runs through the first "%%" anywhere on a later line,
- * or to the end of its container (the note, a quote, a list item) when there
- * is none. Any other "%%" pairs with a later "%%" on the same line as an
+ * three spaces, starts with "%%" and holds no other "%" at all opens a block
+ * comment: "%%" and "%% note" open one, while "%%%", "%% 50%", and
+ * "%% a %%" are ordinary paragraphs (F1). The block runs through the first
+ * "%%" anywhere on a later line, or to the end of its container (the note,
+ * a quote, a list item) when there is none. Any other "%%" pairs with a later "%%" on the same line as an
  * inline comment, or stays plain text. A comment's text is still read
  * inline, so a reference inside it is live (Jason's ruling, 2026-10-03,
  * which is what Obsidian's parser says).
@@ -151,8 +152,10 @@ function percentComments(tables: ParserTables): void {
         while (start < 3 && value.charCodeAt(start) === 32) start++;
         if (!value.startsWith("%%", start)) return undefined;
         const openerEnd = lineEnd(value, start);
-        // a second "%%" on the opener's own line makes an inline pair, so the line is a paragraph (F3)
-        if (value.slice(start + 2, openerEnd).includes("%%")) return undefined;
+        // any other "%" on the opener's own line, a lone one included, makes
+        // the line a paragraph (F1, F3; the overnight oracle run of
+        // 2026-10-03 found "%%%" lines and "%% 50%" lines read this way)
+        if (value.slice(start + 2, openerEnd).includes("%")) return undefined;
         if (silent === true) return true;
         const close = openerEnd === value.length ? -1 : value.indexOf("%%", openerEnd);
         const innerEnd = close === -1 ? value.length : close;
