@@ -317,7 +317,7 @@ async function popupRound(opts: {
 }
 
 describe("U3: the popup's save-back and a definition appended below its own", () => {
-    it.fails("a definition that lands BELOW the popup's own (a carried paste right after closing) is not wiped", async () => {
+    it("a definition that lands BELOW the popup's own (a carried paste right after closing) is not wiped", async () => {
         // The popup's definition is the note's last line, so the embed's
         // `after` is "" and every note ends with it.
         const result = await popupRound({
@@ -353,7 +353,7 @@ describe("U4: the popup's save-back and a copy of the label below the definition
         expect(result.text).toBe(["Text[^1] typed more", "", "[^1]: the definition"].join("\n"));
     });
 
-    it.fails("typing above survives when a fenced example of the same label sits below the definitions", async () => {
+    it("typing above survives when a fenced example of the same label sits below the definitions", async () => {
         // In Reading view the fenced "[^1]: example" is code, not a definition
         // (a fence at the left margin after a blank line ends the footnote),
         // so the popup's [^1] is the only definition.
@@ -372,7 +372,7 @@ describe("U4: the popup's save-back and a copy of the label below the definition
         );
     });
 
-    it.fails("typing above survives when a commented-out copy of the label sits below the definitions", async () => {
+    it("typing above survives when a commented-out copy of the label sits below the definitions", async () => {
         const result = await popupRound({
             note: ["Text[^1] more", "", "[^1]: ", "", "%%", "[^1]: an old draft", "%%"],
             caret: { line: 0, ch: 8 },
@@ -390,7 +390,7 @@ describe("U4: the popup's save-back and a copy of the label below the definition
 });
 
 describe("U5: the popup's save-back and a definition inside a callout", () => {
-    it.fails("typing BELOW a quoted definition survives (definitions in a callout above the prose)", async () => {
+    it("typing BELOW a quoted definition survives (definitions in a callout above the prose)", async () => {
         // The popup opened from the reference below the callout; after
         // closing it, the user carries on typing after the reference.
         const result = await popupRound({

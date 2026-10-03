@@ -11,7 +11,7 @@ import {
 } from "../editor/obsidian-internals";
 import { popupCanBind, PopupWaitingNotice, retryUntilShown } from "./popup-retry";
 import { replaceMinimal } from "../editor/write-back";
-import { findDefinitionBlocks } from "../parsing/markdown-scan";
+import { allDefinitionBlocks, definitionStartLines, maskProtectedLines, scanDocument } from "../parsing/markdown-scan";
 
 import { showNotice } from "../editor/notice";
 // A small popup anchored at the cursor. Inside it sits Obsidian's own
@@ -76,6 +76,40 @@ export async function settleFootnotePopupWithFeedback(): Promise<void> {
         window.clearTimeout(noticeTimer);
         feedback.notice?.hide();
     }
+}
+
+/**
+ * Where the text of footnote `name`'s definition sits in `text`, the note
+ * as it reads now: from just after `label`, the start of the label line as
+ * the popup's embed knew it ("[^1]: ", or "> [^1]: " inside a quote), to
+ * the end of the definition's last line. Null when the note no longer has
+ * that definition, or its label line no longer starts that way.
+ *
+ * The definition is read with the scanner, as every other part of the
+ * plugin reads one: a fenced or commented copy of the label is not a
+ * definition, a quoted definition counts with its quoted continuation
+ * (allDefinitionBlocks), and of two definitions of one name the last
+ * wins, the one Obsidian renders. The save-back used to bound the section
+ * by matching the text the embed had seen after it, and by searching for
+ * the label as a plain string, so a line appended right under a last-line
+ * definition was wiped, and a fenced copy of the label or a quoted
+ * definition made it give up and leave the embed's stale whole-file save
+ * to wipe the user's typing (hunt 2026-10-02, pin
+ * bug-popup-save-back-wipes-main-editor-edits).
+ */
+function definitionSection(text: string, name: string, label: string): { start: number; end: number } | null {
+    const lines = text.split("\n");
+    const scan = scanDocument(lines);
+    const masked = maskProtectedLines(lines, scan);
+    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+    const folded = name.toLowerCase();
+    const block = allDefinitionBlocks(lines, scan, masked, starts)
+        .filter((candidate) => candidate.name.toLowerCase() === folded)
+        .pop();
+    if (!block || !lines[block.start].startsWith(label)) return null;
+    // the offset where line `n` starts: every line above it plus its line break
+    const lineStart = (n: number) => lines.slice(0, n).reduce((sum, line) => sum + line.length + 1, 0);
+    return { start: lineStart(block.start) + label.length, end: lineStart(block.end) + lines[block.end].length };
 }
 
 export function popupEditingAvailable(plugin: FootnotePlugin): boolean {
@@ -496,8 +530,10 @@ export async function openFootnotePopup(
         // the main editor as the smallest edit that gets there. The note is
         // read AFTER that join, because the user may already be typing in
         // it: that typing is the whole point, and it must survive. The
-        // section is found by its label rather than by its old offset for
-        // the same reason. Reports false when the section cannot be found,
+        // section is found the way the rest of the plugin finds a
+        // definition, by reading the note as it is now (definitionSection),
+        // rather than by its old offset or by matching the old text around
+        // it. Reports false only when the definition is gone from the note,
         // in which case the embed stays the writer.
         const writeThroughMainEditor = async (): Promise<boolean> => {
             const text = embed.editMode?.editor?.getValue?.() ?? embed.text;
@@ -525,30 +561,11 @@ export async function openFootnotePopup(
             const section = joined.slice(before.length, joined.length - after.length);
             const current = editor.getValue();
             // `before` ends with the label line's start ("[^1]: ", or
-            // "> [^1]: " inside a quote). It sits where it was unless
-            // something above it changed; then the last such label wins,
-            // which is the one Obsidian renders.
+            // "> [^1]: " inside a quote), which is where the section starts
             const label = before.slice(before.lastIndexOf("\n") + 1);
-            let labelAt = before.length - label.length;
-            if (!current.startsWith(label, labelAt) || (labelAt > 0 && current[labelAt - 1] !== "\n")) {
-                const found = current.lastIndexOf("\n" + label);
-                labelAt = found !== -1 ? found + 1 : current.startsWith(label) ? 0 : -1;
-            }
-            if (labelAt === -1) return false;
-            const sectionStart = labelAt + label.length;
-            let sectionEnd: number;
-            if (current.endsWith(after) && current.length - after.length >= sectionStart) {
-                sectionEnd = current.length - after.length;
-            } else {
-                // something below the definition changed as well: bound
-                // the section by the plugin's own reading of the block
-                const lines = current.split("\n");
-                const labelLine = current.slice(0, labelAt).split("\n").length - 1;
-                const block = findDefinitionBlocks(lines).find((candidate) => candidate.start === labelLine);
-                if (!block) return false;
-                sectionEnd = lines.slice(0, block.end + 1).join("\n").length;
-            }
-            const updated = current.slice(0, sectionStart) + section + current.slice(sectionEnd);
+            const bounds = definitionSection(current, footnoteId, label);
+            if (!bounds) return false;
+            const updated = current.slice(0, bounds.start) + section + current.slice(bounds.end);
             if (updated !== current) replaceMinimal(editor, current, updated, mdView);
             embed.dirty = false;
             return true;

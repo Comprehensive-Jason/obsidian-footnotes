@@ -4,12 +4,12 @@ import { positionAfterRewrite } from "../editor/document-diff";
 import { definitionLabelWithName, referenceOccurrences } from "../parsing/footnote-grammar";
 import { orphanedDefinitionBlocks } from "../linting/rules/remove-orphaned-definitions";
 import {
+    allDefinitionBlocks,
     DefinitionBlock,
     definitionStartLines,
     findDefinitionBlocks,
     maskProtectedLines,
     normalizeEol,
-    quotedDefinitionEnd,
     removeLineRanges,
     scanDocument,
 } from "../parsing/markdown-scan";
@@ -93,26 +93,14 @@ function carriedBlocks(lines: string[], from: EditorPosition, to: EditorPosition
     // every definition block the note has: column-0 blocks, and quoted
     // ones with the quoted continuation Obsidian gives them. An in-item
     // definition is recognised but has no modelled extent, so it is a
-    // name with nothing to carry.
-    const all: DefinitionBlock[] = findDefinitionBlocks(lines, scan, masked, starts);
-    for (let i = 0; i < lines.length; i++) {
-        if (scan.isProtected[i] || !starts[i]) continue;
-        const hit = definitionLabelWithName(lines[i], masked[i]);
-        if (!hit?.label.quoted) continue;
-        all.push({
-            name: hit.name,
-            start: i,
-            end: hit.label.afterCloser ? i : quotedDefinitionEnd(lines, scan, starts, i),
-        });
-    }
-    // The blocks go by lower-cased name in document order, quoted and
-    // column-0 ones sorted together, so "the last definition of a name"
-    // is the last in the note whatever its shape (hunt 2026-10-02, pin
-    // bug-carry-quoted-duplicate-first: the quoted ones used to be listed
-    // after all the others, so a quoted first duplicate won).
-    all.sort((a, b) => a.start - b.start);
+    // name with nothing to carry. The blocks go by lower-cased name in
+    // document order, quoted and column-0 ones sorted together, so "the
+    // last definition of a name" is the last in the note whatever its
+    // shape (hunt 2026-10-02, pin bug-carry-quoted-duplicate-first: the
+    // quoted ones used to be listed after all the others, so a quoted
+    // first duplicate won).
     const blocksOf = new Map<string, DefinitionBlock[]>();
-    for (const block of all) {
+    for (const block of allDefinitionBlocks(lines, scan, masked, starts)) {
         const folded = block.name.toLowerCase();
         blocksOf.set(folded, [...(blocksOf.get(folded) ?? []), block]);
     }
@@ -213,16 +201,7 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     // text, the last block of a name winning as it does in Obsidian
     const taken = new Set<string>();
     const bodies = new Map<string, string>();
-    const blocks: DefinitionBlock[] = findDefinitionBlocks(lines, scan, masked, starts);
-    for (let i = 0; i < lines.length; i++) {
-        if (scan.isProtected[i] || !starts[i]) continue;
-        const hit = definitionLabelWithName(lines[i], masked[i]);
-        if (hit?.label.quoted) {
-            blocks.push({ name: hit.name, start: i, end: hit.label.afterCloser ? i : quotedDefinitionEnd(lines, scan, starts, i) });
-        }
-    }
-    blocks.sort((a, b) => a.start - b.start);
-    for (const block of blocks) {
+    for (const block of allDefinitionBlocks(lines, scan, masked, starts)) {
         taken.add(block.name.toLowerCase());
         bodies.set(normalisedBody(lines.slice(block.start, block.end + 1)), block.name);
     }

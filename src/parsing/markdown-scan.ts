@@ -3335,6 +3335,31 @@ export function quotedDefinitionEnd(
 }
 
 /**
+ * Every definition in the note with its extent, in document order: the
+ * column-0 blocks of findDefinitionBlocks, and the quoted definitions
+ * ("> [^1]: text" in a blockquote or callout), which form no block of
+ * their own but are as real as the others (the C22 ruling) and run on
+ * through their quoted continuation (quotedDefinitionEnd). A label that
+ * shares its line with a "%%" closer owns that one line. A definition
+ * inside a list item is left out, since the plugin does not model its
+ * extent. Sorted by start line, so "the last definition of a name" is the
+ * last in the note whatever its shape, the one Obsidian renders. Shared by
+ * the carry and the popup's save-back so they read definitions the same
+ * way (hunt 2026-10-02, pins bug-carry-quoted-duplicate-first and
+ * bug-popup-save-back-wipes-main-editor-edits).
+ */
+export function allDefinitionBlocks(lines: string[], scan: DocumentScan, masked: string[], starts: boolean[]): DefinitionBlock[] {
+    const all = findDefinitionBlocks(lines, scan, masked, starts);
+    for (let i = 0; i < lines.length; i++) {
+        if (scan.isProtected[i] || !starts[i]) continue;
+        const hit = definitionLabelWithName(lines[i], masked[i]);
+        if (!hit?.label.quoted) continue;
+        all.push({ name: hit.name, start: i, end: hit.label.afterCloser ? i : quotedDefinitionEnd(lines, scan, starts, i) });
+    }
+    return all.sort((a, b) => a.start - b.start);
+}
+
+/**
  * The line of the quoted definition label that owns `line`, or -1. A quoted
  * definition never forms a block (C22), so the block list cannot answer
  * "is this line inside a definition" for it; this walks up through quoted
