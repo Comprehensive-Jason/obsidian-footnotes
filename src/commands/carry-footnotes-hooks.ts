@@ -11,12 +11,13 @@ import { replaceMinimal } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
 import { lintAfterFootnoteCreation, withEmptySectionHeadingRemoved } from "../linting/linter";
 import { quotedReference } from "../parsing/footnote-grammar";
-import { normalizeEol, removeLineRanges, restoreEol } from "../parsing/markdown-scan";
+import { normalizeEol, restoreEol } from "../parsing/markdown-scan";
 import {
     CarriedDefinition,
+    CarriedDefinitions,
     carriedDefinitions,
-    definitionsOrphanedByCut,
     planCarriedPaste,
+    planCut,
     splitCarriedText,
     withCarriedText,
 } from "./carry-footnotes";
@@ -38,10 +39,11 @@ import { planDefinitionAppend } from "./definition-append";
 // downside to carrying and the setting went.
 //
 // Cut takes the event over whenever the selection needs a definition
-// (the editor's own cut would write the bare text) or the deletion
-// orphans one: the selection AND the definitions it orphaned leave the
-// note in one transaction. A definition still used elsewhere stays, and
-// only its copy travels.
+// (the editor's own cut would write the bare text): the selection AND the
+// carried definitions nothing else uses leave the note in one
+// transaction. A definition still used elsewhere stays, and only its copy
+// travels; a definition the clipboard does not carry never leaves the
+// note (planCut).
 //
 // Paste: Obsidian's editor-paste event hands over the ClipboardEvent
 // before the insert, and its text is read synchronously from the event,
@@ -132,16 +134,11 @@ function textBetween(doc: Editor, from: EditorPosition, to: EditorPosition): str
     return parts.join("\n");
 }
 
-/** Remember what the selection needs, and return it with the editor and the range. Null when there is nothing to remember. */
-function remember(plugin: FootnotePlugin, event: Event): { doc: Editor; from: EditorPosition; to: EditorPosition; entry: CarryRegister } | null {
-    const selection = carryableSelection(plugin, event);
-    if (!selection) return null;
-    const { doc, from, to } = selection;
+/** Remember what the selection between `from` and `to` carries, as the register for the paste that follows. */
+function remember(doc: Editor, from: EditorPosition, to: EditorPosition, { carried, missing }: CarriedDefinitions): CarryRegister {
     const body = textBetween(doc, from, to);
-    const { carried, missing } = carriedDefinitions(doc.getValue(), from, to);
-    const entry = { text: withCarriedText(body, carried), body, carried, missing };
-    register = entry;
-    return { doc, from, to, entry };
+    register = { text: withCarriedText(body, carried), body, carried, missing };
+    return register;
 }
 
 /**
@@ -150,52 +147,43 @@ function remember(plugin: FootnotePlugin, event: Event): { doc: Editor; from: Ed
  * A selection that needs no definition is left to the editor.
  */
 export function handleCopy(plugin: FootnotePlugin, event: ClipboardEvent): void {
-    const remembered = remember(plugin, event);
-    if (!remembered || remembered.entry.carried.length === 0 || !event.clipboardData) return;
-    event.clipboardData.setData("text/plain", remembered.entry.text);
+    const selection = carryableSelection(plugin, event);
+    if (!selection) return;
+    const { doc, from, to } = selection;
+    const entry = remember(doc, from, to, carriedDefinitions(doc.getValue(), from, to));
+    if (entry.carried.length === 0 || !event.clipboardData) return;
+    event.clipboardData.setData("text/plain", entry.text);
     event.preventDefault();
 }
 
 /**
  * The cut hook (a capturing document listener, so it runs before the
  * editor's own cut and can take the event over). It takes over when the
- * selection needs a definition or the deletion orphans one; a cut that
- * needs neither is the editor's own.
+ * selection needs a definition; a cut that needs none is the editor's
+ * own. What leaves the note and what goes into the clipboard come from
+ * one plan (planCut), so the cut only ever removes definitions the
+ * clipboard carries.
  */
 export function handleCut(plugin: FootnotePlugin, event: ClipboardEvent): void {
-    const remembered = remember(plugin, event);
-    if (!remembered || !event.clipboardData) return;
-    const { doc, from, to, entry } = remembered;
+    const selection = carryableSelection(plugin, event);
+    if (!selection) return;
+    const { doc, from, to } = selection;
     const before = doc.getValue();
-    const orphaned = definitionsOrphanedByCut(before, from, to);
-    if (entry.carried.length === 0 && orphaned.length === 0) return;
-    event.clipboardData.setData("text/plain", entry.text);
-    event.preventDefault();
-    event.stopPropagation();
-    // the note as it reads without the selection and without the orphaned
-    // blocks, written back as the smallest set of edits in one transaction
-    const { text: normalised, eol } = normalizeEol(before);
-    const lines = normalised.split("\n");
-    const joined = [
-        ...lines.slice(0, from.line),
-        lines[from.line].slice(0, from.ch) + lines[to.line].slice(to.ch),
-        ...lines.slice(to.line + 1),
-    ];
-    // the orphaned blocks were reported in the note's own line numbers;
-    // after the deletion the lines below the selection sit higher up
-    const shift = to.line - from.line;
-    const ranges = orphaned.map((block) => ({
-        start: block.start < from.line ? block.start : block.start - shift,
-        end: block.end < from.line ? block.end : block.end - shift,
-    }));
     // a cut that takes the last definition with it empties the section,
     // so the section heading goes too when the setting says so (Jason,
     // 2026-09-25)
-    const after = withEmptySectionHeadingRemoved(plugin, restoreEol(removeLineRanges(joined, ranges).join("\n"), eol));
-    replaceMinimal(doc, before, after, plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined);
-    doc.setCursor(from);
-    if (orphaned.length > 0) {
-        const count = orphaned.length;
+    const plan = planCut(before, from, to, (text) => withEmptySectionHeadingRemoved(plugin, text));
+    const entry = remember(doc, from, to, plan);
+    if (entry.carried.length === 0 || !event.clipboardData) return;
+    event.clipboardData.setData("text/plain", entry.text);
+    event.preventDefault();
+    event.stopPropagation();
+    // the note as the plan reads it, written back as the smallest set of
+    // edits in one transaction, and the caret where the selection was
+    replaceMinimal(doc, before, restoreEol(plan.text, normalizeEol(before).eol), plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined);
+    doc.setCursor(plan.caret);
+    if (plan.removed > 0) {
+        const count = plan.removed;
         showNotice(`Cut with ${count} footnote definition${count === 1 ? "" : "s"} that nothing else used; paste to carry ${count === 1 ? "it" : "them"} along.`);
     }
 }

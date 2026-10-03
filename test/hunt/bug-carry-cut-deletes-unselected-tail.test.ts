@@ -67,7 +67,7 @@ beforeEach(() => {
 });
 
 describe("cut from a definition's continuation line to past its only reference", () => {
-    it.fails("text after the selection on the to-line is never deleted, even when the join lands it in a definition the cut orphans", () => {
+    it("text after the selection on the to-line is never deleted, even when the join lands it in a definition the cut orphans", () => {
         // The selection runs from the end of [^a]'s continuation line to
         // just after the only [^a] reference; " tail." is not selected.
         const r = cut(["[^a]: def", "    cont xx", "", "Para [^a] tail."], { line: 1, ch: 11 }, { line: 3, ch: 9 });

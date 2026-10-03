@@ -28,7 +28,7 @@ const carry = (lines: string[], from: { line: number; ch: number }, to: { line: 
     carriedDefinitions(lines.join("\n"), from, to);
 
 describe("a footnote defined in a blockquote first and at column 0 last", () => {
-    it.fails("of a quoted duplicate FIRST and a column-0 duplicate LAST, the last in the document is carried", () => {
+    it("of a quoted duplicate FIRST and a column-0 duplicate LAST, the last in the document is carried", () => {
         expect(carry(["a[^d]", "", "> [^d]: quoted first", "", "[^d]: plain last"], { line: 0, ch: 0 }, { line: 0, ch: 5 }).carried).toEqual([
             { name: "d", lines: ["[^d]: plain last"] },
         ]);

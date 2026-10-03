@@ -75,20 +75,20 @@ beforeEach(() => {
 describe("a selection whose edge only touches a definition's label line", () => {
     // The paragraph and the blank line under it, selected with Shift+Down,
     // so the selection ends at character 0 of the definition's line.
-    it.fails("a line selection ending at ch 0 of the definition line carries that definition (the selection holds none of its text)", () => {
+    it("a line selection ending at ch 0 of the definition line carries that definition (the selection holds none of its text)", () => {
         expect(carry(["Intro.", "", "Para [^1].", "", "[^1]: one"], { line: 2, ch: 0 }, { line: 4, ch: 0 }).carried).toEqual([
             { name: "1", lines: ["[^1]: one"] },
         ]);
     });
 
     // The selection starts after the last character of "[^1]: one".
-    it.fails("a selection starting at the END of a definition's line carries that definition", () => {
+    it("a selection starting at the END of a definition's line carries that definition", () => {
         expect(carry(["[^1]: one", "", "Para [^1]."], { line: 0, ch: 9 }, { line: 2, ch: 10 }).carried).toEqual([
             { name: "1", lines: ["[^1]: one"] },
         ]);
     });
 
-    it.fails("cut takes the definition it orphans along instead of leaving it behind", () => {
+    it("cut takes the definition it orphans along instead of leaving it behind", () => {
         const doc = editor(["Para [^1]", "", "[^1]: def"], { line: 0, ch: 0 }, { line: 2, ch: 0 });
         const event = clipboardEvent();
         handleCut(fakePlugin({ carryFootnotesOnCopy: true }, doc), event as never);
@@ -104,7 +104,7 @@ describe("a selection whose edge only touches a definition's label line", () => 
     // the reference but not the label, so the definition does not travel
     // with the text and has to be carried. Today nothing is carried and the
     // hook leaves the copy to the editor.
-    it.fails("a copy starting mid-body on a definition's label line and ending past a later reference carries that definition", () => {
+    it("a copy starting mid-body on a definition's label line and ending past a later reference carries that definition", () => {
         const lines = ["x[^a]", "", "[^a]: delta eps", "    gamma", "", "more[^a]"];
         // Today: { carried: [], missing: [] }.
         expect(carry(lines, { line: 2, ch: 8 }, { line: 5, ch: 8 }).carried.map((block) => block.name)).toEqual(["a"]);

@@ -1,5 +1,6 @@
 import { EditorPosition } from "obsidian";
 
+import { positionAfterRewrite } from "../editor/document-diff";
 import { definitionLabelWithName, referenceOccurrences } from "../parsing/footnote-grammar";
 import { orphanedDefinitionBlocks } from "../linting/rules/remove-orphaned-definitions";
 import {
@@ -9,6 +10,7 @@ import {
     maskProtectedLines,
     normalizeEol,
     quotedDefinitionEnd,
+    removeLineRanges,
     scanDocument,
 } from "../parsing/markdown-scan";
 
@@ -45,49 +47,78 @@ export interface CarriedDefinitions {
  * leaves this note: the definition of every live reference inside the
  * selection whose block lies outside it, plus, all the way down, the
  * definitions of the references inside those blocks' own bodies. A block
- * whose first line the selection contains travels with the text and is
- * not carried again. A reference the selection cuts through (only part of
- * its brackets selected) is not a reference in the copy, so it needs
- * nothing. Of duplicate definitions the LAST is carried, the one Obsidian
+ * travels with the text, and is not carried again, exactly when the
+ * selection holds its whole label, "[^name]:" (see selectionHolds). A
+ * reference the selection cuts through (only part of its brackets
+ * selected) is not a reference in the copy, so it needs nothing. Of
+ * duplicate definitions the LAST in the note is carried, the one Obsidian
  * renders. Names match without regard to case.
  */
 export function carriedDefinitions(markdown: string, from: EditorPosition, to: EditorPosition): CarriedDefinitions {
     const lines = normalizeEol(markdown).text.split("\n");
+    const { blocks, missing } = carriedBlocks(lines, from, to);
+    return { carried: blocks.map((block) => asCarried(lines, block)), missing };
+}
+
+/** A block as the clipboard carries it: its name and its lines exactly as they stand. */
+function asCarried(lines: string[], block: DefinitionBlock): CarriedDefinition {
+    return { name: block.name, lines: lines.slice(block.start, block.end + 1) };
+}
+
+/**
+ * Whether the selection from `from` to `to` holds the stretch of `line`
+ * from character `start` to character `end` whole. Positions are compared
+ * by line and then by character, never by line alone: a line-wise
+ * selection made with Shift+Down ends at character 0 of the line below
+ * and holds none of it, and one dragged up from the end of a line starts
+ * on that line without holding any of it (hunt 2026-10-02, pin
+ * bug-carry-line-selection-boundary).
+ */
+function selectionHolds(from: EditorPosition, to: EditorPosition, line: number, start: number, end: number): boolean {
+    const atOrAfter = (a: EditorPosition, b: EditorPosition) => a.line > b.line || (a.line === b.line && a.ch >= b.ch);
+    return atOrAfter({ line, ch: start }, from) && atOrAfter(to, { line, ch: end });
+}
+
+/**
+ * The reader behind carriedDefinitions and planCut, so the two can never
+ * disagree about what a selection carries: the blocks to carry, in the
+ * order the copy meets them, in the note's own line numbers, and the
+ * names that have nothing to carry.
+ */
+function carriedBlocks(lines: string[], from: EditorPosition, to: EditorPosition): { blocks: DefinitionBlock[]; missing: string[] } {
     const scan = scanDocument(lines);
     const masked = maskProtectedLines(lines, scan);
     const starts = definitionStartLines(lines, scan, (i) => masked[i]);
 
-    // every definition block the note has, by lower-cased name, in
-    // document order: column-0 blocks, and quoted ones with the quoted
-    // continuation Obsidian gives them. An in-item definition is
-    // recognised but has no modelled extent, so it is a name with nothing
-    // to carry.
-    const blocksOf = new Map<string, DefinitionBlock[]>();
-    const remember = (block: DefinitionBlock) => {
-        const folded = block.name.toLowerCase();
-        blocksOf.set(folded, [...(blocksOf.get(folded) ?? []), block]);
-    };
-    for (const block of findDefinitionBlocks(lines, scan, masked, starts)) remember(block);
+    // every definition block the note has: column-0 blocks, and quoted
+    // ones with the quoted continuation Obsidian gives them. An in-item
+    // definition is recognised but has no modelled extent, so it is a
+    // name with nothing to carry.
+    const all: DefinitionBlock[] = findDefinitionBlocks(lines, scan, masked, starts);
     for (let i = 0; i < lines.length; i++) {
         if (scan.isProtected[i] || !starts[i]) continue;
         const hit = definitionLabelWithName(lines[i], masked[i]);
         if (!hit?.label.quoted) continue;
-        remember({
+        all.push({
             name: hit.name,
             start: i,
             end: hit.label.afterCloser ? i : quotedDefinitionEnd(lines, scan, starts, i),
         });
     }
+    // The blocks go by lower-cased name in document order, quoted and
+    // column-0 ones sorted together, so "the last definition of a name"
+    // is the last in the note whatever its shape (hunt 2026-10-02, pin
+    // bug-carry-quoted-duplicate-first: the quoted ones used to be listed
+    // after all the others, so a quoted first duplicate won).
+    all.sort((a, b) => a.start - b.start);
+    const blocksOf = new Map<string, DefinitionBlock[]>();
+    for (const block of all) {
+        const folded = block.name.toLowerCase();
+        blocksOf.set(folded, [...(blocksOf.get(folded) ?? []), block]);
+    }
 
-    // the references the selection holds whole, in order, skipping the
-    // reference-shaped head of a quoted label (a label defines, it does
-    // not point)
-    const inside = (line: number, start: number, end: number): boolean => {
-        if (line < from.line || line > to.line) return false;
-        if (line === from.line && start < from.ch) return false;
-        if (line === to.line && end > to.ch) return false;
-        return true;
-    };
+    // the references inside a block's lines, skipping the reference-shaped
+    // head of a quoted label (a label defines, it does not point)
     const referencesOn = (line: number): string[] => {
         if (scan.isProtected[line] || !lines[line].includes("[^")) return [];
         const label = starts[line] ? definitionLabelWithName(lines[line], masked[line]) : null;
@@ -96,6 +127,8 @@ export function carriedDefinitions(markdown: string, from: EditorPosition, to: E
             .filter((occurrence) => occurrence.start !== labelStart)
             .map((occurrence) => occurrence.name);
     };
+    // the references the selection holds whole, in order, skipping labels
+    // the same way
     const queue: string[] = [];
     for (let line = from.line; line <= to.line && line < lines.length; line++) {
         if (scan.isProtected[line] || !lines[line].includes("[^")) continue;
@@ -103,11 +136,11 @@ export function carriedDefinitions(markdown: string, from: EditorPosition, to: E
         const labelStart = label ? label.label.nameStart - 2 : -1;
         for (const occurrence of referenceOccurrences(lines[line], masked[line], starts[line])) {
             if (occurrence.start === labelStart) continue;
-            if (inside(line, occurrence.start, occurrence.end)) queue.push(occurrence.name);
+            if (selectionHolds(from, to, line, occurrence.start, occurrence.end)) queue.push(occurrence.name);
         }
     }
 
-    const carried: CarriedDefinition[] = [];
+    const carried: DefinitionBlock[] = [];
     const missing: string[] = [];
     const seen = new Set<string>();
     while (queue.length > 0) {
@@ -122,9 +155,16 @@ export function carriedDefinitions(markdown: string, from: EditorPosition, to: E
         }
         // the last definition is the one Obsidian renders
         const block = blocks[blocks.length - 1];
-        // a block the selection contains travels with the text
-        if (block.start >= from.line && block.start <= to.line) continue;
-        carried.push({ name: block.name, lines: lines.slice(block.start, block.end + 1) });
+        // A block whose whole label "[^name]:" the selection holds travels
+        // with the text. One whose label the selection holds only part of,
+        // or none of, lies outside it and is carried: a selection that
+        // takes just the "[^" of a label, or starts after the label in the
+        // middle of the definition's text, carries the definition whole
+        // (hunt 2026-10-02, pins bug-carry-line-selection-boundary and
+        // spec-carry-label-head-selection).
+        const label = definitionLabelWithName(lines[block.start], masked[block.start]);
+        if (label && selectionHolds(from, to, block.start, label.label.nameStart - 2, label.label.nameEnd + 2)) continue;
+        carried.push(block);
         // and the references inside its body need their own definitions,
         // met right after it, as a reader meets them (preorder), before
         // the selection's later references
@@ -132,7 +172,7 @@ export function carriedDefinitions(markdown: string, from: EditorPosition, to: E
         for (let line = block.start; line <= block.end; line++) inner.push(...referencesOn(line));
         queue.unshift(...inner);
     }
-    return { carried, missing };
+    return { blocks: carried, missing };
 }
 
 /** How carried definitions land in a destination note: the pasted body and the blocks to append, both with the collision renames made, and the counts for the toast. */
@@ -312,35 +352,101 @@ export function splitCarriedText(text: string): { body: string; carried: Carried
     return { body: lines.slice(0, bodyEnd).join("\n"), carried };
 }
 
+/** What a cut does to the note and to the clipboard (planCut). */
+export interface CutPlan extends CarriedDefinitions {
+    /** the note as it reads after the cut, its lines joined with "\n" */
+    text: string;
+    /** where the caret goes in `text`: the place the selection was */
+    caret: EditorPosition;
+    /** how many of the carried blocks the cut took out of the note, the number the toast gives */
+    removed: number;
+}
+
 /**
- * The definition blocks that deleting the text between `from` and `to`
- * would leave with nothing pointing at them, chains included, in the
- * note's own line numbers, so a cut can delete them in the same
- * transaction as the selection. A definition that was an orphan already,
- * and one the plugin never cuts (its line closes a comment), are not
- * among them: the cut only takes what it orphans. The reading is the
- * orphan-definition rule's own, run on the note as it would be after the
- * deletion.
+ * What cutting the text between `from` and `to` does, worked out in one
+ * pass so the clipboard and the note can never disagree.
+ *
+ * The promise: a cut removes the selection, plus the definition blocks it
+ * carries that nothing else in the note uses, and nothing else. So a
+ * definition block leaves the note only when all three of these hold.
+ * The clipboard carries it (carriedBlocks, the reader copy uses too). Once
+ * the selection is gone, nothing references it, read by the orphan rule's
+ * own reader on the note as it reads then, chains included; a definition
+ * that was an orphan before the cut, and one the plugin never cuts (its
+ * line closes a comment), are not the cut's to take. And deleting the
+ * selection left its lines whole (leftWhole).
+ *
+ * Every other block stays where it is. That is how the cut used to lose
+ * text, wherever the two halves disagreed (hunt 2026-10-02): a selection
+ * ending inside a reference's brackets deleted a definition the clipboard
+ * did not carry (pin bug-carry-cut-through-reference-brackets); a block
+ * the deletion joined unselected text onto was deleted with that text
+ * (pin bug-carry-cut-deletes-unselected-tail); and of a name defined
+ * twice both blocks were deleted while only the last was carried (pin
+ * bug-carry-cut-duplicate-definitions). The first duplicate now stays in
+ * the note, where the lint's alerts name it (ADR 0002: never silent,
+ * never eat text).
+ *
+ * `tidy` is what the plugin does to the note after the cut (removing a
+ * section heading the cut left empty); the caret is worked out in the
+ * note as it reads after that too, so it can never point past the end of
+ * the note (pin bug-carry-cut-caret-stale-line).
+ *
+ * When the clipboard carries nothing, the plugin leaves the cut to the
+ * editor, and the plan is the editor's own cut: the selection deleted,
+ * and nothing tidied.
  */
-export function definitionsOrphanedByCut(markdown: string, from: EditorPosition, to: EditorPosition): DefinitionBlock[] {
+export function planCut(
+    markdown: string,
+    from: EditorPosition,
+    to: EditorPosition,
+    tidy: (text: string) => string = (text) => text,
+): CutPlan {
     const lines = normalizeEol(markdown).text.split("\n");
-    const before = new Set(orphanedDefinitionBlocks(lines, scanDocument(lines)).map((block) => block.name.toLowerCase()));
-    const after = [
+    const { blocks, missing } = carriedBlocks(lines, from, to);
+    const carried = blocks.map((block) => asCarried(lines, block));
+    // the note with the selection deleted: what was left of its first line
+    // and of its last line, joined into one
+    const joined = [
         ...lines.slice(0, from.line),
         lines[from.line].slice(0, from.ch) + lines[to.line].slice(to.ch),
         ...lines.slice(to.line + 1),
     ];
-    const shift = to.line - from.line;
-    const orphaned: DefinitionBlock[] = [];
-    for (const block of orphanedDefinitionBlocks(after, scanDocument(after))) {
-        if (before.has(block.name.toLowerCase())) continue;
-        // a block on the line the deletion joined is one the selection cut
-        // through, which is outside what the cut carries
-        if (block.start === from.line) continue;
-        const back = (line: number) => (line < from.line ? line : line + shift);
-        orphaned.push({ name: block.name, start: back(block.start), end: back(block.end) });
-    }
-    return orphaned;
+    const joinedText = joined.join("\n");
+    if (blocks.length === 0) return { carried, missing, text: joinedText, caret: from, removed: 0 };
+
+    // where a line the deletion keeps sits once the selection is gone
+    const moved = (line: number) => (line <= from.line ? line : line - (to.line - from.line));
+    const wasOrphan = new Set(orphanedDefinitionBlocks(lines, scanDocument(lines)).map((block) => block.name.toLowerCase()));
+    const orphanedAt = new Set(
+        orphanedDefinitionBlocks(joined, scanDocument(joined))
+            .filter((block) => !wasOrphan.has(block.name.toLowerCase()))
+            .map((block) => block.start),
+    );
+    const removed = blocks.filter((block) => leftWhole(lines, from, to, block) && orphanedAt.has(moved(block.start)));
+    const kept = removeLineRanges(joined, removed.map((block) => ({ start: moved(block.start), end: moved(block.end) })));
+    const text = tidy(kept.join("\n"));
+    return { carried, missing, text, caret: positionAfterRewrite(joinedText, text, from), removed: removed.length };
+}
+
+/**
+ * Whether deleting the selection from `from` to `to` leaves `block` whole,
+ * on lines of its own, so that taking its lines out takes nothing else.
+ *
+ * A block on lines the deletion never touches is whole. So is one that
+ * meets the selection only at an edge: it ends exactly where the
+ * selection starts and nothing follows the selection's end on its line,
+ * or it starts at the very beginning of the selection's last line and
+ * nothing comes before the selection's start on its line. Either way the
+ * line the deletion joins is the block's own line, as it was (a line-wise
+ * selection made with Shift+Down ends like this; hunt 2026-10-02, pin
+ * bug-carry-line-selection-boundary). Any other block shares a line with
+ * text the cut is not taking, and keeps its lines.
+ */
+function leftWhole(lines: string[], from: EditorPosition, to: EditorPosition, block: DefinitionBlock): boolean {
+    if (block.end < from.line || block.start > to.line) return true;
+    if (block.end === from.line && from.ch === lines[from.line].length && to.ch === lines[to.line].length) return true;
+    return block.start === to.line && to.ch === 0 && from.ch === 0;
 }
 
 /** A definition block's body with the label stripped and whitespace collapsed, the key two definitions are compared by. */

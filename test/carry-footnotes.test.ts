@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
     carriedDefinitions,
-    definitionsOrphanedByCut,
     planCarriedPaste,
+    planCut,
     splitCarriedText,
     withCarriedText,
 } from "../src/commands/carry-footnotes";
@@ -209,27 +209,33 @@ describe("the clipboard text with definitions in it", () => {
     });
 });
 
-// Cut: the definitions the deletion leaves with nothing pointing at them go
-// with it, chains included, and nothing that was already an orphan or that
-// the plugin never cuts. Reported in the note's own line numbers so the
-// cut can delete them in the same transaction as the selection.
-describe("definitionsOrphanedByCut", () => {
-    it("names the blocks the deletion orphans, in the note's line numbers, and leaves the still-used ones", () => {
-        expect(definitionsOrphanedByCut("a[^1] b[^2] c[^2]\n\n[^1]: one\n[^2]: two", { line: 0, ch: 0 }, { line: 0, ch: 12 })).toEqual([
-            { name: "1", start: 2, end: 2 },
-        ]);
+// Cut: the selection leaves the note with the carried definitions that
+// nothing else uses once it is gone, chains included, and nothing that
+// was already an orphan, that the clipboard does not carry, or that the
+// deletion did not leave whole (hunt 2026-10-02: the cut used to decide
+// what it deleted with a reader of its own, which disagreed with the
+// clipboard's; the pins in test/hunt/bug-carry-cut-*.test.ts hold the
+// shapes where that lost text). These tests were the old
+// definitionsOrphanedByCut's, restated as the note the cut leaves.
+describe("planCut", () => {
+    const cutNames = (plan: { carried: { name: string }[] }) => plan.carried.map((block) => block.name);
+
+    it("takes the carried blocks the deletion orphans and leaves the still-used ones, whose copy still travels", () => {
+        const plan = planCut("a[^1] b[^2] c[^2]\n\n[^1]: one\n[^2]: two", { line: 0, ch: 0 }, { line: 0, ch: 12 });
+        expect(cutNames(plan)).toEqual(["1", "2"]);
+        expect(plan.text).toBe("c[^2]\n\n[^2]: two");
+        expect(plan.removed).toBe(1);
     });
 
-    it("follows a chain, and ignores a definition that was an orphan before the cut", () => {
-        const note = "a[^a] keep\n\n[^a]: see[^b]\n[^b]: bee\n[^old]: already an orphan";
-        expect(definitionsOrphanedByCut(note, { line: 0, ch: 0 }, { line: 0, ch: 5 })).toEqual([
-            { name: "a", start: 2, end: 2 },
-            { name: "b", start: 3, end: 3 },
-        ]);
+    it("follows a chain, and leaves a definition that was an orphan before the cut", () => {
+        const plan = planCut("a[^a] keep\n\n[^a]: see[^b]\n[^b]: bee\n[^old]: already an orphan", { line: 0, ch: 0 }, { line: 0, ch: 5 });
+        expect(plan.text).toBe(" keep\n\n[^old]: already an orphan");
+        expect(plan.removed).toBe(2);
     });
 
-    it("finds nothing when the selection holds no reference, or holds the definition itself", () => {
-        expect(definitionsOrphanedByCut("plain[^1]\n\n[^1]: one", { line: 0, ch: 0 }, { line: 0, ch: 5 })).toEqual([]);
-        expect(definitionsOrphanedByCut("plain[^1]\n\n[^1]: one", { line: 0, ch: 0 }, { line: 2, ch: 9 })).toEqual([]);
+    it("takes nothing when the selection holds no reference, or holds the definition itself", () => {
+        const note = "plain[^1]\n\n[^1]: one";
+        expect(planCut(note, { line: 0, ch: 0 }, { line: 0, ch: 5 })).toMatchObject({ carried: [], removed: 0 });
+        expect(planCut(note, { line: 0, ch: 0 }, { line: 2, ch: 9 })).toMatchObject({ carried: [], removed: 0, text: "" });
     });
 });

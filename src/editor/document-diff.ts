@@ -215,6 +215,41 @@ export function lineMapper(changes: OffsetChange[], before: string): (line: numb
 }
 
 /**
+ * Where position `pos` of `before` sits in `after`, when the one is turned
+ * into the other by the edits lineDiffChanges works out. It follows the
+ * edits the way the editor carries a caret through them: an edit before
+ * the position moves it along by however much longer or shorter that edit
+ * made the text, and a position inside text that an edit replaced or
+ * deleted moves to the start of whatever took that text's place. The
+ * answer is always a real position of `after`. (Written for the caret after
+ * a cut, whose own line can be trimmed away with the blank lines around
+ * it; hunt 2026-10-02, pin bug-carry-cut-caret-stale-line.)
+ */
+export function positionAfterRewrite(before: string, after: string, pos: { line: number; ch: number }): { line: number; ch: number } {
+    const beforeLines = before.split("\n");
+    let offset = pos.ch;
+    for (let i = 0; i < pos.line; i++) offset += beforeLines[i].length + 1;
+    let grew = 0;
+    for (const change of lineDiffChanges(before, after)) {
+        if (change.from >= offset) break;
+        if (change.to > offset) {
+            // the position was inside this edit's text
+            offset = change.from;
+            break;
+        }
+        grew += change.text.length - (change.to - change.from);
+    }
+    const afterLines = after.split("\n");
+    let rest = offset + grew;
+    let line = 0;
+    while (line < afterLines.length - 1 && rest > afterLines[line].length) {
+        rest -= afterLines[line].length + 1;
+        line++;
+    }
+    return { line, ch: Math.min(rest, afterLines[line].length) };
+}
+
+/**
  * For each line of `a`, where it lives in `b`: `from` is the line a fold
  * may START on (-1 when the line is gone), `to` the line a fold may END
  * on.

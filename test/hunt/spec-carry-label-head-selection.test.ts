@@ -33,7 +33,7 @@ const carry = (lines: string[], from: { line: number; ch: number }, to: { line: 
     carriedDefinitions(lines.join("\n"), from, to);
 
 describe("spec question: a selection that takes only the '[^' of a definition's label", () => {
-    it.fails("a selection that takes only the '[^' of a definition's label carries that definition", () => {
+    it("a selection that takes only the '[^' of a definition's label carries that definition", () => {
         expect(carry(["a[^1]", "", "[^1]: one"], { line: 0, ch: 0 }, { line: 2, ch: 2 }).carried).toEqual([
             { name: "1", lines: ["[^1]: one"] },
         ]);

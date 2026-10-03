@@ -61,7 +61,7 @@ beforeEach(() => {
 });
 
 describe("cut through a reference's brackets", () => {
-    it.fails("never removes a definition from the note that the clipboard does not carry", () => {
+    it("never removes a definition from the note that the clipboard does not carry", () => {
         const doc = editor(["a[^1] b", "", "[^1]: precious text"], { line: 0, ch: 0 }, { line: 0, ch: 3 });
         const event = clipboardEvent();
         handleCut(fakePlugin({ carryFootnotesOnCopy: true }, doc), event as never);

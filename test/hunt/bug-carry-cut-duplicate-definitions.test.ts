@@ -55,7 +55,7 @@ beforeEach(() => {
 });
 
 describe("cutting the only reference of a footnote defined twice", () => {
-    it.fails("every definition body the cut deletes reaches the clipboard (or the earlier one stays in the note)", () => {
+    it("every definition body the cut deletes reaches the clipboard (or the earlier one stays in the note)", () => {
         const from = { line: 0, ch: 0 };
         const to = { line: 0, ch: 6 };
         const doc = fakeEditor(["a[^d] b", "", "[^d]: one", "", "[^d]: two"], { wholeDoc: true, edits: true, cursor: from, selection: { anchor: from, head: to } });
@@ -65,7 +65,7 @@ describe("cutting the only reference of a footnote defined twice", () => {
         expect(survives).toBe(true);
     });
 
-    it.fails("the toast does not promise to carry a definition the clipboard lacks", () => {
+    it("the toast does not promise to carry a definition the clipboard lacks", () => {
         const from = { line: 0, ch: 0 };
         const to = { line: 0, ch: 6 };
         const doc = fakeEditor(["a[^d] b", "", "[^d]: one", "", "[^d]: two"], { wholeDoc: true, edits: true, cursor: from, selection: { anchor: from, head: to } });

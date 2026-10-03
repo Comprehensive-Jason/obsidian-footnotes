@@ -57,7 +57,7 @@ beforeEach(() => {
 });
 
 describe("cut: the caret afterwards", () => {
-    it.fails("puts the caret where the selection was when an orphaned definition ABOVE it was removed", () => {
+    it("puts the caret where the selection was when an orphaned definition ABOVE it was removed", () => {
         const lines = ["# Chapter 1", "", "[^a]: alpha", "", "# Chapter 2", "", "Text[^a] more"];
         const doc = editor(lines, { line: 6, ch: 4 }, { line: 6, ch: 8 });
         handleCut(fakePlugin({ carryFootnotesOnCopy: true }, doc), clipboardEvent() as never);
@@ -71,7 +71,7 @@ describe("cut: the caret afterwards", () => {
     // and the blank lines above it, the cut's own emptied line among them.
     // The note is left as "intro" alone, and the caret is left on line 2,
     // past the end of the note.
-    it.fails("keeps the caret inside the note when the heading removal takes the cut's own (now blank) line", () => {
+    it("keeps the caret inside the note when the heading removal takes the cut's own (now blank) line", () => {
         const lines = ["intro", "", "a[^1] b", "", "# Footnotes", "", "[^1]: one"];
         const doc = editor(lines, { line: 2, ch: 0 }, { line: 2, ch: 7 });
         const plugin = fakePlugin(
@@ -95,7 +95,7 @@ describe("cut: the caret afterwards", () => {
     // last lines then takes the blank lines left behind, the cut's own
     // emptied line among them. The note is left as "Intro." alone, and the
     // caret is left on line 2, past the end of the note.
-    it.fails("keeps the caret inside the note when the cut's own emptied line is trimmed away at default settings", () => {
+    it("keeps the caret inside the note when the cut's own emptied line is trimmed away at default settings", () => {
         const lines = ["Intro.", "", "Only[^1] here.", "", "[^1]: one"];
         const doc = editor(lines, { line: 2, ch: 0 }, { line: 2, ch: 14 });
         handleCut(fakePlugin({ carryFootnotesOnCopy: true }, doc), clipboardEvent() as never);
