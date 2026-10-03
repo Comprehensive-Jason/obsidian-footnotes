@@ -362,7 +362,7 @@ function landCarriedText(
         notice += ` ${missing.map(quotedReference).join(", ")} ${missing.length === 1 ? "has" : "have"} no definition to carry.`;
     }
     showNotice(notice, missing.length > 0 ? 8000 : undefined);
-    if (lintAfterFootnoteCreation(plugin, false) === null && !plugin.settings.lintOnFootnoteCreation) {
+    if (lintAfterFootnoteCreation(plugin, doc, false) === null && !plugin.settings.lintOnFootnoteCreation) {
         noticeLintAlerts(plugin, doc.getValue());
     }
 }

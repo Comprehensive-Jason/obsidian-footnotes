@@ -278,7 +278,7 @@ function openPopupForNewDefinition(
     seededBody?: string,
 ) {
     const ordinal = referenceOrdinalAtCursor(doc, footnoteId, doc.getCursor());
-    const relocated = lintAfterFootnoteCreation(plugin, false, seededBody);
+    const relocated = lintAfterFootnoteCreation(plugin, doc, false, seededBody);
     const effectiveId = relocated ?? footnoteId;
     if (relocated !== null) {
         // The lint changed the note. It rewrites as little text as it can,
@@ -369,7 +369,7 @@ export function landDefinitionBackedInsertion(opts: {
             opts.changes,
             true,
         );
-        lintAfterFootnoteCreation(opts.plugin, true, opts.seededBody);
+        lintAfterFootnoteCreation(opts.plugin, opts.doc, true, opts.seededBody);
     }
 }
 

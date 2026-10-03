@@ -680,9 +680,18 @@ function uniqueSeededDefinitionName(doc: Editor, body: string): string | null {
  * Creations inside a table cell skip this trigger completely: editing the
  * document while a cell's sub-editor has focus is the issue #28 corruption
  * family.
+ *
+ * `edited` is the editor the creation wrote into. The lint only ever
+ * touches the active tab's main editor, so when the creation happened
+ * somewhere else, such as a carried paste into a hover popover's editor,
+ * it lints nothing and lets the alerts speak for the edited note instead,
+ * as they do when this trigger is off. It used to lint the active tab's
+ * note, which the user had not touched (hunt 2026-10-02, pin
+ * bug-paste-lints-other-note).
  */
 export function lintAfterFootnoteCreation(
     plugin: FootnotePlugin,
+    edited: Editor,
     relandCursor: boolean,
     seededBody?: string,
 ): string | null {
@@ -696,6 +705,10 @@ export function lintAfterFootnoteCreation(
     // code calling in directly from editing the hidden buffer.
     const target = safeLintTarget(plugin);
     if (!target) return null;
+    if (target.doc !== edited) {
+        noticeLintAlerts(plugin, edited.getValue());
+        return null;
+    }
     const doc = target.doc;
     const before = doc.getValue();
     // Say nothing when a bad prefix blocks the lint. The insert that just

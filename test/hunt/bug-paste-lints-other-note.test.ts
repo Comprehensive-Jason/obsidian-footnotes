@@ -58,7 +58,7 @@ beforeEach(() => {
 });
 
 describe("lint on creation after a carried paste", () => {
-    it.fails("lints the note the paste landed in, never the active view's other note", () => {
+    it("lints the note the paste landed in, never the active view's other note", () => {
         // the note in the active tab behind the popover: its definition
         // sits above its reference, so Move to bottom WOULD rewrite it
         const main = fakeEditor(["[^1]: one", "", "text[^1]"], { wholeDoc: true, edits: true, cursor: { line: 2, ch: 0 } });

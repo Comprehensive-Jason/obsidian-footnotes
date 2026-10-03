@@ -61,7 +61,7 @@ describe("Placement \"Don't move\" with every other lint rule off", () => {
             { ...everyOtherRuleOff, footnotePlacement: "none", lintFixPunctuation: true, lintOnFootnoteCreation: true },
             doc,
         );
-        lintAfterFootnoteCreation(plugin, false);
+        lintAfterFootnoteCreation(plugin, doc, false);
         // Today: one notice, the orphan alert naming [^9].
         expect(noticeCalls).toEqual([]);
     });

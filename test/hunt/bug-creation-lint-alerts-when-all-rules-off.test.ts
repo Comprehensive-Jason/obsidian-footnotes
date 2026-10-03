@@ -54,7 +54,7 @@ describe("lint on footnote creation with every lint rule off", () => {
             },
             doc,
         );
-        lintAfterFootnoteCreation(plugin, false);
+        lintAfterFootnoteCreation(plugin, doc, false);
         expect(noticeCalls).toEqual([]);
     });
 
@@ -72,7 +72,7 @@ describe("lint on footnote creation with every lint rule off", () => {
             },
             doc,
         );
-        lintAfterFootnoteCreation(plugin, false);
+        lintAfterFootnoteCreation(plugin, doc, false);
         expect(noticeCalls.some((args) => String(args[0]).includes("nothing references"))).toBe(true);
     });
 });

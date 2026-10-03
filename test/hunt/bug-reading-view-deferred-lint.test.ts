@@ -67,7 +67,7 @@ describe("popup-deferred lint-on-creation vs Reading view (fixed 2026-08-10)", (
             { lintOnFootnoteCreation: true },
             "preview",
         );
-        lintAfterFootnoteCreation(plugin, true);
+        lintAfterFootnoteCreation(plugin, doc, true);
         expect(doc.lines).toEqual(lines);
         expect(doc.cursor).toEqual({ line: 2, ch: lines[2].length });
     });
@@ -82,7 +82,7 @@ describe("popup-deferred lint-on-creation vs Reading view (fixed 2026-08-10)", (
             { lintOnFootnoteCreation: true },
             "source",
         );
-        lintAfterFootnoteCreation(plugin, true);
+        lintAfterFootnoteCreation(plugin, doc, true);
         expect(doc.transactions).toBeGreaterThan(0);
     });
 });

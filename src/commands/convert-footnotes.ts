@@ -389,7 +389,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
     );
     // anything that creates a footnote lints, when that setting is on;
     // otherwise the alerts alone speak (ADR 2)
-    if (lintAfterFootnoteCreation(plugin, false) === null && !plugin.settings.lintOnFootnoteCreation) {
+    if (lintAfterFootnoteCreation(plugin, doc, false) === null && !plugin.settings.lintOnFootnoteCreation) {
         noticeLintAlerts(plugin, doc.getValue());
     }
     return result;

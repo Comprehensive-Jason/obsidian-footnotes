@@ -137,7 +137,7 @@ function creationLint(
     relandCursor = false,
 ): FakeDoc {
     const doc = fakeEditor(value, { line: 0, ch: 0 });
-    lintAfterFootnoteCreation(pluginFor(viewFor(doc), overrides), relandCursor);
+    lintAfterFootnoteCreation(pluginFor(viewFor(doc), overrides), doc, relandCursor);
     return doc;
 }
 
@@ -377,7 +377,7 @@ describe("lintAfterFootnoteCreation guards", () => {
     // of the (absent) view's mode throws.
     it("survives having no active markdown view", () => {
         expect(() =>
-            { lintAfterFootnoteCreation(pluginFor(null), false); },
+            { lintAfterFootnoteCreation(pluginFor(null), fakeEditor(DIRTY), false); },
         ).not.toThrow();
         expect(noticeCalls).toEqual([]);
     });
@@ -388,6 +388,7 @@ describe("lintAfterFootnoteCreation guards", () => {
         expect(() =>
             { lintAfterFootnoteCreation(
                 pluginFor({ file: { path: "note.md" }, getMode: () => "source" }),
+                fakeEditor(DIRTY),
                 false,
             ); },
         ).not.toThrow();
@@ -405,9 +406,23 @@ describe("lintAfterFootnoteCreation guards", () => {
             contains: (el: unknown) => el === nested,
         };
         const doc = fakeEditor(DIRTY, { line: 0, ch: 0 }, { contentDOM });
-        lintAfterFootnoteCreation(pluginFor(viewFor(doc)), false);
+        lintAfterFootnoteCreation(pluginFor(viewFor(doc)), doc, false);
         expect(doc.value).toBe(DIRTY);
         expect(doc.appliedChanges).toEqual([]);
+    });
+
+    // A creation written into another editor than the active tab's (a
+    // carried paste into a hover popover) leaves the active note alone, and
+    // the alerts speak for the edited note instead (hunt 2026-10-02, pin
+    // bug-paste-lints-other-note).
+    it("leaves the active note alone when another editor was edited, and alerts on that one", () => {
+        const active = fakeEditor(DIRTY, { line: 0, ch: 0 });
+        const edited = fakeEditor("text[^1]\n\n[^1]: used\n[^9]: stray", { line: 0, ch: 0 });
+        expect(lintAfterFootnoteCreation(pluginFor(viewFor(active)), edited, false)).toBeNull();
+        expect(active.value).toBe(DIRTY);
+        expect(active.appliedChanges).toEqual([]);
+        expect(edited.appliedChanges).toEqual([]);
+        expect(messages().some((m) => m.includes("nothing references"))).toBe(true);
     });
 
     // L433 ConditionalExpression (-> false): an invalid footnote-prefix
@@ -599,7 +614,7 @@ describe("the creation lint returns the relocated definition name", () => {
     it("returns the renumbered name of the unique empty definition", () => {
         const doc = fakeEditor("alpha[^5] bravo[^9]\n\n[^5]: five\n[^9]: ");
         expect(
-            lintAfterFootnoteCreation(pluginFor(viewFor(doc)), false),
+            lintAfterFootnoteCreation(pluginFor(viewFor(doc)), doc, false),
         ).toBe("2");
         expect(doc.value).toBe("alpha[^1] bravo[^2]\n\n[^1]: five\n[^2]: ");
     });
@@ -607,21 +622,21 @@ describe("the creation lint returns the relocated definition name", () => {
     it("returns null when the lint changed nothing", () => {
         const doc = fakeEditor("alpha[^1]\n\n[^1]: ");
         expect(
-            lintAfterFootnoteCreation(pluginFor(viewFor(doc)), false),
+            lintAfterFootnoteCreation(pluginFor(viewFor(doc)), doc, false),
         ).toBeNull();
     });
 
     it("returns the seeded definition's renumbered name when a body is given", () => {
         const doc = fakeEditor("alpha[^5] bravo[^9]\n\n[^5]: five\n[^9]: moved text");
         expect(
-            lintAfterFootnoteCreation(pluginFor(viewFor(doc)), false, "moved text"),
+            lintAfterFootnoteCreation(pluginFor(viewFor(doc)), doc, false, "moved text"),
         ).toBe("2");
     });
 
     it("returns null when several empty definitions leave the new one ambiguous", () => {
         const doc = fakeEditor("a[^7] b[^9]\n\n[^7]: \n[^9]: ");
         expect(
-            lintAfterFootnoteCreation(pluginFor(viewFor(doc)), false),
+            lintAfterFootnoteCreation(pluginFor(viewFor(doc)), doc, false),
         ).toBeNull();
     });
 });
