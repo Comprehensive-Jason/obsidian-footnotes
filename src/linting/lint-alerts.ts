@@ -1,17 +1,14 @@
 import type FootnotePlugin from "../main";
 import { footnotePrefix, footnotePrefixProblem } from "../parsing/footnote-prefix";
 import {
-    definitionLabelIn,
     definitionLabelWithName,
-    definitionStartLines,
     DocumentScan,
-    findDefinitionBlocks,
     maskProtectedLines,
     normalizeEol,
-    quotedDefinitionEnd,
     scanDocument,
     tableRowLinesOf,
 } from "../parsing/markdown-scan";
+import { readNote } from "../parsing/note-reading";
 import {
     escapedAt,
     footnoteNameProblem,
@@ -351,7 +348,7 @@ export function invalidFootnoteNames(
     lines: string[],
     scan: DocumentScan,
     masked: string[],
-    starts: boolean[] = definitionStartLines(lines, scan, (i) => masked[i]),
+    starts: boolean[] = readNote(lines).labelLines,
 ): string[] {
     const names: string[] = [];
     const seen = new Set<string>();
@@ -363,15 +360,12 @@ export function invalidFootnoteNames(
     };
     for (let i = 0; i < lines.length; i++) {
         for (const { name } of referenceOccurrences(lines[i], masked[i], starts[i])) consider(name);
-        // the line's own definition label, at column 0 or behind a
-        // blockquote or callout marker: a quoted definition is as real as
-        // a column-0 one (the C22 ruling), and used to go unchecked here
-        // because only column-0 blocks were read (Kimi sweep 2026-09-13)
-        if (!starts[i]) continue;
-        const hit = definitionLabelWithName(lines[i], masked[i]);
-        if (hit) consider(hit.name);
     }
-    for (const block of findDefinitionBlocks(lines, scan, masked, starts)) consider(block.name);
+    // every definition's name, wherever it sits: a quoted one used to go
+    // unchecked because only column-0 blocks were read (Kimi sweep
+    // 2026-09-13), and one in a list item counts the same (Jason's ruling
+    // 1, option a, 2026-10-03)
+    for (const definition of readNote(lines).definitions) consider(definition.name);
     return names;
 }
 
@@ -404,7 +398,7 @@ export function nestedFootnoteDefinitionNames(
     lines: string[],
     scan: DocumentScan,
     masked: string[],
-    starts: boolean[] = definitionStartLines(lines, scan, (i) => masked[i]),
+    starts: boolean[] = readNote(lines).labelLines,
 ): string[] {
     const names: string[] = [];
     // One entry per NAME, ignoring case, the same way the duplicate and
@@ -412,36 +406,18 @@ export function nestedFootnoteDefinitionNames(
     // used to be reported twice, which made the notice's count too high
     // (bug hunt, 2026-08-25).
     const seen = new Set<string>();
-    // Every definition's text: the column-0 blocks, and the quoted
-    // definitions, which never form blocks but are as real as the others
-    // (the C22 ruling) and used to be skipped here (Kimi sweep
-    // 2026-09-13). A quoted definition's text is the rest of its label
-    // line and its continuation inside the quote (quotedDefinitionEnd).
-    const spans = findDefinitionBlocks(lines, scan, masked, starts).map((block) => ({
-        name: block.name,
-        start: block.start,
-        end: block.end,
-    }));
-    for (let i = 0; i < lines.length; i++) {
-        if (!starts[i]) continue;
-        const hit = definitionLabelWithName(lines[i], masked[i]);
-        if (!hit?.label.quoted) continue;
-        // a label after a "%%" closer has its line to itself
-        spans.push({
-            name: hit.name,
-            start: i,
-            end: hit.label.afterCloser ? i : quotedDefinitionEnd(lines, scan, starts, i),
-        });
-    }
+    // Every definition's text, wherever the definition sits: at the top
+    // level, in a blockquote or callout (the C22 ruling; Kimi sweep
+    // 2026-09-13), or in a list item (Jason's ruling 1, option a,
+    // 2026-10-03; hunt 2026-10-02, cluster E7). Its text is the rest of its
+    // label line after the label and the lines of its body.
+    const spans = readNote(lines).definitions;
     for (const span of spans) {
         let nested = false;
         for (let i = span.start; i <= span.end && !nested; i++) {
-            const startAt =
-                i === span.start
-                    ? definitionLabelIn(lines[i])?.labelEnd ?? 0
-                    : 0;
+            const startAt = i === span.start ? span.labelEnd : 0;
             nested =
-                referenceOccurrences(lines[i], masked[i]).some(
+                referenceOccurrences(lines[i], masked[i], starts[i]).some(
                     (occurrence) => occurrence.start >= startAt,
                 ) || lineHasInlineFootnote(masked[i]);
         }
@@ -550,21 +526,18 @@ const rowShaped = (line: string): boolean => line.includes("|") && line.trim() !
  */
 export function definitionsInsideTableNames(markdown: string): string[] {
     const lines = normalizeEol(markdown).text.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+    const reading = readNote(lines);
     const rows = tableRowLinesOf(lines);
     const names: string[] = [];
     const seen = new Set<string>();
     for (let i = 1; i + 1 < lines.length; i++) {
-        if (!starts[i]) continue;
+        const label = reading.labelOn(i);
+        if (!label) continue;
         if (!rows[i - 1] || !rowShaped(lines[i + 1])) continue;
-        const hit = definitionLabelWithName(lines[i], masked[i]);
-        if (!hit) continue;
-        const folded = hit.name.toLowerCase();
+        const folded = label.name.toLowerCase();
         if (seen.has(folded)) continue;
         seen.add(folded);
-        names.push(hit.name);
+        names.push(label.name);
     }
     return names;
 }
@@ -595,7 +568,7 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string) {
     const lines = normalizeEol(markdown).text.split("\n");
     const scan = scanDocument(lines);
     const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+    const starts = readNote(lines).labelLines;
     noticeEmptyReferences(markdown, prefix, masked);
     noticeOrphanedReferences(plugin, markdown, prefix, { lines, masked, scan, starts });
     noticeLazyDefinitions(lines, scan, masked, starts);

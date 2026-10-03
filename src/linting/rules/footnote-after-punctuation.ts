@@ -1,6 +1,6 @@
-import { inItemDefinitionLabels } from "../../parsing/list-item-definitions";
 import { inlineFootnoteSpans, referenceOccurrences } from "../../parsing/footnote-grammar";
 import { ClosingMarkChars, definitionLabelIn, FootnotePlacement, punctuationAt, referenceLandingAfter } from "../../parsing/markdown-scan";
+import { readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
@@ -61,7 +61,7 @@ function swapInSegment(
     // move (Claude sweep 2026-09-13); and a reference-shaped string inside
     // an inline footnote's body belongs to that body (footnotes never nest,
     // ADR 1), so it moves with the footnote, not on its own
-    const references: MovableUnit[] = referenceOccurrences(original, masked)
+    const references: MovableUnit[] = referenceOccurrences(original, masked, false)
         .filter((occurrence) => !/\s/.test(occurrence.name))
         .filter((occurrence) => !spans.some((span) => occurrence.start >= span.start && occurrence.end <= span.end))
         .map((occurrence) => ({ start: occurrence.start, end: occurrence.end, reference: true }));
@@ -171,29 +171,27 @@ export function footnoteAfterPunctuation(markdown: string, placement: FootnotePl
     // a comment opens or closes, the part inside the comment is blanked
     // while the part outside it still gets the swap
     // (bug-comment-boundary-lines).
-    return rewriteDocument(markdown, (_text, { lines, scan, maskedLines, definitionStarts }) => {
-        // a definition inside a list item ("- [^la]: text") has a label the
-        // margin reader does not see; the swap used to hop that label's
-        // reference over its own colon and destroy the definition (found
-        // by the former sheet 23 tests, 2026-09-20; Jason's ruling 1 keeps such
-        // definitions as they are)
-        const inItemLabelEnds = new Map(
-            inItemDefinitionLabels(lines, scan, maskedLines, definitionStarts).map((hit) => [hit.line, hit.labelEnd]),
-        );
+    return rewriteDocument(markdown, (_text, { lines, scan, maskedLines }) => {
+        const reading = readNote(lines);
 
         const result = lines.map((line, i) => {
             if (scan.isProtected[i]) return line;
             const masked = maskedLines[i];
             // A definition's own "[^x]:" label is not a reference sitting
-            // in front of a colon, so start after it. Labels inside a
-            // blockquote or a callout ("> [^1]: def.") are labels just the
-            // same (C22); the swap used to mangle those into
-            // "> :[^1] def."
+            // in front of a colon, so start after it, wherever the
+            // definition sits. Labels inside a blockquote or a callout
+            // ("> [^1]: def.") are labels just the same (C22); the swap used
+            // to mangle those into "> :[^1] def.", and the label of a
+            // definition in a list item ("- [^la]: text", even behind a
+            // quote marker) the same way (found by the former sheet 23
+            // tests, 2026-09-20; hunt 2026-10-02, cluster Q1). A lazy
+            // label's start is stepped over too, so the label the user
+            // meant stays whole for fix-lazy to repair.
             // a byte order mark in front of a line-0 label is not text
             // the label reader sees, so it is stepped over first (the old
             // colon guard happened to cover it; spec-bom-before-line-zero-label)
             const bom = line.startsWith("\ufeff") ? 1 : 0;
-            const prefixLength = inItemLabelEnds.get(i) ?? bom + (definitionLabelIn(line.slice(bom))?.labelEnd ?? 0);
+            const prefixLength = reading.labelOn(i)?.labelEnd ?? bom + (definitionLabelIn(line.slice(bom))?.labelEnd ?? 0);
             return (
                 line.slice(0, prefixLength) +
                 swapInSegment(

@@ -1,8 +1,9 @@
 import { EditorView, ViewUpdate } from "@codemirror/view";
 import { Notice } from "obsidian";
 
-import { definitionLabelWithName, quotedReference, referenceOccurrences } from "../parsing/footnote-grammar";
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../parsing/markdown-scan";
+import { quotedReference, referenceOccurrences } from "../parsing/footnote-grammar";
+import { maskProtectedLines, scanDocument } from "../parsing/markdown-scan";
+import { readNote } from "../parsing/note-reading";
 
 import { showNotice } from "./notice";
 // Feedback for a PARTIAL undo (Jason's report 2026-08-27; the notice is
@@ -64,27 +65,27 @@ export function stillOrphanedNames(text: string, names: string[]): string[] {
 }
 
 /**
- * Every definition name and every reference name in `lines`, from ONE scan
- * and one masked twin. The two functions above used to mask the document
+ * Every definition name and every reference name in `lines`, from ONE scan,
+ * one masked twin, and the note reading. The two functions above used to mask the document
  * separately (review B4, 2026-09-09). Both sides are judged on the masked
  * twin.
  *
  * Definition names come back as a map from the lowercased name to the
  * casing actually typed, and when a name is defined more than once the LAST
  * one wins, matching Obsidian's rule that only the last definition renders.
+ * A definition counts wherever it sits, in a list item too (Jason's ruling
+ * 1, option a, 2026-10-03; hunt 2026-10-02, cluster U7).
  * Reference names come back lowercased.
  */
 function namesIn(lines: string[]): { defined: Map<string, string>; referenced: Set<string> } {
     const scan = scanDocument(lines);
     const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+    const reading = readNote(lines);
+    const starts = reading.labelLines;
     const defined = new Map<string, string>();
+    for (const definition of reading.definitions) defined.set(definition.name.toLowerCase(), definition.name);
     const referenced = new Set<string>();
     for (let i = 0; i < lines.length; i++) {
-        if (starts[i]) {
-            const hit = definitionLabelWithName(lines[i], masked[i]);
-            if (hit) defined.set(hit.name.toLowerCase(), hit.name);
-        }
         for (const occurrence of referenceOccurrences(lines[i], masked[i], starts[i])) {
             referenced.add(occurrence.name.toLowerCase());
         }

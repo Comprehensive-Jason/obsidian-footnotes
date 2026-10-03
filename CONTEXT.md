@@ -28,6 +28,14 @@ An indented line that belongs to the definition above it.
 A label line plus its continuation lines — the unit that moves, merges,
 and is jumped to as one thing.
 
+**Container**:
+What holds a definition: the note itself (top level), a quote or callout,
+a list item, or another footnote's definition. Every definition counts,
+whatever its container (Jason's ruling 1, option a, 2026-10-03); only a
+**movable** one, at the top level with nothing but indentation before its
+label, is ever moved, and a rule that cannot safely edit one in a
+container refuses or alerts.
+
 **Inline footnote**:
 The self-contained `^[…]` form, with its text in place instead of in a
 definition.
@@ -101,6 +109,12 @@ A press with several carets that puts the same footnote at every one.
 Atomic: one bad caret refuses the lot, one undo reverts the lot.
 
 ### Reading the document
+
+**Note reading**:
+The one parse of a note the way Obsidian reads it (remark-parse 8 plus
+Obsidian's rules), remembered per exact text, from which every definition
+with its extent and container is read.
+_Avoid_: parse result, AST (except in code about the tree)
 
 **Protected text**:
 Regions where footnote syntax is plain text, not footnotes: code,

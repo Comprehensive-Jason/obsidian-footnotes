@@ -134,6 +134,11 @@ describe("a real table under a definition label that follows a block line", () =
         const scan = scanDocument(lines);
         const masked = maskProtectedLines(lines, scan);
         const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-        expect(findDefinitionBlocks(lines, scan, masked, starts).map((b) => [b.start, b.end])).toEqual([[1, 1]]);
+        // the label is a lazy line of the item, so the note reading puts the
+        // definition inside the item, on its one line: not a block that
+        // moves (Jason's ruling 1, option a, 2026-10-03), and the table
+        // stays out of it
+        expect(findDefinitionBlocks(lines, scan, masked, starts)).toEqual([]);
+        expect(starts[1]).toBe(true);
     });
 });

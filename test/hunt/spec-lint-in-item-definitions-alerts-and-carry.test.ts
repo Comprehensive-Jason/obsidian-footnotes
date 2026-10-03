@@ -1,3 +1,4 @@
+// RULED 2026-10-03 by Jason's ruling 1, option a (a definition inside a list item is modelled everywhere, like any other; the runtime swap, step 1): the nested-footnote, duplicate, and orphan-definition alerts all count in-item definitions, an in-item label is no reference, and a copy carries an in-item definition with its lines as they stand. The question below is kept as it was asked.
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { carriedDefinitions } from "../../src/commands/carry-footnotes";
@@ -57,13 +58,13 @@ function readers(doc: string) {
 }
 
 describe("spec question: the never-silent alerts and in-item definitions", () => {
-    it.fails("the nested-footnote alert names an in-item definition holding a reference", () => {
+    it("the nested-footnote alert names an in-item definition holding a reference", () => {
         const { lines, scan, masked, starts } = readers(["text[^1] [^2]", "", "- [^1]: see[^2]", "", "[^2]: two"].join("\n"));
         // Today: [].
         expect(nestedFootnoteDefinitionNames(lines, scan, masked, starts)).toEqual(["1"]);
     });
 
-    it.fails("the duplicate alert names a footnote defined in an item and again at column 0", () => {
+    it("the duplicate alert names a footnote defined in an item and again at column 0", () => {
         // Today: [].
         expect(duplicateFootnoteDefinitionNames(["text[^1]", "", "- [^1]: in item", "", "[^1]: col0"].join("\n"))).toEqual(["1"]);
     });
@@ -86,24 +87,24 @@ function namedAsOrphan(alerts: string[], name: string): boolean {
 describe("spec question: the orphan-definition alert and in-item definitions", () => {
     beforeEach(resetNotices);
 
-    it.fails("an in-item definition nothing references is named with Delete orphaned definitions off", () => {
+    it("an in-item definition nothing references is named with Delete orphaned definitions off", () => {
         // Today: no orphan alert.
         expect(namedAsOrphan(lintThenAlerts("Text.\n\n- [^i]: in item orphan\n"), "i")).toBe(true);
     });
 
-    it.fails("an in-item label does not keep a column-0 orphan of the same name alive", () => {
+    it("an in-item label does not keep a column-0 orphan of the same name alive", () => {
         // Today: no orphan alert; the in-item label's "[^i]" counts as a reference.
         expect(namedAsOrphan(lintThenAlerts("Text.\n\n- [^i]: in item\n\n[^i]: col0\n"), "i")).toBe(true);
     });
 
-    it.fails("'- [^a]: def' with no reference anywhere is reported by the orphan-definition reader", () => {
+    it("'- [^a]: def' with no reference anywhere is reported by the orphan-definition reader", () => {
         // Today: [].
         expect(orphanedFootnoteDefinitionNames("Text here.\n\n- [^a]: def\n")).toEqual(["a"]);
     });
 });
 
 describe("spec question: carrying a footnote defined inside a list item", () => {
-    it.fails("the copy does not report an in-item definition as missing", () => {
+    it("the copy does not report an in-item definition as missing", () => {
         const doc = ["alpha[^1] beta", "", "- [^1]: in item"].join("\n");
         // Today: ["1"].
         expect(carriedDefinitions(doc, { line: 0, ch: 0 }, { line: 0, ch: 14 }).missing).toEqual([]);

@@ -155,12 +155,16 @@ describe("deleteFootnoteEverywhere", () => {
         });
     });
 
-    it("still refuses an in-item definition that runs on to another line, since the plugin does not model where it ends", () => {
-        const plan = del(["- item[^i]", "- [^i]: first line", "  continued"], "i");
-        expect(plan.kind).toBe("refused");
-        if (plan.kind !== "refused") throw new Error("unreachable");
-        expect(plan.reason).toContain('"[^i]"');
-        expect(plan.reason).toContain("list item");
+    // Jason's ruling 1, option a (2026-10-03): the note reading knows where
+    // an in-item definition ends, so one that runs on to another line is
+    // deleted whole instead of refused; the bullet stays, as above.
+    it("deletes an in-item definition that runs on to another line, its continuation included", () => {
+        expect(del(["- item[^i]", "- [^i]: first line", "  continued"], "i")).toEqual({
+            kind: "deleted",
+            markdown: "- item\n- ",
+            references: 1,
+            definitions: 1,
+        });
     });
 
     it("refuses a cut that would change how Obsidian reads the line (a leftover marker turning prose into a bullet)", () => {

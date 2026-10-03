@@ -66,7 +66,7 @@ describe("a quoted definition with a continuation line", () => {
         expect(doc.moves).toEqual([{ line: 3, ch: single[3].length }]);
     });
 
-    it.fails("(b) under reading two, the jump lands at the end of the last continuation line", () => {
+    it("(b) under reading two, the jump lands at the end of the last continuation line", () => {
         const doc = fakeEditor(multi, { wholeDoc: true });
         expect(
             jumpToFootnoteDefinition("cq", { line: 1, ch: 11 }, fakePlugin({ enablePopupEditor: false }, doc), doc),

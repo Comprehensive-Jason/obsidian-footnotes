@@ -1,11 +1,11 @@
 // Imported from the Kimi K3 cycle 5 hunt of 2026-09-16 (OpenCode worktree); 2 of 4 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
+import { readNote } from "../../src/parsing/note-reading";
 import { describe, expect, it } from "vitest";
 
 import {
     definitionStartLines,
     findDefinitionBlocks,
     maskProtectedLines,
-    quotedDefinitionEnd,
     scanDocument,
 } from "../../src/parsing/markdown-scan";
 import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
@@ -49,7 +49,7 @@ describe("a quoted definition with a setext underline under its lazy continuatio
         const masked = maskProtectedLines(quoted, scan);
         const starts = definitionStartLines(quoted, scan, (i) => masked[i]);
         expect(starts[0]).toBe(true);
-        expect(quotedDefinitionEnd(quoted, scan, starts, 0)).toBe(0);
+        expect((readNote(quoted).labelOn(0)?.end ?? 0)).toBe(0);
     });
 
     it("orphan deletion keeps the heading", () => {
@@ -69,9 +69,6 @@ describe("a quoted definition with a setext underline under its lazy continuatio
 
     it("control: a quoted definition with a plain lazy continuation reaches it", () => {
         const lines = ["> [^2]: body", "> cont"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-        expect(quotedDefinitionEnd(lines, scan, starts, 0)).toBe(1);
+        expect(readNote(lines).labelOn(0)?.end).toBe(1);
     });
 });

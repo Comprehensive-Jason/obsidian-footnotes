@@ -1,4 +1,4 @@
-import { inItemDefinitionLineSet } from "./list-item-definitions";
+import { Definition, readNote } from "./note-reading";
 // The basic scanning pieces that the whole-document footnote transforms
 // share: reindex, move-to-bottom, and after-punctuation. Nothing in this
 // file touches an Editor. Lines go in, facts about them come out.
@@ -220,21 +220,6 @@ export function linkLikeEndAt(text: string, offset: number): number {
     }
     return -1;
 }
-// An indented line is a continuation line: it belongs to the definition
-// above it. The exception is a line that is itself a label indented one to
-// three spaces, which starts the NEXT definition (that is DefinitionStart
-// above; the block walker checks both patterns).
-const IndentedContent = /^\s+\S/;
-
-export interface DefinitionBlock {
-    name: string;
-    /** the block's line range, both ends included, continuation lines and all */
-    start: number;
-    end: number;
-    /** The label sits after a "%%" block comment's closer on its line. The definition is real and counts for the orphan ALERT, but its line is never cut out: that would leave the comment open over the rest of the note. */
-    holdsCloser?: true;
-}
-
 /**
  * Which lines belong to a GFM table: every run of neighbouring lines that
  * carry an unescaped pipe, counted as a table when its SECOND line is a
@@ -2595,7 +2580,7 @@ export function maskLineWithScan(
  */
 export function removeLineRanges(
     lines: string[],
-    ranges: { start: number; end: number }[],
+    ranges: readonly { start: number; end: number }[],
 ): string[] {
     const rangeAtLine = new Map(ranges.map((range) => [range.start, range]));
     const out: string[] = [];
@@ -2652,763 +2637,73 @@ export function removeLineRanges(
 }
 
 /**
- * Which lines START a live footnote definition. A start is a label, at
- * column 0, indented up to three spaces, or behind blockquote markers, on a
- * line that is allowed to begin a block.
- *
- * Obsidian does not let a footnote definition interrupt a paragraph, the
- * same way CommonMark does not let a link reference definition do it. A
- * label directly under a line of prose (paragraph text, a list item, a
- * quote line, a table row, or a lazy continuation of any of those) is lazy
- * paragraph text: it renders as the plain characters "[^x]: ..." and makes
- * no footnote. Ground truth in Reading view 2026-09-09 (manual sheet 14),
- * and Jason's ruling the same day was to match Obsidian.
- *
- * A label may start after a blank line (a bare ">" inside a quote counts as
- * one), at the note start, after a protected line (a fence closer, a
- * comment, frontmatter, indented code), after a heading, after a thematic
- * break, or after another definition, meaning its label or any of its
- * continuation lines, blank gaps included.
- *
- * Note that micromark's GFM footnotes DO let a definition interrupt a
- * paragraph, so the differential oracle cannot referee this rule.
- *
- * The cheap check against the RAW line runs first, so only label-shaped
- * lines are ever masked.
+ * How cutting `definitions` out of `lines` goes: the lines with every label
+ * that sits on a list marker's line trimmed back to the marker, and the
+ * ranges of whole lines to remove (removeLineRanges). A definition's lines
+ * go whole, except on a list marker's line, where only the definition goes
+ * and the bullet stays, an empty item, because that is what Obsidian's own
+ * delete leaves (Jason, 2026-09-24, sheet 19; since Jason's ruling 1,
+ * option a, 2026-10-03, for every rule that cuts a definition). Pass only
+ * definitions that are `removable`. `lines` comes back as the same array
+ * when nothing was trimmed.
  */
-export function definitionStartLines(
+export function definitionCuts(
     lines: string[],
-    scan: Pick<
-        DocumentScan,
-        "isProtected" | "startsInComment" | "startsInMath" | "startsInCode" | "codeOpenerAt" | "literalOpeners" | "startsInFence" | "inCommentBlock" | "commentBlockCloseAt" | "indentedCode"
-    >,
-    maskedAt: (i: number) => string,
-): boolean[] {
-    const starts = new Array<boolean>(lines.length).fill(false);
-    // real table rows only (a run with a delimiter row): a lone "| a | b |"
-    // line is paragraph text, and the label under it is lazy
-    const tableRows = tableRowLinesOf(lines);
-    // What the lines so far leave open for the next line: nothing, so a
-    // label may start; a paragraph, so a label is lazy text; a definition,
-    // so a label starts the next one; or a definition with a blank gap
-    // behind it, where indented content still continues it and anything
-    // else closes it.
-    type Open = "none" | "paragraph" | "definition" | "definition-gap";
-    let open = "none" as Open;
-    let previousDepth = 0;
-    // the line above was a link reference definition, whose title may
-    // follow on this line
-    let lrdAbove = false;
-    // ... and the quote depth that definition sat at: a title line inside
-    // a quote under a column-0 definition is the quote's own paragraph,
-    // and the label under it is lazy (GLM hunt cycle 7, probed 2026-09-16)
-    let lrdDepth = 0;
-    // the line above was a link reference label alone ("[foo]:") whose
-    // destination follows on this line
-    let lrdDestinationNext = false;
-    // a definition inside a list item is recognized elsewhere (Jason's
-    // ruling 1, 2026-09-20) and is neither a start here nor lazy text: it
-    // is a block of its own that opens nothing
-    const inItemLines = inItemDefinitionLineSet(lines, scan, maskedAt);
-    for (let i = 0; i < lines.length; i++) {
-        if (inItemLines.has(i)) {
-            open = "none";
-            previousDepth = blockquoteDepth(lines[i]).depth;
-            continue;
+    definitions: readonly Definition[],
+): { lines: string[]; ranges: { start: number; end: number }[] } {
+    let trimmed = lines;
+    const ranges: { start: number; end: number }[] = [];
+    for (const definition of definitions) {
+        const before = lines[definition.start].slice(0, definition.labelStart);
+        // a removable label has only indentation, quote markers, and list
+        // markers before it, so anything else there is a list marker
+        if (/[^\s>]/.test(before)) {
+            if (trimmed === lines) trimmed = lines.slice();
+            trimmed[definition.start] = before;
+            if (definition.end > definition.start) ranges.push({ start: definition.start + 1, end: definition.end });
+        } else {
+            ranges.push({ start: definition.start, end: definition.end });
         }
-        // a trailing carriage return is dropped before the line is judged,
-        // as scanDocument drops it, so the end-anchored patterns below
-        // (a rule, a setext underline, a table row) still match a note
-        // read with Windows line endings (Claude sweep 2026-09-13)
-        const line = lines[i].endsWith("\r") ? lines[i].slice(0, -1) : lines[i];
-        const { depth } = blockquoteDepth(line);
-        // A deeper blockquote marker opens a container, and a quote does
-        // interrupt a paragraph: "prose" followed by "> [^1]: quoted" is a
-        // definition (ground truth 2026-09-09). A SHALLOWER line is a lazy
-        // continuation instead.
-        if (depth > previousDepth) open = "none";
-        previousDepth = depth;
-        if (scan.isProtected[i]) {
-            // A protected line INSIDE a definition's content keeps the
-            // definition open: an indented fence or math block, or a
-            // comment run one of its continuation lines opened. The test is
-            // the block walker's own absorb rule, a four-space indent or a
-            // region flag. A construct at column 0 ends whatever was open.
-            const inDefinition = open === "definition" || open === "definition-gap";
-            open =
-                inDefinition &&
-                ((/^ {4}/.test(line) && !scan.indentedCode[i]) ||
-                    scan.startsInComment[i] ||
-                    scan.startsInMath[i] ||
-                    scan.startsInFence[i])
-                    ? "definition"
-                    : "none";
-            continue;
-        }
-        // Inside a "%%" block comment no label starts at all: Obsidian
-        // hides the block, so the definition there is dead (ground truth
-        // 2026-09-09). Its closer ends the block, so a label directly under
-        // a bare closer IS a definition, while live text after the closer
-        // on the same line starts a paragraph.
-        if (scan.inCommentBlock[i]) {
-            const close = scan.commentBlockCloseAt[i];
-            if (close >= 0) {
-                // a label right after the closer is a definition (Jason's
-                // verification 2026-09-15: "%% [^3]: def" renders, and so
-                // does its quoted twin), as long as nothing but spaces sit
-                // between the closer and the label
-                const label = definitionLabelIn(line);
-                if (
-                    label?.afterCloser &&
-                    label.nameStart - 2 >= close &&
-                    line.slice(close, label.nameStart - 2).trim() === "" &&
-                    definitionLabelWithName(line, maskedAt(i))
-                ) {
-                    starts[i] = true;
-                    open = "definition";
-                    continue;
-                }
-                // a bare closer ends the block; a definition the block sat
-                // inside stays open (its indented chunk after the closer is
-                // still its body, probed 2026-09-16), and live text after
-                // the closer starts a paragraph
-                open =
-                    line.slice(close).trim() === ""
-                        ? open === "definition" || open === "definition-gap"
-                            ? "definition"
-                            : "none"
-                        : "paragraph";
-            }
-            continue;
-        }
-        const bare = line.replace(BlockquotePrefix, "");
-        // A link reference definition's title may sit on the line under
-        // it ('  "title"', CommonMark 4.7), so the block runs two lines
-        // and the label under the title still starts a definition (Kimi
-        // hunt cycle 5, probed in Reading view 2026-09-16).
-        const lrdTitle = lrdAbove && depth === lrdDepth && /^ {0,3}(?:"[^"]*"|'[^']*'|\([^)]*\))\s*$/.test(bare);
-        lrdAbove = false;
-        if (lrdTitle) {
-            open = "none";
-            continue;
-        }
-        // The destination may sit on the line under the label too
-        // ("[foo]:" then "/url", CommonMark 4.7): Reading view renders
-        // the link and the footnote label under the pair as a definition
-        // (GLM hunt cycle 6, probed 2026-09-16). "[foo]:" with nothing
-        // under it is paragraph text.
-        if (lrdDestinationNext) {
-            lrdDestinationNext = false;
-            open = "none";
-            // a title may still follow on the next line, unless this
-            // destination line already carries one
-            lrdAbove = /^\s*\S+\s*$/.test(bare);
-            lrdDepth = depth;
-            continue;
-        }
-        // The destination line may carry the title as well ("/url
-        // \"title\""): Reading view renders the link with its title and
-        // the label under the pair as a definition (GLM hunt cycle 8,
-        // probed 2026-09-16).
-        if (
-            open !== "paragraph" &&
-            /^ {0,3}\[(?!\^)[^\]]+\]:\s*$/.test(bare) &&
-            i + 1 < lines.length &&
-            !scan.isProtected[i + 1] &&
-            /^\s*\S+(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*$/.test(lines[i + 1].replace(BlockquotePrefix, "")) &&
-            blockquoteDepth(lines[i + 1]).depth === depth
-        ) {
-            lrdDestinationNext = true;
-            open = "none";
-            continue;
-        }
-        if (bare.trim() === "") {
-            open = open === "definition" || open === "definition-gap" ? "definition-gap" : "none";
-            continue;
-        }
-        if (
-            IndentedContent.test(bare) &&
-            !DefinitionStart.test(bare) &&
-            !blockEnder(bare, open === "paragraph")
-        ) {
-            // A continuation of whatever is open. After a blank line with
-            // nothing open, an indent of 1 to 3 spaces starts a paragraph;
-            // 4 or more would be code, which the scan already protected
-            // above. An indented heading or rule is not a continuation
-            // (the ender check below takes it). After a definition's blank
-            // gap only a four-column indent continues the definition; one
-            // to three spaces start a paragraph there too, and the label
-            // under that paragraph is lazy (Kimi hunt cycle 3, probed in
-            // Reading view 2026-09-16).
-            open =
-                open === "definition" || (open === "definition-gap" && leadingIndentWidth(bare) >= 4)
-                    ? "definition"
-                    : "paragraph";
-            continue;
-        }
-        // An HTML comment line is an HTML block (CommonMark type 2), not
-        // paragraph text, so a label directly under "<!-- c -->", or under
-        // the "-->" line that closes a multi-line comment, is a definition
-        // (ground truth 2026-09-09). An inline "%% c %%" line is the
-        // opposite: it counts as a paragraph line, and a label under it
-        // stays lazy.
-        if (scan.startsInComment[i]) {
-            // The closer line of a comment opened MID-LINE ("x <!-- a", then
-            // "--> tail" or a bare "-->") is part of the same paragraph,
-            // tail or no tail, so the label under it is lazy text (Kimi
-            // hunt cycle 2, probed in Reading view 2026-09-16). A comment
-            // that opened at the start of a line is an HTML block whose
-            // lines are protected, and never reaches here.
-            open = "paragraph";
-            continue;
-        }
-        if (/^ {0,3}<!--/.test(bare)) {
-            open = "none";
-            continue;
-        }
-        // A link reference definition ("[foo]: /url") is a block of its
-        // own, not paragraph text, so the label right under it starts a
-        // definition (Kimi hunt cycle 1, verified in Reading view
-        // 2026-09-16). The label shape "[^x]:" is excluded here: that is
-        // a footnote label and takes the path below.
-        if (open !== "paragraph" && LinkReferenceDefinition.test(bare)) {
-            open = "none";
-            lrdAbove = true;
-            lrdDepth = depth;
-            continue;
-        }
-        // A "$$" closer ends the math block the same way, so a label right
-        // under it is a definition (Claude sweep 2026-09-13, verified in
-        // Reading view). Live text after the closer on that line starts a
-        // paragraph.
-        if (scan.startsInMath[i]) {
-            open = maskedAt(i).replace(/\0/g, " ").trim() === "" ? "none" : "paragraph";
-            continue;
-        }
-        // A heading, a thematic break, a setext underline under a
-        // paragraph, a callout title, or a table row ends the block it
-        // closes, so the label under it starts a definition. These are
-        // checked BEFORE the indent rule below, because a heading or a
-        // rule indented one to three spaces is still a heading or a rule,
-        // not a paragraph continuation (Claude sweep 2026-09-13). One or
-        // two dashes under a paragraph are a heading underline, not
-        // prose (Kimi and Claude sweeps, verified in Reading view). A
-        // callout title needs its ">" marker: a column-0 line starting
-        // with "[!" is paragraph text, a README badge for instance
-        // (Claude sweep, verified). A label directly under a table row is
-        // a definition, because a definition ends the table the way any
-        // block does (Jason's ruling A2, verified in Reading view
-        // 2026-09-15).
-        // Obsidian turns a setext underline into a heading only when ONE
-        // line sits above it: "para", "more", "===" renders as a paragraph
-        // with a literal "===", and so does "para", "[^1]: a", "===" (a
-        // lazy label being paragraph text), so the label under such a run
-        // is lazy too (Kimi hunt cycle 3, probed in Reading view
-        // 2026-09-16). A three-dash run is a thematic break either way.
-        const setextUnderline = /^ {0,3}(=+|-+) *$/.test(bare);
-        const thematicBreak = /^ {0,3}([-*_])(?: *\1){2,} *$/.test(bare);
-        if (
-            /^ {0,3}#{1,6}(?:\s|$)/.test(bare) ||
-            thematicBreak ||
-            (open === "paragraph" && setextUnderline && paragraphLinesAbove(i, depth) === 1) ||
-            (depth > 0 && /^\[![^\]]*\][+-]?/.test(bare)) ||
-            tableRows[i] ||
-            // an EMPTY list item ("-" or "1." alone) holds no paragraph to
-            // continue, so the label under it is a definition (GLM hunt
-            // cycle 11, probed in Reading view 2026-09-16); a lone "-" under
-            // a paragraph is a setext underline and was judged above
-            /^ {0,3}(?:[-+*]|\d{1,9}[.)])\s*$/.test(bare)
-        ) {
-            open = "none";
-            continue;
-        }
-        if (open === "paragraph" && setextUnderline) {
-            continue;
-        }
-        // a label behind a "%%" that the scan did not record as a block
-        // comment's closer (an inline "%% ... %%" pair, say) is not a
-        // definition; only the branch above starts one after a closer
-        const label = definitionLabelIn(line);
-        // A setext underline directly under a definition's own paragraph
-        // (GLM hunt cycle 8, probed in Reading view 2026-09-16): under the
-        // definition's LAZY line it pulls that line out as a heading, so
-        // the definition ended above and the label under the underline
-        // starts a new one; under an INDENTED continuation it is the
-        // footnote's body text ("x y ===" is one footnote), so the
-        // definition stays open and the label under it starts the next.
-        // The underline directly under the label line itself is handled
-        // at the label (the whole line becomes a heading).
-        if (open === "definition" && setextUnderline) {
-            const above = lines[i - 1].endsWith("\r") ? lines[i - 1].slice(0, -1) : lines[i - 1];
-            open = leadingIndentWidth(blockquoteDepth(above).rest) >= 4 ? "definition" : "none";
-            continue;
-        }
-        // A plain line directly under a definition is the definition's own
-        // lazy continuation, and a label under THAT line starts a new
-        // definition: "[^1]: body", "more lazy", "[^2]: second" renders
-        // both footnotes (GLM hunt cycle 3, probed in Reading view
-        // 2026-09-16). Only under a plain paragraph is such a label lazy.
-        if (open === "definition" && label === null && lazyContinuation(bare)) {
-            continue;
-        }
-        if (open !== "paragraph" && label !== null && !label.afterCloser) {
-            const hit = definitionLabelWithName(line, maskedAt(i));
-            if (hit) {
-                // A setext underline directly under the label line makes
-                // the whole line a heading: "[^1]: x" over "===" (or over
-                // "---") renders as a heading reading "1: x" with no
-                // footnote, at column 0 and inside a quote alike (Kimi
-                // hunt cycle 3, probed in Reading view 2026-09-16). The
-                // label is heading text, so it starts nothing.
-                if (setextUnderlineUnder(i, depth)) {
-                    open = "paragraph";
-                    continue;
-                }
-                starts[i] = true;
-                open = "definition";
-                continue;
-            }
-        }
-        open = "paragraph";
     }
-    return starts;
-
-    /** Whether the line under `i`, at the same quote depth and unprotected, is a setext underline. */
-    function setextUnderlineUnder(i: number, depth: number): boolean {
-        if (i + 1 >= lines.length || scan.isProtected[i + 1]) return false;
-        const next = lines[i + 1].endsWith("\r") ? lines[i + 1].slice(0, -1) : lines[i + 1];
-        const under = blockquoteDepth(next);
-        return under.depth === depth && /^ {0,3}(=+|-+) *$/.test(under.rest);
-    }
-
-    /** How many lines the open paragraph above line `i` holds: contiguous non-blank, unprotected lines at the same depth, stopping at a definition start or at a block of its own. */
-    function paragraphLinesAbove(i: number, depth: number): number {
-        let count = 0;
-        for (let j = i - 1; j >= 0; j--) {
-            const text = lines[j].endsWith("\r") ? lines[j].slice(0, -1) : lines[j];
-            const above = blockquoteDepth(text);
-            if (scan.isProtected[j] || above.depth !== depth || above.rest.trim() === "") break;
-            // a heading, a thematic break, a fence, an HTML block, a table
-            // row, a link reference definition, or a "%%" block comment's
-            // line is a block of its own, not paragraph text, so the
-            // paragraph above the underline starts under it: "# H",
-            // "para", "===" heads "para" alone and the label under the
-            // heading is a definition (GLM hunt cycle 8, probed in Reading
-            // view 2026-09-16; the scan's own walk already stopped there)
-            if (
-                /^ {0,3}(?:#{1,6}(?: |$)|([-*_])( *\1){2,} *$|`{3,}|~{3,}|<|\|)/.test(above.rest) ||
-                LinkReferenceDefinition.test(above.rest) ||
-                tableRows[j] ||
-                scan.inCommentBlock[j]
-            ) {
-                break;
-            }
-            count++;
-            if (starts[j]) break;
-        }
-        return count;
-    }
+    return { lines: trimmed, ranges: ranges.sort((a, b) => a.start - b.start) };
 }
 
 /**
- * Every definition together with its continuation lines: the indented lines
- * under it, plus blank runs that lead on to more indented lines.
+ * Which lines hold the label of a definition, as the note reading finds
+ * them (note-reading.ts): one entry per line, true where some definition's
+ * label sits, wherever the definition is (Jason's ruling 1, option a,
+ * 2026-10-03). A label-shaped line that the reading does not call a
+ * definition is lazy paragraph text (lazyDefinitionLabelLines below).
  *
- * Pass the full `scan` when you have one. A continuation line can OPEN a
- * multi-line comment or math region ("    $$"), or a fence that belongs to
- * the definition's content ("    ```", 2026-08-25), and only the scan's
- * startsIn* facts let this walk absorb that construct's protected interior
- * instead of splitting the block in half (Sol bug #3, 2026-08-10).
+ * The second and third arguments are accepted for the callers written when
+ * this was the scanner's own walk, which needed the scan and the masked
+ * twin; the reading needs neither, and they are not read.
+ */
+export function definitionStartLines(lines: string[], _scan?: object, _maskedAt?: (i: number) => string): boolean[] {
+    return [...readNote(lines).labelLines];
+}
+
+/**
+ * The definitions whose lines are their own to move or cut: the ones at the
+ * top level of the note with nothing but indentation before their label
+ * (Definition.movable), in document order, each running from its label line
+ * to the last line of its body. These are the blocks move-to-bottom
+ * gathers and reindex reorders; a definition in a quote, a list item, or
+ * another footnote, or one that shares its label line with other text,
+ * stays where it is. Every definition, whatever holds it, is in
+ * readNote(lines).definitions.
  *
- * Labels are read through the MASKED twin, like every other definition
- * reader. A comment CLOSER line such as "[^2]: two -->" is left unprotected
- * for the sake of the live text after the closer, but the label inside the
- * comment is not a definition (review A1, 2026-09-08: move-to-bottom used
- * to drag the "-->" away and leave the comment unclosed).
- *
- * `scan` is the document's scan, taken here when it is omitted; every
- * caller used to pass scan.isProtected alongside it (review C2). Pass
- * `maskedLines` when the twin is already at hand; without it, only the
- * label-shaped lines are masked, one at a time. Pass `starts` when the
- * caller already holds definitionStartLines' answer (a label under a line
- * of prose is lazy text, not the start of a block).
+ * Each comes back as its name and its lines only. The arguments after
+ * `lines` are accepted for the callers written when this was the scanner's
+ * own walk; they are not read.
  */
 export function findDefinitionBlocks(
     lines: string[],
-    scan: Pick<
-        DocumentScan,
-        "isProtected" | "startsInComment" | "startsInMath" | "startsInCode" | "codeOpenerAt" | "literalOpeners" | "startsInFence" | "inCommentBlock" | "commentBlockCloseAt" | "indentedCode"
-    > = scanDocument(lines),
-    maskedLines?: string[],
-    starts?: boolean[],
-): DefinitionBlock[] {
-    const isProtected = scan.isProtected;
-    const maskedAt = (j: number): string => {
-        if (maskedLines) return maskedLines[j];
-        return maskLineWithScan(lines, scan, j);
-    };
-    const startsAt = starts ?? definitionStartLines(lines, scan, maskedAt);
-    // A protected line the walk is allowed to absorb into an open block.
-    // Two shapes qualify. One is the interior or closer of a comment, math,
-    // or fence region whose opener was a continuation line already absorbed
-    // into this block; a region that was open BEFORE the definition would
-    // have protected the label line itself. The other is a protected line
-    // AT THE CONTINUATION INDENT, four spaces or more: the opener of a
-    // construct the definition owns, such as the "    ```" fence riding
-    // that indent (hunt 2026-08-25).
-    //
-    // The indent floor is what separates the two cases. A fence opener at
-    // the DOCUMENT level that happens to carry a space or two (" ```") is
-    // protected and indented as well, yet it ends the block. Only the
-    // four-space column, past the 3-space cap an ordinary block start
-    // allows, marks a construct the definition owns.
-    // A code span that opened on a line of the block and runs on (B30)
-    // is such a region too: its no-backtick interior lines are protected
-    // in full and belong to the footnote's body, as Reading view renders
-    // it (Kimi hunt cycle 4, 2026-09-16: the move left them behind and the
-    // dead reference inside the span woke up).
-    // the rows Reading view renders as a table: a row under a block line
-    // ends the block, while a pipe run that renders as text is lazy text
-    // (GLM hunt cycle 10, probed 2026-09-16)
-    const tableRows = tableRowLinesOf(lines);
-    // ... but never CommonMark indented code: a chunk the scan reads as
-    // code (after a quoted definition's lines, say) is not the block's,
-    // and moving it would wake it up (GLM hunt cycle 11, 2026-09-16)
-    const absorbable = (j: number) =>
-        isProtected[j] &&
-        (scan.startsInComment[j] ||
-            scan.startsInMath[j] ||
-            scan.startsInFence[j] ||
-            scan.startsInCode[j] > 0 ||
-            (/^ {4}/.test(lines[j]) && !scan.indentedCode[j]));
-    const blocks: DefinitionBlock[] = [];
-    for (let i = 0; i < lines.length; i++) {
-        if (!startsAt[i]) continue;
-        // Blocks at column 0, or indented ones, only. To the orphan rules a
-        // blockquoted label is a live definition on its own line, but it
-        // never forms a block here.
-        if (!DefinitionStart.test(lines[i])) continue;
-        const hit = definitionLabelWithName(lines[i], maskedAt(i));
-        if (!hit) continue;
-
-        let end = i;
-        let j = i + 1;
-        // A table that starts on the label line ("[^1]: | a | b |") goes on
-        // with column-0 rows, and Reading view renders the whole table
-        // inside the footnote (Kimi hunt cycle 3, probed 2026-09-16), so
-        // its delimiter row and the rows after it are the block's. A table
-        // that starts UNDER the label, on its own line, is a table of its
-        // own outside the footnote (probed the same day).
-        if (
-            hasUnescapedPipe(lines[i].slice(hit.label.labelEnd)) &&
-            j < lines.length &&
-            !isProtected[j] &&
-            tableDelimiterRow(lines[j])
-        ) {
-            // a quoted row ("> | c | d |") is a blockquote of its own, not a
-            // row of the footnote's table: Reading view ends the table at
-            // it and renders it as a quote outside the footnote (GLM hunt
-            // cycle 3, probed 2026-09-16)
-            const columnZeroRow = (k: number): boolean =>
-                !isProtected[k] &&
-                leadingIndentWidth(lines[k]) < 4 &&
-                !/^ {0,3}>/.test(lines[k]) &&
-                definitionLabelIn(lines[k]) === null &&
-                hasUnescapedPipe(lines[k]);
-            while (j < lines.length && columnZeroRow(j)) end = j++;
-        }
-        while (j < lines.length) {
-            // A line inside a region that a line already in the block
-            // opened belongs to the block, whatever it looks like: the
-            // interior and the closer of a comment, math block, or fence
-            // opened on a continuation line, or the lines of a "%%" block
-            // opened there. Obsidian carries such a region on to its closer
-            // across column-0 lines (verified in Reading view, 2026-09-16),
-            // so the definition owns all of it. The block used to stop at
-            // the end of the indented run, and every rule that moves or
-            // deletes whole blocks then took the opener away from its
-            // closer (Claude sweep 2026-09-13).
-            if (
-                scan.startsInComment[j] ||
-                scan.startsInMath[j] ||
-                scan.startsInFence[j] ||
-                (scan.inCommentBlock[j] && scan.inCommentBlock[end])
-            ) {
-                end = j++;
-                continue;
-            }
-            if (isProtected[j]) {
-                if (absorbable(j)) {
-                    end = j++;
-                    continue;
-                }
-                break;
-            }
-            if (IndentedContent.test(lines[j]) && !DefinitionStart.test(lines[j])) {
-                end = j++;
-                continue;
-            }
-            // A setext-shaped line ("===", "--") directly under an INDENTED
-            // continuation line is the footnote's body text, not an
-            // underline: Reading view renders "[^1]: x", "    y", "===" as
-            // one footnote reading "x y ===" (Kimi hunt cycle 3, probed
-            // 2026-09-16). Three or more dashes are a thematic break there
-            // and end the block like any rule.
-            if (
-                end === j - 1 &&
-                !isProtected[j - 1] &&
-                leadingIndentWidth(lines[j - 1]) >= 4 &&
-                /^ {0,3}(=+|-{1,2}) *$/.test(lines[j])
-            ) {
-                end = j++;
-                continue;
-            }
-            // A "%%" block comment that opens directly under a line of the
-            // block does not end the definition: the indented chunk after
-            // its closer is still the footnote's body (GLM hunt cycle 2,
-            // probed in Reading view 2026-09-16), so the block's lines are
-            // the definition's too, and the walker owns what the scan says
-            // the definition owns (GLM hunt cycle 4: the move used to
-            // strand the chunk behind the label, and it turned into code).
-            if (end === j - 1 && scan.inCommentBlock[j] && !isProtected[j]) {
-                while (j < lines.length && scan.inCommentBlock[j]) end = j++;
-                continue;
-            }
-            // A plain line directly under a block line, no blank between,
-            // is a lazy continuation of the definition's paragraph and
-            // belongs to the block, as Reading view renders it ("[^1]:
-            // body" then "more lazy" is one footnote; GLM hunt cycle 1,
-            // probed 2026-09-16). Anything that starts a block of its own
-            // (a label, a heading, a rule, a fence, a quote, a list item,
-            // an HTML line, a table row, a %% marker) ends the block here.
-            // A plain line that a setext underline follows is a heading,
-            // not a continuation: "[^1]: x", "lazy", "===" renders "lazy"
-            // as a heading outside the footnote (probed 2026-09-16, "---"
-            // included), so the block ends above it.
-            if (
-                end === j - 1 &&
-                lines[j].trim() !== "" &&
-                lazyContinuation(lines[j]) &&
-                !tableRows[j] &&
-                !(j + 1 < lines.length && !isProtected[j + 1] && /^ {0,3}(=+|-+) *$/.test(lines[j + 1]))
-            ) {
-                end = j++;
-                continue;
-            }
-            if (lines[j].trim() !== "") break;
-            // a run of blank lines continues the block only when indented
-            // content follows it: either unprotected content, or a
-            // construct the block may absorb
-            let k = j;
-            while (k < lines.length && lines[k].trim() === "") k++;
-            // after the gap the continuation needs the full four columns
-            // of indent (or a tab): "   prose" indented one to three is a
-            // new paragraph outside the footnote, as Reading view renders
-            // it, and the old one-space test let orphan deletion eat such
-            // a paragraph as the footnote's body (Kimi hunt cycle 3,
-            // probed 2026-09-16)
-            if (
-                k < lines.length &&
-                ((!isProtected[k] &&
-                    leadingIndentWidth(lines[k]) >= 4 &&
-                    !DefinitionStart.test(lines[k])) ||
-                    absorbable(k))
-            ) {
-                end = k;
-                j = k + 1;
-            } else {
-                break;
-            }
-        }
-        blocks.push({ name: hit.name, start: i, end });
-        i = end;
-    }
-    return blocks;
-}
-
-/**
- * The last line of the quoted definition whose label sits on `start`. A
- * label inside a blockquote or callout never forms a block, but Obsidian
- * gives it the same continuation a column-0 definition gets, inside the
- * quote: each following non-blank quoted line at the same depth (a lazy
- * continuation, or an indented one), and a run of empty quote lines when
- * an indented quoted line follows it. A protected line, a line starting a
- * definition of its own, and a change of quote depth end it (verified in
- * Reading view 2026-09-16; Claude sweep 2026-09-13, where the orphan rule
- * cut a quoted label away from its body).
- */
-export function quotedDefinitionEnd(
-    lines: string[],
-    scan: Pick<DocumentScan, "isProtected" | "startsInComment" | "startsInMath" | "startsInFence" | "startsInCode">,
-    starts: boolean[],
-    start: number,
-): number {
-    const depthOf = (text: string): number =>
-        (text.match(BlockquotePrefix)?.[0].match(/>/g) ?? []).length;
-    const inner = (j: number): string => lines[j].replace(BlockquotePrefix, "");
-    const depth = depthOf(lines[start]);
-    const continues = (j: number): boolean =>
-        j < lines.length && !scan.isProtected[j] && !starts[j] && depthOf(lines[j]) === depth;
-    // a line inside a comment, math block, or fence that a line of this
-    // definition opened belongs to the definition, as it does for a
-    // column-0 block: cutting the definition without them left the
-    // opener gone and the hidden text alive (Kimi hunt cycle 2, 2026-09-16)
-    const regionLine = (j: number): boolean =>
-        j < lines.length &&
-        (scan.startsInComment[j] || scan.startsInMath[j] || scan.startsInFence[j] || scan.startsInCode[j] > 0) &&
-        depthOf(lines[j]) === depth;
-    // a plain quoted line that a setext underline follows is a heading,
-    // not a continuation, exactly as the column-0 walker reads it ("[^1]:
-    // body", "cont", "===" renders "cont" as a heading outside the
-    // footnote; Kimi hunt cycle 5, 2026-09-16)
-    const underlineNext = (j: number): boolean =>
-        j + 1 < lines.length &&
-        !scan.isProtected[j + 1] &&
-        depthOf(lines[j + 1]) === depth &&
-        /^ {0,3}(=+|-+) *$/.test(inner(j + 1));
-    // a quoted table row ends the quoted definition the way a column-0
-    // table under a label does (probed 2026-09-16), read on demand
-    let rows: boolean[] | null = null;
-    const tableRow = (j: number): boolean => {
-        if (rows === null) rows = tableRowLinesOf(lines);
-        return rows[j];
-    };
-    let end = start;
-    let j = start + 1;
-    while (continues(j) || regionLine(j)) {
-        if (!regionLine(j) && inner(j).trim() !== "" && !/^ {4}/.test(inner(j)) && underlineNext(j)) break;
-        // a quoted heading, list item, rule, fence, HTML line, or table
-        // row is a block of its own inside the quote, not the footnote's
-        // body ("> [^2]: body" then "> # Heading" renders the heading
-        // outside the footnote; GLM hunt cycle 10, probed in Reading view
-        // 2026-09-16), the same stops the column-0 walker makes; "2.
-        // item" carries the footnote on there too
-        if (
-            !regionLine(j) &&
-            inner(j).trim() !== "" &&
-            leadingIndentWidth(inner(j)) < 4 &&
-            (!lazyContinuation(inner(j)) || tableRow(j))
-        ) {
-            break;
-        }
-        if (regionLine(j) || inner(j).trim() !== "") {
-            end = j++;
-            continue;
-        }
-        let k = j;
-        while (continues(k) && inner(k).trim() === "") k++;
-        // four columns of indent, spaces or a tab, as the column-0 walker
-        // and the scan measure it (GLM hunt cycle 4, 2026-09-16)
-        if (continues(k) && leadingIndentWidth(inner(k)) >= 4) {
-            end = k;
-            j = k + 1;
-        } else {
-            break;
-        }
-    }
-    // A plain line at a SHALLOWER depth directly under the definition's
-    // last line lazily continues it out of the quote: "> [^1]: quoted
-    // def" then "plain column-0 line" renders one footnote "quoted def
-    // plain column-0 line", and so on through further plain lines, while
-    // a label under them starts a new definition, a heading ends the run,
-    // and an indented chunk after such a line is code (GLM hunt cycle 9,
-    // probed in Reading view 2026-09-16). Cutting the label without the
-    // tail used to strand the footnote's body as prose.
-    let tailDepth = depth;
-    for (let k = end + 1; k < lines.length; k++) {
-        if (scan.isProtected[k] || starts[k]) break;
-        const d = depthOf(lines[k]);
-        const text = inner(k);
-        if (d >= tailDepth || text.trim() === "" || leadingIndentWidth(text) >= 4 || !lazyContinuation(text)) break;
-        if (
-            k + 1 < lines.length &&
-            !scan.isProtected[k + 1] &&
-            depthOf(lines[k + 1]) === d &&
-            /^ {0,3}(=+|-+) *$/.test(inner(k + 1))
-        ) {
-            break;
-        }
-        tailDepth = d + 1;
-        end = k;
-    }
-    return end;
-}
-
-/**
- * Every definition in the note with its extent, in document order: the
- * column-0 blocks of findDefinitionBlocks, and the quoted definitions
- * ("> [^1]: text" in a blockquote or callout), which form no block of
- * their own but are as real as the others (the C22 ruling) and run on
- * through their quoted continuation (quotedDefinitionEnd). A label that
- * shares its line with a "%%" closer owns that one line. A definition
- * inside a list item is left out, since the plugin does not model its
- * extent. Sorted by start line, so "the last definition of a name" is the
- * last in the note whatever its shape, the one Obsidian renders. Shared by
- * the carry and the popup's save-back so they read definitions the same
- * way (hunt 2026-10-02, pins bug-carry-quoted-duplicate-first and
- * bug-popup-save-back-wipes-main-editor-edits).
- */
-export function allDefinitionBlocks(lines: string[], scan: DocumentScan, masked: string[], starts: boolean[]): DefinitionBlock[] {
-    const all = findDefinitionBlocks(lines, scan, masked, starts);
-    for (let i = 0; i < lines.length; i++) {
-        if (scan.isProtected[i] || !starts[i]) continue;
-        const hit = definitionLabelWithName(lines[i], masked[i]);
-        if (!hit?.label.quoted) continue;
-        all.push({ name: hit.name, start: i, end: hit.label.afterCloser ? i : quotedDefinitionEnd(lines, scan, starts, i) });
-    }
-    return all.sort((a, b) => a.start - b.start);
-}
-
-/**
- * The line of the quoted definition label that owns `line`, or -1. A quoted
- * definition never forms a block (C22), so the block list cannot answer
- * "is this line inside a definition" for it; this walks up through quoted
- * lines at the same depth to the nearest label and asks quotedDefinitionEnd
- * whether its extent reaches `line`. The label line itself counts. Used by
- * the jump and by the nesting guards (Kimi hunt cycle 3, 2026-09-16: the
- * multi-caret and selection presses planted footnotes inside quoted
- * definitions the single-caret press refused).
- */
-export function quotedDefinitionLabelAbove(
-    lines: string[],
-    scan: Pick<DocumentScan, "isProtected" | "startsInComment" | "startsInMath" | "startsInFence" | "startsInCode">,
-    starts: boolean[],
-    maskedAt: (i: number) => string,
-    line: number,
-): number {
-    const depthOf = (text: string): number =>
-        (text.match(BlockquotePrefix)?.[0].match(/>/g) ?? []).length;
-    // a plain shallower line directly under quoted lines may be the quoted
-    // definition's lazy tail (see quotedDefinitionEnd), so the walk first
-    // climbs such lines to the quoted run above them
-    let from = line;
-    while (
-        from >= 0 &&
-        depthOf(lines[from]) < depthOf(lines[line]) + 1 &&
-        depthOf(lines[from]) === 0 &&
-        lines[from].trim() !== "" &&
-        !scan.isProtected[from] &&
-        !starts[from]
-    ) {
-        from--;
-    }
-    if (from < 0) return -1;
-    const depth = depthOf(lines[from]);
-    if (depth === 0) return -1;
-    for (let j = from; j >= 0; j--) {
-        if (depthOf(lines[j]) !== depth) return -1;
-        const hit = definitionLabelWithName(lines[j], maskedAt(j));
-        if (!hit) continue;
-        if (!starts[j]) return -1;
-        return quotedDefinitionEnd(lines, scan, starts, j) >= line ? j : -1;
-    }
-    return -1;
-}
-
-/** Whether a non-blank, unindented line can lazily continue a definition's paragraph: it is not a label and starts no block of its own. */
-function lazyContinuation(line: string): boolean {
-    if (DefinitionStart.test(line)) return false;
-    return lazyLineShape(line);
+    _scan?: object,
+    _masked?: string[],
+    _starts?: boolean[],
+): { name: string; start: number; end: number }[] {
+    return readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }));
 }
 
 /** Whether a line has the shape of plain paragraph text rather than the start of a block of its own; a footnote label counts as plain here (a quoted fence swallows one, GLM hunt cycle 11). */
@@ -3441,13 +2736,11 @@ export function lazyDefinitionLabelLines(
     starts: boolean[],
 ): number[] {
     const out: number[] = [];
-    // a definition inside a list item is a definition, not a lazy label
-    const inItemLines = inItemDefinitionLineSet(lines, scan, masked);
     for (let i = 0; i < lines.length; i++) {
         // a label inside a "%%" block comment is dead text, not a
         // definition one blank line short of working, so there is nothing
         // to report and nothing to fix
-        if (scan.isProtected[i] || starts[i] || scan.inCommentBlock[i] || inItemLines.has(i)) continue;
+        if (scan.isProtected[i] || starts[i] || scan.inCommentBlock[i]) continue;
         const hit = definitionLabelWithName(lines[i], masked[i]);
         // a label behind a "%%" that is not a block's closer sits inside a
         // one-line "%% ... %%" pair: Obsidian hides it, and no blank line

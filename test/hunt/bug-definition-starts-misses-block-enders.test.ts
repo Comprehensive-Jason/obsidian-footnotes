@@ -134,8 +134,14 @@ describe("a block start indented one to three spaces still ends the paragraph", 
         expect(lastLineStarts("t[^1]\npara\n  ***\n[^1]: real")).toBe(true);
     });
 
-    it("a setext underline indented one to three spaces", () => {
-        expect(lastLineStarts("t[^1]\n\nH\n  ===\n[^1]: real")).toBe(true);
+    // Corrected 2026-10-03 (the runtime swap): Obsidian does not read an
+    // indented "  ===" as a setext underline, so the label under it is lazy
+    // paragraph text. Evidence: recorded fact c8bdf46 in
+    // test/obsidian-answers/recorded-facts.json, where Obsidian's own
+    // answer for "H" / "  ===" / "[^3]: three" lists [^3] as a reference
+    // on the label line and no definition.
+    it("a setext underline indented one to three spaces is no underline to Obsidian: the label stays lazy", () => {
+        expect(lastLineStarts("t[^1]\n\nH\n  ===\n[^1]: real")).toBe(false);
     });
 
     it("so the lint does not insert a blank line into a note that already renders", () => {

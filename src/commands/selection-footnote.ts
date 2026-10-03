@@ -24,11 +24,7 @@ import {
     simulateChanges,
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
-import {
-    maskInlineRegions,
-    quotedDefinitionLabelAbove,
-    scanDocument,
-} from "../parsing/markdown-scan";
+import { maskInlineRegions, scanDocument } from "../parsing/markdown-scan";
 import {
     autonumFootnoteId,
     landCellDefinitionAppend,
@@ -359,38 +355,22 @@ export function selectionPressHandled(
         showNotice(ProtectedSelectionNotice, 8000);
         return true;
     }
-    // A selection that sits inside another footnote's definition block, or
-    // laps over one, would nest footnotes inside each other. It is refused
-    // just as the caret presses are (Jason's ruling 2026-08-13). Any
-    // overlap at all counts. Starting inside a block would nest the new
-    // footnote into the old one; swallowing a block would nest the old one
-    // into the new footnote.
+    // A selection that sits inside another footnote's definition, or laps
+    // over one, would nest footnotes inside each other. It is refused just
+    // as the caret presses are (Jason's ruling 2026-08-13). Any overlap at
+    // all counts: starting inside a definition would nest the new footnote
+    // into the old one; swallowing one would nest the old one into the new
+    // footnote. Every definition counts, wherever it sits: one in a
+    // blockquote or callout with its quoted continuation (second review
+    // 2026-09-09, Kimi hunt cycle 3, 2026-09-16), and one in a list item
+    // (Jason's ruling 1, option a, 2026-10-03).
     if (
-        ctx.blocks().some(
-            (block) =>
-                trimmed.from.line <= block.end && trimmed.to.line >= block.start,
+        ctx.reading().definitions.some(
+            (definition) => trimmed.from.line <= definition.end && trimmed.to.line >= definition.start,
         )
     ) {
         showNotice(NestedFootnoteNotice, 8000);
         return true;
-    }
-    // A definition inside a blockquote or a callout is a live definition
-    // that occupies a single line, and it never counts as a definition
-    // block. It needs its own check (second review 2026-09-09: selecting
-    // the body of "> [^1]: text" converted it, which nested the new
-    // footnote into the old one's line).
-    // Its quoted continuation lines belong to it too (Reading view folds
-    // "> [^q]: body" and "> more" into one footnote), so a selection on
-    // one of them nests just the same (Kimi hunt cycle 3, 2026-09-16).
-    const starts = ctx.definitionStarts();
-    for (let line = trimmed.from.line; line <= trimmed.to.line; line++) {
-        if (
-            starts[line] ||
-            quotedDefinitionLabelAbove(ctx.lines, ctx.scan, starts, (j) => ctx.maskedLine(j), line) >= 0
-        ) {
-            showNotice(NestedFootnoteNotice, 8000);
-            return true;
-        }
     }
     // Finally, a selection that touches any live footnote at all refuses:
     // a reference, a placeholder, or an inline footnote (nesting is

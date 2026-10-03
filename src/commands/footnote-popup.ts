@@ -11,7 +11,7 @@ import {
 } from "../editor/obsidian-internals";
 import { popupCanBind, PopupWaitingNotice, retryUntilShown } from "./popup-retry";
 import { replaceMinimal } from "../editor/write-back";
-import { allDefinitionBlocks, definitionStartLines, maskProtectedLines, scanDocument } from "../parsing/markdown-scan";
+import { readNote } from "../parsing/note-reading";
 
 import { showNotice } from "../editor/notice";
 // A small popup anchored at the cursor. Inside it sits Obsidian's own
@@ -85,11 +85,10 @@ export async function settleFootnotePopupWithFeedback(): Promise<void> {
  * the end of the definition's last line. Null when the note no longer has
  * that definition, or its label line no longer starts that way.
  *
- * The definition is read with the scanner, as every other part of the
+ * The definition comes from the note reading, as every other part of the
  * plugin reads one: a fenced or commented copy of the label is not a
- * definition, a quoted definition counts with its quoted continuation
- * (allDefinitionBlocks), and of two definitions of one name the last
- * wins, the one Obsidian renders. The save-back used to bound the section
+ * definition, a quoted definition counts with its quoted continuation, and
+ * of two definitions of one name the last wins, the one Obsidian renders. The save-back used to bound the section
  * by matching the text the embed had seen after it, and by searching for
  * the label as a plain string, so a line appended right under a last-line
  * definition was wiped, and a fenced copy of the label or a quoted
@@ -99,13 +98,10 @@ export async function settleFootnotePopupWithFeedback(): Promise<void> {
  */
 function definitionSection(text: string, name: string, label: string): { start: number; end: number } | null {
     const lines = text.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
     const folded = name.toLowerCase();
-    const block = allDefinitionBlocks(lines, scan, masked, starts)
-        .filter((candidate) => candidate.name.toLowerCase() === folded)
-        .pop();
+    const block = readNote(lines)
+        .definitions.filter((candidate) => candidate.name.toLowerCase() === folded)
+        .at(-1);
     if (!block || !lines[block.start].startsWith(label)) return null;
     // the offset where line `n` starts: every line above it plus its line break
     const lineStart = (n: number) => lines.slice(0, n).reduce((sum, line) => sum + line.length + 1, 0);

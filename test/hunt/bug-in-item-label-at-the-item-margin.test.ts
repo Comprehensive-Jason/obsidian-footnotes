@@ -6,12 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { lintFootnotes, type LintOptions } from "../../src/linting/linter";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
-import { inItemDefinitionNamesFolded } from "../../src/parsing/list-item-definitions";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { inItemDefinitionNamesFolded } from "../helpers/in-item";
 
 // Jason's ruling 1 of 2026-09-20 names two spellings of a footnote
 // definition written inside a list item: "right after the marker
@@ -58,13 +53,7 @@ const DASH = "- item\n\n  [^la]: in item\n\nprose[^la] here";
 const ORDERED = "1. item\n\n   [^la]: in item\n\nprose[^la] here";
 const FOUR = "- item\n\n    [^la]: in item\n\nprose[^la] here";
 
-const inItemNames = (doc: string): Set<string> => {
-    const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return inItemDefinitionNamesFolded(lines, scan, masked, starts);
-};
+const inItemNames = (doc: string): Set<string> => inItemDefinitionNamesFolded(doc.split("\n"));
 
 const options: LintOptions = {
     fixPunctuation: true,

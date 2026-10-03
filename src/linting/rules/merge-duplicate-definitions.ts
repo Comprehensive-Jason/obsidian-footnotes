@@ -1,14 +1,5 @@
-import {
-    definitionLabelIn,
-    definitionLabelWithName,
-    definitionStartLines,
-    DocumentScan,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    normalizeEol,
-    removeLineRanges,
-    scanDocument,
-} from "../../parsing/markdown-scan";
+import { normalizeEol, removeLineRanges } from "../../parsing/markdown-scan";
+import { Definition, readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
@@ -38,44 +29,25 @@ import { FootnoteRule } from "../rule";
  * once each, in the order the names first appear, spelled with the case
  * they were first seen with.
  *
- * Only definition blocks at the left margin count. A label inside a
- * blockquote IS a real definition as far as the orphan rules are concerned
- * (C22), but merging into or out of a quoted block would need continuation
- * lines that know about quote markers. So duplicates involving a quoted
- * definition are neither merged nor reported here.
+ * Every definition counts, wherever it sits: at the left margin, after a
+ * "%%" closer (GLM hunt cycle 1, 2026-09-16), inside a blockquote or
+ * callout, or in a list item (Jason's ruling 1, option a, 2026-10-03; hunt
+ * 2026-10-02, cluster E7). Obsidian renders only the LAST definition of a
+ * name, so any copy silently hides or is hidden by its twin.
  */
 export function duplicateFootnoteDefinitionNames(
     markdown: string,
-    // The alerts all share ONE pass of normalizing the line endings and
-    // scanning the note, done once and handed round (2026-08-11 review, a
-    // speed fix). Anything calling this on its own leaves it out.
-    precomputed?: { lines: string[]; scan: DocumentScan; masked?: string[]; starts?: boolean[] },
+    // The alerts all share ONE pass of normalizing the line endings, done
+    // once and handed round (2026-08-11 review, a speed fix). Anything
+    // calling this on its own leaves it out.
+    precomputed?: { lines: string[] },
 ): string[] {
     // No "[^" anywhere in the note means no definitions, and so no
     // duplicates. Worth checking first, because this runs on every single
     // lint (speed fix F4).
     if (!markdown.includes("[^")) return [];
     const lines = precomputed?.lines ?? normalizeEol(markdown).text.split("\n");
-    const scan = precomputed?.scan ?? scanDocument(lines);
-    const masked = precomputed?.masked ?? maskProtectedLines(lines, scan);
-    const starts = precomputed?.starts ?? definitionStartLines(lines, scan, (i) => masked[i]);
-    // Every definition the alert should count: the column-0 blocks, and
-    // the labels after a "%%" closer, which form no block but are real
-    // definitions (Jason's verification 2026-09-15). Obsidian renders only
-    // the LAST definition of a name, so a copy on a closer line silently
-    // hides or is hidden by its twin; the alert used to read the blocks
-    // alone and never said so (GLM hunt cycle 1, 2026-09-16). Definitions
-    // inside a blockquote or callout stay outside this alert, as the C22
-    // ruling recorded below.
-    const found: { name: string; line: number }[] = findDefinitionBlocks(lines, scan, masked, starts).map(
-        (block) => ({ name: block.name, line: block.start }),
-    );
-    for (let i = 0; i < lines.length; i++) {
-        if (!starts[i]) continue;
-        const hit = definitionLabelWithName(lines[i], masked[i]);
-        if (hit?.label.afterCloser) found.push({ name: hit.name, line: i });
-    }
-    found.sort((a, b) => a.line - b.line);
+    const found = readNote(lines).definitions;
     const counts = new Map<string, number>();
     for (const entry of found) {
         const folded = entry.name.toLowerCase();
@@ -94,6 +66,12 @@ export function duplicateFootnoteDefinitionNames(
 
 /**
  * Merge every later duplicate into the FIRST definition block for that name.
+ * Only a name whose every copy sits at the top level of the note, alone on
+ * its lines (Definition.movable), is merged: a copy in a quote, a list
+ * item, or another footnote cannot take or give indented continuation
+ * lines without changing its container, so such a name is left as written
+ * and the duplicate alert names it (ADR 2; Jason's ruling 1, option a,
+ * 2026-10-03).
  *
  * What was written after the duplicate's label becomes an indented
  * continuation line, and the duplicate's own continuation lines follow it
@@ -107,10 +85,9 @@ export function duplicateFootnoteDefinitionNames(
  */
 export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
     if (!markdown.includes("[^")) return markdown;
-    return rewriteDocument(markdown, (text, { lines, scan, blocks }) => {
-
-        const groups = new Map<string, typeof blocks>();
-        for (const block of blocks) {
+    return rewriteDocument(markdown, (text, { lines, definitions }) => {
+        const groups = new Map<string, Definition[]>();
+        for (const block of definitions) {
             const folded = block.name.toLowerCase();
             const group = groups.get(folded);
             if (group) group.push(block);
@@ -123,7 +100,7 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
         const appendAfter = new Map<number, string[]>();
         const doomed: { start: number; end: number }[] = [];
         for (const group of groups.values()) {
-            if (group.length < 2) continue;
+            if (group.length < 2 || group.some((block) => !block.movable)) continue;
             // A copy whose table starts on its label line ("[^1]: | a | b |"
             // with the delimiter row under it) cannot be folded into
             // indented continuation lines: the header would become body
@@ -131,12 +108,10 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
             // Reading view shows inside the footnote would be gone (GLM
             // hunt cycle 7, 2026-09-16). Such a duplicate stays as written
             // and the duplicate alert names it.
-            const holdsTable = (block: (typeof blocks)[number]): boolean => {
-                const label = definitionLabelIn(lines[block.start]);
+            const holdsTable = (block: Definition): boolean => {
                 const next = lines[block.start + 1] ?? "";
                 return (
-                    label !== null &&
-                    lines[block.start].slice(label.labelEnd).includes("|") &&
+                    lines[block.start].slice(block.labelEnd).includes("|") &&
                     block.end > block.start &&
                     /^ {0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/.test(next)
                 );
@@ -147,10 +122,7 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
             const base = group[0];
             const appended = appendAfter.get(base.end) ?? [];
             for (const duplicate of group.slice(1)) {
-                const label = definitionLabelIn(lines[duplicate.start]);
-                const body = label
-                    ? lines[duplicate.start].slice(label.labelEnd).trim()
-                    : "";
+                const body = lines[duplicate.start].slice(duplicate.labelEnd).trim();
                 if (body !== "") appended.push(`    ${body}`);
                 for (let i = duplicate.start + 1; i <= duplicate.end; i++) {
                     appended.push(lines[i]);

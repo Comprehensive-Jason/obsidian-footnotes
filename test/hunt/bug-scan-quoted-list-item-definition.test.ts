@@ -32,18 +32,18 @@ import { orphanedFootnoteReferenceNames } from "../../src/linting/rules/remove-o
 // a list marker behind a quote.
 
 describe("a list-item definition inside a blockquote", () => {
-    it.fails("after (default): the punctuation rule leaves '> - [^a]: def.' its label", () => {
+    it("after (default): the punctuation rule leaves '> - [^a]: def.' its label", () => {
         const doc = "x[^a]\n\n> - [^a]: def.";
         // Today the last line becomes "> - :[^a] def.".
         expect(footnoteAfterPunctuation(doc, "after")).toBe(doc);
     });
 
-    it.fails("'> - [^la]: text' is recognized like '- [^la]: text' (no orphan-reference alert for [^la])", () => {
+    it("'> - [^la]: text' is recognized like '- [^la]: text' (no orphan-reference alert for [^la])", () => {
         const doc = "> - [^la]: a quoted list-item definition\n\nuse[^la]";
         expect(orphanedFootnoteReferenceNames(doc)).toEqual([]);
     });
 
-    it.fails("delete footnote everywhere removes the definition on a quoted list item, not just its label's brackets", () => {
+    it("delete footnote everywhere removes the definition on a quoted list item, not just its label's brackets", () => {
         const plan = deleteFootnoteEverywhere("> - [^i]: quoted item\n\np[^i]", "i");
         // Today: "> - : quoted item\n\np".
         expect(plan.kind === "deleted" ? plan.markdown : plan.kind).not.toBe("> - : quoted item\n\np");

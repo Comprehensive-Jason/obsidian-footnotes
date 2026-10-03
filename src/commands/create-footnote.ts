@@ -603,6 +603,20 @@ export function createMatchingFootnoteDefinition(
     // definition rather than create a duplicate one.
     if (!idListIncludes(list, footnoteId)) {
         const plan = planDefinitionAppend({ lines: ctx.lines, edits: [], footnoteId, plugin });
+        // The new definition must be live where it lands, as every other
+        // creation checks: at the end of a note whose last line is a "$$"
+        // after a paragraph, a definition appended below it is taken into
+        // the math block that line then opens (rule M2), so the press
+        // refuses instead of writing a definition Obsidian never shows
+        // (the runtime swap, 2026-10-03; found by the multi-caret named-flow
+        // property).
+        const verdict = verifyLiveFootnoteInsertion({
+            lines: plan.final,
+            anchors: [],
+            footnoteId,
+            definitionLabelLine: plan.labelLine,
+        });
+        if (refusedCreation(verdict, ProtectedCreationNotice)) return true;
         landDefinitionBackedInsertion({
             plugin,
             doc,

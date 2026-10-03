@@ -1,3 +1,4 @@
+// RULED 2026-10-03 by Jason's ruling 1, option a (a definition inside a list item is modelled everywhere, like any other; the runtime swap, step 1): a press in an in-item definition's label jumps back to its reference, and a press, selection, or second caret in its text or continuation lines refuses to nest, exactly as for the column-0 twin. The question below is kept as it was asked.
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote, insertInlineFootnote } from "../../src/commands/insert-or-navigate-footnotes";
@@ -64,14 +65,14 @@ const NOTE = [
 ];
 
 describe("spec question: a press in an in-item definition", () => {
-    it.fails("numbered press in the text of a marker-line in-item definition does not nest a reference in it", async () => {
+    it("numbered press in the text of a marker-line in-item definition does not nest a reference in it", async () => {
         const doc = ed(NOTE, 0, NOTE[0].indexOf("written") + 2);
         await insertAutonumFootnote(pl(doc));
         // Today: "... written[^1] right after ...", a reference inside footnote la.
         expect(doc.lines[0]).toBe(NOTE[0]);
     });
 
-    it.fails("a press inside an in-item definition's LABEL jumps back to the reference, like a column-0 label", async () => {
+    it("a press inside an in-item definition's LABEL jumps back to the reference, like a column-0 label", async () => {
         const doc = ed(NOTE, 0, 4); // inside [^la] of the label
         await insertAutonumFootnote(pl(doc));
         expect(doc.lines).toEqual(NOTE);
@@ -123,7 +124,7 @@ describe("spec question: a press on an in-item definition's text, its continuati
             ["numbered", insertAutonumFootnote],
             ["inline", insertInlineFootnote],
         ] as const) {
-            it.fails(`${key} key, ${name}: no footnote is written inside the definition`, async () => {
+            it(`${key} key, ${name}: no footnote is written inside the definition`, async () => {
                 const doc = fakeEditor([...rows], { cursor: { line, ch }, edits: true, wholeDoc: true, words: true });
                 await command(fakePlugin(settings, doc));
                 const first = rows.findIndex((l) => l.includes("[^1]:"));
@@ -139,7 +140,7 @@ describe("spec question: a press on an in-item definition's text, its continuati
         expect(doc.lines).toEqual(rows);
     });
 
-    it.fails("a selection of words in the in-item text is refused like the column-0 twin", async () => {
+    it("a selection of words in the in-item text is refused like the column-0 twin", async () => {
         const rows = ["text[^1] here", "", "- [^1]: def words"];
         const doc = fakeEditor([...rows], {
             selection: { anchor: { line: 2, ch: 12 }, head: { line: 2, ch: 17 } },
@@ -152,7 +153,7 @@ describe("spec question: a press on an in-item definition's text, its continuati
         expect(doc.lines).toEqual(rows);
     });
 
-    it.fails("a multi-caret press with one caret in the in-item text refuses the lot", async () => {
+    it("a multi-caret press with one caret in the in-item text refuses the lot", async () => {
         const rows = ["text here", "", "- [^1]: def", "  more words"];
         const doc = fakeEditor([...rows], {
             carets: [

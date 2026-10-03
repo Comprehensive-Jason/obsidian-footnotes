@@ -43,7 +43,7 @@ import {
 // through listExistingFootnoteDefinitions.
 
 describe("spec: a footnote label directly after a list marker", () => {
-    it.fails("micromark's reading: the label on the marker line starts a definition", () => {
+    it("micromark's reading: the label on the marker line starts a definition", () => {
         const lines = "- [^a]: def\n\nuse[^a]".split("\n");
         const scan = scanDocument(lines);
         const masked = maskProtectedLines(lines, scan);

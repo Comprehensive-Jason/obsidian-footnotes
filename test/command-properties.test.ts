@@ -1,3 +1,4 @@
+import { readNote } from "../src/parsing/note-reading";
 import { underlinedDefinitionLabelNames } from "../src/linting/rules/remove-orphaned-references";
 import { lazyDefinitionLabelNames } from "../src/linting/rules/remove-orphaned-references";
 import { Editor, EditorChange, EditorPosition } from "obsidian";
@@ -10,7 +11,8 @@ import { resetNotices } from "./helpers/notices";
 import { fakeEditor as fakeMultiEditor } from "./helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "./helpers/fake-plugin";
 import FootnotePlugin from "../src/main";
-import { simulateChanges } from "../src/editor/insertion-liveness";
+import { simulateChanges, verifyLiveFootnoteInsertion } from "../src/editor/insertion-liveness";
+import { planDefinitionAppend } from "../src/commands/definition-append";
 import {
     InlineSelectionNotice,
     SelectionCommandNotice,
@@ -37,8 +39,6 @@ import {
     findDefinitionBlocks,
     maskProtectedLines,
     normalizeEol,
-    quotedDefinitionEnd,
-    quotedDefinitionLabelAbove,
     scanDocument,
 } from "../src/parsing/markdown-scan";
 
@@ -252,13 +252,9 @@ function plantedPlaceholder(doc: PressDoc, placeholder: string): boolean {
     );
 }
 
+/** Every name the note defines, folded, wherever the definition sits (Jason's ruling 1, option a, 2026-10-03: a definition the press's edit pulls into a list item is still one). */
 function definitionNamesFolded(lines: string[]): Set<string> {
-    const scan = scanDocument(lines);
-    return new Set(
-        findDefinitionBlocks(lines, scan).map((block) =>
-            block.name.toLowerCase(),
-        ),
-    );
+    return new Set(readNote(lines).definitions.map((definition) => definition.name.toLowerCase()));
 }
 
 /** The names on label-shaped lines that are lazy prose today (or heading text under an underline): a press that fills the blank line above such a label can lawfully turn it into a definition, exactly as typing there would. */
@@ -446,6 +442,21 @@ describe("creation-command invariants over random documents", () => {
                         ) {
                             return;
                         }
+                        // Nor where Obsidian reads the typed reference as
+                        // dead while the scanner reads it live: "$$[^x]" on a
+                        // math block's last line is no closer to Obsidian, so
+                        // the block runs on and takes the reference and any
+                        // definition appended after it. The press then
+                        // refuses (the new definition would be born dead).
+                        // The scanner's protection moves onto the note
+                        // reading in step 2 of the runtime swap (2026-10-03).
+                        if (
+                            !readNote(doc.lines).references.some(
+                                (r) => r.line === at && r.live && r.name.toLowerCase() === name.toLowerCase(),
+                            )
+                        ) {
+                            return;
+                        }
                     }
                     const definitionsBefore = definitionNamesFolded(doc.lines);
                     // A placeholder planted on the blank line right under a
@@ -465,7 +476,7 @@ describe("creation-command invariants over random documents", () => {
                             (block) => typedLine >= block.start && typedLine <= block.end,
                         ) ||
                         typedStarts[typedLine] ||
-                        quotedDefinitionLabelAbove(doc.lines, typedScan, typedStarts, (j) => typedMasked[j], typedLine) >= 0;
+                        readNote(doc.lines).definitionAt(typedLine) !== null;
                     await insertNamedFootnote(plugin);
                     const folded = name.toLowerCase();
                     const definitionsAfter = definitionNamesFolded(doc.lines);
@@ -1134,7 +1145,7 @@ describe("multi-caret press invariants over random documents", () => {
                     newCarets.some(
                         (caret) =>
                             typedStarts[caret.line] ||
-                            quotedDefinitionLabelAbove(typedLines, typedScan, typedStarts, (j) => typedMasked[j], caret.line) >= 0,
+                            readNote(typedLines).definitionAt(caret.line) !== null,
                     );
                 // A caret in front of a quote marker (column 0 of "> ===")
                 // plants the reference outside the quote and un-quotes the
@@ -1161,6 +1172,19 @@ describe("multi-caret press invariants over random documents", () => {
                 if (defsTyped.has(name.toLowerCase())) {
                     // the name already works: the second press navigates or refuses, no duplicate
                     expect([...defsAfter].sort()).toEqual([...defsTyped].sort());
+                    return;
+                }
+                // Where the definition would land is born dead to Obsidian (a
+                // "$$" last line under a paragraph opens a math block once a
+                // line follows it, rule M2), the press rightly refuses and
+                // edits nothing (the runtime swap, 2026-10-03)
+                const plugin2 = sharedFakePlugin(
+                    { ...settings, footnoteSectionHeading: "# Footnotes", enablePopupEditor: false, enableFootnotePrefix: false, lintOnFootnoteCreation: false },
+                    fakeMultiEditor(typedLines),
+                );
+                const plan = planDefinitionAppend({ lines: typedLines, edits: [], footnoteId: name, plugin: plugin2 });
+                if (verifyLiveFootnoteInsertion({ lines: plan.final, anchors: [], footnoteId: name, definitionLabelLine: plan.labelLine }) !== "live") {
+                    expect(doc2.lines).toEqual(typedLines);
                     return;
                 }
                 // fresh valid name: ONE shared definition exists, both typed
@@ -1195,7 +1219,7 @@ describe("multi-caret press invariants over random documents", () => {
             if (!starts[i]) continue;
             const hit = definitionLabelWithName(lines[i], masked[i]);
             if (!hit?.label.quoted) continue;
-            const end = hit.label.afterCloser ? i : quotedDefinitionEnd(lines, scan, starts, i);
+            const end = hit.label.afterCloser ? i : (readNote(lines).labelOn(i)?.end ?? i);
             for (let j = i; j <= end; j++) {
                 for (const o of referenceOccurrences(lines[j], masked[j], starts[j])) {
                     if (defined.has(o.name.toLowerCase())) nested.add(o.name.toLowerCase());
@@ -1226,7 +1250,7 @@ describe("multi-caret press invariants over random documents", () => {
                 if (!starts[i]) continue;
                 const hit = definitionLabelWithName(lines[i], masked[i]);
                 if (!hit?.label.quoted) continue;
-                const end = hit.label.afterCloser ? i : quotedDefinitionEnd(lines, scan, starts, i);
+                const end = hit.label.afterCloser ? i : (readNote(lines).labelOn(i)?.end ?? i);
                 for (let j = i; j <= end; j++) interiors.push(j);
             }
             if (interiors.length === 0) return null;
@@ -1513,7 +1537,7 @@ const quotedPressArb = fc
             if (!starts[i]) continue;
             const hit = definitionLabelWithName(lines[i], masked[i]);
             if (!hit || !hit.label.quoted) continue;
-            const end = quotedDefinitionEnd(lines, scan, starts, i);
+            const end = (readNote(lines).labelOn(i)?.end ?? i);
             for (let j = i; j <= end; j++) inside.push(j);
         }
         const line = inside[pick % inside.length];
@@ -1580,8 +1604,23 @@ describe("press definition-census invariants over random documents", () => {
                                     name.toLowerCase(),
                         ),
                     );
+                    // An in-item definition has no label shape of its own on
+                    // its line ("    [^x]: ..." under "- item"), and a press
+                    // in front of the item's marker un-lists the item, so
+                    // its line reads as indented code: still there, word
+                    // for word, only reclassified (Jason's ruling 1, option
+                    // a, 2026-10-03, made such definitions count here)
+                    const inItemLabels = new Set(
+                        readNote(lines)
+                            .definitions.filter((d) => d.name.toLowerCase() === name.toLowerCase())
+                            .map((d) => lines[d.start]),
+                    );
                     let survives = false;
                     for (let j = 0; j < doc.lines.length; j++) {
+                        if (inItemLabels.has(doc.lines[j]) && !afterStarts[j]) {
+                            survives = true;
+                            break;
+                        }
                         if (!originalLabels.has(doc.lines[j])) continue;
                         const hit = definitionLabelWithName(doc.lines[j], afterMasked[j]);
                         if (hit && hit.name.toLowerCase() === name.toLowerCase() && !afterStarts[j]) {

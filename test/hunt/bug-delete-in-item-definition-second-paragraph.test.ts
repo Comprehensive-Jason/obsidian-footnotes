@@ -32,7 +32,7 @@ function md(lines: string[], name: string): string {
 }
 
 describe("an in-item definition whose text runs on after a blank line", () => {
-    it.fails("is refused or taken whole", () => {
+    it("is refused or taken whole", () => {
         const out = md(["- [^i]: first", "", "      second paragraph of i", "", "p[^i]"], "i");
         // Today: "- \n\n      second paragraph of i\n\np".
         expect(out.startsWith("<<refused") || out === "- \n\np").toBe(true);

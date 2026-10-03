@@ -32,7 +32,7 @@ import { fakePlugin } from "../helpers/fake-plugin";
 // which has not been probed for this shape.
 
 describe("spec question: a definition inside a table inside a list item", () => {
-    it.fails("the lint inserts nothing into the item's table", () => {
+    it("the lint inserts nothing into the item's table", () => {
         const doc = "use[^1]\n\n- | a | b |\n  | - | - |\n  [^1]: x\n  | e | f |\n";
         const plugin = fakePlugin({ ...DEFAULT_SETTINGS, lintMoveToBottom: false });
         // Today: a blank line lands between "  | - | - |" and "  [^1]: x".

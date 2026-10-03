@@ -60,12 +60,12 @@ describe("a nested list item indented with a tab or four spaces holding a defini
         const lines = ["Text[^a] and[^b] here", "", parent, nested, "", "[^b]: col0"];
         const doc = lines.join("\n");
 
-        it.fails(`Delete orphaned references keeps the reference and the label (${label})`, () => {
+        it(`Delete orphaned references keeps the reference and the label (${label})`, () => {
             // Today: "Text and[^b] here", and the nested line loses its "[^a]".
             expect(lintFootnotes(doc, { removeOrphanedReferences: true })).toBe(doc);
         });
 
-        it.fails(`a numbered press on the reference appends no second definition (${label})`, async () => {
+        it(`a numbered press on the reference appends no second definition (${label})`, async () => {
             const editor = fakeEditor(lines, { cursor: { line: 0, ch: 6 }, edits: true, wholeDoc: true, words: true });
             await insertAutonumFootnote(fakePlugin({ ...DEFAULT_SETTINGS, enablePopupEditor: false }, editor));
             // Today: ["[^a]: "].

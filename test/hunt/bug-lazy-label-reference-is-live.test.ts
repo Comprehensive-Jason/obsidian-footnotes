@@ -89,7 +89,11 @@ describe("two more paragraph enders the start rule knows", () => {
     });
 
     it("a label directly under a callout title, quoted or not, is a definition (ground truth)", () => {
-        expect(blocksOf("> [!note] Title\n[^1]: x\n\nbody[^1]")).toEqual(["1@1"]);
+        // the label is a lazy line of the callout, so the note reading puts
+        // the definition inside it: a definition (it starts on line 1), but
+        // not a block that moves (Jason's ruling 1, option a, 2026-10-03)
+        expect(blocksOf("> [!note] Title\n[^1]: x\n\nbody[^1]")).toEqual([]);
+        expect(definitionStartLines("> [!note] Title\n[^1]: x\n\nbody[^1]".split("\n"))[1]).toBe(true);
         expect(lazyOf("> [!note] Title\n> [^1]: x\n\nbody[^1]")).toEqual([]);
     });
 });

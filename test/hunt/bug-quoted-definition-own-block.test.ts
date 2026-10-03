@@ -38,12 +38,12 @@
 // Settings involved: `Delete orphaned definitions` ON for the cut; the
 // walker disagreement itself needs no setting.
 
+import { readNote } from "../../src/parsing/note-reading";
 import { describe, expect, it } from "vitest";
 
 import {
     definitionStartLines,
     maskProtectedLines,
-    quotedDefinitionEnd,
     scanDocument,
 } from "../../src/parsing/markdown-scan";
 import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
@@ -62,7 +62,7 @@ describe("a block of its own directly under a quoted definition's label", () => 
             const masked = maskProtectedLines(lines, scan);
             const starts = definitionStartLines(lines, scan, (i) => masked[i]);
             expect(starts[0]).toBe(true);
-            expect(quotedDefinitionEnd(lines, scan, starts, 0)).toBe(0);
+            expect((readNote(lines).labelOn(0)?.end ?? 0)).toBe(0);
         });
     }
 
@@ -79,10 +79,7 @@ describe("a block of its own directly under a quoted definition's label", () => 
     it("REFUTED for \"2. item\": an ordered item not numbered 1 carries the quoted footnote on", () => {
         // one footnote "body 2. item" (probed 2026-09-16), as at column 0
         const lines = ["> [^2]: body", "> 2. item", "", "text[^1]", "", "[^1]: d"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-        expect(quotedDefinitionEnd(lines, scan, starts, 0)).toBe(1);
+        expect(readNote(lines).labelOn(0)?.end).toBe(1);
     });
 
     it("orphan deletion keeps the heading the quote shows", () => {
@@ -108,9 +105,6 @@ describe("a block of its own directly under a quoted definition's label", () => 
 
     it("control: a plain quoted line still continues the definition", () => {
         const lines = ["> [^2]: body", "> cont"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-        expect(quotedDefinitionEnd(lines, scan, starts, 0)).toBe(1);
+        expect(readNote(lines).labelOn(0)?.end).toBe(1);
     });
 });

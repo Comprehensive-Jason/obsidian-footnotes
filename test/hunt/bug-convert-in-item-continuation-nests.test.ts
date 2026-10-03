@@ -44,14 +44,14 @@ function run(lines: string[], settings: Record<string, unknown> = {}) {
 beforeEach(resetNotices);
 
 describe("a footnote on an in-item definition's continuation line", () => {
-    it.fails("normal to inline: a reference on the continuation line is inside a footnote and is skipped", () => {
+    it("normal to inline: a reference on the continuation line is inside a footnote and is skipped", () => {
         const r = convert(["a[^1] b[^i]", "", "- [^i]: in the item", "  see[^1]", "", "[^1]: one"]);
         // Today the continuation line becomes "  see^[one]".
         expect(r.skipped).toContainEqual({ name: "1", reason: "referenced from inside another footnote" });
         expect(r.markdown).toContain("see[^1]");
     });
 
-    it.fails("inline to normal: an inline footnote on the continuation line is left alone", () => {
+    it("inline to normal: an inline footnote on the continuation line is left alone", () => {
         const { doc, result } = run(["a[^i]", "", "- [^i]: in the item", "  more ^[nested]"]);
         // Today the line becomes "  more [^1]" and "[^1]: nested" is added.
         expect(doc.lines.slice(0, 4)).toEqual(["a[^i]", "", "- [^i]: in the item", "  more ^[nested]"]);

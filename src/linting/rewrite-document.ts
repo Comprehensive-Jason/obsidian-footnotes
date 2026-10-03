@@ -1,13 +1,5 @@
-import {
-    DefinitionBlock,
-    definitionStartLines,
-    DocumentScan,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    normalizeEol,
-    restoreEol,
-    scanDocument,
-} from "../parsing/markdown-scan";
+import { DocumentScan, maskProtectedLines, normalizeEol, restoreEol, scanDocument } from "../parsing/markdown-scan";
+import { Definition, readNote } from "../parsing/note-reading";
 
 // The setup and teardown every rewriting rule used to repeat for itself,
 // gathered here (duplicated-logic audit, 2026-09-05). The steps: convert the
@@ -24,8 +16,8 @@ import {
  * The view of the note a rewriting rule works from.
  *
  * The scan, the masked twin (the copy with protected text blanked out) and
- * the definition blocks are each worked out the first time they are asked
- * for, then kept. Two reasons: no rule needs all three, and one rule,
+ * the note reading are each worked out the first time they are asked for,
+ * then kept. Two reasons: no rule needs all three, and one rule,
  * move-to-bottom, trims `lines` before anything has been scanned.
  */
 export interface DocumentView {
@@ -33,11 +25,14 @@ export interface DocumentView {
     readonly scan: DocumentScan;
     readonly maskedLines: string[];
     /**
-     * One entry per line: true where a real definition starts there. Worked
-     * out by definitionStartLines.
+     * One entry per line: true where a definition's label sits, from the
+     * note reading.
      */
     readonly definitionStarts: boolean[];
-    readonly blocks: DefinitionBlock[];
+    /** Every definition, wherever it sits, from the note reading (note-reading.ts). */
+    readonly definitions: readonly Definition[];
+    /** The definitions whose lines are their own to move or cut (Definition.movable): the blocks move-to-bottom gathers and reindex reorders. */
+    readonly blocks: readonly Definition[];
     /**
      * Drop the blank lines at the end of the note, and say how many there
      * were.
@@ -49,8 +44,8 @@ export interface DocumentView {
      * anywhere above the trim and it would describe the untrimmed note
      * (review C7, 2026-09-09).
      *
-     * So this throws if the scan, the masked twin, the definition starts or
-     * the blocks have already been asked for.
+     * So this throws if the scan, the masked twin, or the reading has
+     * already been asked for.
      */
     trimTrailingBlankLines(): number;
 }
@@ -59,8 +54,6 @@ export interface DocumentView {
 interface Derived {
     scan: DocumentScan | null;
     masked: string[] | null;
-    starts: boolean[] | null;
-    blocks: DefinitionBlock[] | null;
 }
 
 // A one-entry memo shared by every view built while one outer
@@ -84,7 +77,7 @@ function documentView(text: string, lines: string[]): DocumentView {
     const d: Derived =
         memoText === text && memoDerived !== null
             ? { ...memoDerived }
-            : { scan: null, masked: null, starts: null, blocks: null };
+            : { scan: null, masked: null };
     // whether anything has been read through THIS view yet (the trim guard)
     let read = false;
     // once trimmed, the pieces describe a shorter note than `text`, so they
@@ -113,8 +106,6 @@ function documentView(text: string, lines: string[]): DocumentView {
             if (count > 0) {
                 d.scan = null;
                 d.masked = null;
-                d.starts = null;
-                d.blocks = null;
                 trimmed = true;
             }
             return count;
@@ -135,22 +126,18 @@ function documentView(text: string, lines: string[]): DocumentView {
             }
             return d.masked;
         },
+        // the note reading keeps its own memo, keyed by the text
         get definitionStarts() {
             read = true;
-            if (d.starts === null) {
-                const masked = this.maskedLines;
-                d.starts = definitionStartLines(lines, this.scan, (i) => masked[i]);
-                publish();
-            }
-            return d.starts;
+            return readNote(lines).labelLines;
+        },
+        get definitions() {
+            read = true;
+            return readNote(lines).definitions;
         },
         get blocks() {
             read = true;
-            if (d.blocks === null) {
-                d.blocks = findDefinitionBlocks(lines, this.scan, this.maskedLines, this.definitionStarts);
-                publish();
-            }
-            return d.blocks;
+            return readNote(lines).blocks;
         },
     };
 }

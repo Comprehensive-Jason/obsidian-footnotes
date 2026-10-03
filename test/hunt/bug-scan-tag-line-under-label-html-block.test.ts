@@ -56,7 +56,7 @@ describe("a type-7 tag line under a definition's own paragraph", () => {
         expect(f.blocks[0]).toMatchObject({ name: "1", start: 0, end: 2 });
     });
 
-    it.fails("the default lint keeps '<span>' and the line under it inside footnote 1's body", () => {
+    it("the default lint keeps '<span>' and the line under it inside footnote 1's body", () => {
         const doc = "x[^1]\n\n[^1]: body\n<span>\nmore text\n\nlast paragraph";
         // Today: "x[^1]\n\n<span>\nmore text\n\nlast paragraph\n\n[^1]: body".
         expect(lintFootnotes(doc)).toContain("[^1]: body\n<span>\nmore text");

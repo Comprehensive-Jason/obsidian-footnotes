@@ -31,7 +31,7 @@ import { fakeEditor } from "../helpers/fake-editor";
 // every Unicode space.
 
 describe("spec question: a no-break space inside a footnote name", () => {
-    it.fails("the NBSP-named definition is listed", () => {
+    it("the NBSP-named definition is listed", () => {
         const name = "a\u00A0b";
         const doc = fakeEditor([`x[^${name}] y`, "", `[^${name}]: def`], { cursor: { line: 0, ch: 3 } });
         // Today: [], the definition is not seen

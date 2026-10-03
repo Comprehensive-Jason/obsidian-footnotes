@@ -1,4 +1,3 @@
-import { inItemDefinitionNamesFolded } from "../parsing/list-item-definitions";
 import { Editor, EditorChange, EditorPosition, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
@@ -12,14 +11,8 @@ import {
 import { DocContext, docContext } from "../editor/doc-context";
 import { footnotePrefixFromEditor, footnotePrefixProblem } from "../parsing/footnote-prefix";
 import { simulateChanges } from "../editor/insertion-liveness";
-import {
-    definitionLabelIn,
-    definitionLabelWithName,
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-} from "../parsing/markdown-scan";
+import { maskProtectedLines, scanDocument } from "../parsing/markdown-scan";
+import { Definition, readNote } from "../parsing/note-reading";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { withEditableEditor } from "./insert-or-navigate-footnotes";
 
@@ -85,17 +78,15 @@ export function renameTargetAtCursor(
         cursorPosition.ch,
     );
     if (occurrence !== null) return occurrence.name;
-    // a definition label at the start of the line: the caret anywhere before
-    // the end of its ":" means the user wants that definition's name
-    const label = definitionLabelIn(lineText);
+    // a definition's label on this line, at the left margin, in a quote, or
+    // after a list marker: the caret anywhere before the end of its ":"
+    // means the user wants that definition's name. A label written directly
+    // under a line of prose is what the project calls a lazy label: Obsidian
+    // reads it as more paragraph text, so the note reading holds no
+    // definition there, and its "[^x]" was a reference above.
+    const label = ctx.reading().labelOn(cursorPosition.line);
     if (!label || cursorPosition.ch >= label.labelEnd) return null;
-    const maskedLabel = definitionLabelIn(ctx.maskedLine(cursorPosition.line));
-    if (!maskedLabel) return null;
-    // a label written directly under a line of prose is what the project
-    // calls a lazy label: Obsidian reads it as more paragraph text, not as a
-    // definition (definitionStartLines decides this)
-    if (!ctx.definitionStarts()[cursorPosition.line]) return null;
-    return lineText.slice(label.nameStart, label.nameEnd);
+    return label.name;
 }
 
 /**
@@ -137,11 +128,9 @@ export function renameTargetInSelection(
     )) {
         if (occurrence.start < to.ch && occurrence.end > from.ch) return occurrence.name;
     }
-    const label = definitionLabelIn(lineText);
+    const label = ctx.reading().labelOn(from.line);
     if (!label || from.ch >= label.labelEnd) return null;
-    if (!definitionLabelIn(ctx.maskedLine(from.line))) return null;
-    if (!ctx.definitionStarts()[from.line]) return null;
-    return lineText.slice(label.nameStart, label.nameEnd);
+    return label.name;
 }
 
 function comparePositions(a: EditorPosition, b: EditorPosition): number {
@@ -219,41 +208,21 @@ export function planFootnoteRename(
 
     const oldFolded = oldName.toLowerCase();
     const newFolded = newName.toLowerCase();
-    const blocks = ctx.blocks();
-    // collect every LIVE definition label. That means the ones at the start
-    // of a line, which form definition blocks, and also labels inside a
-    // blockquote or callout, which count as definitions everywhere else in
-    // the plugin but never form blocks. Missing the second kind was a bug:
-    // a rename rewrote the reference and left "> [^note]:" behind,
-    // orphaning both halves (second review 2026-09-09).
+    // every LIVE definition label, wherever the definition sits: at the
+    // left margin, in a blockquote or callout, or in a list item. Missing the
+    // quoted kind was a bug once: a rename rewrote the reference and left
+    // "> [^note]:" behind, orphaning both halves (second review 2026-09-09).
+    // A definition in a list item is renamed like any other (Jason's ruling
+    // 1, option a, 2026-10-03; it used to be refused).
+    const definitions = ctx.reading().definitions;
     const starts = ctx.definitionStarts();
-    const labels: { line: number; name: string; nameStart: number; nameEnd: number }[] = [];
-    for (let line = 0; line < ctx.lines.length; line++) {
-        if (!starts[line]) continue;
-        const hit = definitionLabelWithName(ctx.lines[line], ctx.maskedLine(line));
-        if (hit) {
-            labels.push({ line, name: hit.name, nameStart: hit.label.nameStart, nameEnd: hit.label.nameEnd });
-        }
-    }
-    // a footnote defined inside a list item is recognized but never
-    // renamed (Jason's ruling 1, 2026-09-20): renaming its references and
-    // leaving the label would orphan both halves, so the rename refuses
-    // and says why; and a new name such a definition holds is taken
-    const inItem = inItemDefinitionNamesFolded(ctx.lines, ctx.scan, ctx.maskedLines(), starts);
-    if (inItem.has(oldFolded)) {
-        return {
-            kind: "invalid",
-            reason: `"[^${oldName}]" is defined inside a list item, which the plugin does not rename. Rename it by hand.`,
-        };
-    }
 
     // a collision means the new name already belongs to ANOTHER footnote,
     // whatever its casing. Changing only the casing of the SAME footnote is
     // fine: that is cosmetic.
     if (newFolded !== oldFolded) {
         const taken =
-            inItem.has(newFolded) ||
-            labels.some((label) => label.name.toLowerCase() === newFolded) ||
+            definitions.some((definition) => definition.name.toLowerCase() === newFolded) ||
             ctx.lines.some(
                 (lineText, line) =>
                     lineText.includes("[^") &&
@@ -285,18 +254,19 @@ export function planFootnoteRename(
         }
     }
     const labelLines: number[] = [];
-    for (const label of labels) {
-        if (label.name.toLowerCase() !== oldFolded) continue;
+    for (const definition of definitions) {
+        if (definition.name.toLowerCase() !== oldFolded) continue;
+        // the name sits between the label's "[^" and its "]:"
         changes.push({
-            from: { line: label.line, ch: label.nameStart },
-            to: { line: label.line, ch: label.nameEnd },
+            from: { line: definition.start, ch: definition.labelStart + 2 },
+            to: { line: definition.start, ch: definition.labelEnd - 2 },
             text: newName,
         });
-        labelLines.push(label.line);
+        labelLines.push(definition.start);
     }
     if (changes.length === 0) return { kind: "noop" };
 
-    if (!renameSurvives(ctx, changes, oldFolded, newName, referenceLines, blocks, labelLines)) {
+    if (!renameSurvives(ctx, changes, oldFolded, newName, referenceLines, definitions, labelLines)) {
         return { kind: "dead" };
     }
     return { kind: "renamed", changes, count: changes.length, newName, prefixAdded };
@@ -329,7 +299,8 @@ function effectiveRenameName(
 //
 // Concretely: on every edited line, the list of occurrences must match the
 // old list, with positions shifted to allow for the new name's length, and
-// the definition blocks must keep their start lines and their mapped names.
+// every definition must keep its label line, its last line, and its mapped
+// name.
 // Anything else means the new name has changed how markdown reads the text
 // around an occurrence. In that case refuse the entire rename, rather than
 // corrupt one copy of it.
@@ -339,7 +310,7 @@ function renameSurvives(
     oldFolded: string,
     newName: string,
     referenceLines: Set<number>,
-    blocksBefore: { start: number; name: string }[],
+    definitionsBefore: readonly Definition[],
     labelLines: number[],
 ): boolean {
     const simulated = simulateChanges(ctx.lines, changes);
@@ -350,7 +321,8 @@ function renameSurvives(
     const simulatedScan = scanDocument(simulated);
     const simulatedMasked = maskProtectedLines(simulated, simulatedScan);
     const startsBefore = ctx.definitionStarts();
-    const startsAfter = definitionStartLines(simulated, simulatedScan, (i) => simulatedMasked[i]);
+    const readingAfter = readNote(simulated);
+    const startsAfter = readingAfter.labelLines;
     const labelLineSet = new Set(labelLines);
     for (const line of referenceLines) {
         const before = referenceOccurrences(ctx.lines[line], ctx.maskedLine(line), startsBefore[line]);
@@ -362,8 +334,8 @@ function renameSurvives(
         // body mentioned its own footnote (Kimi sweep 2026-09-13).
         let shift = 0;
         if (labelLineSet.has(line)) {
-            const hit = definitionLabelWithName(ctx.lines[line], ctx.maskedLine(line));
-            if (hit && hit.name.toLowerCase() === oldFolded) shift = newName.length - hit.name.length;
+            const label = ctx.reading().labelOn(line);
+            if (label && label.name.toLowerCase() === oldFolded) shift = newName.length - label.name.length;
         }
         for (const occurrence of before) {
             const renamed = occurrence.name.toLowerCase() === oldFolded;
@@ -384,27 +356,16 @@ function renameSurvives(
             }
         }
     }
-    // every renamed label must still read as a live definition under the new
-    // name. Labels inside a blockquote are checked here because they never
-    // form definition blocks.
-    for (const line of labelLines) {
-        if (!startsAfter[line]) return false;
-        const hit = definitionLabelWithName(simulated[line], simulatedMasked[line]);
-        if (!hit || hit.name !== newName) return false;
-    }
-    const blocksAfter = findDefinitionBlocks(simulated, simulatedScan);
-    if (blocksAfter.length !== blocksBefore.length) return false;
-    for (let i = 0; i < blocksBefore.length; i++) {
-        const wanted =
-            blocksBefore[i].name.toLowerCase() === oldFolded
-                ? newName
-                : blocksBefore[i].name;
-        if (
-            blocksAfter[i].start !== blocksBefore[i].start ||
-            blocksAfter[i].name !== wanted
-        ) {
-            return false;
-        }
+    // every definition, wherever it sits, must still be read on the same
+    // lines with its name mapped: a renamed label then still reads as a live
+    // definition under the new name
+    const definitionsAfter = readingAfter.definitions;
+    if (definitionsAfter.length !== definitionsBefore.length) return false;
+    for (let i = 0; i < definitionsBefore.length; i++) {
+        const before = definitionsBefore[i];
+        const after = definitionsAfter[i];
+        const wanted = before.name.toLowerCase() === oldFolded ? newName : before.name;
+        if (after.start !== before.start || after.end !== before.end || after.name !== wanted) return false;
     }
     return true;
 }

@@ -1,6 +1,5 @@
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { computeNextFootnoteNumber, referenceOccurrences } from "../../parsing/footnote-grammar";
-import { definitionLabelWithName } from "../../parsing/markdown-scan";
 
 import { rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
@@ -48,7 +47,7 @@ export function applyFootnotePrefix(markdown: string, prefix: string): string {
     // out) is built with the whole note in view, not line by line. That
     // matters on a line where a comment starts or ends: the part inside the
     // comment is blanked, the part outside it stays live.
-    return rewriteDocument(markdown, (text, { lines, scan, maskedLines, blocks, definitionStarts }) => {
+    return rewriteDocument(markdown, (text, { lines, scan, maskedLines, definitions, definitionStarts }) => {
         const isProtected = scan.isProtected;
 
         // One walk over the note collects two things at once.
@@ -81,23 +80,14 @@ export function applyFootnotePrefix(markdown: string, prefix: string): string {
                 record(name);
             }
         }
-        // then the definitions, in the order they appear: the column-0
-        // blocks and the quoted labels alike. A label inside a blockquote
-        // or callout forms no block, but it is a definition all the same
-        // (the C22 ruling), and skipping it here let a rename land on a
-        // name a quoted definition already owned, merging two footnotes,
-        // and left a quoted numbered orphan outside the prefix's namespace
-        // (Kimi and Claude sweeps 2026-09-13).
-        const labels = blocks.map((block) => ({ line: block.start, name: block.name }));
-        for (let i = 0; i < lines.length; i++) {
-            if (isProtected[i] || !definitionStarts[i]) continue;
-            const hit = definitionLabelWithName(lines[i], maskedLines[i]);
-            if (hit?.label.quoted) labels.push({ line: i, name: hit.name });
-        }
-        labels.sort((a, b) => a.line - b.line);
-        for (const { name } of labels) {
-            record(name);
-        }
+        // then the definitions, in the order they appear, wherever each
+        // sits. Skipping the ones inside a blockquote or callout once let a
+        // rename land on a name a quoted definition already owned, merging
+        // two footnotes, and left a quoted numbered orphan outside the
+        // prefix's namespace (Kimi and Claude sweeps 2026-09-13); one in a
+        // list item counts the same (Jason's ruling 1, option a,
+        // 2026-10-03).
+        for (const { name } of definitions) record(name);
 
         // Plain numbers carry on from after the highest-numbered footnote
         // that already carries the prefix. The masked twin is already built,
@@ -128,7 +118,7 @@ export function applyFootnotePrefix(markdown: string, prefix: string): string {
         };
 
         const rewritten = lines.map((line, i) =>
-            isProtected[i] ? line : rewriteFootnoteNames(line, maskedLines[i], renameFor, definitionStarts[i]),
+            isProtected[i] ? line : rewriteFootnoteNames(line, maskedLines[i], renameFor),
         );
         return rewritten.join("\n");
     });

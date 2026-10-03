@@ -113,12 +113,16 @@ describe("the inline pair NAVIGATES from inside a definition (ruling refined 202
         expect(doc.cursor).toEqual({ line: 1, ch: 3 });
     });
 
-    it("a name only masking could see is no definition at all", async () => {
-        // raw "[^a`[`b]: c" has "[" in the name, so no label; the masked
-        // twin would parse as one - the press falls through and inserts
+    // Corrected 2026-10-03 (the runtime swap): "[^a`[`b]: c" is a
+    // definition named "a`[`b" in the note reading, since remark-footnotes'
+    // label reader runs to the first "]" and stops only at whitespace, the
+    // way rule E5 found Obsidian reads a reference's name. Not yet probed in
+    // Reading view for a definition. A press in its text is a press inside a
+    // definition, which nests nothing: no "^[]" is written.
+    it("a name holding a bracket still names a definition: the press inside it writes nothing", async () => {
         const doc = fakeEditor(["[^a`[`b]: c"], { line: 0, ch: 10 });
         await insertInlineFootnote(fakePlugin(doc));
-        expect(doc.lines[0]).toContain("^[]");
+        expect(doc.lines).toEqual(["[^a`[`b]: c"]);
     });
 
     it("autonum key on a continuation line NAVIGATES instead of creating", async () => {

@@ -57,7 +57,10 @@ export function buildDefinitionAppend(
 ): { change: EditorChange; cursor: EditorPosition; prepend?: EditorChange } {
     const lines = ctx.lines;
     const isProtected = ctx.scan.isProtected;
-    const blocks = ctx.blocks();
+    // the definitions at the top level of the note, the ones the new
+    // definition joins; one in a quote, a list item, or another footnote is
+    // not somewhere to append (Jason's ruling 1, option a, 2026-10-03)
+    const blocks = ctx.reading().blocks;
     // A line with text on it directly below the new definition gets pulled
     // INTO the definition, because Obsidian carries a definition on into
     // the next line. So when there is content below, add a blank line

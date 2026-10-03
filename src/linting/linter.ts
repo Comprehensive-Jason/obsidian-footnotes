@@ -10,11 +10,9 @@ import { jumpToFootnoteDefinition } from "../commands/navigation";
 import { docContext } from "../editor/doc-context";
 import { replaceMinimal } from "../editor/write-back";
 import { rewriteDocument } from "./rewrite-document";
-import { definitionLabel, definitionLabelWithName, quotedReference, referenceOccurrences } from "../parsing/footnote-grammar";
+import { definitionLabel, quotedReference, referenceOccurrences } from "../parsing/footnote-grammar";
 import { footnotePrefix, footnotePrefixProblem } from "../parsing/footnote-prefix";
-import {
-    findDefinitionBlocks,
-    maskInlineRegions, FootnotePlacement } from "../parsing/markdown-scan";
+import { maskInlineRegions, FootnotePlacement } from "../parsing/markdown-scan";
 import { AppWithCommands, AppWithPlugins, readingViewActive, viewEditor, WindowWithVim } from "../editor/obsidian-internals";
 import { activeTableCellEditor, nestedSubEditorOwnsFocus, runOutsideTableCell } from "../editor/table-cursor";
 // The pipeline calls each rule through its catalogue entry (rule.apply), not
@@ -581,26 +579,18 @@ export function installVimWriteHook(plugin: FootnotePlugin) {
 // be the footnote just created.
 function uniqueEmptyDefinitionName(doc: Editor): string | null {
     const ctx = docContext(doc);
-    const starts = ctx.definitionStarts();
     let found: string | null = null;
-    for (let i = 0; i < ctx.lines.length; i++) {
-        if (!starts[i]) continue;
-        // The shared label reader. It finds the label against the masked
-        // twin (the copy of the note with protected text blanked out) but
-        // cuts the name from the raw line, because a code span inside a name
-        // is blanked to NUL characters in the twin. The name then goes to
-        // jumpToFootnoteDefinition, which compares raw names. After that,
-        // check that nothing has been typed after the label yet.
-        const hit = definitionLabelWithName(ctx.lines[i], ctx.maskedLine(i));
-        if (!hit || ctx.lines[i].slice(hit.label.labelEnd).trim() !== "") continue;
-        // A "> [^x]: " inside a blockquote is a real definition, but it can
-        // never be the one being hunted here: the plugin only ever creates
-        // definitions at the left margin (or indented). Counting it would
-        // make the note look ambiguous, and the caret would be left
-        // stranded.
-        if (hit.label.quoted) continue;
+    for (const definition of ctx.reading().definitions) {
+        // A definition in a quote, a list item, or another footnote is a
+        // real definition, but it can never be the one being hunted here:
+        // the plugin only ever creates definitions at the left margin (or
+        // indented). Counting it would make the note look ambiguous, and the
+        // caret would be left stranded.
+        if (!definition.movable) continue;
+        // nothing typed after the label yet
+        if (ctx.lines[definition.start].slice(definition.labelEnd).trim() !== "") continue;
         if (found !== null) return null; // ambiguous
-        found = hit.name;
+        found = definition.name;
     }
     return found;
 }
@@ -621,14 +611,9 @@ function uniqueSeededDefinitionName(doc: Editor, body: string): string | null {
     const ctx = docContext(doc);
     const bodyLines = body.split("\n");
     let found: string | null = null;
-    for (const block of findDefinitionBlocks(ctx.lines, ctx.scan)) {
-        if (block.end - block.start !== bodyLines.length - 1) continue;
-        const hit = definitionLabelWithName(
-            ctx.lines[block.start],
-            ctx.maskedLine(block.start),
-        );
-        if (!hit) continue;
-        if (ctx.lines[block.start] !== `${definitionLabel(hit.name)} ${bodyLines[0]}`) {
+    for (const block of ctx.reading().definitions) {
+        if (!block.movable || block.end - block.start !== bodyLines.length - 1) continue;
+        if (ctx.lines[block.start] !== `${definitionLabel(block.name)} ${bodyLines[0]}`) {
             continue;
         }
         let same = true;
@@ -640,7 +625,7 @@ function uniqueSeededDefinitionName(doc: Editor, body: string): string | null {
         }
         if (!same) continue;
         if (found !== null) return null; // ambiguous
-        found = hit.name;
+        found = block.name;
     }
     return found;
 }

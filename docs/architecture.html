@@ -508,15 +508,15 @@
   </div>
   <div class="gap"><span>calls</span></div>
   <div class="band l-parsing">
-    <div><span class="name">parsing/</span><span class="count">4 files · 4,240 lines</span></div>
-    <div class="what">The scanner, the masked twin, the footnote grammar, the prefix reader, and the reader for definitions written inside list items. Pure text in, facts out. The scanner itself imports nothing.</div>
+    <div><span class="name">parsing/</span><span class="count">7 files · 4,840 lines</span></div>
+    <div class="what">The note reading (Obsidian's own parser, rebuilt from remark-parse 8), the scanner and the masked twin, the footnote grammar, and the prefix reader. Pure text in, facts out.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-obsidian">nothing</span></div>
   </div>
 </div>
 <p class="figcaption"><b>Figure 1.</b> Each band lists the layers it imports from, taken from the real import statements. Reading top to bottom, every "leans on" chip points further down the stack. Small exceptions are noted below.</p>
 </div>
 <div class="prose">
-<p>The biggest file in the plugin, <code>parsing/markdown-scan.ts</code> at 3,460 lines, imports <strong>nothing at all</strong>. It is pure text logic: give it lines, get back facts about those lines. That is why it can be tested thousands of times per second without Obsidian running, and why the mutation tester can chew on it.</p>
+<p>The biggest file in the plugin, <code>parsing/markdown-scan.ts</code> at 2,790 lines, imports nothing but the note reading. It is pure text logic: give it lines, get back facts about those lines. That is why it can be tested thousands of times per second without Obsidian running, and why the mutation tester can chew on it.</p>
 <p>A few imports do point the wrong way, and they are worth knowing about because they are where the layers leak. The prefix reader in parsing imports the notice helper and the plugin class. The linter imports the popup and one navigation jump from commands, because lint on save has to close an open popup first and the after-creation lint has to land the caret. (The lint alerts used to import the inline-footnote scanner from commands too; on 2026-09-21 that scanner moved down into the grammar.) None of these is a bug, but each one is a reason the "parsing is pure" claim is true of the scanner and grammar, not the whole folder.</p>
 </div>
 </section>
@@ -550,8 +550,8 @@
 <p>A line that looks like <code>[^1]: text</code> is usually a definition. But if it sits directly under a line of prose with no blank line between, Obsidian treats it as a continuation of that paragraph, plain text with a live <code>[^1]</code> reference in it. The project calls this a <strong>lazy label</strong>. The scanner decides which label lines are real definition starts and which are lazy, and every command and every rule asks it rather than guessing. This rule diverges from the GitHub-flavoured Markdown reference parser, which is why the test suite's cross-check against that parser deliberately skips documents with a lazy label. As of September 9 there is a lint rule that repairs the situation by inserting the missing blank line (section 4); with it switched off, lint alerts about the label instead. One nuance the same ground-truth session settled: a line holding an HTML comment counts as a block, so a label directly under it is a real definition, whereas a line holding an inline <code>%% %%</code> comment is a paragraph line, so a label under it stays lazy.</p>
 <p>Once the real starts are known, the scanner expands each into a <strong>definition block</strong>: the label line plus any four-space-indented continuation lines and the blank lines between them. Blocks are the unit that gets moved to the bottom, merged, or jumped to. Two more shapes the mid-September hunts settled against Reading view: an inline code span that wraps across lines is one span, so the reference-looking text inside it stays a fake on both lines; and an HTML block inside a blockquote or a list item is dead text that ends with its container.</p>
 
-<h3>Definitions inside list items</h3>
-<p>Reading view also accepts a definition written inside a list item: <code>- [^la]: text</code> with the label right after the bullet, or a label indented to the item's margin under the item after a blank line. The rest of the plugin reads labels from the left margin only, so such a definition never forms a block, is never moved, and is never renamed. <code>parsing/list-item-definitions.ts</code> recognises it only in the places where ignoring it misfired: the orphan-reference alert and its deletion, the hotkey's choice between navigating and creating, the two renamers (reindex leaves the name alone, rename refuses), the punctuation rule, and delete-everywhere, which removes a single-line one with its item line the way Obsidian's own delete does. Modelling these definitions everywhere waits until more such cases turn up (Jason's ruling, 2026-09-20).</p>
+<h3>The note reading and definitions in containers</h3>
+<p>Which lines are definitions, and where each one ends, now comes from the <strong>note reading</strong> (<code>parsing/note-reading.ts</code>): one parse of the note with <code>parsing/obsidian-markdown.ts</code>, the remark-parse 8 reader the referee suite holds to Obsidian's own answers, remembered per exact text so a press or a lint parses each text once. Every definition counts wherever it sits, at the top level, in a quote or callout, in a list item, or inside another footnote, and each carries its <strong>container</strong> (Jason's ruling 1, option a, 2026-10-03). Only a <em>movable</em> one, at the top level with nothing but indentation before its label, is ever moved to the bottom or reordered; one in a container stays where it is, and a rule that cannot safely edit it refuses or alerts. Protected text and live references still come from the scanner until step 2 of the swap.</p>
 
 <h3>DocContext: scan once per press</h3>
 <p>A hotkey press builds one <code>DocContext</code> in <code>editor/doc-context.ts</code>. It runs the scanner exactly once and then answers every later question from cache: the masked version of a line, the list of definition starts, the list of blocks. The whole cascade of decisions in the next section shares that one object, so a press costs one walk over the note no matter how many questions it asks.</p>
@@ -819,7 +819,7 @@
   <tr><td>The popup will not open or behaves oddly</td><td class="open"><span class="mono"><span class="dot l-commands"></span>commands/footnote-popup.ts</span><span class="mono"><span class="dot l-commands"></span>commands/popup-retry.ts</span><span class="mono"><span class="dot l-editor"></span>editor/obsidian-internals.ts</span></td><td>Smoke tests only; unit tests cannot see this</td></tr>
   <tr><td>A whole-note edit unfolded a section, moved the caret, or jumped a second pane</td><td class="open"><span class="mono"><span class="dot l-editor"></span>editor/write-back.ts</span><span class="mono"><span class="dot l-editor"></span>editor/document-diff.ts</span></td><td><span class="mono">test/document-diff.test.ts</span>, <span class="mono">test/fold-lines.test.ts</span>, <span class="mono">test/second-pane-caret.test.ts</span>, then a live check: folds are Obsidian's</td></tr>
   <tr><td>Delete everywhere, a style conversion, or a carried paste did the wrong thing</td><td class="open"><span class="mono"><span class="dot l-commands"></span>commands/delete-footnote.ts</span><span class="mono"><span class="dot l-commands"></span>commands/convert-footnotes.ts</span><span class="mono"><span class="dot l-commands"></span>commands/carry-footnotes.ts</span> (pure), <span class="mono">carry-footnotes-hooks.ts</span> (the keys)</td><td>Their own specs and properties; the paste route on a phone by hand (sheet 19)</td></tr>
-  <tr><td>A definition inside a list item is treated wrongly</td><td class="open"><span class="mono"><span class="dot l-parsing"></span>parsing/list-item-definitions.ts</span></td><td><span class="mono">test/list-item-definitions.test.ts</span>; the ruling of 2026-09-20 says where it is recognised</td></tr>
+  <tr><td>A definition inside a list item or a quote is treated wrongly</td><td class="open"><span class="mono"><span class="dot l-parsing"></span>parsing/note-reading.ts</span></td><td><span class="mono">test/note-reading.test.ts</span>, <span class="mono">test/list-item-definitions.test.ts</span>; Jason's ruling 1, option a (2026-10-03)</td></tr>
   <tr><td>A dialog looks or behaves wrong, especially on the phone</td><td class="open"><span class="mono"><span class="dot l-commands"></span>commands/validated-text-modal.ts</span></td><td>Smoke tests; the phone by hand (sheet 13)</td></tr>
   <tr><td>Anything inside a table cell</td><td class="open"><span class="mono"><span class="dot l-editor"></span>editor/table-cursor.ts</span></td><td>Smoke tests</td></tr>
   <tr><td>A setting is missing, mis-migrated, or the tab looks wrong</td><td class="open"><span class="mono"><span class="dot l-plumbing"></span>settings.ts</span> for the tab<span class="mono"><span class="dot l-plumbing"></span>main.ts</span> for migrations</td><td>Unit tests for the migrations</td></tr>
@@ -832,10 +832,12 @@
 <span class="l-plumbing">  main.ts                 plugin entry: commands, hooks, migrations
   settings.ts             settings tab and defaults</span>
 <span class="l-parsing">  parsing/                reads the note, knows nothing about Obsidian
+    note-reading.ts         the note reading: every definition, its extent and container
+    obsidian-markdown.ts    Obsidian's parser, rebuilt from remark-parse 8
+    footnote-facts.ts       the facts read off its tree
     markdown-scan.ts        the scanner and the masked twin
     footnote-grammar.ts     what a reference and a definition look like
-    footnote-prefix.ts      the frontmatter prefix reader
-    list-item-definitions.ts   definitions written inside list items</span>
+    footnote-prefix.ts      the frontmatter prefix reader</span>
 <span class="l-editor">  editor/                 helpers that sit between the note and the editor
     doc-context.ts          one scan per press, cached
     insertion-liveness.ts   the born-dead rehearsal

@@ -1,9 +1,9 @@
 import {
-    definitionStartLines,
     lazyDefinitionLabelLines,
     maskProtectedLines,
     scanDocument,
 } from "../../parsing/markdown-scan";
+import { readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
@@ -78,16 +78,25 @@ function fixLazyDefinitionsOnce(markdown: string): string {
         // definition is itself a definition. Inserting above every lazy
         // label in one go would therefore add lines that are not needed.
         //
-        // Each time round, at least the label being aimed at becomes a
-        // definition, so this always finishes. The loop count is only a
-        // safety net, not what actually stops it.
+        // Each time round, either the label being aimed at becomes a
+        // definition or it is skipped, so this always finishes. The loop
+        // count is only a safety net, not what actually stops it.
         for (let guard = lazy.length * 2; guard > 0; guard--) {
             const at = lazy.find((line) => !skipped.has(line));
             if (at === undefined) break;
             const markers = (QuoteMarkers.exec(lines[at])?.[1] ?? "").trimEnd();
             const trial = [...lines.slice(0, at), markers, ...lines.slice(at)];
             const trialScan = scanDocument(trial);
-            if (protectedTextChanged(lines, scan, trial, trialScan)) {
+            // A blank line goes in only when it makes the label a definition
+            // in Obsidian's reading. One that does not, because the line
+            // above opens something the blank line would close differently
+            // ("x $$" then "$$ tail" over the label, where the blank line
+            // turns the "$$" line into a math block that takes the label
+            // in), is not inserted: it used to be inserted on every lint, one
+            // more blank line each time (the runtime swap, 2026-10-03; found
+            // by the adjacency property). Nor is one that changes which text
+            // is protected.
+            if (protectedTextChanged(lines, scan, trial, trialScan) || !readNote(trial).labelLines[at + 1]) {
                 skipped.add(at);
                 continue;
             }
@@ -95,13 +104,7 @@ function fixLazyDefinitionsOnce(markdown: string): string {
             scan = trialScan;
             skipped = new Set([...skipped].map((line) => (line >= at ? line + 1 : line)));
             const masked = maskProtectedLines(lines, scan);
-            lazy = lazyDefinitionLabelLines(lines, scan, masked, definitionStartLines(lines, scan, (i) => masked[i]));
-            // The label being aimed at did not become a definition. Stop,
-            // rather than pile blank line on blank line above it. No known
-            // piece of markdown behaves this way; the property test in
-            // test/fix-lazy-definitions.test.ts is watching in case one
-            // turns up.
-            if (lazy.includes(at + 1)) break;
+            lazy = lazyDefinitionLabelLines(lines, scan, masked, readNote(lines).labelLines);
         }
         return lines.join("\n");
     });

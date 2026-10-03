@@ -2,24 +2,18 @@
 // Obsidian's: which labels are definitions and where each block ends, which
 // reference-shaped strings are live, and which lines the scanner protects.
 //
-// It calls the scanner's readers exactly as the commands and the lint do
-// (src/parsing/markdown-scan.ts and list-item-definitions.ts), so a
+// It calls the readers exactly as the commands and the lint do: the note
+// reading for definitions (src/parsing/note-reading.ts), the scanner for
+// protection and live references (src/parsing/markdown-scan.ts), so a
 // disagreement found here is a disagreement in the shipped plugin.
 // run-oracle.mjs bundles this file with esbuild for Node, the way
 // scripts/generate-corpora.ts is run.
 
 import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import { inItemDefinitionLabels } from "../../src/parsing/list-item-definitions";
-import {
-    allDefinitionBlocks,
-    definitionLabelWithName,
-    definitionStartLines,
-    maskProtectedLines,
-    normalizeEol,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { maskProtectedLines, normalizeEol, scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
-/** One definition as the plugin reads it. `end` is null where the plugin does not model the extent (a definition inside a list item). */
+/** One definition as the plugin reads it, by what holds it: the note itself, a quote, or a list item. `end` is null where the plugin does not model the extent (no longer the case since the runtime swap of 2026-10-03). */
 export interface PluginDefinition {
     name: string;
     kind: "block" | "quoted" | "in-item";
@@ -45,27 +39,19 @@ export function pluginFacts(text: string): PluginFacts {
     const lines = normalizeEol(text).text.split("\n");
     const scan = scanDocument(lines);
     const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+    const reading = readNote(lines);
+    const starts = reading.labelLines;
 
-    const definitions: PluginDefinition[] = [];
-    for (const block of allDefinitionBlocks(lines, scan, masked, starts)) {
-        const quoted = definitionLabelWithName(lines[block.start], masked[block.start])?.label.quoted === true;
-        definitions.push({ name: block.name, kind: quoted ? "quoted" : "block", line: block.start, end: block.end });
-    }
-    // An in-item label ("- [^a]: text") is a definition to the plugin's
-    // orphan and navigation readers (Jason's ruling 1, 2026-09-20), so its
-    // "[^a]" is not a reference; remember where each one starts.
-    const inItemLabelAt = new Map<number, number>();
-    for (const hit of inItemDefinitionLabels(lines, scan, masked, starts)) {
-        definitions.push({ name: hit.name, kind: "in-item", line: hit.line, end: null });
-        inItemLabelAt.set(hit.line, lines[hit.line].lastIndexOf(`[^${hit.name}]:`, hit.labelEnd));
-    }
-    definitions.sort((a, b) => a.line - b.line);
+    const definitions: PluginDefinition[] = reading.definitions.map((definition) => ({
+        name: definition.name,
+        kind: definition.container.listItems > 0 ? "in-item" : definition.container.quotes > 0 ? "quoted" : "block",
+        line: definition.start,
+        end: definition.end,
+    }));
 
     const references: PluginReference[] = [];
     for (let i = 0; i < lines.length; i++) {
         for (const occurrence of referenceOccurrences(lines[i], masked[i], starts[i])) {
-            if (inItemLabelAt.get(i) === occurrence.start) continue;
             references.push({ name: occurrence.name, line: i, column: occurrence.start });
         }
     }

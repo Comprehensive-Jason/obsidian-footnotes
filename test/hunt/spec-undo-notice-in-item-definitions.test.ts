@@ -1,3 +1,4 @@
+// RULED 2026-10-03 by Jason's ruling 1, option a (a definition inside a list item is modelled everywhere, like any other; the runtime swap, step 1): the partial-undo notice counts in-item definitions in all three cases. The question below is kept as it was asked.
 import { describe, expect, it } from "vitest";
 
 import { orphanedByUndo, stillOrphanedNames } from "../../src/editor/undo-orphan-notice";
@@ -35,14 +36,14 @@ import { orphanedByUndo, stillOrphanedNames } from "../../src/editor/undo-orphan
 // afterwards".
 
 describe("spec question: the partial-undo notice and in-item definitions", () => {
-    it.fails("names a reference an undo left without its list-item definition", () => {
+    it("names a reference an undo left without its list-item definition", () => {
         const before = ["See this[^a].", "", "- [^a]: a definition in a list"].join("\n");
         const after = ["See this[^a].", "", "- "].join("\n");
         // Today: [].
         expect(orphanedByUndo(before, after)).toEqual(["a"]);
     });
 
-    it.fails("stays quiet when the footnote is still defined inside a list item", () => {
+    it("stays quiet when the footnote is still defined inside a list item", () => {
         // The undo took out a column-0 copy; the list-item definition stays.
         const before = ["See this[^a].", "", "- [^a]: in the list", "", "[^a]: a stray copy"].join("\n");
         const after = ["See this[^a].", "", "- [^a]: in the list"].join("\n");
@@ -50,7 +51,7 @@ describe("spec question: the partial-undo notice and in-item definitions", () =>
         expect(orphanedByUndo(before, after)).toEqual([]);
     });
 
-    it.fails("the standing notice retires itself when a redo brings the in-item definition back", () => {
+    it("the standing notice retires itself when a redo brings the in-item definition back", () => {
         // Today: ["a"]: with the definition back, the notice still claims [^a] is orphaned.
         expect(stillOrphanedNames("T[^a] here\n\n- [^a]: def", ["a"])).toEqual([]);
     });

@@ -8,7 +8,7 @@ import {
     lazyDefinitionLabelNames,
     orphanedFootnoteReferenceNames,
 } from "../../src/linting/rules/remove-orphaned-references";
-import { inItemDefinitionLabels } from "../../src/parsing/list-item-definitions";
+import { inItemDefinitionLabels } from "../helpers/in-item";
 import {
     definitionStartLines,
     maskProtectedLines,
@@ -69,7 +69,7 @@ const readersOf = (doc: string) => {
     const masked = maskProtectedLines(lines, scan);
     const starts = definitionStartLines(lines, scan, (i) => masked[i]);
     return {
-        inItem: inItemDefinitionLabels(lines, scan, masked, starts),
+        inItem: inItemDefinitionLabels(lines),
         lazy: lazyDefinitionLabelNames(lines, scan, masked, starts),
         orphans: orphanedFootnoteReferenceNames(doc),
     };

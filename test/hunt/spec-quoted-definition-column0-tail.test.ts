@@ -1,6 +1,7 @@
 // Imported from the glm-cycle-9 hunt of 2026-09-16 (OpenCode worktree); rewritten to the probed reading 2026-09-16.
 // REFUTED 2026-09-16 (GLM hunt cycle 9, probed in Reading view): a plain column-0 line directly under a quoted definition is the quoted footnote's lazy body ("quoted def plain column-0 line"), further plain lines carry it on, a label under them starts a new definition, a heading ends the run, and an indented chunk after the tail is code. definitionStartLines was right; quotedDefinitionEnd now owns the tail, the scan protects the chunk, and the press guard reaches the tail.
 // Imported from the GLM 5.3 Flash cycle 13 hunt of 2026-09-16 (OpenCode worktree); 1 of 3 tests carries it.fails: marked by this hunt.
+import { readNote } from "../../src/parsing/note-reading";
 import { describe, expect, it } from "vitest";
 
 import { definitionLabelWithName, referenceOccurrences } from "../../src/parsing/footnote-grammar";
@@ -8,7 +9,6 @@ import {
     definitionStartLines,
     findDefinitionBlocks,
     maskProtectedLines,
-    quotedDefinitionEnd,
     scanDocument,
 } from "../../src/parsing/markdown-scan";
 import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphaned-references";
@@ -82,13 +82,16 @@ describe("a label under a column-0 line that follows a quoted definition", () =>
         const { lines, scan, masked, starts } = ctxOf(doc);
         expect(starts[2]).toBe(true);
         expect(lazyDefinitionLabelNames(lines, scan, masked, starts)).toEqual([]);
-        expect(findDefinitionBlocks(lines, scan, masked, starts).map((b) => b.start)).toEqual([2]);
+        // the label follows lazy lines of the quote, so the note reading
+        // puts footnote 2 inside the quote too: a definition, but not a
+        // block that moves (Jason's ruling 1, option a, 2026-10-03)
+        expect(findDefinitionBlocks(lines, scan, masked, starts).map((b) => b.start)).toEqual([]);
     });
 
     it("the orphan rules' reader owns the column-0 tail, so the whole footnote is cut together", () => {
-        const { lines, scan, masked, starts } = ctxOf(doc);
+        const { lines, masked, starts } = ctxOf(doc);
         expect(starts[0]).toBe(true);
-        expect(quotedDefinitionEnd(lines, scan, starts, 0)).toBe(1);
+        expect((readNote(lines).labelOn(0)?.end ?? 0)).toBe(1);
         const hit = definitionLabelWithName(lines[0], masked[0]);
         expect(hit?.name).toBe("1");
         // the quoted label's own "[^1]" is not a reference
@@ -100,20 +103,20 @@ describe("a label under a column-0 line that follows a quoted definition", () =>
 
     it("the tail runs through further plain lines, stops at a heading, and takes no indented chunk", () => {
         const two = ctxOf("> [^1]: quoted def\nplain one\nplain two\n\ntail[^1]");
-        expect(quotedDefinitionEnd(two.lines, two.scan, two.starts, 0)).toBe(2);
+        expect((readNote(two.lines).labelOn(0)?.end ?? 0)).toBe(2);
         const heading = ctxOf("> [^1]: quoted def\nplain one\n# H\n\ntail[^1]");
-        expect(quotedDefinitionEnd(heading.lines, heading.scan, heading.starts, 0)).toBe(1);
+        expect((readNote(heading.lines).labelOn(0)?.end ?? 0)).toBe(1);
         // an indented chunk after the column-0 tail is code (Reading view
         // lets no indented line continue a quote's paragraph), with or
         // without a blank line before it
         const chunk = ctxOf("> [^1]: quoted def\nplain column-0 line\n    chunk[^9]\n\ntail[^1]");
         expect(chunk.scan.isProtected).toEqual([false, false, true, false, false]);
-        expect(quotedDefinitionEnd(chunk.lines, chunk.scan, chunk.starts, 0)).toBe(1);
+        expect((readNote(chunk.lines).labelOn(0)?.end ?? 0)).toBe(1);
         const gap = ctxOf("> [^1]: quoted def\nplain column-0 line\n\n    chunk[^9]\n\ntail[^1]");
         expect(gap.scan.isProtected).toEqual([false, false, false, true, false, false]);
         // and a quoted lazy line before the column-0 one is part of the run
         const mixed = ctxOf("> [^1]: quoted def\n> quoted lazy\nplain column-0 line\n[^2]: second\n\ntail[^1] and[^2]");
-        expect(quotedDefinitionEnd(mixed.lines, mixed.scan, mixed.starts, 0)).toBe(2);
+        expect((readNote(mixed.lines).labelOn(0)?.end ?? 0)).toBe(2);
         expect(mixed.starts[3]).toBe(true);
     });
 });

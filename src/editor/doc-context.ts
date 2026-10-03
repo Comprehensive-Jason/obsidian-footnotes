@@ -1,18 +1,8 @@
-import { inItemDefinitionLabels } from "../parsing/list-item-definitions";
 import { Editor, EditorPosition } from "obsidian";
 
+import { DocumentScan, maskLineWithScan, maskProtectedLines, scanDocument } from "../parsing/markdown-scan";
+import { NoteReading, readNote } from "../parsing/note-reading";
 import {
-    DefinitionBlock,
-    definitionStartLines,
-    DocumentScan,
-    findDefinitionBlocks,
-    maskLineWithScan,
-    maskProtectedLines,
-    quotedDefinitionLabelAbove,
-    scanDocument,
-} from "../parsing/markdown-scan";
-import {
-    definitionLabelWithName,
     footnoteReferenceMatches,
     occurrenceAtCursor,
     referenceAtCursor,
@@ -21,8 +11,8 @@ import {
 } from "../parsing/footnote-grammar";
 
 // One press's shared, read-only view of the document. It depends on nothing
-// but markdown-scan and Obsidian's own types. Split out of the all-in-one
-// commands file 2026-08-11.
+// but the parsing modules and Obsidian's own types. Split out of the
+// all-in-one commands file 2026-08-11.
 
 // Every scan judges the document's masked twin: a copy of it with protected
 // text (code, frontmatter) blotted out and every column left where it was.
@@ -63,18 +53,19 @@ export interface DocContext {
     maskedLine(i: number): string;
     /** The whole masked twin, built once and remembered. */
     maskedLines(): string[];
-    /** Which lines start a live definition (definitionStartLines), worked
-     * out once and remembered. */
+    /** Which lines hold a definition's label, from the note reading. */
     definitionStarts(): boolean[];
-    /** The definition blocks (findDefinitionBlocks), worked out once and
-     * remembered: a single press used to walk them two or three times
-     * (review C2). */
-    blocks(): DefinitionBlock[];
+    /** The note reading (note-reading.ts): every definition wherever it
+     * sits, with its extent and its container. The reading parses each
+     * distinct text once and remembers it, so asking again costs nothing
+     * (review C2 asked the same of the old block walk). */
+    reading(): NoteReading;
 }
 
-/** The names of every footnote definition ("[^x]: …" lines) in the order
- * they appear, at most one per line. A definition inside a code block does
- * not count. */
+/** The names of every footnote definition in the order they appear,
+ * wherever each sits: at the top level, in a quote or callout, or in a
+ * list item (Jason's ruling 1, option a, 2026-10-03). A definition inside a
+ * code block does not count. */
 export function listExistingFootnoteDefinitions(
     doc: Editor,
     ctx: DocContext = docContext(doc),
@@ -84,29 +75,7 @@ export function listExistingFootnoteDefinitions(
 
 /** The same list, read from a context alone, for a note that is not in an editor yet (the note as a creation will leave it). */
 export function definitionNames(ctx: DocContext): string[] {
-    const definitionNames: string[] = [];
-
-    // walk every line looking for definition labels, both the ones at
-    // column 0 and the ones inside a blockquote or callout ("> [^x]: …",
-    // C22), and collect their names
-    const lines = ctx.lines;
-    const masked = ctx.maskedLines();
-    const starts = ctx.definitionStarts();
-    for (let i = 0; i < lines.length; i++) {
-        if (!starts[i]) continue;
-        // definitionLabelWithName is the one place that matches against the
-        // masked twin and then re-slices the name from the raw line. That
-        // matters because a code span inside a name masks to NULs
-        const hit = definitionLabelWithName(lines[i], masked[i]);
-        if (hit) definitionNames.push(hit.name);
-    }
-    // a definition inside a list item counts too, so the press on its
-    // reference navigates instead of appending a second definition
-    // (Jason's ruling 1, 2026-09-20)
-    for (const hit of inItemDefinitionLabels(lines, ctx.scan, masked, starts)) {
-        definitionNames.push(hit.name);
-    }
-    return definitionNames;
+    return ctx.reading().definitions.map((definition) => definition.name);
 }
 
 export function docContext(doc: Editor): DocContext {
@@ -132,32 +101,25 @@ export function contextOfLines(lines: string[]): DocContext {
     };
     const maskedLines = (): string[] =>
         full ?? (full = maskProtectedLines(lines, scan));
+    let reading: NoteReading | null = null;
+    const readingOf = (): NoteReading => reading ?? (reading = readNote(lines));
     let starts: boolean[] | null = null;
-    const definitionStarts = (): boolean[] =>
-        starts ?? (starts = definitionStartLines(lines, scan, maskedLine));
-    let blocks: DefinitionBlock[] | null = null;
-    const blocksOf = (): DefinitionBlock[] =>
-        blocks ?? (blocks = findDefinitionBlocks(lines, scan, undefined, definitionStarts()));
-    return { lines, scan, maskedLine, maskedLines, definitionStarts, blocks: blocksOf };
+    const definitionStarts = (): boolean[] => starts ?? (starts = [...readingOf().labelLines]);
+    return { lines, scan, maskedLine, maskedLines, definitionStarts, reading: readingOf };
 }
 
 /**
- * Whether line `line` belongs to some footnote's definition: a column-0
- * definition block, or a quoted definition, which forms no block but owns
- * its label line and its quoted continuation lines all the same, or any
- * other definition label line (one after a "%%" closer, say), where a
- * reference in the body nests just the same (Kimi hunt cycle 3,
- * 2026-09-16, the second found by its property). A footnote written on
- * such a line would be nested, which the plugin never creates (ADR 0001).
- * The caret guard asks it of the note before a press, and the liveness
- * check of the note after it (hunt 2026-10-02, cluster R2).
+ * Whether line `line` belongs to some footnote's definition, its label line
+ * or any line of its body, wherever the definition sits: at the top level,
+ * in a quote or callout, in a list item, or after a "%%" closer (Jason's
+ * ruling 1, option a, 2026-10-03; the quoted case was Kimi hunt cycle 3,
+ * 2026-09-16, the in-item one hunt 2026-10-02, cluster R3). A footnote
+ * written on such a line would be nested, which the plugin never creates
+ * (ADR 0001). The caret guard asks it of the note before a press, and the
+ * liveness check of the note after it (hunt 2026-10-02, cluster R2).
  */
 export function insideDefinition(ctx: DocContext, line: number): boolean {
-    return (
-        ctx.definitionStarts()[line] ||
-        ctx.blocks().some((block) => line >= block.start && line <= block.end) ||
-        quotedDefinitionLabelAbove(ctx.lines, ctx.scan, ctx.definitionStarts(), (j) => ctx.maskedLine(j), line) >= 0
-    );
+    return ctx.reading().definitionAt(line) !== null;
 }
 
 /**

@@ -4,20 +4,17 @@ import {
     quotedReference,
     referenceOccurrences,
 } from "../parsing/footnote-grammar";
-import { inItemDefinitionLabels } from "../parsing/list-item-definitions";
 import {
-    DefinitionBlock,
-    definitionStartLines,
-    findDefinitionBlocks,
+    definitionCuts,
     lazyDefinitionLabelLines,
     maskProtectedLines,
     normalizeEol,
-    quotedDefinitionEnd,
     removeLineRanges,
     restoreEol,
     scanDocument,
     underlinedDefinitionLabelLines,
 } from "../parsing/markdown-scan";
+import { readNote } from "../parsing/note-reading";
 import { linesReadDifferently } from "../linting/rules/remove-orphaned-definitions";
 import { cutOne, readsDifferently } from "../linting/rules/remove-orphaned-references";
 import { MarkdownView } from "obsidian";
@@ -73,63 +70,30 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     const lines = text.split("\n");
     const scan = scanDocument(lines);
     const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+    const reading = readNote(lines);
+    const starts = reading.labelLines;
 
-    const blocks: DefinitionBlock[] = findDefinitionBlocks(lines, scan, masked, starts).filter(
-        (block) => block.name.toLowerCase() === folded,
-    );
-    // A definition inside a list item ("- [^x]: text", or a label indented
-    // under the item) is deleted when it is one line long, since Obsidian's
-    // own delete removes it too (Jason, 2026-09-22). The plugin does not
-    // model where such a definition ends, so one that runs on to another
-    // line (anything below it that is not blank, the end of the note, or a
-    // new list item) is refused with a reason, as the rename command
-    // refuses every in-item definition (Jason's ruling 1, 2026-09-20). On
-    // a marker line only the definition text goes and the bullet stays, an
-    // empty item, because that is what Obsidian's own delete leaves
-    // (Jason, 2026-09-24, sheet 19); a label indented under the item has
-    // no marker of its own, so its whole line goes.
-    const trimmed = new Map<number, number>();
-    for (const hit of inItemDefinitionLabels(lines, scan, masked, starts)) {
-        if (hit.name.toLowerCase() !== folded) continue;
-        const endsHere =
-            hit.line + 1 >= lines.length ||
-            lines[hit.line + 1].trim() === "" ||
-            /^ {0,3}(?:[-+*]|\d{1,9}[.)])(?: |$)/.test(lines[hit.line + 1]);
-        if (!endsHere) {
-            return {
-                kind: "refused",
-                reason: `Nothing was deleted: ${quotedReference(name)} is defined inside a list item over more than one line, which the plugin does not delete. Delete it by hand.`,
-            };
-        }
-        const marker = /^ {0,3}(?:[-+*]|\d{1,9}[.)]) +/.exec(lines[hit.line]);
-        if (marker && lines[hit.line].startsWith("[^", marker[0].length)) {
-            trimmed.set(hit.line, marker[0].length);
-        } else {
-            blocks.push({ name: hit.name, start: hit.line, end: hit.line });
-        }
+    // Every definition of the name goes, wherever it sits: at the top
+    // level, in a blockquote or callout with the quoted continuation
+    // Obsidian gives it, or in a list item with its whole body (Jason's
+    // ruling 1, option a, 2026-10-03: the plugin now knows where an in-item
+    // definition ends, so one over several lines is no longer refused; on
+    // a list marker's line the bullet stays, see definitionCuts). A
+    // definition whose label follows other text on its line (a callout's
+    // title, the "%%" closing a comment) is never cut, since the line would
+    // take that text with it, leaving the callout untitled or the comment
+    // open over the rest of the note; the command refuses and says so.
+    const named = reading.definitions.filter((definition) => definition.name.toLowerCase() === folded);
+    const unremovable = named.find((definition) => !definition.removable);
+    if (unremovable) {
+        return {
+            kind: "refused",
+            reason: `Nothing was deleted: the ${quotedDefinitionLabel(unremovable.name)} definition shares its line with other text, such as a callout's title or the "%%" that closes a comment, which cutting it would take too. Delete it by hand.`,
+        };
     }
-    // A label inside a blockquote or callout ("> [^x]: ...") is a real
-    // definition everywhere else in the plugin but never forms a block, so
-    // it is collected here with the quoted continuation Obsidian gives it
-    // (the same reading the orphan-definition rule uses). A label that
-    // shares its line with the "%%" closing a comment is never cut, since
-    // the line would take the closer with it and leave the comment open
-    // over the rest of the note; the command refuses and says so.
-    for (let i = 0; i < lines.length; i++) {
-        if (scan.isProtected[i] || !starts[i]) continue;
-        const hit = definitionLabelWithName(lines[i], masked[i]);
-        if (!hit || hit.name.toLowerCase() !== folded) continue;
-        if (hit.label.afterCloser) {
-            return {
-                kind: "refused",
-                reason: `Nothing was deleted: the ${quotedDefinitionLabel(hit.name)} definition shares its line with the "%%" that closes a comment, so cutting it would leave the comment open. Delete it by hand.`,
-            };
-        }
-        if (hit.label.quoted) {
-            blocks.push({ name: hit.name, start: i, end: quotedDefinitionEnd(lines, scan, starts, i) });
-        }
-    }
+    const definitionCut = definitionCuts(lines, named);
+    const blocks = definitionCut.ranges;
+    let definitions = named.length;
     // A lazy label (a "[^x]:" line directly under prose, one blank line
     // short of a definition) and an underlined label (a "[^x]:" line with
     // a setext underline under it, which makes it a heading) are the
@@ -139,10 +103,16 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     const labelOf = (i: number): boolean =>
         definitionLabelWithName(lines[i], masked[i])?.name.toLowerCase() === folded;
     for (const i of lazyDefinitionLabelLines(lines, scan, masked, starts)) {
-        if (labelOf(i)) blocks.push({ name, start: i, end: i });
+        if (labelOf(i)) {
+            blocks.push({ start: i, end: i });
+            definitions++;
+        }
     }
     for (const i of underlinedDefinitionLabelLines(lines, scan, masked, starts)) {
-        if (labelOf(i)) blocks.push({ name, start: i, end: i + 1 });
+        if (labelOf(i)) {
+            blocks.push({ start: i, end: i + 1 });
+            definitions++;
+        }
     }
     blocks.sort((a, b) => a.start - b.start);
     // the lines a block cut takes with it: a reference on one of them
@@ -153,10 +123,9 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     }
 
     let references = 0;
-    const cutLines = lines.map((line, i) => {
-        if (scan.isProtected[i] || cut.has(i)) return line;
-        const keep = trimmed.get(i);
-        if (keep !== undefined) return line.slice(0, keep);
+    const cutLines = definitionCut.lines.map((line, i) => {
+        // a label line trimmed back to its list marker is done with
+        if (scan.isProtected[i] || cut.has(i) || line !== lines[i]) return line;
         // rightmost first, so that cutting one keeps the offsets of the
         // ones before it
         const hits = referenceOccurrences(line, masked[i], starts[i])
@@ -165,7 +134,6 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
         references += hits.length;
         return hits.reduce((kept, { start, end }) => cutOne(kept, start, end), line);
     });
-    const definitions = blocks.length + trimmed.size;
     if (references === 0 && definitions === 0) return { kind: "nothing" };
 
     // The promise the two orphan rules make, kept here too: a deletion
@@ -176,7 +144,10 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     // lazy label there into a definition (the guards' own comments list
     // the cases).
     const byHand = " would change how Obsidian reads the text around it. Delete it by hand.";
-    if (references > 0 && readsDifferently(lines, scan, starts, cutLines)) {
+    // a deleted definition's label line that keeps only its list marker is
+    // meant to stop being a label, so it is not asked to read as before
+    const keptStarts = starts.map((start, i) => start && definitionCut.lines[i] === lines[i]);
+    if (references > 0 && readsDifferently(lines, scan, keptStarts, cutLines)) {
         return { kind: "refused", reason: `Nothing was deleted: removing ${quotedReference(name)}${byHand}` };
     }
     const out = removeLineRanges(cutLines, blocks);

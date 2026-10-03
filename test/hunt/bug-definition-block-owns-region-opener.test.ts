@@ -67,13 +67,24 @@ describe("bug: a definition block carries a comment opener away from its closer"
     // line. What must never happen is the half-way state the bug produced:
     // the opener gone and the closer left behind, hiding or revealing text
     // the user never touched.
-    it("deleting an orphaned definition takes the %% lines its body was hiding with it", () => {
+    // Corrected 2026-10-03 (the runtime swap): the "%%" and "<!--" inside
+    // [^9]'s body open nothing that reaches [^1]. Obsidian reads [^9] on
+    // the label line and the opener line, and "[^1]: one" as a definition of
+    // its own that "a[^1]" cites (rule D5 in docs/obsidian-reading-rules.md:
+    // "[^9]: orphan" / "    %%" / "[^1]: one" / "%%" gives [^9] on lines 1
+    // to 2 and [^1] on lines 3 to 4; a label ends a definition, rule E1). So
+    // only the orphan [^9] goes, and [^1] stays.
+    it("deleting an orphaned definition takes only its own lines when its %% opener reaches no further", () => {
         const doc = "a[^1]\n\n[^9]: orphan\n    %%\n[^1]: one\n%%";
-        expect(removeOrphanedFootnoteDefinitions(doc)).toBe("a[^1]");
+        expect(removeOrphanedFootnoteDefinitions(doc)).toBe("a[^1]\n\n[^1]: one\n%%");
     });
 
-    it("deleting an orphaned definition takes the HTML lines its body was hiding with it", () => {
+    // The same reading for the HTML twin. Expected fail until step 2 of the
+    // swap: the scanner still reads "<!--" as a comment running to "-->",
+    // which hides "[^1]: one", so the cut looks like it changes how the
+    // rest of the note reads and is refused.
+    it.fails("deleting an orphaned definition takes only its own lines when its HTML opener reaches no further", () => {
         const doc = "a[^1]\n\n[^9]: orphan\n    <!--\n[^1]: one\n-->";
-        expect(removeOrphanedFootnoteDefinitions(doc)).toBe("a[^1]");
+        expect(removeOrphanedFootnoteDefinitions(doc)).toBe("a[^1]\n\n[^1]: one\n-->");
     });
 });

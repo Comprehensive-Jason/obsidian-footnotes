@@ -59,10 +59,18 @@ describe("carriedDefinitions", () => {
         ]);
     });
 
-    it("reports a reference with nothing to carry: an orphan, a lazy label, an in-item definition", () => {
+    it("reports a reference with nothing to carry: an orphan, a lazy label", () => {
         expect(carry(["a[^x]"], { line: 0, ch: 0 }, { line: 0, ch: 5 })).toEqual({ carried: [], missing: ["x"] });
         expect(carry(["a[^l]", "[^l]: lazy"], { line: 0, ch: 0 }, { line: 0, ch: 5 }).missing).toEqual(["l"]);
-        expect(carry(["- a[^i]", "- [^i]: in the item"], { line: 0, ch: 0 }, { line: 0, ch: 7 }).missing).toEqual(["i"]);
+    });
+
+    // Jason's ruling 1, option a (2026-10-03): a definition in a list item
+    // is carried like a quoted one, its lines as they stand.
+    it("carries an in-item definition with its lines as they stand", () => {
+        expect(carry(["- a[^i]", "- [^i]: in the item"], { line: 0, ch: 0 }, { line: 0, ch: 7 })).toEqual({
+            carried: [{ name: "i", lines: ["- [^i]: in the item"] }],
+            missing: [],
+        });
     });
 
     it("ignores a reference in protected text and one the selection cuts through", () => {

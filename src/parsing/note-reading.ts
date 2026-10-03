@@ -22,16 +22,20 @@
 import { DefinitionFact, FootnoteFacts, footnoteFacts } from "./footnote-facts";
 
 /** A definition as the reading gives it: name, label line and columns, last line, container. */
-type Definition = DefinitionFact;
+export type Definition = DefinitionFact;
 
 /** One note, read once. */
 export interface NoteReading {
     /** Every definition in the note, wherever it sits, in the order of their labels. */
     readonly definitions: readonly Definition[];
+    /** The definitions whose lines are their own to move or cut (Definition.movable), in the same order: the blocks move-to-bottom gathers and reindex reorders. */
+    readonly blocks: readonly Definition[];
     /** Every reference, with whether it is live. */
     readonly references: FootnoteFacts["references"];
-    /** One entry per line: true where the label of some definition sits on the line. */
-    readonly labelLines: readonly boolean[];
+    /** The stretches of protected text: code, math, comments, frontmatter, and the like. */
+    readonly protectedSpans: FootnoteFacts["protectedSpans"];
+    /** One entry per line: true where the label of some definition sits on the line. Shared by every caller of the same text, so never changed. */
+    readonly labelLines: boolean[];
     /** The definition whose label sits on `line` (the first, when one line holds two), or null. */
     labelOn(line: number): Definition | null;
     /** The innermost definition whose lines, label line to last line, take in `line`, or null. */
@@ -67,15 +71,25 @@ function textOf(lines: readonly string[]): string {
 
 /** Builds the reading from the facts of a note with `lineCount` lines. */
 function readingOf(facts: FootnoteFacts, lineCount: number): NoteReading {
-    const definitions = [...facts.definitions].sort((a, b) => a.start - b.start || a.labelStart - b.labelStart);
+    // Every caller of the same text gets the same reading, so its lists and
+    // definitions are frozen: a caller that tried to change one would
+    // change it for everyone, and freezing makes such a slip fail at once
+    // instead (spec-document-view-memo-mutation, 2026-09-13).
+    const definitions = Object.freeze(
+        [...facts.definitions]
+            .sort((a, b) => a.start - b.start || a.labelStart - b.labelStart)
+            .map((definition) => Object.freeze({ ...definition, container: Object.freeze(definition.container) })),
+    );
     const labels = new Array<Definition | null>(lineCount).fill(null);
     for (const definition of definitions) labels[definition.start] ??= definition;
     // which definition owns each line, worked out the first time it is asked
     let owners: (Definition | null)[] | null = null;
     return {
         definitions,
+        blocks: Object.freeze(definitions.filter((definition) => definition.movable)),
         references: facts.references,
-        labelLines: labels.map((label) => label !== null),
+        protectedSpans: facts.protectedSpans,
+        labelLines: Object.freeze(labels.map((label) => label !== null)) as boolean[],
         labelOn: (line) => labels[line] ?? null,
         definitionAt(line) {
             if (owners === null) {

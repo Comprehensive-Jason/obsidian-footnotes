@@ -383,11 +383,10 @@ export function verifyLiveFootnoteInsertion(opts: {
 }): InsertionVerdict {
     const ctx = contextOfLines(opts.lines);
     const bodyExtraLines = opts.definitionBodyExtraLines ?? 0;
-    const definitionLive = ctx.blocks().some(
-        (block) =>
-            block.start === opts.definitionLabelLine &&
-            block.end >= opts.definitionLabelLine + bodyExtraLines,
-    );
+    // the new definition must read as one at the top level of the note,
+    // where the plugin writes it, running at least over its seeded body
+    const label = ctx.reading().labelOn(opts.definitionLabelLine);
+    const definitionLive = label !== null && label.movable && label.end >= opts.definitionLabelLine + bodyExtraLines;
     if (!definitionLive) return "dead";
     const starts = ctx.definitionStarts();
     const everyReferenceLive = opts.anchors.every((anchor) =>

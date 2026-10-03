@@ -1,3 +1,4 @@
+// RULED 2026-10-03 by Jason's ruling 1, option a (a definition inside a list item is modelled everywhere, like any other; the runtime swap, step 1): a paste reuses a matching definition the destination holds in a list item. The question below is kept as it was asked.
 import { describe, expect, it } from "vitest";
 
 import { planCarriedPaste } from "../../src/commands/carry-footnotes";
@@ -26,7 +27,7 @@ import { planCarriedPaste } from "../../src/commands/carry-footnotes";
 // 1.
 
 describe("spec question: a paste whose definition the destination holds in a list item", () => {
-    it.fails("a body the destination holds in an in-item definition is reused", () => {
+    it("a body the destination holds in an in-item definition is reused", () => {
         const plan = planCarriedPaste("t[^q]\n\n- [^q]: same", "a[^1]", [{ name: "1", lines: ["[^1]: same"] }]);
         // Today: body "a[^1]", added 1, reused 0.
         expect(plan).toMatchObject({ body: "a[^q]", reused: 1, added: 0 });

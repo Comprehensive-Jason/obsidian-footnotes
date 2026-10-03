@@ -1,4 +1,4 @@
-import { definitionLabelIn, maskProtectedLines } from "./markdown-scan";
+import { maskProtectedLines } from "./markdown-scan";
 
 // The label reader lives over in markdown-scan, beside the block walker
 // that needs it, because markdown-scan sits below this module and so cannot
@@ -17,8 +17,8 @@ export { definitionLabelWithName } from "./markdown-scan";
 
 /**
  * Matches everything SHAPED like a footnote reference, numbered or named.
- * It does not rule out a definition's own label; where the match sits on
- * the line is what decides that, over in footnoteReferenceMatches.
+ * It does not rule out a definition's own label; referenceOccurrences
+ * does that, for a line the note reading says holds one.
  *
  * The /g flag makes this pattern remember where it last matched, so read it
  * with matchAll only. Calling test or exec on it gives a different answer
@@ -39,10 +39,7 @@ export const ExtractNameFromFootnote = /(\[\^)([^[\]]+)(?=\])/;
  *
  * A "[^name]:" in the MIDDLE of a line is not a label. It is a live
  * reference followed by an ordinary colon, which is exactly how Obsidian
- * renders it, so it counts. Only a label at column 0 is a definition.
- * Deciding this by position is the whole point of the function: the old
- * test was a `(?!:)` lookahead inside the pattern, and that also threw away
- * genuine mid-line references that happened to sit before a colon.
+ * renders it, so it counts.
  *
  * Pass the line already masked when protected text must be ignored.
  *
@@ -50,18 +47,17 @@ export const ExtractNameFromFootnote = /(\[\^)([^[\]]+)(?=\])/;
  * typed is kept here; callers fold case only when comparing two names.
  *
  * This is the RAW gate: cheap enough to run on every keystroke. A label
- * behind a blockquote marker still reads as a reference here, and is
- * excluded one level up in referenceOccurrences, which knows where the
- * line's label is.
+ * behind a quote or list marker still reads as a reference here, and is
+ * excluded one level up in referenceOccurrences, which knows whether the
+ * line holds a label.
  */
 export function footnoteReferenceMatches(
     line: string,
     // Pass false when the line's label-shaped start is really LAZY
-    // paragraph text, which definitionStartLines decides. Obsidian renders
-    // that "[^x]" as a live reference, so it must count as one here (second
-    // review, 2026-09-09: excluding it no matter what let orphaned
-    // definition deletion destroy the real definition such a reference
-    // pointed at).
+    // paragraph text. Obsidian renders that "[^x]" as a live reference, so
+    // it must count as one here (second review, 2026-09-09: excluding it no
+    // matter what let orphaned definition deletion destroy the real
+    // definition such a reference pointed at).
     labelIsDefinition = true,
 ): RegExpMatchArray[] {
     const matches: RegExpMatchArray[] = [];
@@ -112,30 +108,45 @@ export interface ReferenceOccurrence {
 export function referenceOccurrences(
     line: string,
     masked: string,
-    // Whether the line's label-shaped start is a real definition, which
-    // definitionStartLines is what decides. A caller already holding those
-    // starts passes its own answer, so a LAZY label's "[^x]" is counted as
-    // the live reference it really is.
+    // Whether the note reading puts a definition's label on this line
+    // (definitionStartLines). A caller holding that answer passes it, so
+    // a LAZY label's "[^x]" is counted as the live reference it really is.
     labelIsDefinition = true,
 ): ReferenceOccurrence[] {
     const occurrences: ReferenceOccurrence[] = [];
     // A line's own definition label defines a footnote; it never references
-    // one. That holds at column 0, which footnoteReferenceMatches already
-    // skips, and behind a blockquote or callout marker, as in
-    // "> [^9]: quoted" (case C22). Reindex used to count a quoted orphaned
-    // definition's label as the first reference and give it number 1
-    // (review A3, 2026-09-08). The exclusion lives here, in the one home of
-    // "every reference on this line", so that no rule can disagree with it.
-    const label = labelIsDefinition ? definitionLabelIn(masked) : null;
-    const labelStart = label ? label.nameStart - 2 : -1;
-    for (const match of footnoteReferenceMatches(masked, labelIsDefinition)) {
+    // one. The label is a "[^name]" with a ":" right after it and nothing
+    // but container syntax before it (labelPrefix). So the one rule covers a
+    // label at the left margin, behind a quote marker ("> [^9]: quoted",
+    // case C22), and after a list marker ("- [^a]: in an item", Jason's
+    // ruling 1, option a, 2026-10-03). Reindex used to count a quoted
+    // orphaned definition's label as the first reference and give it
+    // number 1 (review A3, 2026-09-08), and an in-item label used to keep an
+    // orphan of the same name alive (hunt 2026-10-02, cluster E7). The
+    // exclusion lives here, in the one home of "every reference on this
+    // line", so that no rule can disagree with it.
+    let label = labelIsDefinition;
+    for (const match of footnoteReferenceMatches(masked, false)) {
         const start = match.index ?? 0;
-        if (start === labelStart) continue;
         const end = start + match[0].length;
+        if (label && masked[end] === ":" && LabelPrefix.test(masked.slice(0, start))) {
+            label = false;
+            continue;
+        }
         occurrences.push({ name: line.slice(start + 2, end - 1), start, end });
     }
     return occurrences;
 }
+
+/**
+ * What may come before a definition's label on its line: indentation,
+ * quote markers, and list markers (with a task box after one), then
+ * perhaps a callout's title marker "[!type]", the "%%" that closes a
+ * comment, or the "---" that closes the frontmatter, each of which the note
+ * reading lets a definition follow. A "[^x]:" after anything else is a
+ * reference followed by a colon.
+ */
+const LabelPrefix = /^(?:[ \t]*(?:>|(?:[-+*]|\d{1,9}[.)])(?:[ \t]+\[[ xX]\])?(?=[ \t])))*[ \t]*(?:(?:\[![^\]]*\][+-]?|%%|---)[ \t]*)?$/;
 
 /**
  * The reference whose brackets strictly contain the column `ch`, or null.

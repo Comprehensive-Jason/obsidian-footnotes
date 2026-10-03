@@ -1,19 +1,14 @@
+import { referenceOccurrences } from "../../parsing/footnote-grammar";
 import {
-    definitionLabelWithName,
-    referenceOccurrences,
-} from "../../parsing/footnote-grammar";
-import {
-    DefinitionBlock,
+    definitionCuts,
     DocumentScan,
-    definitionStartLines,
-    findDefinitionBlocks,
     maskProtectedLines,
     normalizeEol,
-    quotedDefinitionEnd,
     removeLineRanges,
     restoreEol,
     scanDocument,
 } from "../../parsing/markdown-scan";
+import { Definition, readNote } from "../../parsing/note-reading";
 import { FootnoteRule } from "../rule";
 
 // Deleting orphaned definitions, as a rule of its own (2026-08-10).
@@ -28,22 +23,26 @@ import { FootnoteRule } from "../rule";
 // another definition's body dies when that one dies, however long the chain
 // gets, and it all happens in ONE call, so the repeat limit in reindex never
 // comes into it. Definitions that reference each other in a ring count as
-// referenced and survive, exactly as they do under reindex. A definition
-// that is never cut (its line holds a "%%" closer) keeps every reference
-// in its body alive: Reading view still shows the footnote such a body
-// cites, so cutting it would orphan a live reference (GLM hunt cycle 9,
-// probed 2026-09-16).
+// referenced and survive, exactly as they do under reindex. Every
+// definition takes part, wherever it sits: at the top level, in a quote or
+// callout, in a list item (Jason's ruling 1, option a, 2026-10-03), or
+// inside another footnote. A definition that is never cut (its label
+// follows other text on its line, such as a "%%" closer or a callout's
+// title) keeps every reference in its body alive: Reading view still shows
+// the footnote such a body cites, so cutting it would orphan a live
+// reference (GLM hunt cycle 9, probed 2026-09-16), and the alert names it
+// instead (ADR 2).
 
 interface ReferenceScan {
-    blocks: DefinitionBlock[];
+    blocks: readonly Definition[];
     /**
      * For each name, lower-cased, how many references to it there are on
-     * lines OUTSIDE every definition block.
+     * lines OUTSIDE every definition.
      */
     liveRefs: Map<string, number>;
     /**
-     * One entry per definition block: the names, lower-cased, that its own
-     * lines reference.
+     * One entry per definition: the names, lower-cased, that its own lines
+     * reference (a line inside a nested definition counts for the innermost).
      */
     blockRefs: string[][];
 }
@@ -51,85 +50,34 @@ interface ReferenceScan {
 function scanReferences(
     lines: string[],
     scan: DocumentScan,
-    // The alerts pass in the masked twin and the definition starts they
-    // have already worked out
+    // The alerts pass in the masked twin they have already worked out
     precomputedMasked?: string[],
-    precomputedStarts?: boolean[],
 ): ReferenceScan {
     // The masked twin is built with the whole note in view: a protected
     // line is nothing but NUL characters, so it matches nothing, and on a
     // line where a comment opens or closes, only the part inside the
     // comment is blanked.
     const maskedLines = precomputedMasked ?? maskProtectedLines(lines, scan);
-    const starts = precomputedStarts ?? definitionStartLines(lines, scan, (i) => maskedLines[i]);
-    const blocks = findDefinitionBlocks(lines, scan, maskedLines, starts);
+    const reading = readNote(lines);
+    const blocks = reading.definitions;
+    const indexOf = new Map(blocks.map((block, i) => [block, i]));
 
-    // Following through on C22 (parallel-review probe, 2026-08-10). A label
-    // inside a blockquote or a callout, "> [^x]: ...", is a REAL
-    // definition. It becomes a block here too, running to the end of its
-    // continuation inside the quote (quotedDefinitionEnd). It used to be a
-    // block one line long, on the belief that a quote has no continuation
-    // lines; Obsidian disagrees, and cutting the label alone left its body
-    // behind as quoted code, whose references died with it, so the next
-    // lint deleted a definition only that body had been citing (Claude
-    // sweep 2026-09-13). Now the body goes with its label, and a
-    // definition only that body cited dies in the same call, exactly as
-    // under a column-0 orphan.
-    //
-    // And no definition label, of either shape, ever counts as a reference.
-    // A label defines a footnote; it does not point at one. Counting labels
-    // as references kept orphaned definitions alive.
-    const labelStartAt = new Array<number>(lines.length).fill(-1);
-    for (let i = 0; i < lines.length; i++) {
-        if (scan.isProtected[i] || !starts[i]) continue;
-        const hit = definitionLabelWithName(lines[i], maskedLines[i]);
-        if (!hit) continue;
-        // The "[^x]" at the head of a real label is not a reference. A LAZY
-        // label's "[^x]" is one, because that is how it renders, and it
-        // does keep the definition it points at alive. So only real
-        // definition starts are recorded here.
-        labelStartAt[i] = hit.label.nameStart - 2;
-        // A label after a "%%" closer defines its footnote, but its line
-        // holds the closer, so it is never a block this rule may cut out:
-        // deleting the line would leave the comment open over the rest of
-        // the note. It is still a block for the ALERT: an orphan the rule
-        // will not delete is named, never passed over in silence (ADR 2;
-        // Kimi hunt cycle 1, 2026-09-16).
-        if (hit.label.quoted) {
-            blocks.push({
-                name: hit.name,
-                start: i,
-                end: hit.label.afterCloser ? i : quotedDefinitionEnd(lines, scan, starts, i),
-                ...(hit.label.afterCloser ? { holdsCloser: true as const } : {}),
-            });
-        }
-    }
-    blocks.sort((a, b) => a.start - b.start);
-
-    const blockAtLine = new Array<number>(lines.length).fill(-1);
-    blocks.forEach((block, i) => {
-        for (let line = block.start; line <= block.end; line++) {
-            blockAtLine[line] = i;
-        }
-    });
-
+    // No definition label ever counts as a reference: a label defines a
+    // footnote, it does not point at one, and counting labels as references
+    // kept orphaned definitions alive. referenceOccurrences leaves a line's
+    // label out when the reading says the line holds one. A LAZY label's
+    // "[^x]" is a reference, because that is how it renders, and it does
+    // keep the definition it points at alive.
     const liveRefs = new Map<string, number>();
     const blockRefs: string[][] = blocks.map(() => []);
     for (let i = 0; i < lines.length; i++) {
-        for (const { name: raw, start } of referenceOccurrences(
-            lines[i],
-            maskedLines[i],
-            starts[i],
-        )) {
-            // A label at the left margin is already left out by
-            // footnoteReferenceMatches. One inside a blockquote looks like
-            // an ordinary mid-line reference, so it is skipped here.
-            if (start === labelStartAt[i]) continue;
+        const owner = reading.definitionAt(i);
+        for (const { name: raw } of referenceOccurrences(lines[i], maskedLines[i], reading.labelLines[i])) {
             const name = raw.toLowerCase();
-            if (blockAtLine[i] === -1) {
+            if (owner === null) {
                 liveRefs.set(name, (liveRefs.get(name) ?? 0) + 1);
             } else {
-                blockRefs[blockAtLine[i]].push(name);
+                blockRefs[indexOf.get(owner) ?? 0].push(name);
             }
         }
     }
@@ -148,7 +96,7 @@ function scanReferences(
  * This always finishes, because every round but the last removes at least
  * one block.
  */
-function orphanedBlocks(referenceScan: ReferenceScan): DefinitionBlock[] {
+function orphanedBlocks(referenceScan: ReferenceScan): Definition[] {
     const { blocks, liveRefs, blockRefs } = referenceScan;
     const refCount = new Map(liveRefs);
     for (const refs of blockRefs) {
@@ -162,8 +110,8 @@ function orphanedBlocks(referenceScan: ReferenceScan): DefinitionBlock[] {
         changed = false;
         for (const i of [...alive]) {
             if ((refCount.get(blocks[i].name.toLowerCase()) ?? 0) > 0) continue;
-            // a block the rule never cuts stays, references and all
-            if (blocks[i].holdsCloser) continue;
+            // a definition the rule never cuts stays, references and all
+            if (!blocks[i].removable) continue;
             alive.delete(i);
             for (const name of blockRefs[i]) {
                 refCount.set(name, (refCount.get(name) ?? 0) - 1);
@@ -189,19 +137,14 @@ export function orphanedFootnoteDefinitionNames(
     // The alerts all share ONE pass of normalizing the line endings and
     // scanning the note, done once and handed round (2026-08-11 review, a
     // speed fix). Anything calling this on its own leaves it out.
-    precomputed?: { lines: string[]; scan: DocumentScan; masked?: string[]; starts?: boolean[] },
+    precomputed?: { lines: string[]; scan: DocumentScan; masked?: string[] },
 ): string[] {
     // No "[^" anywhere in the note means no definitions, and so no
     // orphaned ones. Worth checking first, because this runs on every
     // single lint (speed fix F4).
     if (!markdown.includes("[^")) return [];
     const lines = precomputed?.lines ?? normalizeEol(markdown).text.split("\n");
-    const referenceScan = scanReferences(
-        lines,
-        precomputed?.scan ?? scanDocument(lines),
-        precomputed?.masked,
-        precomputed?.starts,
-    );
+    const referenceScan = scanReferences(lines, precomputed?.scan ?? scanDocument(lines), precomputed?.masked);
     const referenced = new Set(referenceScan.liveRefs.keys());
     for (const refs of referenceScan.blockRefs) {
         for (const name of refs) referenced.add(name);
@@ -225,13 +168,22 @@ export function orphanedFootnoteDefinitionNames(
  * routes to deleting orphaned definitions always agree, however long the
  * chain.
  */
-export function orphanedDefinitionBlocks(
-    lines: string[],
-    scan: DocumentScan,
-): DefinitionBlock[] {
-    // a definition whose line holds a comment closer is reported by the
-    // alert but never cut (see scanReferences)
-    return orphanedBlocks(scanReferences(lines, scan)).filter((block) => !block.holdsCloser);
+export function orphanedDefinitionBlocks(lines: string[], scan: DocumentScan): Definition[] {
+    // a definition that is not removable is reported by the alert but
+    // never cut, and orphanedBlocks already keeps it alive
+    return orphanedBlocks(scanReferences(lines, scan));
+}
+
+/**
+ * `lines` with `dead` cut out (definitionCuts, removeLineRanges), or null
+ * when the cut would change how Obsidian reads a line it keeps
+ * (linesReadDifferently). `scan` is the scan of `lines`.
+ */
+function cutDefinitionsIfClean(lines: string[], scan: DocumentScan, dead: readonly Definition[]): string[] | null {
+    const cut = definitionCuts(lines, dead);
+    const out = removeLineRanges(cut.lines, cut.ranges);
+    const cutScan = cut.lines === lines ? scan : scanDocument(cut.lines);
+    return linesReadDifferently(cut.lines, cutScan, cut.ranges, out) ? null : out;
 }
 
 /**
@@ -263,16 +215,10 @@ export function removeOrphanedFootnoteDefinitions(markdown: string): string {
     for (;;) {
         const dead = orphanedDefinitionBlocks(current, currentScan);
         if (dead.length === 0) break;
-        const whole = removeLineRanges(current, dead);
-        let next: string[] | null = linesReadDifferently(current, currentScan, dead, whole) ? null : whole;
-        if (next === null) {
-            for (const block of dead) {
-                const one = removeLineRanges(current, [block]);
-                if (!linesReadDifferently(current, currentScan, [block], one)) {
-                    next = one;
-                    break;
-                }
-            }
+        let next = cutDefinitionsIfClean(current, currentScan, dead);
+        for (const block of dead) {
+            if (next !== null) break;
+            next = cutDefinitionsIfClean(current, currentScan, [block]);
         }
         if (next === null) break;
         current = next;
@@ -294,14 +240,12 @@ export function removeOrphanedFootnoteDefinitions(markdown: string): string {
 export function linesReadDifferently(
     lines: string[],
     scan: DocumentScan,
-    dead: DefinitionBlock[],
+    dead: readonly { start: number; end: number }[],
     out: string[],
 ): boolean {
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+    const starts = readNote(lines).labelLines;
     const scanAfter = scanDocument(out);
-    const maskedAfter = maskProtectedLines(out, scanAfter);
-    const startsAfter = definitionStartLines(out, scanAfter, (i) => maskedAfter[i]);
+    const startsAfter = readNote(out).labelLines;
     const cut = new Set<number>();
     for (const block of dead) for (let i = block.start; i <= block.end; i++) cut.add(i);
     let j = 0;

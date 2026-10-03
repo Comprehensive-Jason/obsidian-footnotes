@@ -18,7 +18,7 @@ const doc = ["Prose[^1] here.", "", "[^1]: the definition", "    continued", "",
 
 /** Runs `rule` on `text` inside the current composition and hands back what it saw. */
 function view(text: string, rule?: (v: Parameters<Parameters<typeof rewriteDocument>[1]>[1]) => string) {
-    const seen: { scan: DocumentScan; blocks: { name: string; start: number; end: number }[] }[] = [];
+    const seen: { scan: DocumentScan; blocks: readonly { name: string; start: number; end: number }[] }[] = [];
     const out = rewriteDocument(text, (inner, v) => {
         const result = rule ? rule(v) : inner;
         seen.push({ scan: v.scan, blocks: v.blocks });
@@ -69,7 +69,7 @@ describe("the rewriteDocument memo", () => {
             });
             expect(trimmed.scan).not.toBe(first.scan);
             expect(trimmed.scan.isProtected).toHaveLength(4);
-            expect(trimmed.blocks).toEqual([{ name: "1", start: 2, end: 3 }]);
+            expect(trimmed.blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([{ name: "1", start: 2, end: 3 }]);
             // a third view for the same text must not inherit the trimmed
             // pieces; it gets the untrimmed ones the first view published
             const third = view(text);
@@ -88,7 +88,7 @@ describe("the rewriteDocument memo", () => {
                 return v.lines.join("\n");
             });
             expect(second.scan).toBe(first.scan);
-            expect(second.blocks).toEqual([{ name: "1", start: 2, end: 3 }]);
+            expect(second.blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([{ name: "1", start: 2, end: 3 }]);
             return text;
         });
     });

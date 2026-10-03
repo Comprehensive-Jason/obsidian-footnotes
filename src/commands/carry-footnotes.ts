@@ -1,18 +1,10 @@
 import { EditorPosition } from "obsidian";
 
 import { positionAfterRewrite } from "../editor/document-diff";
-import { definitionLabelWithName, referenceOccurrences } from "../parsing/footnote-grammar";
+import { referenceOccurrences } from "../parsing/footnote-grammar";
 import { orphanedDefinitionBlocks } from "../linting/rules/remove-orphaned-definitions";
-import {
-    allDefinitionBlocks,
-    DefinitionBlock,
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    normalizeEol,
-    removeLineRanges,
-    scanDocument,
-} from "../parsing/markdown-scan";
+import { definitionCuts, maskProtectedLines, normalizeEol, removeLineRanges, scanDocument } from "../parsing/markdown-scan";
+import { Definition, readNote } from "../parsing/note-reading";
 
 // Carrying footnote definitions along on copy, cut, and paste (issue #59;
 // Jason's rulings 2026-09-21 and 2026-09-22).
@@ -29,7 +21,13 @@ import {
 // clipboard text that carries definition lines is split back apart. The
 // editor-side hooks live in carry-footnotes-hooks.ts.
 
-/** One definition block to carry: its name as written, and its lines exactly as they stand in the source note, continuation lines included. */
+/**
+ * One definition block to carry: its name as written, and its lines exactly
+ * as they stand in the source note, continuation lines included. A
+ * definition in a quote or a list item travels with its quote or list
+ * markers, as it stands (Jason's ruling 1, option a, 2026-10-03, made it
+ * carriable; how it should land at the destination is open for Jason).
+ */
 export interface CarriedDefinition {
     name: string;
     lines: string[];
@@ -38,7 +36,7 @@ export interface CarriedDefinition {
 export interface CarriedDefinitions {
     /** the blocks the selection needs, in the order their references are first met */
     carried: CarriedDefinition[];
-    /** the names referenced inside the selection (or inside a carried body) that have no definition to carry: an orphan, a lazy label, or a definition inside a list item, which the plugin does not model; spelled as first seen, each once */
+    /** the names referenced inside the selection (or inside a carried body) that have no definition to carry: an orphan or a lazy label; spelled as first seen, each once */
     missing: string[];
 }
 
@@ -61,7 +59,7 @@ export function carriedDefinitions(markdown: string, from: EditorPosition, to: E
 }
 
 /** A block as the clipboard carries it: its name and its lines exactly as they stand. */
-function asCarried(lines: string[], block: DefinitionBlock): CarriedDefinition {
+function asCarried(lines: string[], block: Definition): CarriedDefinition {
     return { name: block.name, lines: lines.slice(block.start, block.end + 1) };
 }
 
@@ -85,51 +83,37 @@ function selectionHolds(from: EditorPosition, to: EditorPosition, line: number, 
  * order the copy meets them, in the note's own line numbers, and the
  * names that have nothing to carry.
  */
-function carriedBlocks(lines: string[], from: EditorPosition, to: EditorPosition): { blocks: DefinitionBlock[]; missing: string[] } {
+function carriedBlocks(lines: string[], from: EditorPosition, to: EditorPosition): { blocks: Definition[]; missing: string[] } {
     const scan = scanDocument(lines);
     const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+    const reading = readNote(lines);
+    const starts = reading.labelLines;
 
-    // every definition block the note has: column-0 blocks, and quoted
-    // ones with the quoted continuation Obsidian gives them. An in-item
-    // definition is recognised but has no modelled extent, so it is a
-    // name with nothing to carry. The blocks go by lower-cased name in
-    // document order, quoted and column-0 ones sorted together, so "the
-    // last definition of a name" is the last in the note whatever its
-    // shape (hunt 2026-10-02, pin bug-carry-quoted-duplicate-first: the
-    // quoted ones used to be listed after all the others, so a quoted
-    // first duplicate won).
-    const blocksOf = new Map<string, DefinitionBlock[]>();
-    for (const block of allDefinitionBlocks(lines, scan, masked, starts)) {
+    // every definition the note has, wherever it sits (Jason's ruling 1,
+    // option a, 2026-10-03: one in a list item is carried too), by
+    // lower-cased name in document order, so "the last definition of a
+    // name" is the last in the note whatever its shape (hunt 2026-10-02,
+    // pin bug-carry-quoted-duplicate-first: the quoted ones used to be
+    // listed after all the others, so a quoted first duplicate won)
+    const blocksOf = new Map<string, Definition[]>();
+    for (const block of reading.definitions) {
         const folded = block.name.toLowerCase();
         blocksOf.set(folded, [...(blocksOf.get(folded) ?? []), block]);
     }
 
-    // the references inside a block's lines, skipping the reference-shaped
-    // head of a quoted label (a label defines, it does not point)
-    const referencesOn = (line: number): string[] => {
-        if (scan.isProtected[line] || !lines[line].includes("[^")) return [];
-        const label = starts[line] ? definitionLabelWithName(lines[line], masked[line]) : null;
-        const labelStart = label ? label.label.nameStart - 2 : -1;
-        return referenceOccurrences(lines[line], masked[line], starts[line])
-            .filter((occurrence) => occurrence.start !== labelStart)
-            .map((occurrence) => occurrence.name);
-    };
-    // the references the selection holds whole, in order, skipping labels
-    // the same way
+    // the references on a line; a label defines, it does not point, and
+    // referenceOccurrences leaves a definition's own label out
+    const referencesOn = (line: number) =>
+        scan.isProtected[line] || !lines[line].includes("[^") ? [] : referenceOccurrences(lines[line], masked[line], starts[line]);
+    // the references the selection holds whole, in order
     const queue: string[] = [];
     for (let line = from.line; line <= to.line && line < lines.length; line++) {
-        if (scan.isProtected[line] || !lines[line].includes("[^")) continue;
-        const label = starts[line] ? definitionLabelWithName(lines[line], masked[line]) : null;
-        const labelStart = label ? label.label.nameStart - 2 : -1;
-        for (const occurrence of referenceOccurrences(lines[line], masked[line], starts[line])) {
-            if (occurrence.start === labelStart) continue;
+        for (const occurrence of referencesOn(line)) {
             if (selectionHolds(from, to, line, occurrence.start, occurrence.end)) queue.push(occurrence.name);
         }
     }
 
-    const carried: DefinitionBlock[] = [];
-    const missing: string[] = [];
+    const carried: Definition[] = [];    const missing: string[] = [];
     const seen = new Set<string>();
     while (queue.length > 0) {
         const name = queue.shift() as string;
@@ -150,14 +134,13 @@ function carriedBlocks(lines: string[], from: EditorPosition, to: EditorPosition
         // middle of the definition's text, carries the definition whole
         // (hunt 2026-10-02, pins bug-carry-line-selection-boundary and
         // spec-carry-label-head-selection).
-        const label = definitionLabelWithName(lines[block.start], masked[block.start]);
-        if (label && selectionHolds(from, to, block.start, label.label.nameStart - 2, label.label.nameEnd + 2)) continue;
+        if (selectionHolds(from, to, block.start, block.labelStart, block.labelEnd)) continue;
         carried.push(block);
         // and the references inside its body need their own definitions,
         // met right after it, as a reader meets them (preorder), before
         // the selection's later references
         const inner: string[] = [];
-        for (let line = block.start; line <= block.end; line++) inner.push(...referencesOn(line));
+        for (let line = block.start; line <= block.end; line++) inner.push(...referencesOn(line).map((occurrence) => occurrence.name));
         queue.unshift(...inner);
     }
     return { blocks: carried, missing };
@@ -194,16 +177,19 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     const lines = normalizeEol(destination).text.split("\n");
     const scan = scanDocument(lines);
     const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+    const reading = readNote(lines);
+    const starts = reading.labelLines;
 
     // what the destination holds: every name in use (definitions and
     // references, folded), and every definition body by its normalised
-    // text, the last block of a name winning as it does in Obsidian
+    // text, wherever the definition sits (a list item's included: hunt
+    // 2026-10-02, pin spec-carry-paste-reuse-in-item-definition), the last
+    // definition of a name winning as it does in Obsidian
     const taken = new Set<string>();
     const bodies = new Map<string, string>();
-    for (const block of allDefinitionBlocks(lines, scan, masked, starts)) {
+    for (const block of reading.definitions) {
         taken.add(block.name.toLowerCase());
-        bodies.set(normalisedBody(lines.slice(block.start, block.end + 1)), block.name);
+        bodies.set(normalisedBody(lines.slice(block.start, block.end + 1), block.labelEnd), block.name);
     }
     for (let i = 0; i < lines.length; i++) {
         if (scan.isProtected[i] || !lines[i].includes("[^")) continue;
@@ -256,15 +242,13 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     const rename = (text: string[]): string[] => {
         const textScan = scanDocument(text);
         const textMasked = maskProtectedLines(text, textScan);
-        const textStarts = definitionStartLines(text, textScan, (i) => textMasked[i]);
+        const textReading = readNote(text);
         return text.map((line, i) => {
             if (textScan.isProtected[i] || !line.includes("[^")) return line;
             const edits: { start: number; end: number; name: string }[] = [];
-            const label = textStarts[i] ? definitionLabelWithName(line, textMasked[i]) : null;
-            const labelStart = label ? label.label.nameStart - 2 : -1;
-            if (label) edits.push({ start: label.label.nameStart, end: label.label.nameEnd, name: label.name });
-            for (const occurrence of referenceOccurrences(line, textMasked[i], textStarts[i])) {
-                if (occurrence.start === labelStart) continue;
+            const label = textReading.labelOn(i);
+            if (label) edits.push({ start: label.labelStart + 2, end: label.labelEnd - 2, name: label.name });
+            for (const occurrence of referenceOccurrences(line, textMasked[i], textReading.labelLines[i])) {
                 edits.push({ start: occurrence.start + 2, end: occurrence.end - 1, name: occurrence.name });
             }
             return edits
@@ -310,10 +294,8 @@ export function withCarriedText(body: string, carried: CarriedDefinition[]): str
  */
 export function splitCarriedText(text: string): { body: string; carried: CarriedDefinition[] } {
     const lines = normalizeEol(text).text.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    const blocks = findDefinitionBlocks(lines, scan, masked, starts);
+    // the definitions at the top level of the text, the ones withCarriedText appends
+    const blocks = readNote(lines).blocks;
     const byEnd = new Map(blocks.map((block) => [block.end, block]));
     let cut = lines.length;
     for (;;) {
@@ -402,8 +384,12 @@ export function planCut(
             .filter((block) => !wasOrphan.has(block.name.toLowerCase()))
             .map((block) => block.start),
     );
-    const removed = blocks.filter((block) => leftWhole(lines, from, to, block) && orphanedAt.has(moved(block.start)));
-    const kept = removeLineRanges(joined, removed.map((block) => ({ start: moved(block.start), end: moved(block.end) })));
+    const removed = blocks.filter((block) => leftWhole(lines, from, to, block) && orphanedAt.has(moved(block.start)) && block.removable);
+    const cut = definitionCuts(
+        joined,
+        removed.map((block) => ({ ...block, start: moved(block.start), end: moved(block.end) })),
+    );
+    const kept = removeLineRanges(cut.lines, cut.ranges);
     const text = tidy(kept.join("\n"));
     return { carried, missing, text, caret: positionAfterRewrite(joinedText, text, from), removed: removed.length };
 }
@@ -422,17 +408,19 @@ export function planCut(
  * bug-carry-line-selection-boundary). Any other block shares a line with
  * text the cut is not taking, and keeps its lines.
  */
-function leftWhole(lines: string[], from: EditorPosition, to: EditorPosition, block: DefinitionBlock): boolean {
+function leftWhole(lines: string[], from: EditorPosition, to: EditorPosition, block: Definition): boolean {
     if (block.end < from.line || block.start > to.line) return true;
     if (block.end === from.line && from.ch === lines[from.line].length && to.ch === lines[to.line].length) return true;
     return block.start === to.line && to.ch === 0 && from.ch === 0;
 }
 
-/** A definition block's body with the label stripped and whitespace collapsed, the key two definitions are compared by. */
-function normalisedBody(blockLines: string[]): string {
-    const scan = scanDocument(blockLines);
-    const masked = maskProtectedLines(blockLines, scan);
-    const label = definitionLabelWithName(blockLines[0], masked[0]);
-    const first = label ? blockLines[0].slice(label.label.labelEnd) : blockLines[0];
+/**
+ * A definition block's body with the label stripped and whitespace
+ * collapsed, the key two definitions are compared by. `labelEnd` is where
+ * the label ends on the first line; without it, the block is read on its
+ * own to find out (a carried block, as the clipboard holds it).
+ */
+function normalisedBody(blockLines: string[], labelEnd = readNote(blockLines).labelOn(0)?.labelEnd ?? 0): string {
+    const first = blockLines[0].slice(labelEnd);
     return [first, ...blockLines.slice(1)].join("\n").replace(/\s+/g, " ").trim();
 }

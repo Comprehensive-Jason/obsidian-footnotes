@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { inItemDefinitionLabels } from "../../src/parsing/list-item-definitions";
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+import { inItemDefinitionLabels } from "../helpers/in-item";
 import { orphanedFootnoteReferenceNames } from "../../src/linting/rules/remove-orphaned-references";
 
 // BUG (wrong output): the reader for list-item definitions counts two
@@ -22,27 +21,26 @@ import { orphanedFootnoteReferenceNames } from "../../src/linting/rules/remove-o
 // interrupt a paragraph) and the ground truth of 2026-09-09 (a label
 // inside a "%%" block comment is dead).
 //
+// Fixed by the runtime swap (2026-10-03): the note reading decides where
+// list items are, as Obsidian does, so neither line is a definition.
+//
 // Cause: inItemDefinitionLabels looks for a list marker on the line
 // without asking whether a list item can open there, or whether the line
 // is inside a comment.
 
 // The list-item definitions the reader finds in `doc`.
 function inItem(doc: string) {
-    const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return inItemDefinitionLabels(lines, scan, masked, starts);
+    return inItemDefinitionLabels(doc.split("\n"));
 }
 
 describe("in-item labels where no list item can be", () => {
-    it.fails("'2. [^x]: def' under prose is lazy paragraph text (2. does not interrupt), not an in-item definition", () => {
+    it("'2. [^x]: def' under prose is lazy paragraph text (2. does not interrupt), not an in-item definition", () => {
         const doc = "para\n2. [^x]: def\n\nuse[^x]";
         expect(inItem(doc)).toEqual([]);
         expect(orphanedFootnoteReferenceNames(doc)).toContain("x");
     });
 
-    it.fails("'- [^8]: x' inside a %% block is not an in-item definition", () => {
+    it("'- [^8]: x' inside a %% block is not an in-item definition", () => {
         expect(inItem("%%\n- [^8]: commented out\n%%\n\nuse[^8]")).toEqual([]);
     });
 });

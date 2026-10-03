@@ -76,7 +76,7 @@ beforeEach(() => {
 });
 
 describe("spec question: a cut whose orphan removal would turn a lazy label into a real definition", () => {
-    it.fails("a cut whose orphan removal would turn a lazy label below into a real definition leaves the lazy label's reading alone", () => {
+    it("a cut whose orphan removal would turn a lazy label below into a real definition leaves the lazy label's reading alone", () => {
         const r = cut(["a[^4] b", "", "para", "===", "[^4]: x $$", "$$ tail", "[^3]: y"], { line: 0, ch: 0 }, { line: 0, ch: 6 });
         expect(r.lines).toContain("$$ tail");
     });

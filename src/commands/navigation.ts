@@ -1,4 +1,3 @@
-import { inItemDefinitionLabels } from "../parsing/list-item-definitions";
 import { Editor, EditorPosition } from "obsidian";
 
 import type FootnotePlugin from "../main";
@@ -15,7 +14,6 @@ import {
     referenceOccurrences,
 } from "../parsing/footnote-grammar";
 import { openFootnotePopup, popupEditingAvailable } from "./footnote-popup";
-import { definitionLabelIn, quotedDefinitionLabelAbove } from "../parsing/markdown-scan";
 
 import { addReferenceOrDeleteDefinition, showNotice } from "../editor/notice";
 // The jump half of the decision cascade. From a definition it jumps to the
@@ -34,82 +32,42 @@ export function shouldJumpFromDefinitionToReference(
     doc: Editor,
     ctx?: DocContext,
 ): boolean {
-    // work out whether the caret is on a definition line ("[^1]: footnote")
-    // or on one of its continuation lines. If it is, jump back to the
-    // footnote's reference in the text.
-
-    // a cheap check on the raw line first. The whole-document scanning below
-    // only runs when the caret sits on something definition-shaped: the
-    // "[^x]:" line itself, or an indented line that MIGHT be a continuation
-    // line. That second case matters because jumping to a definition parks
-    // the caret on the LAST continuation line on purpose, and pressing the
-    // hotkey there used to insert a new footnote instead of jumping back
-    // (bug reported 2026-07-17).
-    // A quoted line ("> cont line") may be a quoted definition's
-    // continuation, so it passes the cheap check too (Kimi and Claude sweeps
-    // 2026-09-13: a press at the end of such a line nested a footnote).
-    if (
-        definitionLabelIn(lineText) === null &&
-        !/^\s+\S/.test(lineText) &&
-        !/^ {0,3}>/.test(lineText)
-    ) {
-        return false;
-    }
+    // work out whether the caret is inside a definition: its label line or
+    // any line of its body, wherever the definition sits (at the top level,
+    // in a quote or callout, or in a list item: Jason's ruling 1, option a,
+    // 2026-10-03). If it is, jump back to the footnote's reference in the
+    // text. That matters on the definition's last line above all, because
+    // jumping to a definition parks the caret there on purpose, and
+    // pressing the hotkey there used to insert a new footnote instead of
+    // jumping back (bug reported 2026-07-17).
+    //
+    // A blank line carries nothing to jump from. Inside a definition the
+    // press refuses there instead (warnDefinitionCaretIfInside, GLM sweep
+    // 2026-09-13), and anywhere else it creates as usual.
+    if (lineText.trim() === "") return false;
 
     // #41: a "[^x]:" inside a code block is not a definition, and a
-    // reference inside code is not somewhere to jump to. So look the
-    // definition up in blocks that know about protected text, and scan the
-    // masked twin (the copy of the note with protected text blanked out).
-    // This reading of the document is only built once past the raw-line
-    // check above, which exists because this runs on every press
-    // (perf F1/F8).
+    // reference inside code is not somewhere to jump to. The note reading
+    // knows both, and the press builds it anyway for its guards.
     ctx ??= docContext(doc);
     const lines = ctx.lines;
-    // the single scan for protected text that this press makes feeds both
-    // the block lookup and the masking
-    const block = ctx.blocks().find(
-        (candidate) =>
-            cursorPosition.line >= candidate.start &&
-            cursorPosition.line <= candidate.end,
-    );
-    let definitionName: string | null = null;
+    const line = cursorPosition.line;
+    let definitionName: string | null = ctx.reading().definitionAt(line)?.name ?? null;
     // the line whose own "[^x]" must not count as the reference to jump
     // to: a lazy label's, since its label reads as a reference
     let ownLabelLine = -1;
-    if (block) {
-        definitionName = block.name;
-    } else {
-        // a label inside a blockquote or callout ("> [^x]: …", C22) is a
-        // definition too, but it never belongs to a definition BLOCK, which
-        // only forms at the start of a line. Match against the caret line's
-        // masked twin instead.
-        const hit = definitionLabelWithName(
-            lineText,
-            ctx.maskedLine(cursorPosition.line),
-        );
-        const line = cursorPosition.line;
-        if (hit?.label.quoted && ctx.definitionStarts()[line]) {
-            definitionName = hit.name;
-        } else if (
-            hit &&
-            !ctx.definitionStarts()[line] &&
-            !ctx.scan.isProtected[line] &&
-            !ctx.scan.inCommentBlock[line]
-        ) {
-            // A LAZY label: a "[^x]:" line directly under prose, which
-            // Obsidian reads as paragraph text. The user almost certainly
-            // meant a definition and lost the blank line, so a press here
-            // behaves as on a real definition label: it jumps to the
-            // footnote's reference in the text, and never inserts (Jason's
-            // ruling, 2026-09-15). Its own "[^x]" is a live reference to
-            // Obsidian, so the search below skips this line.
+    if (definitionName === null) {
+        // A LAZY label: a "[^x]:" line directly under prose, which
+        // Obsidian reads as paragraph text. The user almost certainly
+        // meant a definition and lost the blank line, so a press here
+        // behaves as on a real definition label: it jumps to the
+        // footnote's reference in the text, and never inserts (Jason's
+        // ruling, 2026-09-15). Its own "[^x]" is a live reference to
+        // Obsidian, so the search below skips this line.
+        const hit = definitionLabelWithName(lineText, ctx.maskedLine(line));
+        if (hit && !ctx.scan.isProtected[line] && !ctx.scan.inCommentBlock[line]) {
             definitionName = hit.name;
             ownLabelLine = line;
-        } else if (!hit && /^ {0,3}>/.test(lineText)) {
-            // a quoted definition's continuation line: the quoted label
-            // above it, reached through unbroken quoted lines at the same
-            // depth, owns this line
-            definitionName = quotedDefinitionAbove(ctx, line);
         }
     }
     if (definitionName !== null) {
@@ -150,30 +108,6 @@ export function shouldJumpFromDefinitionToReference(
     return false;
 }
 
-/**
- * The name of the quoted definition whose continuation the quoted line
- * `line` is, or null. Walking up from the line, every line must carry the
- * same number of ">" markers and hold text: a blank quote line or a change
- * of depth ends the definition (Obsidian's Reading view, 2026-09-16: "> [^1]:
- * quoted" then "> cont line" renders as one footnote).
- */
-function quotedDefinitionAbove(ctx: DocContext, line: number): string | null {
-    // the one reading of a quoted definition's extent, shared with the
-    // orphan rules and the nesting guards: a blank quote line followed by
-    // an indented quoted line is still inside the definition (Kimi hunt
-    // cycle 1, 2026-09-16: the old walk stopped at the blank line and the
-    // press nested a footnote into the body)
-    const at = quotedDefinitionLabelAbove(
-        ctx.lines,
-        ctx.scan,
-        ctx.definitionStarts(),
-        (j) => ctx.maskedLine(j),
-        line,
-    );
-    if (at < 0) return null;
-    return definitionLabelWithName(ctx.lines[at], ctx.maskedLine(at))?.name ?? null;
-}
-
 /** Move the caret to the end of the named footnote's definition, counting its indented continuation lines as part of it. */
 export function jumpToFootnoteDefinition(
     footnoteName: string,
@@ -182,49 +116,25 @@ export function jumpToFootnoteDefinition(
     doc: Editor,
     ctx: DocContext = docContext(doc),
 ): boolean {
-    // find the LAST line carrying this definition label. When a note has
-    // duplicate definitions, Obsidian renders only the last of them
-    // (ground-truthed 2026-08-12), so jumping to an earlier one would land
-    // the user on text nobody sees. The matching runs on the masked twin
-    // (the copy of the note with protected text blanked out) so that
-    // definition-shaped lines inside code do not count (#41). Labels inside
-    // a blockquote or callout do count (C22).
-    const lines = ctx.lines;
-    const masked = ctx.maskedLines();
-    const starts = ctx.definitionStarts();
-    let labelLine = -1;
-    for (let i = 0; i < masked.length; i++) {
-        if (!starts[i]) continue;
-        // names ignore case: the definition's label may be cased differently
-        // from the reference name that sent us here
-        const hit = definitionLabelWithName(lines[i], masked[i]);
-        if (hit && hit.name.toLowerCase() === footnoteName.toLowerCase()) {
-            labelLine = i;
-        }
-    }
-    // a definition inside a list item is a landing too, its own line
-    // only, since it never forms a block (Jason's ruling 1, 2026-09-20)
-    for (const hit of inItemDefinitionLabels(lines, ctx.scan, masked, starts)) {
-        if (hit.name.toLowerCase() === footnoteName.toLowerCase() && hit.line > labelLine) {
-            labelLine = hit.line;
-        }
-    }
-    if (labelLine !== -1) {
-        // land at the END of the definition, continuation lines included,
-        // so the user can backspace or type without reaching for the arrow
-        // keys. How far the definition block reaches comes from
-        // findDefinitionBlocks itself. A walk written by hand here stopped
-        // at runs of blank lines and inside regions the block walk absorbs,
-        // which left the caret in the middle of a definition (2026-08-11
-        // review bug #12). A label in a blockquote never belongs to a
-        // block, so its own line is where the caret lands.
-        const block = ctx.blocks().find((candidate) => candidate.start === labelLine);
-        const endLine = block ? block.end : labelLine;
-        const newCursorPos = { line: endLine, ch: doc.getLine(endLine).length };
-        moveCursorAndSetJumpPoint(doc, cursorPosition, newCursorPos, plugin, undefined, true);
-        return true;
-    }
-    return false;
+    // find the LAST definition of this name. When a note has duplicate
+    // definitions, Obsidian renders only the last of them (ground-truthed
+    // 2026-08-12), so jumping to an earlier one would land the user on text
+    // nobody sees. The note reading leaves out definition-shaped lines
+    // inside code (#41) and counts a definition wherever it sits: in a
+    // blockquote or callout (C22) or in a list item (Jason's ruling 1,
+    // option a, 2026-10-03). Names ignore case: the definition's label may
+    // be cased differently from the reference name that sent us here.
+    const folded = footnoteName.toLowerCase();
+    const target = ctx.reading().definitions.filter((definition) => definition.name.toLowerCase() === folded).at(-1);
+    if (target === undefined) return false;
+    // land at the END of the definition, continuation lines included, so
+    // the user can backspace or type without reaching for the arrow keys.
+    // A walk written by hand here once stopped at runs of blank lines and
+    // inside regions the definition owns, which left the caret in the
+    // middle of a definition (2026-08-11 review bug #12).
+    const newCursorPos = { line: target.end, ch: doc.getLine(target.end).length };
+    moveCursorAndSetJumpPoint(doc, cursorPosition, newCursorPos, plugin, undefined, true);
+    return true;
 }
 
 /** Cascade step 2: with the caret on a reference that HAS a definition, open the popup editor on it when that setting is on, or else jump to it. A reference with no definition returns false, so the creation step runs instead. */

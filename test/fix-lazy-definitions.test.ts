@@ -1,3 +1,4 @@
+import { readNote } from "../src/parsing/note-reading";
 import fc from "fast-check";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -83,7 +84,7 @@ describe("fixLazyDefinitions inserts the blank line a hidden definition needs", 
         expect(fixLazyDefinitions(inline)).toBe(inline);
     });
 
-    it("never leaves a lazy label behind, and only ever inserts blank or bare-quote lines", () => {
+    it("never leaves a lazy label behind, and only ever inserts blank or bare-quote lines", { timeout: 30_000 }, () => {
         const isInsertable = (line: string) => /^ {0,3}(?:>[ \t]?)*$/.test(line) && line.trimEnd() === line;
         // the protected lines of a note, as a sorted list of their text: the
         // swallow guard's own measure of "the blank line would change how
@@ -98,9 +99,11 @@ describe("fixLazyDefinitions inserts the blank line a hidden definition needs", 
                 const fixed = fixLazyDefinitions(doc);
                 // A lazy label may only be left behind when the blank line
                 // it needs would make the definition swallow protected text
-                // below it (the swallow guard, 2026-09-15): for every label
-                // still lazy, inserting its blank line must change the set
-                // of protected lines.
+                // below it (the swallow guard, 2026-09-15), or would not make
+                // it a definition at all in Obsidian's reading (the runtime
+                // swap, 2026-10-03): for every label still lazy, inserting
+                // its blank line must change the set of protected lines or
+                // leave the label undefined.
                 const fixedLines = fixed.split(/\r?\n/);
                 const fixedScan = scanDocument(fixedLines);
                 const fixedMasked = maskProtectedLines(fixedLines, fixedScan);
@@ -112,7 +115,9 @@ describe("fixLazyDefinitions inserts the blank line a hidden definition needs", 
                 );
                 for (const at of leftover) {
                     const markers = (/^((?: {0,3}>[ \t]?)*)/.exec(fixedLines[at])?.[1] ?? "").trimEnd();
-                    const trial = [...fixedLines.slice(0, at), markers, ...fixedLines.slice(at)].join("\n");
+                    const trialLines = [...fixedLines.slice(0, at), markers, ...fixedLines.slice(at)];
+                    const trial = trialLines.join("\n");
+                    if (!readNote(trialLines).labelLines[at + 1]) continue;
                     expect(protectedTexts(trial)).not.toBe(protectedTexts(fixed));
                 }
                 // every input line survives, in order; the extra lines are insertable

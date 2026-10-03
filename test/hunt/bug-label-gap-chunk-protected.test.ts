@@ -85,7 +85,11 @@ describe("an indented chunk after a definition's blank gap, under a label that o
         expect(scan.isProtected).toEqual([false, false, false, true]);
         const masked = maskProtectedLines(lines, scan);
         const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-        expect(findDefinitionBlocks(lines, scan, masked, starts).map((b) => [b.start, b.end])).toEqual([[1, 1]]);
+        // "[^2]: body" is a lazy line of the quote, so the note reading puts
+        // footnote 2 inside the quote with footnote 1: neither is a block
+        // that moves (Jason's ruling 1, option a, 2026-10-03), so nothing
+        // can carry the chunk away
+        expect(findDefinitionBlocks(lines, scan, masked, starts).map((b) => [b.start, b.end])).toEqual([]);
     });
 
     it("REFUTED under a quoted definition's continuation line: code", () => {

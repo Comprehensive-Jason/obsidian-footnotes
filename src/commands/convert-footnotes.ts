@@ -1,21 +1,13 @@
+import { inlineFootnoteSpans, referenceOccurrences } from "../parsing/footnote-grammar";
 import {
-    definitionLabelWithName,
-    inlineFootnoteSpans,
-    referenceOccurrences,
-} from "../parsing/footnote-grammar";
-import { inItemDefinitionLabels } from "../parsing/list-item-definitions";
-import {
-    DefinitionBlock,
-    definitionStartLines,
-    findDefinitionBlocks,
     maskProtectedLines,
     normalizeEol,
-    quotedDefinitionEnd,
     removeLineRanges,
     restoreEol,
     scanDocument,
     tableRowLinesOf,
 } from "../parsing/markdown-scan";
+import { Definition, readNote } from "../parsing/note-reading";
 import { linesReadDifferently } from "../linting/rules/remove-orphaned-definitions";
 import { readsDifferently } from "../linting/rules/remove-orphaned-references";
 import { sanitizeInlineFootnoteContent } from "./inline-footnotes";
@@ -78,12 +70,28 @@ export interface ConversionToInline {
  * untouched, and a bracket or pipe that would break the inline footnote or
  * a table row is escaped.
  */
+/**
+ * Why the conversion leaves `definition` where it is, in the toast's
+ * words, or undefined when it may cut it: only a definition at the top
+ * level of the note, alone on its lines, is cut.
+ */
+function whyLeftInPlace(definition: Definition): string | undefined {
+    if (definition.container.footnotes > 0) return "inside another footnote";
+    if (definition.container.listItems > 0) return "inside a list item";
+    if (definition.container.quotes > 0) return "inside a blockquote";
+    // at the top level, but after other text on its line: the "%%" that
+    // closes a comment, or the "---" that closes the frontmatter
+    if (!definition.movable) return "shares its line with other text";
+    return undefined;
+}
+
 export function convertNormalFootnotesToInline(markdown: string): ConversionToInline {
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");
     const scan = scanDocument(lines);
     const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+    const reading = readNote(lines);
+    const starts = reading.labelLines;
     const unchanged = (skipped: ConversionToInline["skipped"], refused?: string): ConversionToInline => ({
         markdown,
         converted: 0,
@@ -93,57 +101,35 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
         ...(refused ? { refused } : {}),
     });
 
-    // Every definition the note has, by lower-cased name: the column-0
-    // blocks (the ones this transform can cut), and the quoted, in-item
-    // and closer-line ones, which it recognises so their names are skipped
-    // with a reason rather than passed over in silence (ADR 2).
-    type Found = { name: string; line: number; block?: DefinitionBlock; reason?: string };
+    // Every definition the note has, by lower-cased name, wherever it sits.
+    // Only one at the top level of the note, alone on its lines, is cut;
+    // the others are recognised so their names are skipped with a reason
+    // rather than passed over in silence (ADR 2; Jason's ruling 1, option a,
+    // 2026-10-03).
+    type Found = { definition: Definition; reason?: string };
     const found = new Map<string, Found[]>();
-    const add = (entry: Found) => {
-        const folded = entry.name.toLowerCase();
-        found.set(folded, [...(found.get(folded) ?? []), entry]);
-    };
-    for (const block of findDefinitionBlocks(lines, scan, masked, starts)) {
-        add({ name: block.name, line: block.start, block });
-    }
-    // lines that belong to SOME definition's body, quoted ones included:
-    // a reference on one of them is inside another footnote
+    // lines that belong to SOME definition's body, wherever it sits: a
+    // reference on one of them is inside another footnote
     const insideDefinition = new Array<boolean>(lines.length).fill(false);
-    for (const block of findDefinitionBlocks(lines, scan, masked, starts)) {
-        for (let i = block.start; i <= block.end; i++) insideDefinition[i] = true;
-    }
-    for (let i = 0; i < lines.length; i++) {
-        if (scan.isProtected[i] || !starts[i]) continue;
-        const hit = definitionLabelWithName(lines[i], masked[i]);
-        if (!hit || !hit.label.quoted) continue;
-        add({
-            name: hit.name,
-            line: i,
-            reason: hit.label.afterCloser ? "shares its line with a %% closer" : "inside a blockquote",
-        });
-        const end = hit.label.afterCloser ? i : quotedDefinitionEnd(lines, scan, starts, i);
-        for (let j = i; j <= end; j++) insideDefinition[j] = true;
-    }
-    for (const hit of inItemDefinitionLabels(lines, scan, masked, starts)) {
-        add({ name: hit.name, line: hit.line, reason: "inside a list item" });
-        insideDefinition[hit.line] = true;
+    for (const definition of reading.definitions) {
+        const folded = definition.name.toLowerCase();
+        found.set(folded, [...(found.get(folded) ?? []), { definition, reason: whyLeftInPlace(definition) }]);
+        for (let i = definition.start; i <= definition.end; i++) insideDefinition[i] = true;
     }
     if (found.size === 0) return unchanged([]);
 
     // every live reference, by lower-cased name, with whether it sits
     // inside a definition's body or an inline footnote (where a converted
-    // reference would nest). A quoted label's own "[^x]" is not a
-    // reference; a lazy label's is, as it renders.
+    // reference would nest). A definition's own label is not a reference
+    // (referenceOccurrences leaves it out); a lazy label's "[^x]" is one,
+    // as it renders.
     type Ref = { line: number; start: number; end: number; nested: boolean };
     const refs = new Map<string, Ref[]>();
     const tableRows = tableRowLinesOf(lines);
     for (let i = 0; i < lines.length; i++) {
         if (scan.isProtected[i] || !lines[i].includes("[^")) continue;
-        const label = starts[i] ? definitionLabelWithName(lines[i], masked[i]) : null;
-        const labelStart = label ? label.label.nameStart - 2 : -1;
         const spans = inlineFootnoteSpans(masked[i]);
         for (const occurrence of referenceOccurrences(lines[i], masked[i], starts[i])) {
-            if (occurrence.start === labelStart) continue;
             const folded = occurrence.name.toLowerCase();
             const inSpan = spans.some((span) => occurrence.start > span.open && occurrence.end <= span.close + 1);
             refs.set(folded, [
@@ -155,27 +141,24 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
 
     // decide each name, in the order its definitions appear
     const skipped: { line: number; name: string; reason: string }[] = [];
-    const eligible: { block: DefinitionBlock; body: string; refs: Ref[] }[] = [];
+    const eligible: { block: Definition; body: string; refs: Ref[] }[] = [];
     for (const [folded, entries] of found) {
-        const first = entries[0];
-        if (entries.length > 1) {
-            skipped.push({ line: first.line, name: first.name, reason: "defined more than once" });
-            continue;
-        }
-        if (first.reason !== undefined || first.block === undefined) {
-            skipped.push({ line: first.line, name: first.name, reason: first.reason ?? "inside a list item" });
-            continue;
-        }
-        const block = first.block;
+        const block = entries[0].definition;
         const skip = (reason: string) => skipped.push({ line: block.start, name: block.name, reason });
+        if (entries.length > 1) {
+            skip("defined more than once");
+            continue;
+        }
+        const reason = entries[0].reason;
+        if (reason !== undefined) {
+            skip(reason);
+            continue;
+        }
         if (block.end !== block.start) {
             skip("more than one line");
             continue;
         }
-        const hit = definitionLabelWithName(lines[block.start], masked[block.start]);
-        // Stryker disable next-line ConditionalExpression: a block always starts on a label line, so this branch is unreachable and only keeps the types honest
-        if (!hit) continue;
-        const bodyStart = hit.label.labelEnd;
+        const bodyStart = block.labelEnd;
         const body = lines[block.start].slice(bodyStart);
         if (body.trim() === "") {
             skip("empty");
@@ -277,20 +260,11 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
     const lines = ctx.lines;
     const masked = ctx.maskedLines();
     const starts = ctx.definitionStarts();
-    // the lines that belong to some definition's body, of every shape the
-    // plugin recognises
+    // the lines that belong to some definition's body, wherever it sits
     const insideDefinition = new Array<boolean>(lines.length).fill(false);
-    for (const block of ctx.blocks()) {
-        for (let i = block.start; i <= block.end; i++) insideDefinition[i] = true;
+    for (const definition of ctx.reading().definitions) {
+        for (let i = definition.start; i <= definition.end; i++) insideDefinition[i] = true;
     }
-    for (let i = 0; i < lines.length; i++) {
-        if (ctx.scan.isProtected[i] || !starts[i]) continue;
-        const hit = definitionLabelWithName(lines[i], masked[i]);
-        if (!hit?.label.quoted) continue;
-        const end = hit.label.afterCloser ? i : quotedDefinitionEnd(lines, ctx.scan, starts, i);
-        for (let j = i; j <= end; j++) insideDefinition[j] = true;
-    }
-    for (const hit of inItemDefinitionLabels(lines, ctx.scan, masked, starts)) insideDefinition[hit.line] = true;
 
     const skipped: { reason: string; count: number }[] = [];
     const skip = (reason: string) => {

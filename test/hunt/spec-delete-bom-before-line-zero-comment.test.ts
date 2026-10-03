@@ -44,7 +44,7 @@ import { lintFootnotes } from "../../src/linting/linter";
 const BOM = "\ufeff";
 
 describe("spec question: a byte order mark in front of a line-0 %% comment opener", () => {
-    it.fails("Delete orphaned definitions never deletes the prose below the comment", () => {
+    it("Delete orphaned definitions never deletes the prose below the comment", () => {
         const withLabel = [BOM + "%%", "[^1]: x", "%%", "", "Real prose here[^2] that matters.", "", "[^2]: two"].join("\n");
         // Today: the whole note after line 0 is deleted, leaving only the
         // byte order mark and "%%".

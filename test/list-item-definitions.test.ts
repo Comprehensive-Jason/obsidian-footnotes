@@ -12,8 +12,7 @@ import {
     orphanedFootnoteReferenceNames,
     removeOrphanedFootnoteReferences,
 } from "../src/linting/rules/remove-orphaned-references";
-import { inItemDefinitionLabels } from "../src/parsing/list-item-definitions";
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../src/parsing/markdown-scan";
+import { inItemDefinitionLabels } from "./helpers/in-item";
 
 // Jason's ruling 1 (2026-09-20, option b): a footnote definition INSIDE a
 // list item, written right after the marker ("- [^la]: text") or indented
@@ -40,17 +39,7 @@ const NOTE = [
     "Uses: alpha[^la] and bravo[^lb].",
 ];
 
-const facts = (lines: string[]) => {
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return { scan, masked, starts };
-};
-
-const labelsIn = (lines: string[]) => {
-    const { scan, masked, starts } = facts(lines);
-    return inItemDefinitionLabels(lines, scan, masked, starts);
-};
+const labelsIn = (lines: string[]) => inItemDefinitionLabels(lines);
 
 describe("definitions inside list items: the reader", () => {
     it("finds a label right after the marker and one indented to the item's margin", () => {
@@ -129,23 +118,28 @@ describe("definitions inside list items: the hotkey navigates instead of appendi
     });
 });
 
-describe("definitions inside list items: never renamed", () => {
-    it("reindex leaves a name defined inside an item alone and hands its number to nobody else", () => {
+// Jason's ruling 1, option a (2026-10-03): a definition inside a list item
+// is renamed like any other (it used to be left alone by reindex and
+// refused by the rename command); it is still never moved out of its item.
+describe("definitions inside list items: renamed like any other, never moved", () => {
+    it("reindex renumbers a name defined inside an item and leaves the definition in its item", () => {
         const doc = ["- [^3]: in an item", "", "use[^9] and[^3]", "", "[^9]: nine"].join("\n");
         expect(reindexFootnotes(doc)).toBe(
-            ["- [^3]: in an item", "", "use[^1] and[^3]", "", "[^1]: nine"].join("\n"),
+            ["- [^2]: in an item", "", "use[^1] and[^2]", "", "[^1]: nine"].join("\n"),
         );
     });
 
-    it("reindex with named footnotes renumbered still leaves the in-item names alone", () => {
-        expect(reindexFootnotes(NOTE.join("\n"), { renumberNamedFootnotes: true })).toBe(NOTE.join("\n"));
+    it("reindex with named footnotes renumbered renumbers the in-item names in place", () => {
+        expect(reindexFootnotes(NOTE.join("\n"), { renumberNamedFootnotes: true })).toBe(
+            NOTE.join("\n").replace(/\[\^la\]/g, "[^1]").replace(/\[\^lb\]/g, "[^2]"),
+        );
     });
 
-    it("the rename command refuses a name whose definition sits inside an item, and says why", () => {
+    it("the rename command renames a name whose definition sits inside an item, label and references alike", () => {
         const doc = fakeEditor(NOTE, { wholeDoc: true, cursor: { line: 7, ch: 13 } });
         const plan = planFootnoteRename(doc, "la", "renamed");
-        expect(plan.kind).toBe("invalid");
-        if (plan.kind === "invalid") expect(plan.reason).toContain("list item");
+        expect(plan.kind).toBe("renamed");
+        if (plan.kind === "renamed") expect(plan.count).toBe(2);
     });
 
     it("a new name that an in-item definition already holds is a collision", () => {

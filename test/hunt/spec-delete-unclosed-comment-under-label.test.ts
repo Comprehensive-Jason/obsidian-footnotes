@@ -32,7 +32,7 @@ function md(lines: string[], name: string): string {
 }
 
 describe("spec question: an unclosed %% opened right under the label line", () => {
-    it.fails("keeps the lines after the comment, or refuses", () => {
+    it("keeps the lines after the comment, or refuses", () => {
         const out = md(["p[^1]", "", "[^1]: x", "%%", "comment to the end", "", "after"], "1");
         expect(out).toContain("after");
     });

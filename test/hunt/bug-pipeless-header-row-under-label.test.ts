@@ -1,12 +1,12 @@
 // Imported from the glm-cycle-10 hunt of 2026-09-16 (OpenCode worktree); rewritten to the probed reading 2026-09-16.
 // PROBED 2026-09-16 (GLM hunt cycle 10, Reading view): the rows of one table agree on the leading pipe. "a | b" over "--- | ---" is a table (under a label it is a separate table, as the piped form is), "a | b" over "| --- | --- |" is paragraph text everywhere (under a label, all of it is the footnote's lazy body), "| a | b |" over "--- | ---" is paragraph text too, and a row written the other way ends a table. GLM's own fixture mixed the styles, so its claim was refuted as written and confirmed for the consistent form; the table reader now judges the style, and the block walker and the quoted walker ask the reader instead of counting pipes.
+import { readNote } from "../../src/parsing/note-reading";
 import { describe, expect, it } from "vitest";
 
 import {
     definitionStartLines,
     findDefinitionBlocks,
     maskProtectedLines,
-    quotedDefinitionEnd,
     scanDocument,
     tableRowLinesOf,
 } from "../../src/parsing/markdown-scan";
@@ -89,9 +89,9 @@ describe("pipe runs under a definition label: the rows of a table agree on the l
 
     it("inside a quote the same rule ends or carries on the quoted definition", () => {
         const table = ctx("> [^1]: body\n> a | b\n> --- | ---\n\ntext[^1]");
-        expect(quotedDefinitionEnd(table.lines, table.scan, table.starts, 0)).toBe(0);
+        expect((readNote(table.lines).labelOn(0)?.end ?? 0)).toBe(0);
         const text = ctx("> [^1]: body\n> a | b\n> | --- | --- |\n\ntext[^1]");
-        expect(quotedDefinitionEnd(text.lines, text.scan, text.starts, 0)).toBe(2);
+        expect((readNote(text.lines).labelOn(0)?.end ?? 0)).toBe(2);
     });
 
     it("control: the fully piped table under a label stays a table of its own", () => {

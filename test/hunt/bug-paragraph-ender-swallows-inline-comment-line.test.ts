@@ -78,13 +78,21 @@ describe("a code span / comment / math region crossing an inline %% pair line", 
         expect(out[2]).toContain("[^1]");
     });
 
-    it("no phantom math block: the lint moves the definition below the closer line (fixed 2026-09-16)", () => {
+    // Corrected 2026-10-03 (the runtime swap): to Obsidian the "$$ b" line
+    // opens a display math block that runs to the end of the note (rule M2:
+    // a line starting with "$$" that is no closed pair opens one, under a
+    // paragraph too; recorded fact 1c658e2, where Obsidian reads no
+    // definition after such a line). So everything from line 2 on is math,
+    // and the lint should leave the note as it is. Expected fail until step
+    // 2 of the swap: the scanner still reads the "$$ b" line as the closer
+    // of a pair, so the lint renames and moves text inside the math.
+    it.fails("the math block the \"$$ b\" line opens runs to the end of the note: the lint leaves it alone", () => {
         const doc = "x $$ a\n%% c %%\n$$ b [^3]\n\n[^4]: def\n\ntext[^4]";
         const once = lintFootnotes(doc, {});
         // the "$$ b" line closes the math opened on line 0, so "[^3]"
         // after the closer is a live (orphaned) reference, the note ends
         // live, and the definition is gathered at the bottom; reindex
         // numbers the two references in order on the way
-        expect(once).toBe("x $$ a\n%% c %%\n$$ b [^1]\n\ntext[^2]\n\n[^2]: def");
+        expect(once).toBe(doc);
     });
 });

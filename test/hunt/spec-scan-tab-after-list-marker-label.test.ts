@@ -1,10 +1,11 @@
+// SETTLED 2026-10-03 by the note reading (the runtime swap, step 1): rule B1 in docs/obsidian-reading-rules.md, from Obsidian's own answers, reads "-\t[^1]: def" as a definition inside a list item, and "-" plus a tab under a label as a new list item that ends the definition, as "- " is. Every test below now holds. The question below is kept as it was asked.
 import { describe, expect, it } from "vitest";
 
 import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 import { lintFootnotes } from "../../src/linting/linter";
 import { orphanedFootnoteReferenceNames } from "../../src/linting/rules/remove-orphaned-references";
-import { inItemDefinitionLabels } from "../../src/parsing/list-item-definitions";
-import { findDefinitionBlocks, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+import { inItemDefinitionLabels } from "../helpers/in-item";
+import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
 
 // spec question: is "-\t[^a]: def", a label written right after a list
 // marker with a TAB between them, a definition inside the list item, the
@@ -69,32 +70,29 @@ function underLabel(second: string): string[] {
 }
 
 describe("spec question: a label behind a tab after a list marker", () => {
-    it.fails("the in-item reader sees '-\\t[^a]: def' like '- [^a]: def'", () => {
-        const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        // Today: [] (no in-item definition).
-        expect(inItemDefinitionLabels(lines, scan, masked).map((l) => l.name)).toEqual(["a"]);
+    it("the in-item reader sees '-\\t[^a]: def' like '- [^a]: def'", () => {
+        // it was [] before the note reading
+        expect(inItemDefinitionLabels(doc.split("\n")).map((l) => l.name)).toEqual(["a"]);
     });
 
-    it.fails("the orphan alert does not name [^a]", () => {
+    it("the orphan alert does not name [^a]", () => {
         // Today: ["a"].
         expect(orphanedFootnoteReferenceNames(doc)).toEqual([]);
     });
 
-    it.fails("Delete orphaned references keeps the reference and the label", () => {
+    it("Delete orphaned references keeps the reference and the label", () => {
         // Today: "text and[^b]\n\n-\t: def\n\n[^b]: col0".
         expect(lintFootnotes(doc, { removeOrphanedReferences: true })).toBe(doc);
     });
 
-    it.fails("Delete footnote everywhere on [^1] keeps '-\\titem' under its label (data loss)", () => {
+    it("Delete footnote everywhere on [^1] keeps '-\\titem' under its label (data loss)", () => {
         const plan = deleteFootnoteEverywhere(underLabel("-\titem").join("\n"), "1");
         expect(plan.kind).toBe("deleted");
         // Today: "T\n\nMore prose." (the list item goes with the definition).
         expect((plan as { markdown: string }).markdown.split("\n")).toContain("-\titem");
     });
 
-    it.fails("the block reader ends [^1] above '#\\tHeading'", () => {
+    it("the block reader ends [^1] above '#\\tHeading'", () => {
         const lines = underLabel("#\tHeading");
         // Today: [[2, 3]] (the heading is read as the definition's text).
         expect(findDefinitionBlocks(lines, scanDocument(lines)).map((b) => [b.start, b.end])).toEqual([[2, 2]]);

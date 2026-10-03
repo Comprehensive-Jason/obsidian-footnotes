@@ -40,7 +40,7 @@ import { messages, resetNotices } from "../helpers/notices";
 beforeEach(resetNotices);
 
 describe("a quoted and a column-0 definition of one name", () => {
-    it.fails("Merge off: the duplicate alert names it", () => {
+    it("Merge off: the duplicate alert names it", () => {
         const note = ["a[^a] b", "", "> [^a]: one", "", "[^a]: two"];
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS }), note.join("\n"));
         // Today: no alert at all.

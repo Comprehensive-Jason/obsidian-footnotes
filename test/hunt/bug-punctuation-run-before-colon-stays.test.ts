@@ -60,7 +60,7 @@ describe("a run of references before a colon at the line's start", () => {
     // reference in " [^2]: x"), so the swap never sees it; whether Obsidian
     // renders "[^1]: [^2]: x" with a live [^2] was not probed. Left as an
     // expected failure until it is.
-    it.fails("a reference at the START of a definition's body crosses its colon too", () => {
+    it("a reference at the START of a definition's body crosses its colon too", () => {
         // the body is sliced off the label before the swap runs, and the
         // same guard sees "[^2]: x" at the slice's start and reads it as a
         // label again. It is body text: "[^1]: [^2]: x" is a definition

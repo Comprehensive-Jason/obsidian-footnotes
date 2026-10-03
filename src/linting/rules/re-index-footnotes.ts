@@ -1,15 +1,12 @@
-import { inItemDefinitionNamesFolded } from "../../parsing/list-item-definitions";
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
+import { referenceOccurrences, nameForBody } from "../../parsing/footnote-grammar";
 import {
-    definitionLabelWithName,
-    referenceOccurrences, nameForBody } from "../../parsing/footnote-grammar";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
+    definitionCuts,
     maskProtectedLines,
     scanDocument,
     removeLineRanges,
 } from "../../parsing/markdown-scan";
+import { readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
 import { FootnoteRule } from "../rule";
@@ -73,13 +70,13 @@ export interface ReindexOptions {
  * and "[^note]" are one footnote, both for ordering and for identity.
  *
  * A definition's own "[^name]:" label does not count as a reference;
- * footnoteReferenceMatches leaves it out based on where it sits. A reference
- * inside a definition's body does count.
+ * referenceOccurrences leaves it out on a line the note reading says holds
+ * one. A reference inside a definition's body does count.
  */
 function referenceAppearanceOrder(
     lines: string[],
     maskedLines: string[],
-    starts: boolean[],
+    starts: readonly boolean[],
 ): string[] {
     const order: string[] = [];
     const seen = new Set<string>();
@@ -194,7 +191,7 @@ function reindexOnce(
         let scan = view.scan;
         let maskedLines = view.maskedLines;
         let starts = view.definitionStarts;
-        let blocks = view.blocks;
+        let definitions = view.definitions;
         let referenceOrder = referenceAppearanceOrder(lines, maskedLines, starts);
 
         if (!keepOrphans) {
@@ -211,11 +208,13 @@ function reindexOnce(
                 // again from scratch: the line numbers have all shifted,
                 // and removing lines can even change which code fences pair
                 // with which.
-                lines = removeLineRanges(lines, orphans);
+                const cut = definitionCuts(lines, orphans);
+                lines = removeLineRanges(cut.lines, cut.ranges);
                 scan = scanDocument(lines);
                 maskedLines = maskProtectedLines(lines, scan);
-                starts = definitionStartLines(lines, scan, (i) => maskedLines[i]);
-                blocks = findDefinitionBlocks(lines, scan, maskedLines, starts);
+                const reading = readNote(lines);
+                starts = reading.labelLines;
+                definitions = reading.definitions;
                 referenceOrder = referenceAppearanceOrder(lines, maskedLines, starts);
             }
         }
@@ -229,24 +228,14 @@ function reindexOnce(
         // all the way through the ordering and the numbering.
         const order = [...referenceOrder];
         const seen = new Set(order);
-        for (const block of blocks) {
-            const name = block.name.toLowerCase();
-            if (!seen.has(name)) {
-                seen.add(name);
-                order.push(name);
-            }
-        }
-        // A label inside a blockquote or a callout is a real definition,
-        // one line long, and it is not one of the definition blocks at the
-        // left margin (C22). An orphan among these still needs its place in
-        // the order. Otherwise the number it is holding could be handed to
-        // some other footnote being renumbered, and two footnotes would end
-        // up sharing a name (review A3, 2026-09-08).
-        for (let i = 0; i < lines.length; i++) {
-            if (scan.isProtected[i] || !starts[i]) continue;
-            const hit = definitionLabelWithName(lines[i], maskedLines[i]);
-            if (!hit?.label.quoted) continue;
-            const name = hit.name.toLowerCase();
+        // Every definition takes its place, wherever it sits: one in a
+        // blockquote or callout (C22) or in a list item (Jason's ruling 1,
+        // option a, 2026-10-03) is renamed like any other. An orphan among
+        // them still needs its place in the order, or the number it holds
+        // could be handed to some other footnote being renumbered, and two
+        // footnotes would end up sharing a name (review A3, 2026-09-08).
+        for (const definition of definitions) {
+            const name = definition.name.toLowerCase();
             if (!seen.has(name)) {
                 seen.add(name);
                 order.push(name);
@@ -264,26 +253,18 @@ function reindexOnce(
         // it a plain number here and the next apply-prefix pass would put
         // the prefix on it anyway.
         const renames = new Map<string, string>();
-        // A name defined inside a list item is never renamed (Jason's
-        // ruling 1, 2026-09-20: such a definition is recognized, not
-        // modelled), and the number it holds is handed to nobody else, or
-        // two footnotes would share a name.
-        const inItem = inItemDefinitionNamesFolded(lines, scan, maskedLines, starts);
-        // Under Named, a numbered footnote with a definition block takes
-        // the first meaningful word of that body as its name, kept clear
-        // of every name the note holds and of the names handed out before
-        // it in this pass (the last block of a name is the one Obsidian
-        // renders, so it is the one read).
+        // Under Named, a numbered footnote takes the first meaningful word of
+        // its definition's body as its name, kept clear of every name the
+        // note holds and of the names handed out before it in this pass
+        // (the last definition of a name is the one Obsidian renders, so it
+        // is the one read).
         const bodyOf = new Map<string, string>();
-        const taken = new Set<string>([...order, ...inItem]);
+        const taken = new Set<string>(order);
         if (nameNumbered) {
-            for (const block of blocks) {
-                const hit = definitionLabelWithName(lines[block.start], maskedLines[block.start]);
-                if (!hit) continue;
-                taken.add(block.name.toLowerCase());
+            for (const definition of definitions) {
                 bodyOf.set(
-                    block.name.toLowerCase(),
-                    [lines[block.start].slice(hit.label.labelEnd), ...lines.slice(block.start + 1, block.end + 1)].join("\n"),
+                    definition.name.toLowerCase(),
+                    [lines[definition.start].slice(definition.labelEnd), ...lines.slice(definition.start + 1, definition.end + 1)].join("\n"),
                 );
             }
         }
@@ -296,16 +277,9 @@ function reindexOnce(
         };
         let nextNumber = 1;
         let nextPrefixed = 1;
-        const takePlain = (): string => {
-            while (inItem.has(String(nextNumber))) nextNumber++;
-            return String(nextNumber++);
-        };
-        const takePrefixed = (): string => {
-            while (inItem.has(`${prefixFolded}${nextPrefixed}`)) nextPrefixed++;
-            return `${prefixOut}${nextPrefixed++}`;
-        };
+        const takePlain = (): string => String(nextNumber++);
+        const takePrefixed = (): string => `${prefixOut}${nextPrefixed++}`;
         for (const name of order) {
-            if (inItem.has(name)) continue;
             if (isPrefixedNumbered(name)) {
                 renames.set(name, (nameNumbered ? nameFromBody(name, prefixOut) : null) ?? takePrefixed());
             } else if (/^\d+$/.test(name)) {
@@ -328,21 +302,24 @@ function reindexOnce(
         const rewritten = lines.map((line, i) =>
             scan.isProtected[i]
                 ? line
-                : rewriteFootnoteNames(line, maskedLines[i], (name) => renames.get(name.toLowerCase()) ?? null, starts[i]),
+                : rewriteFootnoteNames(line, maskedLines[i], (name) => renames.get(name.toLowerCase()) ?? null),
         );
 
         // Swap the definition blocks between the places definitions already
-        // sit, so that they read in appearance order. The sort is stable,
-        // which keeps two definitions of one name next to each other in the
-        // order they were written.
+        // sit, so that they read in appearance order. Only the definitions
+        // whose lines are their own move: one in a quote, a list item, or
+        // another footnote stays in its container (Jason's ruling 1, option
+        // a, 2026-10-03). The sort is stable, which keeps two definitions
+        // of one name next to each other in the order they were written.
         //
         // Every block's name is in `order`: referenced names went in first,
-        // then the blocks themselves were added. So the lookup below always
+        // then every definition's. So the lookup below always
         // finds something. If that ever stopped being true, a block with an
         // unknown name sorts to the END rather than jumping to the front,
         // which is what the old `?? 0` made it do (review C9).
         const orderIndex = new Map(order.map((name, i) => [name, i]));
         const rank = (name: string) => orderIndex.get(name.toLowerCase()) ?? order.length;
+        const blocks = definitions.filter((definition) => definition.movable);
         const sorted = blocks
             .map((block, i) => ({ block, i }))
             .sort((a, b) => rank(a.block.name) - rank(b.block.name) || a.i - b.i)

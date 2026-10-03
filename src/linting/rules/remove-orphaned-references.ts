@@ -1,10 +1,9 @@
-import { inItemDefinitionNamesFolded } from "../../parsing/list-item-definitions";
 import {
     definitionLabelWithName,
     referenceOccurrences,
 } from "../../parsing/footnote-grammar";
+import { readNote } from "../../parsing/note-reading";
 import {
-    definitionStartLines,
     DocumentScan,
     lazyDefinitionLabelLines,
     underlinedDefinitionLabelLines,
@@ -37,29 +36,12 @@ import { FootnoteRule } from "../rule";
 //    user's caret would be losing their work.
 
 /**
- * Every name the note defines, lower-cased. That covers labels at the left
- * margin and labels inside a blockquote or callout (C22).
- *
- * definitionLabelWithName is the piece that finds a label against the masked
- * twin but cuts its name out of the raw line, so names never come back with
- * blanking characters in them.
+ * Every name the note defines, lower-cased, wherever the definition sits:
+ * at the left margin, inside a blockquote or callout (C22), or in a list
+ * item (Jason's ruling 1, 2026-09-20, and option a, 2026-10-03).
  */
-function definitionNamesFolded(
-    lines: string[],
-    masked: string[],
-    starts: boolean[],
-    scan: Pick<DocumentScan, "isProtected">,
-): Set<string> {
-    const names = new Set<string>();
-    for (let i = 0; i < masked.length; i++) {
-        if (!starts[i]) continue;
-        const hit = definitionLabelWithName(lines[i], masked[i]);
-        if (hit) names.add(hit.name.toLowerCase());
-    }
-    // a definition inside a list item renders, so the reference to it is
-    // no orphan (Jason's ruling 1, 2026-09-20)
-    for (const name of inItemDefinitionNamesFolded(lines, scan, masked, starts)) names.add(name);
-    return names;
+function definitionNamesFolded(lines: string[]): Set<string> {
+    return new Set(readNote(lines).definitions.map((definition) => definition.name.toLowerCase()));
 }
 
 /**
@@ -170,8 +152,8 @@ export function orphanedFootnoteReferenceNames(
     const lines = precomputed?.lines ?? normalizeEol(markdown).text.split("\n");
     const scan = precomputed?.scan ?? scanDocument(lines);
     const masked = precomputed?.masked ?? maskProtectedLines(lines, scan);
-    const starts = precomputed?.starts ?? definitionStartLines(lines, scan, (i) => masked[i]);
-    const definitions = definitionNamesFolded(lines, masked, starts, scan);
+    const starts = precomputed?.starts ?? readNote(lines).labelLines;
+    const definitions = definitionNamesFolded(lines);
     const lazyLabels = new Set([
         ...lazyDefinitionLabelNames(lines, scan, masked, starts).map((n) => n.toLowerCase()),
         // and an underlined label, one blank line short in the other direction
@@ -212,8 +194,8 @@ export function removeOrphanedFootnoteReferences(
     const lines = text.split("\n");
     const scan = scanDocument(lines);
     const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    const definitions = definitionNamesFolded(lines, masked, starts, scan);
+    const starts = readNote(lines).labelLines;
+    const definitions = definitionNamesFolded(lines);
     const lazyLabels = new Set([
         ...lazyDefinitionLabelNames(lines, scan, masked, starts).map((n) => n.toLowerCase()),
         // and an underlined label, one blank line short in the other direction
@@ -270,7 +252,7 @@ export function removeOrphanedFootnoteReferences(
         current = trial;
         currentScan = scanDocument(current);
         currentMasked = maskProtectedLines(current, currentScan);
-        currentStarts = definitionStartLines(current, currentScan, (i) => currentMasked[i]);
+        currentStarts = readNote(current).labelLines;
     }
     if (current === lines) return markdown;
     return restoreEol(current.join("\n"), eol);
@@ -315,13 +297,12 @@ export function cutOne(line: string, start: number, end: number): string {
  *
  * Shared with the Delete footnote command (T4, 2026-09-21).
  */
-export function readsDifferently(before: string[], scanBefore: DocumentScan, startsBefore: boolean[], after: string[]): boolean {
+export function readsDifferently(before: string[], scanBefore: DocumentScan, startsBefore: readonly boolean[], after: string[]): boolean {
     const scanAfter = scanDocument(after);
     for (let i = 0; i < before.length; i++) {
         if (scanBefore.isProtected[i] !== scanAfter.isProtected[i]) return true;
     }
-    const maskedAfter = maskProtectedLines(after, scanAfter);
-    const startsAfter = definitionStartLines(after, scanAfter, (i) => maskedAfter[i]);
+    const startsAfter = readNote(after).labelLines;
     for (let i = 0; i < before.length; i++) {
         if (startsBefore[i] !== startsAfter[i]) return true;
         if (before[i] !== after[i] && blockKind(before[i]) !== blockKind(after[i])) return true;

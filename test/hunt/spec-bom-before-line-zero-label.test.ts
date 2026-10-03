@@ -46,7 +46,7 @@ describe("spec question: a definition label on line 0 behind a byte order mark",
         expect(lintFootnotes(doc, {})).toContain("[^1]: def");
     });
 
-    it.fails("is not treated as an orphaned reference and erased", () => {
+    it("is not treated as an orphaned reference and erased", () => {
         const doc = `${BOM}[^1]: def\n\nProse[^1].\n`;
         expect(lintFootnotes(doc, { removeOrphanedReferences: true })).toContain("[^1]");
     });

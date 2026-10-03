@@ -55,7 +55,7 @@ function capture(text: string, rule?: (v: DocumentView) => string) {
 }
 
 describe("spec question: a rule that changes the arrays in the view it was given", () => {
-    it.fails("adding a line to view.lines does not reach the next view of the same text", () => {
+    it("adding a line to view.lines does not reach the next view of the same text", () => {
         rewriteDocument(outerDoc, (text) => {
             // a rule that scribbles on view.lines BEFORE reading anything,
             // then hands the original text back unchanged
@@ -97,10 +97,14 @@ describe("spec question: a rule that changes the arrays in the view it was given
         });
     });
 
-    it.fails("adding to view.blocks does not poison the next view", () => {
+    // Settled by the runtime swap (2026-10-03), reading two: view.blocks
+    // comes from the note reading, typed read-only and frozen, so a rule
+    // that forces a push past the type fails at once instead of poisoning
+    // the next view.
+    it("adding to view.blocks does not poison the next view", () => {
         rewriteDocument(outerDoc, (text) => {
             capture(text, (v) => {
-                v.blocks.push({ name: "fake", start: 0, end: 0 });
+                expect(() => (v.blocks as unknown as { name: string; start: number; end: number }[]).push({ name: "fake", start: 0, end: 0 })).toThrow();
                 return text;
             });
             const next = capture(text);

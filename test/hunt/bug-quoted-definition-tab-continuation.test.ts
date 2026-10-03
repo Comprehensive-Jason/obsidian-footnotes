@@ -51,26 +51,16 @@
 // Settings involved: "Delete orphaned definitions" for the consequence
 // test; quotedDefinitionEnd itself is setting-free.
 
+import { readNote } from "../../src/parsing/note-reading";
 import { describe, expect, it } from "vitest";
 
 import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    quotedDefinitionEnd,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
 
 // ">\tcont" - the quote marker, then a TAB, then the continuation text.
 const TAB_LINES = ["> [^1]: body", ">", ">\tcont"];
 const SPACE_LINES = ["> [^1]: body", ">", ">     cont"];
 
-const extentOf = (lines: string[]): number => {
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return quotedDefinitionEnd(lines, scan, starts, 0);
-};
+const extentOf = (lines: string[]): number => readNote(lines).labelOn(0)?.end ?? 0;
 
 describe("a tab-indented quoted continuation belongs to the definition", () => {
     it("quotedDefinitionEnd measures the tab as four columns, like the space twin", () => {

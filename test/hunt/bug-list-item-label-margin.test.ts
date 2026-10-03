@@ -48,15 +48,15 @@ function startsOf(doc: string): boolean[] {
 }
 
 describe("a definition label indented into a list item (relative indent 1-3)", () => {
-    it.fails("dash item, relative indent 2 (absolute 4): a definition start", () => {
+    it("dash item, relative indent 2 (absolute 4): a definition start", () => {
         expect(startsOf("- item\n\n    [^1]: def\n\nuse[^1]")[2]).toBe(true);
     });
 
-    it.fails("ordered item, relative indent 1 (absolute 4): a definition start", () => {
+    it("ordered item, relative indent 1 (absolute 4): a definition start", () => {
         expect(startsOf("1. item\n\n    [^1]: def\n\nuse[^1]")[2]).toBe(true);
     });
 
-    it.fails("double-digit ordered item, relative indent 3 (absolute 7): a definition start", () => {
+    it("double-digit ordered item, relative indent 3 (absolute 7): a definition start", () => {
         expect(startsOf("10. item\n\n       [^1]: def\n\nuse[^1]")[2]).toBe(true);
     });
 
@@ -72,12 +72,13 @@ describe("a definition label indented into a list item (relative indent 1-3)", (
         expect(orphanedFootnoteReferenceNames("- item\n\n    [^1]: def\n\nuse[^1]")).toEqual([]);
     });
 
-    it("a label at the item's own margin (absolute 2) is an in-item definition, not a margin start", () => {
-        // since 2026-09-21 the in-item reader owns it (Reading view renders
-        // it as a definition; ruling 1 keeps it inside the item), so the
-        // label pass steps over the line and the orphan alert stays quiet
+    it("a label at the item's own margin (absolute 2) is an in-item definition, a label line like any other", () => {
+        // Reading view renders it as a definition, inside the item. Since
+        // Jason's ruling 1, option a (2026-10-03), every definition's label
+        // line counts as one, wherever it sits; it used to be stepped over
+        // by the label pass and owned by a reader of its own
         const doc = "- item\n\n  [^1]: def\n\nuse[^1]";
-        expect(startsOf(doc)[2]).toBe(false);
+        expect(startsOf(doc)[2]).toBe(true);
         expect(orphanedFootnoteReferenceNames(doc)).toEqual([]);
     });
 

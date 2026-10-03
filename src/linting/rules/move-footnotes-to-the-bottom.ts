@@ -3,7 +3,8 @@ import {
     scanDocument,
     removeLineRanges,
 } from "../../parsing/markdown-scan";
-import { rewriteDocument } from "../rewrite-document";
+import { readNote } from "../../parsing/note-reading";
+import { DocumentView, rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
 // The obsidian-linter plugin's "move footnotes to the bottom" rule,
@@ -70,161 +71,175 @@ export function moveFootnoteDefinitionsToBottom(
     sectionHeading = "",
 ): string {
     return rewriteDocument(markdown, (text, view) => {
-        const lines = view.lines;
+        const moved = gathered(text, view, sectionHeading);
+        // A move must leave every definition a definition, as Obsidian reads
+        // the note. Where the end of the note sits inside something only
+        // Obsidian's reading knows about (a "$$" line under a paragraph
+        // opens a math block to the end of the note, recorded fact 1c658e2),
+        // the gathered definitions would land inside it and stop being
+        // footnotes, so the note comes back untouched (the runtime swap,
+        // 2026-10-03; found by the adjacency property).
+        if (moved !== text && readNote(moved.split("\n")).definitions.length !== view.definitions.length) return text;
+        return moved;
+    });
+}
 
-        // Remember how many blank lines the note ended with; they go back on
-        // at the end. The trim goes through the view's own method, which
-        // refuses to run once anything has been worked out from the lines,
-        // so the scan can never end up describing the untrimmed note.
-        const trailingNewlines = view.trimTrailingBlankLines();
+/** The note with its movable definitions gathered under the section heading or at the end, before the check above. */
+function gathered(text: string, view: DocumentView, sectionHeading: string): string {
+    const lines = view.lines;
 
-        const { scan, blocks } = view;
-        const isProtected = scan.isProtected;
-        if (blocks.length === 0) return text;
+    // Remember how many blank lines the note ended with; they go back on
+    // at the end. The trim goes through the view's own method, which
+    // refuses to run once anything has been worked out from the lines,
+    // so the scan can never end up describing the untrimmed note.
+    const trailingNewlines = view.trimTrailingBlankLines();
 
-        // A line added at the end of the note would be inside protected
-        // text, because an unclosed code fence or comment runs on to the end
-        // of the file. Moving definitions in there would cut them off from
-        // their references.
-        if (scan.endsProtected) return text;
+    const { scan, blocks } = view;
+    const isProtected = scan.isProtected;
+    if (blocks.length === 0) return text;
 
-        // Packed label to label, except after a block whose last line is
-        // a lazy continuation (a plain column-0 line): the next label
-        // directly under such a line would read as more lazy text and
-        // stop rendering, so a blank line keeps it a definition (Kimi hunt
-        // cycle 3, 2026-09-16: the move demoted the second footnote and
-        // fix-lazy fought it back every lint).
-        const packed: string[] = [];
-        blocks.forEach((block, index) => {
-            packed.push(lines.slice(block.start, block.end + 1).join("\n"));
-            const last = lines[block.end];
-            const lazyTail =
-                block.end > block.start && !isProtected[block.end] && !/^(?: {4}|\t)/.test(last) && last.trim() !== "";
-            if (lazyTail && index < blocks.length - 1) packed.push("");
-        });
-        const definitions = packed.join("\n");
+    // A line added at the end of the note would be inside protected
+    // text, because an unclosed code fence or comment runs on to the end
+    // of the file. Moving definitions in there would cut them off from
+    // their references.
+    if (scan.endsProtected) return text;
 
-        // Everything that is staying put, still in order. removeLineRanges
-        // also closes the gap: when cutting a block leaves two blank lines
-        // next to each other, they become one.
-        const body = removeLineRanges(lines, blocks);
-        while (body.length > 0 && body[body.length - 1] === "") body.pop();
+    // Packed label to label, except after a block whose last line is
+    // a lazy continuation (a plain column-0 line): the next label
+    // directly under such a line would read as more lazy text and
+    // stop rendering, so a blank line keeps it a definition (Kimi hunt
+    // cycle 3, 2026-09-16: the move demoted the second footnote and
+    // fix-lazy fought it back every lint).
+    const packed: string[] = [];
+    blocks.forEach((block, index) => {
+        packed.push(lines.slice(block.start, block.end + 1).join("\n"));
+        const last = lines[block.end];
+        const lazyTail =
+            block.end > block.start && !isProtected[block.end] && !/^(?: {4}|\t)/.test(last) && last.trim() !== "";
+        if (lazyTail && index < blocks.length - 1) packed.push("");
+    });
+    const definitions = packed.join("\n");
 
-        // The section-heading setting is markdown that may run over
-        // SEVERAL lines, such as "---\n## Footnotes". So the search
-        // compares runs of lines, not single ones. Comparing line by line
-        // meant a multi-line heading was never recognised and a fresh copy
-        // was added on every lint (bug reported 2026-07-17).
-        //
-        // findLineRunEnd is the ONE piece of code that finds the heading,
-        // shared with the heading slot in buildDefinitionAppend. That is
-        // what guarantees a note the plugin built comes back unchanged.
-        //
-        // The scan here runs on the body with the definitions already cut
-        // out. That is safe: removing whole definition blocks cannot change
-        // which code fences pair with which, so the protected regions come
-        // out the same.
-        let anchorEnd = -1;
-        const bodyScan = scanDocument(body);
-        if (sectionHeading) {
-            anchorEnd = findLineRunEnd(
-                body,
-                bodyScan.isProtected,
-                sectionHeading.split("\n"),
-                bodyScan.inCommentBlock,
-            );
-        }
+    // Everything that is staying put, still in order. removeLineRanges
+    // also closes the gap: when cutting a block leaves two blank lines
+    // next to each other, they become one.
+    const body = removeLineRanges(lines, blocks);
+    while (body.length > 0 && body[body.length - 1] === "") body.pop();
 
-        if (anchorEnd !== -1) {
-            const out: string[] = [];
-            const headingStart = anchorEnd - sectionHeading.split("\n").length + 1;
-            for (let i = 0; i <= anchorEnd; i++) {
-                // Make sure there is a blank line above where the heading
-                // starts, the same way every other block of markdown here
-                // is separated
-                if (
-                    i === headingStart &&
-                    out.length > 0 &&
-                    out[out.length - 1] !== ""
-                ) {
-                    out.push("");
-                }
-                out.push(body[i]);
+    // The section-heading setting is markdown that may run over
+    // SEVERAL lines, such as "---\n## Footnotes". So the search
+    // compares runs of lines, not single ones. Comparing line by line
+    // meant a multi-line heading was never recognised and a fresh copy
+    // was added on every lint (bug reported 2026-07-17).
+    //
+    // findLineRunEnd is the ONE piece of code that finds the heading,
+    // shared with the heading slot in buildDefinitionAppend. That is
+    // what guarantees a note the plugin built comes back unchanged.
+    //
+    // The scan here runs on the body with the definitions already cut
+    // out. That is safe: removing whole definition blocks cannot change
+    // which code fences pair with which, so the protected regions come
+    // out the same.
+    let anchorEnd = -1;
+    const bodyScan = scanDocument(body);
+    if (sectionHeading) {
+        anchorEnd = findLineRunEnd(
+            body,
+            bodyScan.isProtected,
+            sectionHeading.split("\n"),
+            bodyScan.inCommentBlock,
+        );
+    }
+
+    if (anchorEnd !== -1) {
+        const out: string[] = [];
+        const headingStart = anchorEnd - sectionHeading.split("\n").length + 1;
+        for (let i = 0; i <= anchorEnd; i++) {
+            // Make sure there is a blank line above where the heading
+            // starts, the same way every other block of markdown here
+            // is separated
+            if (
+                i === headingStart &&
+                out.length > 0 &&
+                out[out.length - 1] !== ""
+            ) {
+                out.push("");
             }
-            const rest = body.slice(anchorEnd + 1);
-            while (rest.length > 0 && rest[0] === "") rest.shift();
-            // An indented code chunk right under the heading stays where it
-            // is, and the definitions go BELOW it. Parked above it, the
-            // last definition would swallow the chunk: an indented line
-            // after a definition's blank line continues the definition, so
-            // the code stopped being code and a reference-shaped string
-            // inside it woke up as a live reference (found by the
-            // conservation property 2026-09-11; Jason's ruling 2026-09-16,
-            // below the chunk, as for any block). The chunk runs while its
-            // lines are indented code, blank lines between them included.
-            let chunkEnd = 0;
-            // rest[k] is body[offset + k], which is how its scan facts are read
-            const offset = body.length - rest.length;
-            const indentedCode = (k: number) =>
-                k < rest.length && bodyScan.isProtected[offset + k] && /^(\t| {4})/.test(rest[k]);
-            if (indentedCode(0)) {
-                while (chunkEnd < rest.length) {
-                    const line = rest[chunkEnd];
-                    if (line === "") {
-                        let next = chunkEnd + 1;
-                        while (next < rest.length && rest[next] === "") next++;
-                        if (indentedCode(next)) {
-                            chunkEnd = next;
-                            continue;
-                        }
-                        break;
-                    }
-                    if (indentedCode(chunkEnd)) {
-                        chunkEnd++;
+            out.push(body[i]);
+        }
+        const rest = body.slice(anchorEnd + 1);
+        while (rest.length > 0 && rest[0] === "") rest.shift();
+        // An indented code chunk right under the heading stays where it
+        // is, and the definitions go BELOW it. Parked above it, the
+        // last definition would swallow the chunk: an indented line
+        // after a definition's blank line continues the definition, so
+        // the code stopped being code and a reference-shaped string
+        // inside it woke up as a live reference (found by the
+        // conservation property 2026-09-11; Jason's ruling 2026-09-16,
+        // below the chunk, as for any block). The chunk runs while its
+        // lines are indented code, blank lines between them included.
+        let chunkEnd = 0;
+        // rest[k] is body[offset + k], which is how its scan facts are read
+        const offset = body.length - rest.length;
+        const indentedCode = (k: number) =>
+            k < rest.length && bodyScan.isProtected[offset + k] && /^(\t| {4})/.test(rest[k]);
+        if (indentedCode(0)) {
+            while (chunkEnd < rest.length) {
+                const line = rest[chunkEnd];
+                if (line === "") {
+                    let next = chunkEnd + 1;
+                    while (next < rest.length && rest[next] === "") next++;
+                    if (indentedCode(next)) {
+                        chunkEnd = next;
                         continue;
                     }
                     break;
                 }
+                if (indentedCode(chunkEnd)) {
+                    chunkEnd++;
+                    continue;
+                }
+                break;
             }
-            if (chunkEnd > 0) out.push("", ...rest.slice(0, chunkEnd));
-            out.push("", ...definitions.split("\n"));
-            // The rest of the note goes below the gathered definitions,
-            // with a blank line between. Without it, the first line of that
-            // text would be read as more of the last definition
-            // (buildDefinitionAppend follows the same rule).
-            const remainder = rest.slice(chunkEnd);
-            while (remainder.length > 0 && remainder[0] === "") remainder.shift();
-            if (remainder.length > 0) out.push("", ...remainder);
-            const anchored = preserveLeadingThematicBreak(
-                isProtected[0],
-                out.join("\n") + "\n".repeat(trailingNewlines),
-            );
-            return anchored;
         }
-
-        const base = body.join("\n");
-        let headingPart = "";
-        if (sectionHeading !== "" && base !== "") {
-            // The same layout rule addFootnoteSectionHeader uses: a blank
-            // line always separates the heading from the text above it.
-            // That is how markdown blocks are kept apart, and it also stops
-            // a heading that starts with a "---" divider from turning the
-            // last line of the note's text into a heading, the way a line
-            // of dashes underneath text does in markdown.
-            headingPart = "\n\n" + sectionHeading;
-        }
-
-        const result =
-            base === ""
-                ? (sectionHeading !== "" ? sectionHeading + "\n\n" : "") +
-                  definitions
-                : base + headingPart + "\n\n" + definitions;
-        const rebuilt = preserveLeadingThematicBreak(
+        if (chunkEnd > 0) out.push("", ...rest.slice(0, chunkEnd));
+        out.push("", ...definitions.split("\n"));
+        // The rest of the note goes below the gathered definitions,
+        // with a blank line between. Without it, the first line of that
+        // text would be read as more of the last definition
+        // (buildDefinitionAppend follows the same rule).
+        const remainder = rest.slice(chunkEnd);
+        while (remainder.length > 0 && remainder[0] === "") remainder.shift();
+        if (remainder.length > 0) out.push("", ...remainder);
+        const anchored = preserveLeadingThematicBreak(
             isProtected[0],
-            result + "\n".repeat(trailingNewlines),
+            out.join("\n") + "\n".repeat(trailingNewlines),
         );
-        return rebuilt;
-    });
+        return anchored;
+    }
+
+    const base = body.join("\n");
+    let headingPart = "";
+    if (sectionHeading !== "" && base !== "") {
+        // The same layout rule addFootnoteSectionHeader uses: a blank
+        // line always separates the heading from the text above it.
+        // That is how markdown blocks are kept apart, and it also stops
+        // a heading that starts with a "---" divider from turning the
+        // last line of the note's text into a heading, the way a line
+        // of dashes underneath text does in markdown.
+        headingPart = "\n\n" + sectionHeading;
+    }
+
+    const result =
+        base === ""
+            ? (sectionHeading !== "" ? sectionHeading + "\n\n" : "") +
+              definitions
+            : base + headingPart + "\n\n" + definitions;
+    const rebuilt = preserveLeadingThematicBreak(
+        isProtected[0],
+        result + "\n".repeat(trailingNewlines),
+    );
+    return rebuilt;
 }
 
 /**

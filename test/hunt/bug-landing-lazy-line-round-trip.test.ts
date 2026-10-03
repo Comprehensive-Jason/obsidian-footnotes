@@ -44,7 +44,7 @@ describe("the round trip through a definition that ends on a lazy line", () => {
         ["named", insertNamedFootnote],
         ["inline", insertInlineFootnote],
     ] as const) {
-        it.fails(`${name} key: press on the reference, then again where it landed, comes back to the reference`, async () => {
+        it(`${name} key: press on the reference, then again where it landed, comes back to the reference`, async () => {
             const doc = fakeEditor(NOTE, { cursor: { line: 0, ch: 6 }, edits: true, wholeDoc: true, words: true });
             const plugin = fakePlugin({ ...DEFAULT_SETTINGS, enablePopupEditor: false }, doc);
             await cmd(plugin);

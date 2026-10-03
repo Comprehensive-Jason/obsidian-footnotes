@@ -22,12 +22,12 @@ import { lintFootnotes } from "../../src/linting/linter";
 // "<div>" block in the same place already ends it.
 
 describe("a '$$' math block directly under a definition is a block of its own", () => {
-    it.fails("the block walker ends the footnote above the '$$' line", () => {
+    it("the block walker ends the footnote above the '$$' line", () => {
         const lines = "text[^1]\n\n[^1]: body\n$$\nx = 1\n$$\n\nlast para".split("\n");
         expect(findDefinitionBlocks(lines, scanDocument(lines))).toEqual([{ name: "1", start: 2, end: 2 }]);
     });
 
-    it.fails("quoted twin: deleting a quoted orphaned definition keeps the quoted math block", () => {
+    it("quoted twin: deleting a quoted orphaned definition keeps the quoted math block", () => {
         const doc = "text\n\n> [^1]: quoted orphan\n> $$\n> x = 1\n> $$\n\nlast para";
         // Today: "text\n\nlast para" - the math block went with the orphan.
         expect(lintFootnotes(doc, { removeOrphanedDefinitions: true })).toContain("> $$\n> x = 1\n> $$");

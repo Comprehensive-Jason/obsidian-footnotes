@@ -1,4 +1,4 @@
-import { inItemDefinitionNamesFolded } from "../src/parsing/list-item-definitions";
+import { readNote } from "../src/parsing/note-reading";
 import fc from "fast-check";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { gfmFootnoteFromMarkdown } from "mdast-util-gfm-footnote";
@@ -36,7 +36,6 @@ import {
     maskedLineAt,
     normalizeEol,
     protectedLines,
-    quotedDefinitionEnd,
     scanDocument,
 } from "../src/parsing/markdown-scan";
 
@@ -316,7 +315,7 @@ describe("lint invariants over random documents", () => {
                 for (let i = 0; i < linesIn.length; i++) {
                     if (!protectedIn[i]) continue;
                     const left = counts.get(linesIn[i]) ?? 0;
-                    expect(left, `protected line lost: ${JSON.stringify(linesIn[i])}`).toBeGreaterThan(0);
+                    expect(left, `protected line lost: ${JSON.stringify(linesIn[i])} in ${JSON.stringify(doc)}`).toBeGreaterThan(0);
                     counts.set(linesIn[i], left - 1);
                 }
             }),
@@ -889,7 +888,7 @@ describe("definition-body conservation over random documents", () => {
                     if (!starts[i]) continue;
                     const hit = definitionLabelWithName(lines[i], masked[i]);
                     if (!hit || !hit.label.quoted) continue;
-                    const end = quotedDefinitionEnd(lines, scan, starts, i);
+                    const end = (readNote(lines).labelOn(i)?.end ?? i);
                     let cursor = 0;
                     for (let j = i + 1; j <= end; j++) {
                         const line = lines[j];
@@ -964,6 +963,10 @@ describe("scanner and alert invariants", () => {
                     const hit = definitionLabelWithName(lines[i], masked[i]);
                     if (hit) live.add(hit.name.toLowerCase());
                 }
+                // every definition the note reading finds, wherever it sits
+                // (an in-item label indented four spaces has no label shape
+                // of its own; Jason's ruling 1, option a, 2026-10-03)
+                for (const definition of readNote(lines).definitions) live.add(definition.name.toLowerCase());
                 const nameLists = [
                     orphanedFootnoteReferenceNames(text),
                     orphanedFootnoteDefinitionNames(text),
@@ -1025,27 +1028,24 @@ describe("scanner and alert invariants", () => {
     // footnote, or a numbered name minted past the slot count, breaks a
     // footnote's pairing with its definition.
     soakIt("reindex conserves the non-numeric names and numbers the rest within 1..k", () => {
-        const nameSets = (text: string): { named: Set<string>; numbered: Set<string>; held: Set<string> } => {
+        const nameSets = (text: string): { named: Set<string>; numbered: Set<string> } => {
             const lines = normalizeEol(text).text.split("\n");
             const scan = scanDocument(lines);
             const masked = maskProtectedLines(lines, scan);
-            const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-            // a name defined inside a list item is never renumbered and
-            // its number is handed to nobody else (Jason's ruling 1,
-            // 2026-09-20), so it sits outside the 1..k slots
-            const held = inItemDefinitionNamesFolded(lines, scan, masked, starts);
+            const reading = readNote(lines);
+            const starts = reading.labelLines;
             const named = new Set<string>();
             const numbered = new Set<string>();
             for (let i = 0; i < lines.length; i++) {
                 for (const { name } of referenceOccurrences(lines[i], masked[i], starts[i])) {
                     (/^\d+$/.test(name) ? numbered : named).add(name.toLowerCase());
                 }
-                if (starts[i]) {
-                    const hit = definitionLabelWithName(lines[i], masked[i]);
-                    if (hit) (/^\d+$/.test(hit.name) ? numbered : named).add(hit.name.toLowerCase());
-                }
             }
-            return { named, numbered, held };
+            // every definition, wherever it sits: one inside a list item is
+            // renumbered like any other since Jason's ruling 1, option a
+            // (2026-10-03); it used to be held outside the 1..k slots
+            for (const { name } of reading.definitions) (/^\d+$/.test(name) ? numbered : named).add(name.toLowerCase());
+            return { named, numbered };
         };
         fc.assert(
             fc.property(docArb, (doc) => {
@@ -1053,7 +1053,6 @@ describe("scanner and alert invariants", () => {
                 const after = nameSets(reindexFootnotes(doc, { renumberNamedFootnotes: false }));
                 expect([...after.named].sort()).toEqual([...before.named].sort());
                 for (const name of after.numbered) {
-                    if (before.held.has(name)) continue;
                     expect(Number(name)).toBeGreaterThanOrEqual(1);
                     expect(Number(name)).toBeLessThanOrEqual(before.numbered.size);
                 }
@@ -1186,17 +1185,14 @@ describe("adjacency sweep over every pair of surface blocks", () => {
         }
         expect(cases).toBeGreaterThan(3000);
         // conservation over the same corpus: references and definitions are
-        // never minted or lost, protected lines survive (deletions off)
-        const referenceCountOf = (text: string): number => {
-            const lines = normalizeEol(text).text.split("\n");
-            const scan = scanDocument(lines);
-            const masked = maskProtectedLines(lines, scan);
-            const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-            return lines.reduce(
-                (sum, line, i) => sum + referenceOccurrences(line, masked[i], starts[i]).length,
-                0,
-            );
-        };
+        // never minted or lost, protected lines survive (deletions off).
+        // References are counted as Obsidian reads them, by the note
+        // reading: the scanner's own count could change where only its
+        // reading of the text did, as when a moved definition takes its
+        // indented chunk along and the scanner, unlike Obsidian, had read
+        // the chunk as code in place (the runtime swap, 2026-10-03)
+        const referenceCountOf = (text: string): number =>
+            readNote(normalizeEol(text).text.split("\n")).references.filter((reference) => reference.live).length;
         const definitionCountOf = (text: string): number =>
             findDefinitionBlocks(normalizeEol(text).text.split("\n")).length;
         for (const doc of counts) {
@@ -1211,7 +1207,21 @@ describe("adjacency sweep over every pair of surface blocks", () => {
                 `definitions changed: ${JSON.stringify(doc)} -> ${JSON.stringify(out)}`,
             ).toBe(definitionCountOf(baseline));
             const linesIn = normalizeEol(doc).text.split("\n");
-            const protectedIn = protectedLines(linesIn);
+            // protected as both the scanner and Obsidian read the note: the
+            // lines the scanner protects that also lie in a code, math,
+            // HTML, or frontmatter block of the note reading. Where the two
+            // disagree (a "$$" line under a paragraph opens math to
+            // Obsidian, recorded fact 1c658e2, but closes a pair to the
+            // scanner; an indented chunk after a definition's blank gap is
+            // the footnote's body to Obsidian, code to the scanner), the
+            // rules still follow the scanner's protection until step 2 of
+            // the runtime swap moves it onto the reading (2026-10-03)
+            const scannerProtected = protectedLines(linesIn);
+            const protectedIn = linesIn.map(() => false);
+            for (const span of readNote(linesIn).protectedSpans) {
+                if (!span.block || span.kind === "percentComment") continue;
+                for (let l = span.startLine; l <= span.endLine; l++) protectedIn[l] = scannerProtected[l];
+            }
             const countsOut = new Map<string, number>();
             for (const line of normalizeEol(out).text.split("\n")) {
                 countsOut.set(line, (countsOut.get(line) ?? 0) + 1);
@@ -1219,7 +1229,7 @@ describe("adjacency sweep over every pair of surface blocks", () => {
             for (let i = 0; i < linesIn.length; i++) {
                 if (!protectedIn[i]) continue;
                 const left = countsOut.get(linesIn[i]) ?? 0;
-                expect(left, `protected line lost: ${JSON.stringify(linesIn[i])}`).toBeGreaterThan(0);
+                expect(left, `protected line lost: ${JSON.stringify(linesIn[i])} in ${JSON.stringify(doc)}`).toBeGreaterThan(0);
                 countsOut.set(linesIn[i], left - 1);
             }
         }
