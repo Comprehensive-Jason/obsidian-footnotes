@@ -227,7 +227,12 @@ export function compareFacts(note: string, obsidian: ObsidianFacts, facts: Reade
 
     const unknown = new Set(obsidian.unknown);
     const key = (r: NamedPlace) => `${r.line}:${r.column}`;
-    const obsKeys = new Map(obsidian.references.map((r) => [key(r), r]));
+    // An empty inline footnote "^[]" shows up among the metadata cache's
+    // references with an empty name (and not among its inline notes), but
+    // Reading view renders nothing there, so it is no reference: it is left
+    // out here, for the live oracle and the saved answers alike (the
+    // overnight oracle run, 2026-10-03: 1,300 of 20,000 notes, and 7 probes).
+    const obsKeys = new Map(obsidian.references.filter((r) => r.name !== "").map((r) => [key(r), r]));
     const readerKeys = new Map(facts.references.map((r) => [key(r), r]));
     for (const [k, r] of obsKeys) {
         if (!readerKeys.has(k)) out.push({ kind: "ref-only-obsidian", name: r.name, line: r.line, detail: `Obsidian reads a live reference [^${r.name}] at line ${r.line + 1}, column ${r.column + 1}; ${reader} does not` });

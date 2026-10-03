@@ -346,5 +346,14 @@
 {"id":"night:c-caret-bracket-closed","text":"a[^^[x]] b [^1]\n\n[^1]: def\n\nuse[^1] use[^2] use[^3]\n","defs":[["1",2,0,2]],"refs":[["^[x",0,1],["1",0,11],["1",4,3],["2",4,11],["3",4,19]],"code":[]},
 {"id":"night:c-two-brackets","text":"a[^[[x] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["[[x",0,1],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
 {"id":"night:c-bracket-mid","text":"a[^x[y] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["x[y",0,1],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
-{"id":"night:c-bracket-and-space","text":"a[^x [y] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]}
+{"id":"night:c-bracket-and-space","text":"a[^x [y] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:e-empty","text":"a^[] [^1]\n\n[^1]: def\n\nuse[^1] use[^2] use[^3]\n","defs":[["1",2,0,2]],"refs":[["",0,1],["1",0,5],["1",4,3],["2",4,11],["3",4,19]],"code":[]},
+{"id":"night:e-empty-alone","text":"a^[] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["",0,1],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:e-empty-two","text":"a^[] b^[] c\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["",0,1],["",0,6],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:e-space","text":"a^[ ] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:e-x","text":"a^[x] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:e-empty-start","text":"^[] b\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["",0,0],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:e-empty-ref","text":"a^[][^1]\n\n[^1]: def\n\nuse[^1] use[^2] use[^3]\n","defs":[["1",2,0,2]],"refs":[["",0,1],["1",0,4],["1",4,3],["2",4,11],["3",4,19]],"code":[]},
+{"id":"night:e-empty-def","text":"[^1]: a^[] b\n\nuse[^1] use[^2] use[^3]\n","defs":[["1",0,0,0]],"refs":[["",0,7],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:e-empty-and-full","text":"a^[] b^[x] c\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["",0,1],["1",2,3],["2",2,11],["3",2,19]],"code":[]}
 ]

@@ -39,9 +39,7 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes"];
 
 /** Notes on which the reader and Obsidian still disagree, by id, with the reason. */
-const KnownDisagreements: Record<string, string> = {
-    "probe:e3-empty": 'Obsidian lists a reference with an empty name at the empty inline footnote "^[]" of "a^[] [^1]", as if it were a reference with no name; harmless, and not a reference the plugin should count.',
-};
+const KnownDisagreements: Record<string, string> = {};
 
 function load(name: string): SavedAnswer[] {
     return JSON.parse(readFileSync(new URL(`./obsidian-answers/${name}.json`, import.meta.url), "utf8")) as SavedAnswer[];
