@@ -336,13 +336,17 @@ function frontmatter(tables: ParserTables): void {
     tables.blockMethods.unshift("frontmatter");
 }
 
-/** Inline display math: "$$", some text without a "$", and "$$" again, spaces allowed (M1). */
-const DoubleDollarMath = /^\$\$[^$]+?\$\$/;
+/** Inline display math: "$$", some text, and the first "$$" after it; spaces and single dollars allowed inside (M1). */
+const DoubleDollarMath = /^\$\$[\s\S]+?\$\$/;
 
 /**
  * "$$ ... $$" inside a paragraph (rule M1). A "$$" pair within one
  * paragraph is math, with spaces allowed after the opener and before the
- * closer, and it may span the paragraph's lines. remark-math 3 rejects a
+ * closer, and it may span the paragraph's lines. It ends at the first "$$"
+ * after the opener, so a single "$" inside does not stop it: in
+ * "$$ a $ b [^1] $$" and "$$ m [^a$] $$" the reference is dead (the
+ * overnight oracle run of 2026-10-03: 62 notes, all with a footnote name
+ * holding a "$" inside such a pair). remark-math 3 rejects a
  * space after the opening "$$", so without this reader such a reference
  * would be live. A line that starts with "$$" and is not a closed pair still
  * opens a display block, as stock remark-math reads it (M2).
