@@ -35,9 +35,14 @@ export default defineConfig([
 			// window/activeWindow globals do not exist — its auto-fix
 			// rewrote a globalThis slot to `window` and broke the suite
 			"obsidianmd/no-global-this": "off",
+			// for the same reason Node's modules are fine in tests: the referee
+			// suite reads Obsidian's saved answers with node:fs
+			"obsidianmd/no-nodejs-modules": "off",
 		},
 	},
 	{
-		ignores: ["node_modules/**", "main.js", "scripts/**"],
+		// remark-parse-list.js is remark-parse 8's list reader, vendored as
+		// plain JavaScript and kept as close to upstream as possible
+		ignores: ["node_modules/**", "main.js", "scripts/**", "src/parsing/remark-parse-list.js"],
 	},
 ]);

@@ -26,7 +26,7 @@ uses it. `test/fake-editor-helper.test.ts` pins the helper's own
 contract. Purpose-built doubles (the offset-splicing linter fake, richer
 view shapes) stay local to their specs.
 
-The suite has four kinds of files:
+The suite has five kinds of files:
 
 - **Feature specs** (`test/*.test.ts`) — one file per unit under test:
   autonumbering, reference regexes, the insert cascade guards, table-cell
@@ -36,6 +36,15 @@ The suite has four kinds of files:
 - **Bug pins** (`test/hunt/bug-*.test.ts`) — every bug ever found gets a
   failing test before its fix and keeps it as a regression pin. Spec
   rulings live next to them as `test/hunt/spec-*.test.ts`.
+- **The offline referee** (`test/obsidian-referee.test.ts`): the
+  remark-parse 8 reader (`src/parsing/obsidian-markdown.ts`, Obsidian's
+  own parser rebuilt from remark-parse 8 and Obsidian's rules as observed
+  with the oracle) against Obsidian's answers saved from the live oracle
+  below, about 6,000 notes in `test/obsidian-answers/`. It uses the
+  oracle's own comparison (`scripts/oracle/compare.mts`) and fails on any
+  disagreement except a short list of known ones, each with its reason.
+  `test/footnote-facts.test.ts` pins the positions the reader derives
+  (label columns, reference ends, protected spans).
 - **Properties** (`test/properties.test.ts`) — fast-check invariants over
   randomly generated documents and option combos: lint idempotence, no
   mask (NUL) leakage, protected-region preservation, reference/definition
@@ -191,10 +200,18 @@ appendix, put at the top); when neither probe leaves the note's own parse
 unchanged, those names' liveness is reported as unknown. The plugin's side
 (`plugin-facts.ts`) calls the scanner's readers the way the commands do:
 column-0 blocks, quoted definitions, in-item labels, live references, and
-protected lines. `compare.mjs` lists the disagreements: a definition one
+protected lines. `compare.mts` lists the disagreements: a definition one
 side reads and the other does not, a definition whose last line differs, a
 reference live to one side only, a line of an Obsidian code block the
-plugin leaves unprotected.
+plugin leaves unprotected. The offline referee suite uses the same file, so
+the two always judge alike. It is TypeScript that Node runs directly, which
+needs Node 22.18 or later.
+
+With `--reader`, either command compares Obsidian with the remark-parse 8
+reader (`reader-facts.ts`) instead of the scanner. With `--answers
+<file>`, `check` also saves Obsidian's answers in the packed form of
+`test/obsidian-answers/`: add the file to `AnswerFiles` in
+`test/obsidian-referee.test.ts` to make those notes part of the referee.
 
 Reading view is the court of appeal (`--render`): each note becomes a
 scratch note in the vault's `Footnote Oracle/` folder, opens in a new tab in
@@ -206,6 +223,7 @@ and the same appended definitions.
 
 ```powershell
 npm run oracle -- check notes.json --render --out results.json
+npm run oracle -- check notes.json --reader --answers test/obsidian-answers/new-notes.json
 npm run oracle -- fuzz --seed 20261003 --count 3000 --render --out fuzz.json
 ```
 

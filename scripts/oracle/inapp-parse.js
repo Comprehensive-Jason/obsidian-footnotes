@@ -13,7 +13,7 @@
 // which of the other reference-shaped strings Obsidian would read as live,
 // each note is parsed again with a definition for every undefined name,
 // once appended after a blank line and once put at the top. The Node side
-// (compare.mjs) takes the first probe that left the note's own parse
+// (compare.mts) takes the first probe that left the note's own parse
 // unchanged and had every probe definition read as one (an unclosed fence
 // or "%%" block at the end swallows the appendix); when neither does, the
 // liveness of the undefined names is reported as unknown rather than guessed.

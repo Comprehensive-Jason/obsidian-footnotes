@@ -8,7 +8,7 @@
 //   {"type":"protected","line":3,"is":true}                  (inside code or math)
 // Each judge answers "agrees", "disagrees", or "no opinion", with a reason.
 
-import { trimmedEnd } from "./compare.mjs";
+import { trimmedEnd } from "./compare.mts";
 
 const fold = (name) => name.toLowerCase();
 

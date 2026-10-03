@@ -2,17 +2,22 @@
 // plugin's scanner. It needs the live app with the sandbox vault open; it is
 // dev tooling, not part of the commit bar. TESTING.md describes the layer.
 //
-//   npm run oracle -- check <notes.json> [--render] [--out <results.json>]
+//   npm run oracle -- check <notes.json> [--render] [--reader] [--out <results.json>] [--answers <answers.json>]
 //       Reads each note (a JSON array of strings, or of {id, text}) with
 //       Obsidian's metadata parser and with the plugin's readers, and lists
 //       where they disagree. --render also renders every note in Reading
 //       view, rules on each disagreement, and compares Reading view with
-//       the metadata cache.
+//       the metadata cache. --answers saves Obsidian's answers in the packed
+//       form of test/obsidian-answers/, ready to add to the referee suite.
 //   npm run oracle -- fuzz [--seed <n>] [--count <n>] [--render] [--out <results.json>]
 //       Generates container-heavy notes (generate.mjs), compares them,
 //       shrinks each disagreement to a short reproducer by deleting lines,
 //       clusters the reproducers by shape, and with --render adjudicates one
 //       representative per cluster in Reading view.
+//
+//   --reader, with either command, compares Obsidian with the remark-parse 8
+//   reader (src/parsing/obsidian-markdown.ts, through reader-facts.ts)
+//   instead of the plugin's scanner.
 
 import { build } from "esbuild";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -22,7 +27,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { appFacts, runInApp } from "./obsidian-bridge.mjs";
 import { judgeWithMetadata, judgeWithReadingView, pluginReading } from "./claims.mjs";
-import { compareNote, isInlineId } from "./compare.mjs";
+import { compareNote, isInlineId, obsidianFacts, packAnswer } from "./compare.mts";
 import { generateNotes } from "./generate.mjs";
 import { judge, metadataVsReadingView, readRendering, renderText } from "./reading-view.mjs";
 
@@ -31,11 +36,15 @@ const PLUGIN_DIR = resolve(HERE, "..", "..");
 const BATCH = 300;
 const RENDER_BATCH = 5;
 
-/** The plugin's readers, bundled for Node with the obsidian stub aliased in, as the unit tests run them. */
-async function loadPluginFacts() {
-    const outfile = join(tmpdir(), `footnote-oracle-plugin-facts-${process.pid}.mjs`);
+// whose reading Obsidian's is compared with, for the disagreement details: "the plugin" or, with --reader, "the reader"
+let readerName = "the plugin";
+const compare = (note, entry, facts) => compareNote(note, entry, facts, readerName);
+
+/** A reader's facts function (plugin-facts.ts or reader-facts.ts), bundled for Node with the obsidian stub aliased in, as the unit tests run them. */
+async function loadFacts(file, exportName) {
+    const outfile = join(tmpdir(), `footnote-oracle-facts-${process.pid}.mjs`);
     await build({
-        entryPoints: [join(HERE, "plugin-facts.ts")],
+        entryPoints: [join(HERE, file)],
         bundle: true,
         platform: "node",
         format: "esm",
@@ -45,7 +54,7 @@ async function loadPluginFacts() {
     });
     const mod = await import(pathToFileURL(outfile).href);
     rmSync(outfile, { force: true });
-    return mod.pluginFacts;
+    return mod[exportName];
 }
 
 /** Obsidian's parse of every note, in batches small enough for one job file each. */
@@ -85,7 +94,7 @@ async function checkNotes(notes, pluginFacts) {
     const parsed = await parseAll(notes.map((n) => n.text));
     return notes.map((n, i) => {
         const plugin = pluginFacts(n.text);
-        const comparison = compareNote(n.text, parsed[i], plugin);
+        const comparison = compare(n.text, parsed[i], plugin);
         return { ...n, entry: parsed[i], plugin, comparison };
     });
 }
@@ -124,7 +133,7 @@ async function shrinkAll(items, pluginFacts) {
         const next = [];
         for (const it of active) {
             const hit = it.candidates.find((c) => {
-                const result = compareNote(candidates[c], parsed[c], pluginFacts(candidates[c]));
+                const result = compare(candidates[c], parsed[c], pluginFacts(candidates[c]));
                 return result.disagreements.some((d) => d.kind === it.kind);
             });
             if (hit !== undefined) {
@@ -209,7 +218,9 @@ async function main() {
     const [command, ...args] = process.argv.slice(2);
     const facts = appFacts();
     console.log(`Obsidian ${facts.version}, vault ${facts.vault}, isMobile ${facts.isMobile}`);
-    const pluginFacts = await loadPluginFacts();
+    const useReader = args.includes("--reader");
+    if (useReader) readerName = "the reader";
+    const pluginFacts = useReader ? await loadFacts("reader-facts.ts", "readerFacts") : await loadFacts("plugin-facts.ts", "pluginFacts");
     const outPath = argValue(args, "--out", null);
     const render = args.includes("--render");
     let report;
@@ -239,6 +250,12 @@ async function main() {
             }
         }
         report = { app: facts, command, records: records.map(({ entry, rv, ...rest }) => ({ ...rest, obsidian: entry.first })) };
+        const answersPath = argValue(args, "--answers", null);
+        if (answersPath) {
+            // one note per line, as in test/obsidian-answers/
+            const answers = records.map((r) => JSON.stringify(packAnswer(r.id, r.text, obsidianFacts(r.text, r.entry))));
+            writeFileSync(answersPath, `[\n${answers.join(",\n")}\n]\n`, "utf8");
+        }
     } else if (command === "fuzz") {
         const seed = Number(argValue(args, "--seed", "20261003"));
         const count = Number(argValue(args, "--count", "2000"));
@@ -256,7 +273,7 @@ async function main() {
         // the line each reproducer's disagreement is about
         const final = await parseAll(items.map((it) => it.text));
         items.forEach((it, i) => {
-            const d = compareNote(it.text, final[i], pluginFacts(it.text)).disagreements.find((x) => x.kind === it.kind);
+            const d = compare(it.text, final[i], pluginFacts(it.text)).disagreements.find((x) => x.kind === it.kind);
             it.focus = d ? d.line : -1;
         });
         const clusters = new Map();
@@ -283,7 +300,7 @@ async function main() {
                 c.metadataVsReadingView = reps[i].metadataVsReadingView;
             });
         } else {
-            for (const c of list) c.detail = compareNote(c.reproducer, (await parseAll([c.reproducer]))[0], pluginFacts(c.reproducer)).disagreements.filter((d) => d.kind === c.kind).map((d) => d.detail);
+            for (const c of list) c.detail = compare(c.reproducer, (await parseAll([c.reproducer]))[0], pluginFacts(c.reproducer)).disagreements.filter((d) => d.kind === c.kind).map((d) => d.detail);
         }
         for (const c of list) {
             console.log(`\n[${c.count}] ${c.kind}: ${JSON.stringify(c.reproducer)}`);
@@ -301,7 +318,7 @@ async function main() {
             clusters: list,
         };
     } else {
-        throw new Error("usage: run-oracle.mjs check <notes.json> [--render] [--out f] | fuzz [--seed n] [--count n] [--render] [--out f]");
+        throw new Error("usage: run-oracle.mjs check <notes.json> [--render] [--reader] [--out f] [--answers f] | fuzz [--seed n] [--count n] [--render] [--reader] [--out f]");
     }
     if (outPath) writeFileSync(outPath, JSON.stringify(report, null, 1), "utf8");
 }

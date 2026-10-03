@@ -19,6 +19,11 @@
   "keywords": [],
   "author": "",
   "license": "MIT",
+  "dependencies": {
+    "remark-footnotes": "2.0.0",
+    "remark-math": "3.0.1",
+    "remark-parse": "8.0.3"
+  },
   "devDependencies": {
     "@codemirror/state": "^6.5.0",
     "@codemirror/view": "^6.38.6",
@@ -41,6 +46,9 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.64.0",
     "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "trim": "0.0.3"
   },
   "knip": {
     "entry": [

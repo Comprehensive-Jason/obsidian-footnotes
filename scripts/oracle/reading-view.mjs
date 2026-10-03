@@ -12,7 +12,7 @@
 // that shift.
 
 import { hiddenReferences, visibleWords } from "./claims.mjs";
-import { trimmedEnd } from "./compare.mjs";
+import { trimmedEnd } from "./compare.mts";
 
 const fold = (name) => name.toLowerCase();
 
