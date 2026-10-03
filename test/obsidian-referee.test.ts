@@ -51,7 +51,9 @@ const KnownDisagreements: Record<string, string> = {
     "night:cs-pct-sp-ref":
         'Text on a "%%" opener line: the metadata cache places it as if the line\'s indentation and the "%%" were not there ("%% a[^1]" puts [^1] at column 3, not 5; "  %% a[^1]" at 3, not 7; in a quote or a list item, short by the "%%" alone). Varied in out-fam-cs: the line after the opener, a closer line with text, and inline pairs are placed right.',
     "night:cs-ord-co-lazy-text":
-        'A lazy line right under a callout title that has anything after its marker (a title, or only a space), when the callout sits inside a list item or another quote: the metadata cache shifts the lazy line right by the outer container\'s width ("1. > [!note] T" then "ab cd[^1]" puts [^1] at column 9, not 6; ">> [!note] T" then "[^1]" at 2, not 1; "- > [!note] T" then "ab[^1]" at 5, not 3). Varied in out-fam-cs: without anything after the marker, at the top level, after a quoted line, or with a plain quote, there is no shift.',
+        'A lazy line right under a callout title that has anything after its marker (a title, or only a space), when the callout sits inside a list item or another quote: the metadata cache shifts the lazy line right by the outer container\'s width ("1. > [!note] T" then "ab cd[^1]" puts [^1] at column 9, not 6; ">> [!note] T" then "[^1]" at 2, not 1; "- > [!note] T" then "ab[^1]" at 5, not 3). Varied in out-fam-cs and out-fam-p2: without anything after the marker, at the top level, after a quoted line, or with a plain quote, there is no shift.',
+    "night:p2b-task-sp-co-quoted":
+        'The same shift in a task item reaches the quoted line under the title too: "- [ ] > [!note] T" then "  > ab[^1]" puts [^1] at column 9, not 7 (and a lazy line under it at 9, not 3). Varied in out-fam-p2b: a plain quote or a callout with nothing after its marker in the same task item, and a tab instead of the task box, show no shift.',
 };
 
 function load(name: string): SavedAnswer[] {
