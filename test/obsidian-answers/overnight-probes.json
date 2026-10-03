@@ -1,0 +1,17 @@
+[
+{"id":"night:ct-tab-title-ref","text":"> [!note]\tTitle[^1]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",0,15],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:ct-tab-ref","text":"> [!note]\t[^1]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",0,10],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:ct-tab2-title-ref","text":"> [!note]\t\tTitle[^1]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:ct-tab-sp-title-ref","text":"> [!note]\t  Title[^1]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",0,17],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:ct-sp-tab-title-ref","text":"> [!note] \tTitle[^1]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:ct-fold-tab-title-ref","text":"> [!note]-\tTitle[^1]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",0,16],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:ct-tab-label","text":"> [!note]\t[^1]: def\n\nuse[^1] use[^2] use[^3]\n","defs":[["1",0,10,0]],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:ct-tab-label-body","text":"> [!note]\tTitle\n> body[^2]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["2",1,6],["1",3,3],["2",3,11],["3",3,19]],"code":[]},
+{"id":"night:ct-sp4-title-ref","text":"> [!note]    Title[^1]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",0,18],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:ct-sp5-title-ref","text":"> [!note]     Title[^1]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:ct-tab-title-ref-mid","text":"> [!note]\tA title [^1] here\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",0,18],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:ct-nested-tab","text":"> > [!note]\tTitle[^1]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",0,17],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:ct-item-tab","text":"- > [!note]\tTitle[^1]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",0,17],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:ct-tab-label-ref","text":"> [!note] [^1]: abc [^2]\n\nuse[^1] use[^2] use[^3]\n","defs":[["1",0,10,0]],"refs":[["2",0,20],["1",2,3],["2",2,11],["3",2,19]],"code":[]},
+{"id":"night:ct-tab-label-ref2","text":"> [!note]\t[^1]: abc [^2]\n\nuse[^1] use[^2] use[^3]\n","defs":[["1",0,10,0]],"refs":[["2",0,20],["1",2,3],["2",2,11],["3",2,19]],"code":[]}
+]

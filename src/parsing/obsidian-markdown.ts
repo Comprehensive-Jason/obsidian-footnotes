@@ -214,7 +214,16 @@ function calloutTitles(tables: ParserTables): void {
         const line = value.slice(0, lineEnd(value, 0));
         let rest = marker[0].length;
         if (line[rest] === " " || line[rest] === "\t") rest++;
-        const children = this.tokenizeBlock(line.slice(rest), along(eat.now(), rest));
+        const now = eat.now();
+        // remark-parse keeps, per line, how many characters its containers
+        // stripped from the start of the line, and the footnote reader adds
+        // its label's length to that count to place the definition's text.
+        // The title's own text starts after the marker, so the count for
+        // this line must say so too, or a reference in a definition on the
+        // title line is placed short by the marker's length (rule A4; the
+        // overnight oracle run of 2026-10-03, about 1,100 of 20,000 notes).
+        this.offset[now.line] = Math.max(this.offset[now.line] ?? 0, now.column - 1 + rest);
+        const children = this.tokenizeBlock(line.slice(rest), along(now, rest));
         return eat(line)({ type: "calloutTitle", children });
     };
     tables.blockMethods.unshift("calloutTitle");

@@ -21,7 +21,13 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 // - probes: the families written to pin down each rule in
 //   obsidian-rules.md (callouts, lists, tables, Obsidian-only syntax, the
 //   footnote reader, "%%" comments, list indentation, and the Reading-view
-//   sample).
+//   sample);
+// - broad-20261004: notes of the overnight run of 2026-10-03, 20,000 notes
+//   from the broad generator with seed 20261004 (generateBroadNotes in
+//   scripts/oracle/generate.mjs): a few hundred the reader agreed on, spread
+//   over the run, and whole notes behind each rule found that night;
+// - overnight-probes: that night's shrunk reproducers and the families
+//   written to pin each new rule down.
 //
 // The comparison is the live oracle's own (scripts/oracle/compare.mts), so a
 // note agrees here exactly when `npm run oracle -- check --reader` would find
@@ -30,7 +36,7 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 // notes, run the live oracle with --answers (TESTING.md) and add the file to
 // AnswerFiles.
 
-const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes"];
+const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes"];
 
 /** Notes on which the reader and Obsidian still disagree, by id, with the reason. */
 const KnownDisagreements: Record<string, string> = {
