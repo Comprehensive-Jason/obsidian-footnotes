@@ -13,6 +13,7 @@
     "test": "vitest",
     "coverage": "vitest run --coverage",
     "test:smoke": "node scripts/smoke-test.mjs",
+    "oracle": "node scripts/oracle/run-oracle.mjs",
     "version": "node scripts/version-bump.mjs && git add manifest.json manifest-beta.json versions.json"
   },
   "keywords": [],
@@ -44,6 +45,8 @@
   "knip": {
     "entry": [
       "scripts/generate-corpora.ts",
+      "scripts/oracle/plugin-facts.ts",
+      "scripts/oracle/inapp-*.js",
       "scripts/strip-inkscape-icons.mjs",
       "scripts/readme-gifs/record.mjs",
       "scripts/readme-gifs/*.js"

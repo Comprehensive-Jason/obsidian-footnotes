@@ -90,9 +90,9 @@ Standing rules:
   sub-editors, embedRegistry) must keep a smoke test — a mocked unit test
   would just encode our assumptions and stay green when Obsidian changes.
 - When a classification is contested (is this line code? frontmatter? a
-  definition continuation?), get ground truth from the real app:
-  `Obsidian.com eval` + `metadataCache.getFileCache(file).sections` shows
-  exactly how Obsidian reads the markdown.
+  definition continuation?), get ground truth from the real app with the
+  oracle below (`npm run oracle -- check`), which reads the note with
+  Obsidian's own parser and, with `--render`, in Reading view.
 
 ## Static analysis — `npm run lint` and `npm run knip`
 
@@ -173,6 +173,58 @@ Notes for writing new smoke tests:
   (`resetSettings`); never rely on a previous test's cleanup running.
 - Settings changes are in-memory only and restored at the end, so the
   vault's `data.json` is untouched.
+
+## The oracle, Obsidian as the referee: `npm run oracle`
+
+`scripts/oracle/` compares the scanner's reading of a note with Obsidian's
+own. It needs the live app with the sandbox vault open and is not part of
+the commit bar: run it when a reading fact is contested, after scanner
+work, or as a fuzz before a release.
+
+Obsidian's side comes from `app.metadataCache.computeMetadataAsync`
+(undocumented), which runs the parser behind Reading view and the metadata
+cache on any string: its sections, its definitions (`footnotes`), and its
+references (`footnoteRefs`). That list holds only references whose name has
+a definition, so each note is parsed a second time with a definition for
+every undefined name appended (or, when an unclosed block swallows the
+appendix, put at the top); when neither probe leaves the note's own parse
+unchanged, those names' liveness is reported as unknown. The plugin's side
+(`plugin-facts.ts`) calls the scanner's readers the way the commands do:
+column-0 blocks, quoted definitions, in-item labels, live references, and
+protected lines. `compare.mjs` lists the disagreements: a definition one
+side reads and the other does not, a definition whose last line differs, a
+reference live to one side only, a line of an Obsidian code block the
+plugin leaves unprotected.
+
+Reading view is the court of appeal (`--render`): each note becomes a
+scratch note in the vault's `Footnote Oracle/` folder, opens in a new tab in
+Reading view, is rendered, read back (which definitions render and from
+which line, which references render), and the tab is closed and the note
+deleted. Reading view renders only referenced definitions and only defined
+references, so the scratch note gets a top paragraph referencing every name
+and the same appended definitions.
+
+```powershell
+npm run oracle -- check notes.json --render --out results.json
+npm run oracle -- fuzz --seed 20261003 --count 3000 --render --out fuzz.json
+```
+
+`check` takes a JSON array of notes (strings, or `{id, text}`); a note may
+carry `claims` (a definition on a line, a definition's last line, a
+reference live or dead, a line protected), and each claim gets the plugin's
+reading and the metadata cache's and Reading view's verdicts (`claims.mjs`
+documents the shapes). `fuzz` generates small container-heavy notes from a
+seed (`generate.mjs`), shrinks each disagreement by deleting lines while it
+persists, clusters the reproducers by line shape, and adjudicates one per
+cluster in Reading view. The bridge (`obsidian-bridge.mjs`) follows the
+live-app rules in `docs/agents/dev-setup.md`: the sandbox vault named on
+every CLI call, scripts and notes passed through the vault's
+`.footnote-oracle/` dotfolder, and evals that return at once while Node
+polls for the result file. Long runs want the sandbox window visible: on
+2026-10-03, with it hidden, the app slowed for a while to about four
+minutes per rendered note and CLI evals timed out, then recovered by
+itself. A metadata-only `fuzz` (no `--render`) of 3000 notes takes about
+40 minutes, most of it shrinking.
 
 ## When to run what
 
