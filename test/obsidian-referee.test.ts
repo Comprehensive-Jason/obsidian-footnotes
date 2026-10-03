@@ -38,8 +38,21 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 
 const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes"];
 
-/** Notes on which the reader and Obsidian still disagree, by id, with the reason. */
-const KnownDisagreements: Record<string, string> = {};
+/**
+ * Notes on which the reader and Obsidian still disagree, by id, with the
+ * reason. Both left today are places where the metadata cache reports a
+ * live reference at the wrong column: the two sides agree that it is live
+ * and on which line, and the reader's column is the one in the text. The
+ * reader keeps the true column (the plugin will edit by it), so these stay
+ * listed rather than copied (the overnight oracle run, 2026-10-03: about
+ * 140 of 20,000 notes, every one of these two shapes).
+ */
+const KnownDisagreements: Record<string, string> = {
+    "night:cs-pct-sp-ref":
+        'Text on a "%%" opener line: the metadata cache places it as if the line\'s indentation and the "%%" were not there ("%% a[^1]" puts [^1] at column 3, not 5; "  %% a[^1]" at 3, not 7; in a quote or a list item, short by the "%%" alone). Varied in out-fam-cs: the line after the opener, a closer line with text, and inline pairs are placed right.',
+    "night:cs-ord-co-lazy-text":
+        'A lazy line right under a callout title that has anything after its marker (a title, or only a space), when the callout sits inside a list item or another quote: the metadata cache shifts the lazy line right by the outer container\'s width ("1. > [!note] T" then "ab cd[^1]" puts [^1] at column 9, not 6; ">> [!note] T" then "[^1]" at 2, not 1; "- > [!note] T" then "ab[^1]" at 5, not 3). Varied in out-fam-cs: without anything after the marker, at the top level, after a quoted line, or with a plain quote, there is no shift.',
+};
 
 function load(name: string): SavedAnswer[] {
     return JSON.parse(readFileSync(new URL(`./obsidian-answers/${name}.json`, import.meta.url), "utf8")) as SavedAnswer[];
