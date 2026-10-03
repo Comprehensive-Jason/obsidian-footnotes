@@ -6,7 +6,7 @@ import { contextOfLines, docLines, insideDefinition } from "../editor/doc-contex
 import { simulateChanges } from "../editor/insertion-liveness";
 import { showNotice } from "../editor/notice";
 import { codeMirrorViewOf, readingViewActive, viewEditor } from "../editor/obsidian-internals";
-import { activeTableCellEditor } from "../editor/table-cursor";
+import { nestedSubEditorOwnsFocus } from "../editor/table-cursor";
 import { replaceMinimal } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
 import { lintAfterFootnoteCreation, withEmptySectionHeadingRemoved } from "../linting/linter";
@@ -76,13 +76,44 @@ export function resetCarryRegister(): void {
     register = null;
 }
 
-/** The single, non-empty selection of the note being edited, or null when the feature is off, no editor is active, the view is Reading view, a table cell owns focus, or the selection is empty or multiple. */
-function carryableSelection(plugin: FootnotePlugin): { doc: Editor; from: EditorPosition; to: EditorPosition } | null {
+/**
+ * Whether the clipboard event `event` happened in `doc`'s own text.
+ *
+ * The copy and cut hooks listen on the whole page, so they also hear a
+ * copy or cut in a Properties field, the inline title, the search box, a
+ * dialog's input, or a hover popover's editor. While the focus sits in one
+ * of those, the note keeps its old selection, and acting on it cut prose
+ * the user was not even looking at (hunt 2026-10-02, pin
+ * bug-carry-unfocused-field-acts-on-note). So the event counts only when
+ * the element it was fired at (or, without one, the focused element) sits
+ * inside the editor's own text area, CodeMirror's content element.
+ *
+ * A table cell, or any other small editor drawn inside that text area,
+ * has its own copy, cut, and paste, and writing through the main editor
+ * while it holds the focus races its write-back into the note (the issue
+ * #28 corruption family; pin bug-carry-unreachable-nested-editor). So the
+ * event does not count while such an editor holds the focus either.
+ *
+ * The Properties box needs no check of its own: Obsidian draws it outside
+ * the content element, so the first test already turns it away.
+ *
+ * The unit tests' stand-in editor has no CodeMirror view, and then there
+ * is nothing to ask, so the event counts.
+ */
+function eventInEditorText(doc: Editor, event: Event): boolean {
+    const content = codeMirrorViewOf(doc)?.contentDOM;
+    if (!content) return true;
+    const target = event.target ?? content.ownerDocument.activeElement;
+    return !!target && content.contains(target as Node) && !nestedSubEditorOwnsFocus(doc);
+}
+
+/** The single, non-empty selection of the note being edited, or null when the feature is off, no editor is active, the view is Reading view, the event happened outside the note's own text (eventInEditorText), or the selection is empty or multiple. */
+function carryableSelection(plugin: FootnotePlugin, event: Event): { doc: Editor; from: EditorPosition; to: EditorPosition } | null {
     if (!plugin.settings.carryFootnotesOnCopy) return null;
     const mdView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
     const doc = mdView && viewEditor(mdView);
     if (!mdView || !doc || readingViewActive(mdView)) return null;
-    if (activeTableCellEditor(doc)) return null;
+    if (!eventInEditorText(doc, event)) return null;
     const selections = doc.listSelections();
     if (selections.length !== 1) return null;
     const [a, b] = [selections[0].anchor, selections[0].head];
@@ -102,8 +133,8 @@ function textBetween(doc: Editor, from: EditorPosition, to: EditorPosition): str
 }
 
 /** Remember what the selection needs, and return it with the editor and the range. Null when there is nothing to remember. */
-function remember(plugin: FootnotePlugin): { doc: Editor; from: EditorPosition; to: EditorPosition; entry: CarryRegister } | null {
-    const selection = carryableSelection(plugin);
+function remember(plugin: FootnotePlugin, event: Event): { doc: Editor; from: EditorPosition; to: EditorPosition; entry: CarryRegister } | null {
+    const selection = carryableSelection(plugin, event);
     if (!selection) return null;
     const { doc, from, to } = selection;
     const body = textBetween(doc, from, to);
@@ -119,7 +150,7 @@ function remember(plugin: FootnotePlugin): { doc: Editor; from: EditorPosition; 
  * A selection that needs no definition is left to the editor.
  */
 export function handleCopy(plugin: FootnotePlugin, event: ClipboardEvent): void {
-    const remembered = remember(plugin);
+    const remembered = remember(plugin, event);
     if (!remembered || remembered.entry.carried.length === 0 || !event.clipboardData) return;
     event.clipboardData.setData("text/plain", remembered.entry.text);
     event.preventDefault();
@@ -132,7 +163,7 @@ export function handleCopy(plugin: FootnotePlugin, event: ClipboardEvent): void 
  * needs neither is the editor's own.
  */
 export function handleCut(plugin: FootnotePlugin, event: ClipboardEvent): void {
-    const remembered = remember(plugin);
+    const remembered = remember(plugin, event);
     if (!remembered || !event.clipboardData) return;
     const { doc, from, to, entry } = remembered;
     const before = doc.getValue();
@@ -172,11 +203,13 @@ export function handleCut(plugin: FootnotePlugin, event: ClipboardEvent): void {
 /**
  * The paste hook, on Obsidian's editor-paste event. Takes the paste over
  * when the text matches the register or ends in definition lines; leaves
- * every other paste, and one another plugin already handled, alone.
- * Returns whether it took the paste over.
+ * every other paste, one another plugin already handled, and one that
+ * happened outside the editor's own text (a table cell's editor, see
+ * eventInEditorText), alone. Returns whether it took the paste over.
  */
 export function handlePaste(plugin: FootnotePlugin, event: ClipboardEvent, doc: Editor): boolean {
     if (event.defaultPrevented || !plugin.settings.carryFootnotesOnCopy || !event.clipboardData) return false;
+    if (!eventInEditorText(doc, event)) return false;
     const text = event.clipboardData.getData("text/plain");
     if (!text) return false;
     let body: string;
@@ -199,7 +232,6 @@ export function handlePaste(plugin: FootnotePlugin, event: ClipboardEvent, doc: 
         }
         return false;
     }
-    if (activeTableCellEditor(doc)) return false;
     const selections = doc.listSelections();
     if (selections.length !== 1) return false;
     const [a, b] = [selections[0].anchor, selections[0].head];
@@ -233,7 +265,7 @@ export function carriedInputHandler(
         const { body, carried } = splitCarriedText(text);
         if (carried.length === 0) return false;
         const doc = editorFor(view);
-        if (!doc || activeTableCellEditor(doc)) return false;
+        if (!doc || nestedSubEditorOwnsFocus(doc)) return false;
         landCarriedText(plugin, doc, doc.offsetToPos(from), doc.offsetToPos(to), body, carried, []);
         return true;
     };

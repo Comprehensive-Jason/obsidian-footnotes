@@ -115,7 +115,7 @@ beforeEach(() => {
 });
 
 describe("copy and cut whose focus is not in the note's editor", () => {
-    it.fails("cut in a Properties field (Live Preview) leaves the note's prose alone", () => {
+    it("cut in a Properties field (Live Preview) leaves the note's prose alone", () => {
         const field = element([".metadata-container"]);
         const doc = staleEditor(field);
         const event = clipboardEvent(field);
@@ -125,7 +125,7 @@ describe("copy and cut whose focus is not in the note's editor", () => {
         expect(event.defaultPrevented).toBe(false);
     });
 
-    it.fails("copy in a Properties field (Live Preview) leaves the field's own clipboard text", () => {
+    it("copy in a Properties field (Live Preview) leaves the field's own clipboard text", () => {
         const field = element([".metadata-container"]);
         const doc = staleEditor(field);
         const event = clipboardEvent(field);
@@ -135,7 +135,7 @@ describe("copy and cut whose focus is not in the note's editor", () => {
         expect(event.defaultPrevented).toBe(false);
     });
 
-    it.fails("cut in a text field outside the editor (inline title, Ctrl+F search, a modal) leaves the note alone", () => {
+    it("cut in a text field outside the editor (inline title, Ctrl+F search, a modal) leaves the note alone", () => {
         const field = element();
         const doc = staleEditor(field);
         const event = clipboardEvent(field);
@@ -145,7 +145,7 @@ describe("copy and cut whose focus is not in the note's editor", () => {
         expect(event.defaultPrevented).toBe(false);
     });
 
-    it.fails("copy in a text field outside the editor does not overwrite the clipboard with the note's selection", () => {
+    it("copy in a text field outside the editor does not overwrite the clipboard with the note's selection", () => {
         const field = element();
         const doc = staleEditor(field);
         const event = clipboardEvent(field);
@@ -154,7 +154,7 @@ describe("copy and cut whose focus is not in the note's editor", () => {
         expect(event.written).toEqual({});
     });
 
-    it.fails("cut in a hover popover's editor never deletes text from the note under it", () => {
+    it("cut in a hover popover's editor never deletes text from the note under it", () => {
         // the popover's own editor content, outside the main editor's page area
         const popover = element([".hover-popover", ".cm-content"]);
         const doc = staleEditor(popover);

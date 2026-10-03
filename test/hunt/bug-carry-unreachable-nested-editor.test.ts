@@ -107,7 +107,7 @@ beforeEach(() => {
 });
 
 describe("a nested editor owns the focus but cannot be reached", () => {
-    it.fails("cut while a nested editor inside the note owns focus: no main-editor write", () => {
+    it("cut while a nested editor inside the note owns focus: no main-editor write", () => {
         const cell = cellElement();
         const doc = editorWithFocusIn(cell);
         handleCut(pluginFor(doc, cell), clipboardEvent(cell) as never);
@@ -115,7 +115,7 @@ describe("a nested editor owns the focus but cannot be reached", () => {
         expect(doc.lines).toEqual(NOTE);
     });
 
-    it.fails("paste while a nested editor owns focus: no main-editor write at the old selection", () => {
+    it("paste while a nested editor owns focus: no main-editor write at the old selection", () => {
         const cell = cellElement();
         const doc = editorWithFocusIn(cell);
         handlePaste(pluginFor(doc, cell), clipboardEvent(cell, "c[^7]\n\n[^7]: seven") as never, doc);
