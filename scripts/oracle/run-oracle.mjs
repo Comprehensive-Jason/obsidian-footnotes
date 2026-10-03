@@ -9,8 +9,9 @@
 //       view, rules on each disagreement, and compares Reading view with
 //       the metadata cache. --answers saves Obsidian's answers in the packed
 //       form of test/obsidian-answers/, ready to add to the referee suite.
-//   npm run oracle -- fuzz [--seed <n>] [--count <n>] [--render] [--out <results.json>]
-//       Generates container-heavy notes (generate.mjs), compares them,
+//   npm run oracle -- fuzz [--seed <n>] [--count <n>] [--broad] [--render] [--out <results.json>]
+//       Generates container-heavy notes (generate.mjs; with --broad, the broad
+//       generator's realistic and container-heavy mix), compares them,
 //       shrinks each disagreement to a short reproducer by deleting lines,
 //       clusters the reproducers by shape, and with --render adjudicates one
 //       representative per cluster in Reading view.
@@ -28,7 +29,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { appFacts, runInApp } from "./obsidian-bridge.mjs";
 import { judgeWithMetadata, judgeWithReadingView, pluginReading } from "./claims.mjs";
 import { compareNote, isInlineId, obsidianFacts, packAnswer } from "./compare.mts";
-import { generateNotes } from "./generate.mjs";
+import { generateBroadNotes, generateNotes } from "./generate.mjs";
 import { judge, metadataVsReadingView, readRendering, renderText } from "./reading-view.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -259,7 +260,8 @@ async function main() {
     } else if (command === "fuzz") {
         const seed = Number(argValue(args, "--seed", "20261003"));
         const count = Number(argValue(args, "--count", "2000"));
-        const notes = generateNotes(seed, count).map((text, i) => ({ id: `${seed}-${i}`, text }));
+        const generate = args.includes("--broad") ? generateBroadNotes : generateNotes;
+        const notes = generate(seed, count).map((text, i) => ({ id: `${seed}-${i}`, text }));
         const records = await checkNotes(notes, pluginFacts);
         const disagreeing = records.filter((r) => r.comparison.disagreements.length > 0);
         const unknownCount = records.filter((r) => r.comparison.unknown.length > 0).length;
@@ -318,7 +320,7 @@ async function main() {
             clusters: list,
         };
     } else {
-        throw new Error("usage: run-oracle.mjs check <notes.json> [--render] [--reader] [--out f] [--answers f] | fuzz [--seed n] [--count n] [--render] [--reader] [--out f]");
+        throw new Error("usage: run-oracle.mjs check <notes.json> [--render] [--reader] [--out f] [--answers f] | fuzz [--seed n] [--count n] [--broad] [--render] [--reader] [--out f]");
     }
     if (outPath) writeFileSync(outPath, JSON.stringify(report, null, 1), "utf8");
 }

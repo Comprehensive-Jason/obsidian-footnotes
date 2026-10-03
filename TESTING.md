@@ -225,6 +225,7 @@ and the same appended definitions.
 npm run oracle -- check notes.json --render --out results.json
 npm run oracle -- check notes.json --reader --answers test/obsidian-answers/new-notes.json
 npm run oracle -- fuzz --seed 20261003 --count 3000 --render --out fuzz.json
+npm run oracle -- fuzz --broad --seed 20261004 --count 20000 --reader --out broad.json
 ```
 
 `check` takes a JSON array of notes (strings, or `{id, text}`); a note may
@@ -232,7 +233,11 @@ carry `claims` (a definition on a line, a definition's last line, a
 reference live or dead, a line protected), and each claim gets the plugin's
 reading and the metadata cache's and Reading view's verdicts (`claims.mjs`
 documents the shapes). `fuzz` generates small container-heavy notes from a
-seed (`generate.mjs`), shrinks each disagreement by deleting lines while it
+seed (`generate.mjs`); with `--broad` it uses the broad generator instead,
+which mixes notes written the way people write them (prose with hard
+wraps, definitions at the bottom, frontmatter, wikilinks, tables, nested
+callouts, long definitions, text in other scripts) with the
+container-heavy shapes, 5 to 30 lines each. It then shrinks each disagreement by deleting lines while it
 persists, clusters the reproducers by line shape, and adjudicates one per
 cluster in Reading view. The bridge (`obsidian-bridge.mjs`) follows the
 live-app rules in `docs/agents/dev-setup.md`: the sandbox vault named on
