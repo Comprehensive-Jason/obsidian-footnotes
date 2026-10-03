@@ -290,13 +290,19 @@ function tablePipeStyles(tables: ParserTables): void {
     };
 }
 
-/** A wikilink or embed: "[[" (or "![[") up to the first "]]" on the same line, with something between (D1). */
-const Wikilink = /^!?\[\[[^\n]+?\]\]/;
+/** A wikilink or embed: "[[" (or "![[") up to the first "]]" on the same line, with something between that holds no "[[" (D1). */
+const Wikilink = /^!?\[\[(?:(?!\[\[)[^\n])+?\]\]/;
 
 /**
  * Wikilinks and embeds (rule D1). Nothing inside one is read, so a
  * reference or a label inside a wikilink is dead text, and a reference right
  * after one ("[[note]][^1]") is live instead of being read as a link.
+ *
+ * A wikilink's text cannot hold a second "[[": in "[[a [[b]] [^1]]]" only
+ * "[[b]]" is a link, and in "[[^1][[]]" there is none at all, so [^1] is a
+ * live reference. Single brackets inside are fine ("[[a [b] [^1]]]" is one
+ * link). (The overnight oracle run of 2026-10-03: 16 notes, and 55 family
+ * notes on what may sit inside and right before a "[[".)
  */
 function wikilinks(tables: ParserTables): void {
     const wikilink: Tokenizer = function (eat, value, silent) {
