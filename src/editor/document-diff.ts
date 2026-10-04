@@ -17,6 +17,8 @@
 // to compare) falls back to one edit for the whole middle, so a giant note
 // never stalls the app.
 
+import { readNote } from "../parsing/note-reading";
+
 /** One edit, as character offsets into the BEFORE text: replace [from, to) with `text`. Edits come back in document order and never overlap. */
 export interface OffsetChange {
     from: number;
@@ -177,20 +179,56 @@ export interface FoldRange {
  * second line's start fell inside the edit and collapsed onto the first,
  * so folds came back a line short or not at all (Kimi and Claude sweeps
  * 2026-09-13, Jason's original fold complaint in a narrower form).
+ *
+ * A folded heading never reaches past its own section afterwards: the
+ * fold ends on the line before the next heading of the same level or a
+ * higher one, which is where Obsidian ends a heading's fold. Without
+ * that, a section folded at the end of the note took in the footnote
+ * section heading the lint added below it, and every definition under
+ * that heading (Jason's report, sheet 12, 2026-10-04: a "# Footnotes"
+ * heading folded away inside a level 2 heading's fold).
  */
 export function mapFoldLines(folds: FoldRange[], changes: OffsetChange[], before: string): FoldRange[] {
     if (changes.length === 0) return folds;
     const after = applyOffsetChanges(before, changes);
-    const map = alignLines(before.split("\n"), after.split("\n"));
+    const afterLines = after.split("\n");
+    const map = alignLines(before.split("\n"), afterLines);
+    const sectionEnd = sectionEnds(afterLines);
     const out: FoldRange[] = [];
     for (const fold of folds) {
         if (fold.from >= map.length || fold.to >= map.length) continue;
         const from = map[fold.from].from;
         if (from === -1) continue;
-        const to = map[fold.to].to;
+        const to = Math.min(map[fold.to].to, sectionEnd(from));
         if (to > from) out.push({ from, to });
     }
     return out;
+}
+
+/**
+ * For a line of `lines`, the last line a fold starting there may reach:
+ * for a heading, the line before the next heading of the same level or a
+ * higher one (the note's last line when there is none), since that is
+ * where its section ends; for any other line, the note's last line. Only
+ * headings outside quotes, lists, and footnotes count, read the way
+ * Obsidian reads the note, so a "# " line inside a code block is no
+ * heading.
+ */
+function sectionEnds(lines: string[]): (line: number) => number {
+    const blocks = readNote(lines).lineBlocks;
+    const levelOf = (line: number): number => {
+        const heading = /^\^heading(\d)$/.exec(blocks[line] ?? "");
+        return heading ? Number(heading[1]) : 0;
+    };
+    return (line) => {
+        const level = levelOf(line);
+        if (level === 0) return lines.length - 1;
+        for (let next = line + 1; next < lines.length; next++) {
+            const nextLevel = levelOf(next);
+            if (nextLevel !== 0 && nextLevel <= level) return next - 1;
+        }
+        return lines.length - 1;
+    };
 }
 
 /**
