@@ -14,6 +14,6 @@ Run **Set footnote prefix** from the command palette:
 - [ ] The modal opens prefilled with `P-`, the value is selected and the box has focus, so typing replaces it straight away
 - [ ] Switch the note to Reading view and open the palette: **Set footnote prefix** is still offered there (a frontmatter edit is fine in Reading view)
 
-(The phone keyboard-above-the-dialog check is sheet 13's.)
+(The phone keyboard-above-the-dialog check is sheet P's.)
 
 [^P-1]: the first prefixed footnote

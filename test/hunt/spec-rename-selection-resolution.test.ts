@@ -9,7 +9,7 @@ import { renameTargetInSelection } from "../../src/commands/rename-footnote";
 //
 // Hunt: 2026-09-13. Lens: the rename command's target resolvers.
 //
-// Manual sheet 13 states the selection rule plainly ("the selection
+// Manual sheet P states the selection rule plainly ("the selection
 // decides"), with no qualifier about single lines and no tie-break for a
 // selection holding two references. Two shapes fall in that gap.
 //
@@ -31,14 +31,14 @@ import { renameTargetInSelection } from "../../src/commands/rename-footnote";
 //       continuation
 // The resolver returns nothing, so the command reports no footnote to
 // rename even though the selection starts on the label.
-//   Reading A: sheet 13's rule (a definition label the selection overlaps
+//   Reading A: sheet P's rule (a definition label the selection overlaps
 //   is the target) should hold across lines too, so this targets "x".
 //   Reading B: the multi-line branch asks the caret rule at the head's
 //   line by design (that is what its docstring says), and a drag into a
 //   body is not a rename gesture, so returning nothing is right and only
 //   the sheet needs the qualifier written down.
 //
-// Source of truth: manual sheet 13 (the selection rule, and the label
+// Source of truth: manual sheet P (the selection rule, and the label
 // rule), and renameTargetInSelection's own docstring for what the
 // multi-line branch is designed to do.
 

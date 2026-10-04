@@ -18,7 +18,7 @@ Run **Rename footnote** from the command palette with the caret in each spot:
 - [ ] Right-click ON `[^menu]` above: the menu shows **Rename footnote** with the pencil icon, and it sits where the native "Rename this heading" item does on a heading line
 - [ ] Choosing it opens the same modal as the command, prefilled with `menu`
 
-(There is no long-press twin on the phone: Obsidian owns that menu there and plugins cannot add to it. Sheet 13 covers the phone's route, the toolbar icon after a long press.)
+(There is no long-press twin on the phone: Obsidian owns that menu there and plugins cannot add to it. Sheet P covers the phone's route, the toolbar icon after a long press.)
 
 [^alpha]: first definition
 [^menu]: the definition to rename

@@ -1,4 +1,4 @@
-# 13: phone and mobile-emulation checks
+# P: phone and mobile-emulation checks
 
 Automated coverage: 0 former checks moved, because every check here needs the phone itself; what the plugin decides underneath checks 3, 4 and 5 is pinned in test/hunt/bug-rename-menu-needs-caret-inside.test.ts and test/manual-phone-and-mobile.test.ts; run `npm test` and `npm run test:smoke` before this sheet.
 

@@ -5,7 +5,7 @@ import { fakeEditor } from "./helpers/fake-editor";
 import { InvalidNameCharacters } from "../src/parsing/footnote-grammar";
 import { planFootnoteRename } from "../src/commands/rename-footnote";
 
-// Manual sheet 13, "phone and mobile-emulation checks".
+// Manual sheet P, "phone and mobile-emulation checks".
 //
 // Almost every check on that sheet needs the phone itself: how the dialog
 // sits above the on-screen keyboard, what Obsidian's own long-press menu

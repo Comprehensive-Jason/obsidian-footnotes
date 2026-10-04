@@ -4,7 +4,7 @@ import { fakeEditor } from "../helpers/fake-editor";
 
 import { renameTargetInSelection } from "../../src/commands/rename-footnote";
 
-// Jason's phone pass, sheet 13 (2026-09-11): on a phone a long press
+// Jason's phone pass, sheet P (2026-09-11): on a phone a long press
 // SELECTS the word it lands on, so the caret sits at the selection's end -
 // on the "]" of the reference or after the label's name - and the rename
 // command, which asked for a caret strictly inside a reference, said no

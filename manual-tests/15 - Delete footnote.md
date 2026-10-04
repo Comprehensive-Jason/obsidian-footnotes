@@ -25,7 +25,7 @@ Run **Delete footnote everywhere** from the command palette with the caret in ea
 
 ## The phone
 
-(There is no long-press twin on the phone: Obsidian owns that menu there. The route is the toolbar icon or the command palette after a long press selects the name, as for rename on sheet 13.)
+(There is no long-press twin on the phone: Obsidian owns that menu there. The route is the toolbar icon or the command palette after a long press selects the name, as for rename on sheet P.)
 
 - [ ] On the phone, long-press `[^menu]` so the word is selected, then tap the command's toolbar icon: the deletion happens and the toast reads well at phone width
 

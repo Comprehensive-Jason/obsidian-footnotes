@@ -73,7 +73,7 @@ export function renameTargetAtCursor(
  * ends up at the selection's end - on the "]" of a reference, or after a
  * label's name - and the caret rule alone found nothing there, so the
  * Rename footnote toolbar icon tapped after a long press said "not on a
- * footnote" (Jason's phone pass, sheet 13, 2026-09-11). The ends may come
+ * footnote" (Jason's phone pass, sheet P, 2026-09-11). The ends may come
  * in either order.
  *
  * What this does NOT change: the phone's long-press menu itself. Obsidian

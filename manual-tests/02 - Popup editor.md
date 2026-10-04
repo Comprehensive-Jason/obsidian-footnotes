@@ -20,4 +20,4 @@ Starting from the end of this sentence, do three fast rounds of: press the numbe
 
 - [ ] Closing feels immediate; the next popup opens without a long stall
 
-(The phone repeat is sheet 13's.)
+(The phone repeat is sheet P's.)
