@@ -1,12 +1,5 @@
 import { inlineFootnoteSpans, referenceOccurrences } from "../parsing/footnote-grammar";
-import {
-    maskProtectedLines,
-    normalizeEol,
-    removeLineRanges,
-    restoreEol,
-    scanDocument,
-    tableRowLinesOf,
-} from "../parsing/markdown-scan";
+import { normalizeEol, removeLineRanges, restoreEol } from "../parsing/markdown-scan";
 import { Definition, readNote } from "../parsing/note-reading";
 import { linesReadDifferently } from "../linting/rules/remove-orphaned-definitions";
 import { readsDifferently } from "../linting/rules/remove-orphaned-references";
@@ -88,9 +81,8 @@ function whyLeftInPlace(definition: Definition): string | undefined {
 export function convertNormalFootnotesToInline(markdown: string): ConversionToInline {
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
     const reading = readNote(lines);
+    const masked = reading.maskedLines();
     const starts = reading.labelLines;
     const unchanged = (skipped: ConversionToInline["skipped"], refused?: string): ConversionToInline => ({
         markdown,
@@ -125,9 +117,9 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
     // as it renders.
     type Ref = { line: number; start: number; end: number; nested: boolean };
     const refs = new Map<string, Ref[]>();
-    const tableRows = tableRowLinesOf(lines);
+    const tableRows = reading.tableRowLines;
     for (let i = 0; i < lines.length; i++) {
-        if (scan.isProtected[i] || !lines[i].includes("[^")) continue;
+        if (reading.protectedLines[i] || !lines[i].includes("[^")) continue;
         const spans = inlineFootnoteSpans(masked[i]);
         for (const occurrence of referenceOccurrences(lines[i], masked[i], starts[i])) {
             const folded = occurrence.name.toLowerCase();
@@ -206,11 +198,10 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
     // that changes how Obsidian reads a line it was not asked to touch is
     // refused whole rather than half done.
     const byHand = "Converting would change how Obsidian reads the text around a footnote. Convert it by hand.";
-    if (readsDifferently(lines, scan, starts, replaced)) return unchanged(named, byHand);
+    if (readsDifferently(lines, replaced, "rewrite")) return unchanged(named, byHand);
     const dead = eligible.map(({ block }) => block).sort((a, b) => a.start - b.start);
-    const replacedScan = scanDocument(replaced);
     const out = removeLineRanges(replaced, dead);
-    if (linesReadDifferently(replaced, replacedScan, dead, out)) return unchanged(named, byHand);
+    if (linesReadDifferently(replaced, { lines: replaced, ranges: dead }, out)) return unchanged(named, byHand);
 
     return {
         markdown: restoreEol(out.join("\n"), eol),
@@ -276,7 +267,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
     // body's key for merging (the body as written, trimmed)
     const spans: { line: number; open: number; close: number; body: string }[] = [];
     for (let i = 0; i < lines.length; i++) {
-        if (ctx.scan.isProtected[i] || !lines[i].includes("^[")) continue;
+        if (ctx.reading().protectedLines[i] || !lines[i].includes("^[")) continue;
         for (const span of inlineFootnoteSpans(masked[i])) {
             const body = lines[i].slice(span.open + 2, span.close).trim();
             if (body === "") {
@@ -314,7 +305,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
     if (named) {
         for (const name of listExistingFootnoteDefinitions(doc, ctx)) taken.add(name.toLowerCase());
         for (let i = 0; i < lines.length; i++) {
-            if (ctx.scan.isProtected[i] || !lines[i].includes("[^")) continue;
+            if (ctx.reading().protectedLines[i] || !lines[i].includes("[^")) continue;
             for (const occurrence of referenceOccurrences(lines[i], masked[i], starts[i])) taken.add(occurrence.name.toLowerCase());
         }
     }

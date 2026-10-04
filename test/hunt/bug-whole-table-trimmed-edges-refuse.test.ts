@@ -8,8 +8,7 @@ import { noticed, resetNotices } from "../helpers/notices";
 import FootnotePlugin from "../../src/main";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { TableSelectionNotice } from "../../src/commands/selection-footnote";
-import { tableRowLines } from "../../src/editor/table-cursor";
-import { scanDocument } from "../../src/parsing/markdown-scan";
+import { tableRowLinesOf } from "../../src/parsing/markdown-scan";
 
 // BUG: a whole table selected edge to edge is refused, with the toast that
 // says the selection cuts through a table, when the table's last row ends
@@ -85,7 +84,7 @@ describe("a whole table whose last row ends in trailing spaces", () => {
     // The premise, green today: the trailing spaces change nothing about
     // what the lines are.
     it("the premise: all three lines are still table rows", () => {
-        expect(tableRowLines(lines, scanDocument(lines).isProtected)).toEqual([
+        expect(tableRowLinesOf(lines)).toEqual([
             false,
             false,
             true,
@@ -128,7 +127,7 @@ describe("a whole table indented one space", () => {
 
     it("the premise: the indented lines are still table rows", () => {
         expect(
-            tableRowLines(lines, scanDocument(lines).isProtected).slice(2, 5),
+            tableRowLinesOf(lines).slice(2, 5),
         ).toEqual([true, true, true]);
     });
 

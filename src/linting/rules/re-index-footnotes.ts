@@ -1,11 +1,6 @@
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { referenceOccurrences, nameForBody } from "../../parsing/footnote-grammar";
-import {
-    definitionCuts,
-    maskProtectedLines,
-    scanDocument,
-    removeLineRanges,
-} from "../../parsing/markdown-scan";
+import { definitionCuts, removeLineRanges } from "../../parsing/markdown-scan";
 import { readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
@@ -75,7 +70,7 @@ export interface ReindexOptions {
  */
 function referenceAppearanceOrder(
     lines: string[],
-    maskedLines: string[],
+    maskedLines: readonly string[],
     starts: readonly boolean[],
 ): string[] {
     const order: string[] = [];
@@ -188,7 +183,7 @@ function reindexOnce(
         // These are all replaced further down if orphan deletion rewrites
         // the note part way through this pass
         let lines = view.lines;
-        let scan = view.scan;
+        let protectedLines = view.reading.protectedLines;
         let maskedLines = view.maskedLines;
         let starts = view.definitionStarts;
         let definitions = view.definitions;
@@ -202,7 +197,7 @@ function reindexOnce(
             // limit meant a chain 21 or more deep was left half deleted
             // (bug-reindex-orphan-cap). Definitions that reference each
             // other in a ring count as referenced and survive.
-            const orphans = orphanedDefinitionBlocks(lines, scan);
+            const orphans = orphanedDefinitionBlocks(lines);
             if (orphans.length > 0) {
                 // Cut the orphaned blocks out, then work everything out
                 // again from scratch: the line numbers have all shifted,
@@ -210,9 +205,9 @@ function reindexOnce(
                 // with which.
                 const cut = definitionCuts(lines, orphans);
                 lines = removeLineRanges(cut.lines, cut.ranges);
-                scan = scanDocument(lines);
-                maskedLines = maskProtectedLines(lines, scan);
                 const reading = readNote(lines);
+                protectedLines = reading.protectedLines;
+                maskedLines = reading.maskedLines();
                 starts = reading.labelLines;
                 definitions = reading.definitions;
                 referenceOrder = referenceAppearanceOrder(lines, maskedLines, starts);
@@ -300,7 +295,7 @@ function reindexOnce(
         // changing is in the map, so no footnote can be renamed onto
         // another one's name.
         const rewritten = lines.map((line, i) =>
-            scan.isProtected[i]
+            protectedLines[i]
                 ? line
                 : rewriteFootnoteNames(line, maskedLines[i], (name) => renames.get(name.toLowerCase()) ?? null),
         );

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // Review B2 (2026-09-09): when a note ends inside an unclosed fence,
 // comment, or math block, buildDefinitionAppend walks up from EOF to find
@@ -32,8 +33,9 @@ describe("scanDocument.endsProtectedAt", () => {
         // the full note's answer is the one the append needs.
         for (const lines of DOCS) {
             const scan = scanDocument(lines);
+            const reading = readNote(lines);
             for (let i = 0; i < lines.length; i++) {
-                const nextCarriesRegion = i + 1 < lines.length && (scan.startsInComment[i + 1] || scan.startsInMath[i + 1]);
+                const nextCarriesRegion = i + 1 < lines.length && reading.regionOpenAt(i + 1);
                 if (nextCarriesRegion) continue;
                 expect(scan.endsProtectedAt[i], `${JSON.stringify(lines)} @${i}`).toBe(
                     scanDocument(lines.slice(0, i + 1)).endsProtected,

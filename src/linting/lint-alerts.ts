@@ -1,13 +1,6 @@
 import type FootnotePlugin from "../main";
 import { footnotePrefix, footnotePrefixProblem } from "../parsing/footnote-prefix";
-import {
-    definitionLabelWithName,
-    DocumentScan,
-    maskProtectedLines,
-    normalizeEol,
-    scanDocument,
-    tableRowLinesOf,
-} from "../parsing/markdown-scan";
+import { definitionLabelWithName, maskProtectedLines, normalizeEol } from "../parsing/markdown-scan";
 import { readNote } from "../parsing/note-reading";
 import {
     escapedAt,
@@ -61,7 +54,7 @@ export function countEmptyFootnoteReferences(
     // The alerts all share ONE pass of normalizing the line endings and
     // building the masked twin, done once and handed round (2026-08-11
     // review, a speed fix). Anything calling this on its own leaves it out.
-    masked?: string[],
+    masked?: readonly string[],
 ): number {
     // Obsidian matches footnote names without regard to case, and so does
     // every other prefix comparison in the plugin, so "[^P.]" under the
@@ -127,7 +120,7 @@ export function orphanSafePrefixFor(
 function noticeEmptyReferences(
     markdown: string,
     prefix: string,
-    masked: string[],
+    masked: readonly string[],
 ) {
     const count = countEmptyFootnoteReferences(markdown, prefix, masked);
     if (count === 0) return;
@@ -169,8 +162,8 @@ function labelList(names: string[]): string {
 // they already wrote it. So these names get this alert and are left out of
 // that one. The orphan rule exempts them too, from its alert and from
 // deletion alike. Like every alert, this one is never silent.
-function noticeLazyDefinitions(lines: string[], scan: DocumentScan, masked: string[], starts: boolean[]) {
-    const names = lazyDefinitionLabelNames(lines, scan, masked, starts);
+function noticeLazyDefinitions(lines: string[]) {
+    const names = lazyDefinitionLabelNames(lines);
     if (names.length === 0) return;
     showNotice(
         names.length === 1
@@ -188,8 +181,8 @@ function noticeLazyDefinitions(lines: string[], scan: DocumentScan, masked: stri
 // left out of the lazy one and its fix (Kimi hunt cycle 3, probed in
 // Reading view 2026-09-16). Never silent, like every alert. Jason
 // approved the wording on 2026-09-20.
-function noticeUnderlinedDefinitions(lines: string[], scan: DocumentScan, masked: string[], starts: boolean[]) {
-    const names = underlinedDefinitionLabelNames(lines, scan, masked, starts);
+function noticeUnderlinedDefinitions(lines: string[]) {
+    const names = underlinedDefinitionLabelNames(lines);
     if (names.length === 0) return;
     showNotice(
         names.length === 1
@@ -217,7 +210,7 @@ function noticeOrphanedReferences(
     plugin: FootnotePlugin,
     markdown: string,
     prefix: string,
-    precomputed: { lines: string[]; masked: string[]; scan: DocumentScan; starts: boolean[] },
+    precomputed: { lines: string[] },
 ) {
     // a reference whose name is invalid (a "#", a backtick) is the
     // invalid-name alert's to report; naming it here as well would ask
@@ -260,7 +253,7 @@ function noticeOrphanedReferences(
 function noticeOrphanedDefinitions(
     plugin: FootnotePlugin,
     markdown: string,
-    precomputed: { lines: string[]; scan: DocumentScan; masked: string[]; starts: boolean[] },
+    precomputed: { lines: string[] },
 ) {
     let names = orphanedFootnoteDefinitionNames(markdown, precomputed);
     if (names.length === 0) return;
@@ -302,7 +295,7 @@ function noticeOrphanedDefinitions(
 function noticeDuplicateDefinitions(
     plugin: FootnotePlugin,
     markdown: string,
-    precomputed: { lines: string[]; scan: DocumentScan; masked: string[]; starts: boolean[] },
+    precomputed: { lines: string[] },
 ) {
     const names = duplicateFootnoteDefinitionNames(markdown, precomputed);
     if (names.length === 0) return;
@@ -343,13 +336,13 @@ function noticeDuplicateDefinitions(
  *
  * Fakes inside protected text do not count. Names containing brackets never
  * get here, because such text cannot form a reference in the first place.
+ * Any arguments after `lines` are accepted for the tests written when this
+ * took the scanner's facts; the note reading supplies them now.
  */
-export function invalidFootnoteNames(
-    lines: string[],
-    scan: DocumentScan,
-    masked: string[],
-    starts: boolean[] = readNote(lines).labelLines,
-): string[] {
+export function invalidFootnoteNames(lines: string[], ..._unused: unknown[]): string[] {
+    const reading = readNote(lines);
+    const masked = reading.maskedLines();
+    const starts = reading.labelLines;
     const names: string[] = [];
     const seen = new Set<string>();
     const consider = (name: string) => {
@@ -369,8 +362,8 @@ export function invalidFootnoteNames(
     return names;
 }
 
-function noticeInvalidNames(lines: string[], scan: DocumentScan, masked: string[], starts: boolean[]) {
-    const names = invalidFootnoteNames(lines, scan, masked, starts);
+function noticeInvalidNames(lines: string[]) {
+    const names = invalidFootnoteNames(lines);
     if (names.length === 0) return;
     showNotice(
         names.length === 1
@@ -392,14 +385,14 @@ function noticeInvalidNames(lines: string[], scan: DocumentScan, masked: string[
  * without throwing text away, so the lint reports it instead. That is the
  * same never-silent policy orphans and duplicates follow.
  *
- * Fakes inside protected text do not count.
+ * Fakes inside protected text do not count. Any arguments after `lines`
+ * are accepted for the tests written when this took the scanner's facts;
+ * the note reading supplies them now.
  */
-export function nestedFootnoteDefinitionNames(
-    lines: string[],
-    scan: DocumentScan,
-    masked: string[],
-    starts: boolean[] = readNote(lines).labelLines,
-): string[] {
+export function nestedFootnoteDefinitionNames(lines: string[], ..._unused: unknown[]): string[] {
+    const reading = readNote(lines);
+    const masked = reading.maskedLines();
+    const starts = reading.labelLines;
     const names: string[] = [];
     // One entry per NAME, ignoring case, the same way the duplicate and
     // orphan alerts do it. A name defined twice with both copies nested
@@ -411,7 +404,7 @@ export function nestedFootnoteDefinitionNames(
     // 2026-09-13), or in a list item (Jason's ruling 1, option a,
     // 2026-10-03; hunt 2026-10-02, cluster E7). Its text is the rest of its
     // label line after the label and the lines of its body.
-    const spans = readNote(lines).definitions;
+    const spans = reading.definitions;
     for (const span of spans) {
         let nested = false;
         for (let i = span.start; i <= span.end && !nested; i++) {
@@ -444,13 +437,8 @@ function lineHasInlineFootnote(masked: string): boolean {
     return false;
 }
 
-function noticeNestedFootnotes(
-    lines: string[],
-    scan: DocumentScan,
-    masked: string[],
-    starts: boolean[],
-) {
-    const names = nestedFootnoteDefinitionNames(lines, scan, masked, starts);
+function noticeNestedFootnotes(lines: string[]) {
+    const names = nestedFootnoteDefinitionNames(lines);
     if (names.length === 0) return;
     showNotice(
         names.length === 1
@@ -472,24 +460,21 @@ function noticeNestedFootnotes(
  */
 export function commentedDefinitionNames(markdown: string): string[] {
     const lines = normalizeEol(markdown).text.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
+    const reading = readNote(lines);
     const names: string[] = [];
     const seen = new Set<string>();
-    for (let i = 0; i < lines.length; i++) {
-        if (!scan.inCommentBlock[i] || scan.isProtected[i]) continue;
-        const hit = definitionLabelWithName(lines[i], masked[i]);
+    let offset = 0;
+    for (let i = 0; i < lines.length; offset += lines[i].length + 1, i++) {
+        if (!reading.commentLines[i] || reading.protectedLines[i]) continue;
+        const hit = definitionLabelWithName(lines[i], reading.maskedLine(i));
         if (!hit) continue;
-        // On the closer line only the text after the "%%" is outside the
-        // comment. A label BEFORE the closer ("[^1]: dead %%") is hidden
-        // like any interior line, and it used to be passed over in
-        // silence (Kimi hunt cycle 3, probed in Reading view 2026-09-16).
-        const close = scan.commentBlockCloseAt[i];
-        // a label at or after the closer's end (commentBlockCloseAt is the
-        // index just past the "%%") is outside the comment, glued to it or
-        // not ("%%[^1]: def" renders a footnote; GLM hunt cycle 5, probed
-        // in Reading view 2026-09-16)
-        if (close >= 0 && hit.label.nameStart - 2 >= close) continue;
+        // Only a label inside the comment is hidden: on the closer line the
+        // text after the "%%" is outside it ("%%[^1]: def" renders a
+        // footnote; GLM hunt cycle 5, probed in Reading view 2026-09-16),
+        // and a label BEFORE the closer ("[^1]: dead %%") is hidden like any
+        // interior line (Kimi hunt cycle 3, 2026-09-16)
+        const at = offset + hit.label.nameStart - 2;
+        if (!reading.comments.some((comment) => comment.block && comment.from <= at && at < comment.to)) continue;
         const folded = hit.name.toLowerCase();
         if (seen.has(folded)) continue;
         seen.add(folded);
@@ -527,7 +512,7 @@ const rowShaped = (line: string): boolean => line.includes("|") && line.trim() !
 export function definitionsInsideTableNames(markdown: string): string[] {
     const lines = normalizeEol(markdown).text.split("\n");
     const reading = readNote(lines);
-    const rows = tableRowLinesOf(lines);
+    const rows = reading.tableRowLines;
     const names: string[] = [];
     const seen = new Set<string>();
     for (let i = 1; i + 1 < lines.length; i++) {
@@ -553,8 +538,9 @@ function noticeDefinitionsInsideTables(markdown: string) {
     );
 }
 
-// The line-ending normalize, the scan, the masked twin and the
-// definition-start pass are all done once here and shared by every alert.
+// The line-ending normalize is done once here and shared by every alert,
+// and the note reading (the parse, the masked twin, the definitions) is
+// remembered per text, so each alert asks it at no extra cost.
 // Each alert used to work them out again for itself, which came to about
 // 40% of the time a lint took, noticeable on every footnote created with
 // lint-on-footnote-creation on (2026-08-11 review, a speed fix). The
@@ -566,17 +552,15 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string) {
     if (!markdown.includes("[^")) return;
     const prefix = orphanSafePrefixFor(plugin, markdown);
     const lines = normalizeEol(markdown).text.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = readNote(lines).labelLines;
+    const masked = readNote(lines).maskedLines();
     noticeEmptyReferences(markdown, prefix, masked);
-    noticeOrphanedReferences(plugin, markdown, prefix, { lines, masked, scan, starts });
-    noticeLazyDefinitions(lines, scan, masked, starts);
-    noticeUnderlinedDefinitions(lines, scan, masked, starts);
+    noticeOrphanedReferences(plugin, markdown, prefix, { lines });
+    noticeLazyDefinitions(lines);
+    noticeUnderlinedDefinitions(lines);
     noticeCommentedDefinitions(markdown);
     noticeDefinitionsInsideTables(markdown);
-    noticeOrphanedDefinitions(plugin, markdown, { lines, scan, masked, starts });
-    noticeDuplicateDefinitions(plugin, markdown, { lines, scan, masked, starts });
-    noticeNestedFootnotes(lines, scan, masked, starts);
-    noticeInvalidNames(lines, scan, masked, starts);
+    noticeOrphanedDefinitions(plugin, markdown, { lines });
+    noticeDuplicateDefinitions(plugin, markdown, { lines });
+    noticeNestedFootnotes(lines);
+    noticeInvalidNames(lines);
 }

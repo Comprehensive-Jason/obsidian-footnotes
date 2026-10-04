@@ -26,7 +26,7 @@ function md(lines: string[], name: string): string {
 }
 
 describe("a reference alone on a line inside a paragraph", () => {
-    it.fails("does not split the paragraph in two when it is cut", () => {
+    it("does not split the paragraph in two when it is cut", () => {
         const out = md(["one", "[^1]", "three", "", "[^1]: x"], "1");
         expect(out).not.toBe("one\n\nthree");
     });

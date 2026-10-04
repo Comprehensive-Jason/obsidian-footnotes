@@ -24,9 +24,13 @@
 // only a "movable" one is ever moved (see DefinitionFact in
 // footnote-facts.ts).
 //
-// The plugin still finds protected text and reference liveness with the
-// hand-written scanner (markdown-scan.ts); those move onto this reading in
-// a later step of the swap (Jason, 2026-10-03).
+// Protected text comes from this reading too (step 2 of the runtime swap,
+// 2026-10-03): which stretches are code, math, comments, frontmatter, and
+// the like, the masked twin every scan judges against, and the per-line
+// facts the commands ask (which lines are protected through and through,
+// which belong to a "%%" block comment, whether the note ends inside a
+// region that never closes). The hand-written scanner's walk that used to
+// work these out is gone.
 
 import { DefinitionFact, FootnoteFacts, partFacts } from "./footnote-facts";
 import { frontmatterEnd } from "./obsidian-markdown";
@@ -59,10 +63,120 @@ export interface NoteReading {
      * break, a setext underline, a heading with no text.
      */
     blockSyntaxEnd(line: number): number;
+    /**
+     * Line `line` of the masked twin: the line as written, with every
+     * character of protected text blotted out as "\0" and every column left
+     * where it was, so a scan over it sees no code while every position it
+     * finds is still right in the real line. A line protected through and
+     * through is all "\0". The text of a "%%" comment stays, since a
+     * reference inside one is live (Jason's ruling A1, reaffirmed
+     * 2026-10-03), and so do a link's brackets and parentheses, so the
+     * landing walk still sees a link's tail. "" for a line outside the note.
+     */
+    maskedLine(line: number): string;
+    /** The whole masked twin, one entry per line, built once. */
+    maskedLines(): readonly string[];
+    /**
+     * One entry per line: true where the line is protected text through and
+     * through: a line of a code block (its fence lines included), a math
+     * block, an HTML block, or the frontmatter, and a line wholly inside a
+     * stretch of inline code, math, or HTML comment that runs over several
+     * lines. A line that only starts or ends such a stretch keeps its live
+     * part, so it is not counted, and neither is a "%%" comment's line.
+     */
+    readonly protectedLines: readonly boolean[];
+    /** One entry per line: true where the line is a row of a table, its header and delimiter row included, as Obsidian renders tables (rules C1 to C5); a table inside a footnote's definition belongs to the definition and is left out. */
+    readonly tableRowLines: readonly boolean[];
+    /** One entry per line: true on the lines of a "%%" block comment, its opening and closing lines included. A definition there is hidden; a reference there is live. */
+    readonly commentLines: readonly boolean[];
+    /** The "%%" comments, block and inline, as stretches of the note: a label written inside one defines nothing Obsidian shows. */
+    readonly comments: readonly FootnoteFacts["protectedSpans"][number][];
+    /**
+     * Whether a stretch of protected text that began on an earlier line
+     * runs on into the start of `line`: an open fence, math block, HTML
+     * comment or block, or a code span over several lines. A caret at
+     * column 0 of such a line sits inside it.
+     */
+    regionOpenAt(line: number): boolean;
+    /**
+     * Where the note ends inside a region that never closes: the line the
+     * region starts on, or -1 when it ends in the open. Such a region (an
+     * unclosed fence, "$$" block, HTML comment or block, or "%%" comment)
+     * swallows anything written after the note's last line, so a
+     * definition appended there would be hidden. Worked out by asking the
+     * reading of the note with a definition appended after a blank line,
+     * which is exactly that question.
+     */
+    readonly openRegionFrom: number;
+    /** One entry per line: the blocks the line belongs to, outermost first, marked where each starts (FootnoteFacts.lineBlocks). */
+    readonly lineBlocks: readonly string[];
+    /** The stretches of protected text and "%%" comments that touch `line`, each as its kind, with a "^" where it starts on this line, in order. */
+    lineSpans(line: number): readonly string[];
+    /** The live references on `line`, by name in lower case, in order. */
+    lineReferences(line: number): readonly string[];
 }
 
-/** How many notes the reading remembers. A press reads the note as it is and as it will be after the edit, and a lint passes each rule's output to the next, so a handful covers both. */
-const CacheSize = 4;
+/**
+ * How an edit may have changed a line it touched, for linesReadAlike:
+ * "none" for a line the edit left alone, "cut" for one it only took text
+ * out of (a reference, a definition's label after a list marker), and
+ * "rewrite" for one whose text it replaced (a reference turned into an
+ * inline footnote).
+ */
+export type LineEdit = "none" | "cut" | "rewrite";
+
+/** Whether every entry of `part` is in `whole`, as many times. */
+function within(part: readonly string[], whole: readonly string[]): boolean {
+    const left = new Map<string, number>();
+    for (const item of whole) left.set(item, (left.get(item) ?? 0) + 1);
+    for (const item of part) {
+        const n = left.get(item) ?? 0;
+        if (n === 0) return false;
+        left.set(item, n - 1);
+    }
+    return true;
+}
+
+/**
+ * Whether line `j` of `after` reads as line `i` of `before` did, as far as
+ * the edit between the two allows (the reclassification guards of the
+ * orphan rules, Delete footnote everywhere, and the conversions; the
+ * runtime swap, step 2, 2026-10-03).
+ *
+ * A line the edit left alone must read exactly as before: the same blocks
+ * around it and starting on it, the same protected text and "%%" comments,
+ * the same live references. A line the edit only cut text out of may lose
+ * things but gain none: its blocks are the ones it had, or the outer ones
+ * of them (an emptied line keeps only its containers, a list marker's line
+ * whose definition went keeps only the item), and it holds no protected
+ * text and no reference it did not hold. So "#[^9] tail" may not become a
+ * heading, "[Smith][^1](2020)" may not become a link, and "[[^1]^2]" may
+ * not become a reference to footnote 2. A line whose text was replaced
+ * must stay in the same blocks; what is inside it is the edit's own.
+ */
+export function linesReadAlike(before: NoteReading, i: number, after: NoteReading, j: number, edit: LineEdit): boolean {
+    const blocksBefore = before.lineBlocks[i] ?? "";
+    const blocksAfter = after.lineBlocks[j] ?? "";
+    if (edit === "rewrite") return blocksBefore === blocksAfter;
+    if (edit === "none") {
+        // a blank line has nothing to read: which container it falls in
+        // (the end of one list item or the gap before the next) changes
+        // nothing, and a change to a block around it shows on that block's
+        // own lines
+        if (before.maskedLine(i).trim() === "" && after.maskedLine(j).trim() === "" && !before.protectedLines[i] && !after.protectedLines[j]) return true;
+        return (
+            blocksBefore === blocksAfter &&
+            before.lineSpans(i).join(" ") === after.lineSpans(j).join(" ") &&
+            before.lineReferences(i).join(" ") === after.lineReferences(j).join(" ")
+        );
+    }
+    // the blocks after are the outer part of the blocks before
+    if (blocksAfter !== "" && blocksBefore !== blocksAfter && !blocksBefore.startsWith(blocksAfter + " ")) return false;
+    return within(after.lineSpans(j), before.lineSpans(i)) && within(after.lineReferences(j), before.lineReferences(i));
+}
+
+/** How many notes the reading remembers. A press reads the note as it is and as it will be after the edit, a lint passes each rule's output to the next, and asking where an unclosed region starts reads the note with a line added, so a handful covers them. */
+const CacheSize = 8;
 
 /** The remembered readings, the most recently used last. A Map keeps its keys in the order they were added. */
 const cache = new Map<string, NoteReading>();
@@ -190,6 +304,8 @@ function addPart(into: FootnoteFacts, part: FootnoteFacts, lines: number, offset
         into.protectedSpans.push({ ...span, from: span.from + offset, to: span.to + offset, startLine: span.startLine + lines, endLine: span.endLine + lines });
     }
     for (const syntax of part.blockSyntax) into.blockSyntax.push({ ...syntax, line: syntax.line + lines });
+    for (const row of part.tableRows) into.tableRows.push(row + lines);
+    for (const blocks of part.lineBlocks) into.lineBlocks.push(blocks);
 }
 
 /**
@@ -230,7 +346,7 @@ function notePartFacts(text: string, lines: readonly string[], reading: number):
     const frontmatter = frontmatterEnd(text);
     const afterFrontmatter = frontmatter === 0 ? 0 : text.slice(0, frontmatter).split("\n").length;
     const starts = partStarts(lines, afterFrontmatter);
-    const facts: FootnoteFacts = { definitions: [], references: [], protectedSpans: [], blockSyntax: [] };
+    const facts: FootnoteFacts = { definitions: [], references: [], protectedSpans: [], blockSyntax: [], tableRows: [], lineBlocks: [] };
     let from = 0;
     // the first entry of `starts` after `from`
     let next = 0;
@@ -257,8 +373,32 @@ function notePartFacts(text: string, lines: readonly string[], reading: number):
     return facts;
 }
 
-/** Builds the reading from the facts of a note with `lineCount` lines. */
-function readingOf(facts: FootnoteFacts, lineCount: number): NoteReading {
+/** A stretch of protected text, as the facts give it. */
+type ProtectedSpan = FootnoteFacts["protectedSpans"][number];
+
+/** The definition the reading appends after a note's last line, behind a blank line, to ask whether the note ends inside a region that never closes (openRegionFrom). */
+const ProbeLabel = "[^footnote-shortcut-probe]: probe";
+
+/**
+ * The part of a protected span the masked twin blots, as offsets. A link's
+ * destination keeps its parentheses and an autolink its angle brackets, so
+ * the landing walk still recognises a link's tail and steps over it whole
+ * (Jason's landing rulings, 2026-09-15); everything else goes whole.
+ */
+function blotted(text: string, span: ProtectedSpan): [number, number] {
+    if (span.kind === "linkDestination" && span.to - span.from >= 2) {
+        const open = text[span.from];
+        if ((open === "(" && text[span.to - 1] === ")") || (open === "<" && text[span.to - 1] === ">")) return [span.from + 1, span.to - 1];
+    }
+    return [span.from, span.to];
+}
+
+/**
+ * Builds the reading from the facts of the note `lines` (as the caller
+ * holds them), whose cleaned text (see cleanLine) is `text`.
+ */
+function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string): NoteReading {
+    const lineCount = lines.length;
     // Every caller of the same text gets the same reading, so its lists and
     // definitions are frozen: a caller that tried to change one would
     // change it for everyone, and freezing makes such a slip fail at once
@@ -274,6 +414,96 @@ function readingOf(facts: FootnoteFacts, lineCount: number): NoteReading {
     let owners: (Definition | null)[] | null = null;
     const syntaxEnds = new Map<number, number>();
     for (const { line, end } of facts.blockSyntax) syntaxEnds.set(line, Math.max(syntaxEnds.get(line) ?? 0, end));
+    const blockSyntaxEnd = (line: number): number => syntaxEnds.get(line) ?? 0;
+
+    // where each line starts in `text`, and how long it is there (a stray
+    // "\r" at the end of a line the caller holds is not in `text`)
+    const lineStarts: number[] = [];
+    let offset = 0;
+    for (let i = 0; i < lineCount; i++) {
+        lineStarts.push(offset);
+        offset = text.indexOf("\n", offset) + 1;
+        if (offset === 0) offset = text.length + 1;
+    }
+    const lineLength = (line: number): number => (line + 1 < lineCount ? lineStarts[line + 1] - 1 : text.length) - lineStarts[line];
+
+    // The last line a span really reaches. A span may end at the very
+    // start of a line, its last character the line break before it (a
+    // "%%" comment inside a definition takes the line break with it); it
+    // holds nothing of that line then, unless the line is empty and the
+    // span ends the note (an unclosed fence's last line, which Obsidian
+    // counts as code).
+    const lastLineOf = (span: ProtectedSpan): number => {
+        const last = Math.min(span.endLine, lineCount - 1);
+        return last > span.startLine && span.to === lineStarts[last] && lineLength(last) > 0 ? last - 1 : last;
+    };
+
+    // the protected spans that touch each line, a "%%" comment's left out
+    // (its text stays live), worked out the first time something asks
+    let spansByLine: ProtectedSpan[][] | null = null;
+    const spansOn = (line: number): readonly ProtectedSpan[] => {
+        if (spansByLine === null) {
+            spansByLine = Array.from({ length: lineCount }, () => [] as ProtectedSpan[]);
+            for (const span of facts.protectedSpans) {
+                if (span.kind === "percentComment") continue;
+                for (let l = span.startLine; l <= lastLineOf(span); l++) spansByLine[l].push(span);
+            }
+        }
+        return spansByLine[line] ?? [];
+    };
+
+    // Whether `span` covers line `line` through and through. A block covers
+    // the line when it starts no later than the line's text (only quote or
+    // list markers, indentation, or a byte order mark before it) and runs
+    // to the line's end; a stretch of inline text only when it starts on
+    // an earlier line and goes on past this one.
+    const covers = (span: ProtectedSpan, line: number): boolean => {
+        const start = lineStarts[line];
+        const end = start + lineLength(line);
+        if (!span.block) return span.from < start && span.to > end;
+        // a block may stop before spaces or tabs at the end of its last line
+        // (a frontmatter closer "---   ")
+        if (span.to < end && !/^[ \t]*$/.test(text.slice(span.to, end))) return false;
+        if (span.from <= start) return true;
+        const before = text.slice(start, span.from);
+        return before.length <= Math.min(blockSyntaxEnd(line), lineLength(line)) || /^[ \t\uFEFF]*$/.test(before);
+    };
+    let protectedLines: readonly boolean[] | null = null;
+    const protectedLinesOf = (): readonly boolean[] =>
+        (protectedLines ??= Object.freeze(Array.from({ length: lineCount }, (_, line) => spansOn(line).some((span) => covers(span, line)))));
+
+    const masked: (string | undefined)[] = new Array<string | undefined>(lineCount);
+    const maskedLine = (line: number): string => {
+        if (line < 0 || line >= lineCount) return "";
+        const known = masked[line];
+        if (known !== undefined) return known;
+        const raw = lines[line];
+        let result = raw;
+        if (protectedLinesOf()[line]) {
+            result = "\0".repeat(raw.length);
+        } else {
+            const start = lineStarts[line];
+            const end = start + lineLength(line);
+            let chars: string[] | null = null;
+            for (const span of spansOn(line)) {
+                const [from, to] = blotted(text, span);
+                for (let i = Math.max(from, start); i < Math.min(to, end); i++) (chars ??= raw.split(""))[i - start] = "\0";
+            }
+            if (chars !== null) result = chars.join("");
+        }
+        masked[line] = result;
+        return result;
+    };
+    let maskedAll: readonly string[] | null = null;
+
+    const comments = Object.freeze(facts.protectedSpans.filter((span) => span.kind === "percentComment"));
+    let commentLines: readonly boolean[] | null = null;
+    let openRegion: number | null = null;
+    let tableRowLines: readonly boolean[] | null = null;
+    // every stretch of protected text and "%%" comment touching each line, and every live reference on it
+    let spanKinds: string[][] | null = null;
+    let referenceNames: string[][] | null = null;
+
     return {
         definitions,
         blocks: Object.freeze(definitions.filter((definition) => definition.movable)),
@@ -292,28 +522,101 @@ function readingOf(facts: FootnoteFacts, lineCount: number): NoteReading {
             }
             return owners[line] ?? null;
         },
-        blockSyntaxEnd: (line) => syntaxEnds.get(line) ?? 0,
+        blockSyntaxEnd,
+        maskedLine,
+        maskedLines: () => (maskedAll ??= Object.freeze(lines.map((_, line) => maskedLine(line)))),
+        get protectedLines() {
+            return protectedLinesOf();
+        },
+        get commentLines() {
+            if (commentLines === null) {
+                const flags = new Array<boolean>(lineCount).fill(false);
+                for (const span of comments) {
+                    if (!span.block) continue;
+                    for (let l = span.startLine; l <= lastLineOf(span); l++) flags[l] = true;
+                }
+                commentLines = Object.freeze(flags);
+            }
+            return commentLines;
+        },
+        comments,
+        get tableRowLines() {
+            if (tableRowLines === null) {
+                const flags = new Array<boolean>(lineCount).fill(false);
+                for (const row of facts.tableRows) if (row < lineCount) flags[row] = true;
+                tableRowLines = Object.freeze(flags);
+            }
+            return tableRowLines;
+        },
+        lineBlocks: Object.freeze(facts.lineBlocks),
+        lineSpans(line) {
+            if (spanKinds === null) {
+                spanKinds = Array.from({ length: lineCount }, () => [] as string[]);
+                for (const span of facts.protectedSpans) {
+                    for (let l = span.startLine; l <= lastLineOf(span); l++) spanKinds[l].push(l === span.startLine ? `^${span.kind}` : span.kind);
+                }
+            }
+            return spanKinds[line] ?? [];
+        },
+        lineReferences(line) {
+            if (referenceNames === null) {
+                referenceNames = Array.from({ length: lineCount }, () => [] as string[]);
+                for (const reference of facts.references) if (reference.live && reference.line < lineCount) referenceNames[reference.line].push(reference.name.toLowerCase());
+            }
+            return referenceNames[line] ?? [];
+        },
+        regionOpenAt(line) {
+            if (line < 0 || line >= lineCount) return false;
+            const start = lineStarts[line];
+            return spansOn(line).some((span) => span.from < start && span.to > start);
+        },
+        get openRegionFrom() {
+            if (openRegion === null) {
+                // the note with a definition written after a blank line under
+                // its last line: unless a region still open swallows it, the
+                // definition is one
+                const probeLine = lineCount + 1;
+                const probe = readNote([...lines, "", ProbeLabel]);
+                if (probe.labelOn(probeLine) !== null) {
+                    openRegion = -1;
+                } else {
+                    // the region is the outermost stretch of protected text
+                    // (or "%%" comment) that takes in the probe
+                    let from = lineCount;
+                    for (const span of probe.protectedSpans) {
+                        if (span.startLine <= probeLine && span.endLine >= probeLine) from = Math.min(from, span.startLine);
+                    }
+                    openRegion = Math.min(from, Math.max(0, lineCount - 1));
+                }
+            }
+            return openRegion;
+        },
     };
 }
 
 /** The note reading of `lines`, built once per distinct text and then remembered. */
 export function readNote(lines: readonly string[]): NoteReading {
+    // Remembered by the text exactly as the caller holds it, since the
+    // masked twin keeps every character of it, a stray "\r" included, and
+    // by the number of lines, since no lines and one empty line join to
+    // the same text.
+    const key = `${lines.length}:${lines.join("\n")}`;
+    const known = cache.get(key);
+    if (known) {
+        // move it to the most recently used end
+        cache.delete(key);
+        cache.set(key, known);
+        return known;
+    }
     let clean = lines;
     let text = lines.join("\n");
     if (text.includes("\r")) {
         clean = lines.map(cleanLine);
         text = clean.join("\n");
     }
-    const known = cache.get(text);
-    if (known) {
-        // move it to the most recently used end
-        cache.delete(text);
-        cache.set(text, known);
-        return known;
-    }
     readings++;
-    const reading = readingOf(notePartFacts(text, clean, readings), lines.length);
-    cache.set(text, reading);
+    const reading = readingOf(notePartFacts(text, clean, readings), [...lines], text);
+    cache.set(key, reading);
     if (cache.size > CacheSize) {
         const oldest = cache.keys().next().value;
         if (oldest !== undefined) cache.delete(oldest);

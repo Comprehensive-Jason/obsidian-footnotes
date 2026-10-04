@@ -44,13 +44,13 @@ function facts(doc: string) {
 }
 
 describe("a type-7 tag line under a definition's own paragraph", () => {
-    it.fails("'<span>' directly under a lazy label is paragraph text, not an HTML block", () => {
+    it("'<span>' directly under a lazy label is paragraph text, not an HTML block", () => {
         const f = facts("para\n[^1]: x\n<span>\nsee [^2]\n\n[^2]: two");
         expect(f.scan.isProtected.slice(0, 4)).toEqual([false, false, false, false]);
         expect(f.live).toContain("3:2");
     });
 
-    it.fails("'<span>' directly under a label line is the footnote's lazy body, not an HTML block", () => {
+    it("'<span>' directly under a label line is the footnote's lazy body, not an HTML block", () => {
         const f = facts("[^1]: body\n<span>\nmore [^2]\n\nx[^1]\n\n[^2]: two");
         expect(f.scan.isProtected.slice(0, 3)).toEqual([false, false, false]);
         expect(f.blocks[0]).toMatchObject({ name: "1", start: 0, end: 2 });

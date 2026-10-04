@@ -24,7 +24,7 @@ function md(lines: string[], name: string): string {
 }
 
 describe("a reference between ']' and '('", () => {
-    it.fails("does not leave a link behind when it is cut", () => {
+    it("does not leave a link behind when it is cut", () => {
         expect(md(["see [Smith][^1](2020) here", "", "[^1]: x"], "1")).not.toContain("[Smith](2020)");
     });
 });

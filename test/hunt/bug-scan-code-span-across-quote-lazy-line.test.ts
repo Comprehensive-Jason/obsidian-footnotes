@@ -38,13 +38,13 @@ function liveReferences(doc: string): string[] {
 }
 
 describe("a code span across a quote's lazy continuation line", () => {
-    it.fails("the default lint never rewrites text inside a code span that crosses a quote's lazy line", () => {
+    it("the default lint never rewrites text inside a code span that crosses a quote's lazy line", () => {
         const doc = "> a `x [^5]\ny` b\n\nuse[^1]\n\n[^1]: one";
         // Today: "> a `x [^1]\ny` b\n\nuse[^2]\n\n[^2]: one".
         expect(lintFootnotes(doc)).toContain("> a `x [^5]");
     });
 
-    it.fails("'> a `x [^1]' then 'y` b' is one paragraph, the span crosses, and [^1] is dead", () => {
+    it("'> a `x [^1]' then 'y` b' is one paragraph, the span crosses, and [^1] is dead", () => {
         expect(liveReferences("> a `x [^1]\ny` b\n\nuse[^2]\n\n[^2]: two")).toEqual(["3:2"]);
     });
 });

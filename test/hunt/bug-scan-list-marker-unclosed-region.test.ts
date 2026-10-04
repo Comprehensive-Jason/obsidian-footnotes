@@ -33,7 +33,7 @@ function facts(doc: string) {
 }
 
 describe("an unclosed region opened on a list item's marker line", () => {
-    it.fails("'- <!--' unclosed runs on: hidden[^99] reserves no number", () => {
+    it("'- <!--' unclosed runs on: hidden[^99] reserves no number", () => {
         expect(facts("- <!--\n  hidden[^99]\nplain[^1]").live).toEqual([]);
     });
 

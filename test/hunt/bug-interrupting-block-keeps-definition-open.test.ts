@@ -96,8 +96,11 @@ describe("an interrupting block ends the definition, so the chunk under it is co
     });
 
     it("after a $$ display-math block", () => {
+        // the "$$" lines are part of the math block, as a fence's lines are
+        // part of its code block (the note reading, runtime swap step 2,
+        // 2026-10-03)
         const lines = ["[^1]: body", "$$", "x", "$$", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, true, false, true]);
+        expect(scanDocument(lines).isProtected).toEqual([false, true, true, true, true]);
     });
 
     it("after a comment that interrupts the definition's lazy continuation", () => {
@@ -126,7 +129,7 @@ describe("an interrupting block ends the definition, so the chunk under it is co
         // Sol bug #3: a "    $$" on a continuation line is content the
         // definition owns, and the definition carries on after its closer
         const lines = ["[^1]: body", "    $$", "    x", "    $$", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, true, false, false]);
+        expect(scanDocument(lines).isProtected).toEqual([false, true, true, true, false]);
     });
 
     it("the reference in the chunk counts as live (one-line comment case)", () => {

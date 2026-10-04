@@ -30,10 +30,13 @@ import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
 
 describe("an unclosed fence inside a list item dies with the item", () => {
     it("the text after an unclosed list fence is live, not code", () => {
+        // the blank line after the dead fence belongs to nothing: the item
+        // and its fence end on the code line (the note reading, runtime
+        // swap step 2, 2026-10-03; the scanner counted the blank as code)
         expect(protectedLines("- ```\n  code\n\nplain[^1]".split("\n"))).toEqual([
             true,
             true,
-            true,
+            false,
             false,
         ]);
     });
@@ -60,7 +63,7 @@ describe("an unclosed fence inside a list item dies with the item", () => {
         expect(protectedLines("1. ```\n   code\n\nplain[^1]".split("\n"))).toEqual([
             true,
             true,
-            true,
+            false,
             false,
         ]);
     });
@@ -70,14 +73,14 @@ describe("an unclosed fence inside a list item dies with the item", () => {
         // unclosed, the fence must die where the nested item ends
         expect(
             protectedLines("- outer\n  - ```\n    code\n\nplain[^1]".split("\n")),
-        ).toEqual([false, true, true, true, false]);
+        ).toEqual([false, true, true, false, false]);
     });
 
     it("the pinned EOF-swallow shape itself (re-litigation)", () => {
         // the existing pin expects [true,true,true,true] + endsProtected;
         // micromark reads "swallowed" as a live paragraph
         const scan = scanDocument("10. ```\n    code\n\nswallowed".split("\n"));
-        expect(scan.isProtected).toEqual([true, true, true, false]);
+        expect(scan.isProtected).toEqual([true, true, false, false]);
         expect(scan.endsProtected).toBe(false);
     });
 

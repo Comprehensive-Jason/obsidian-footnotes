@@ -59,8 +59,15 @@ describe("orphaned-definition deletion reclassifying the lines below it", () => 
         expect(lintFootnotes(once, options)).toBe(once);
     });
 
-    it("a deletion that turns the lazy label below into a real definition is refused", () => {
-        expect(removeOrphanedFootnoteDefinitions(doc)).toBe(doc);
+    // Corrected in step 2 of the runtime swap (2026-10-03): Obsidian reads
+    // "$$ tail" as a display math block of its own, which ends [^4]'s
+    // definition (rules M2 and E1, docs/obsidian-reading-rules.md) and runs
+    // to the end of the note, "[^3]: y" inside it. So [^4] is its label
+    // line alone, cutting it changes how no other line reads, and the cut
+    // goes through; the scanner had [^4] owning the math lines and refused.
+    // The invariant this pin is about, lint twice equals lint once, holds.
+    it("deleting [^4] takes only its own line and changes how no other line reads", () => {
+        expect(removeOrphanedFootnoteDefinitions(doc)).toBe("para\n===\n$$ tail\n[^3]: y");
     });
 
     it("control: without the lazy label below, the orphaned block deletes fine", () => {

@@ -98,7 +98,10 @@ function edit(lines: string[], r: () => number): string[] {
 
 /** The difference between the note reading of `lines` and one parse of the whole note, or null when there is none. */
 function difference(lines: string[]): string | null {
-    const whole = footnoteFacts(lines.join("\n"));
+    // the whole note as the reading sees it: a "\r" at the end of a line
+    // dropped and one inside a line read as a space (cleanLine in
+    // note-reading.ts), so the two count the same lines
+    const whole = footnoteFacts(lines.map((line) => line.replace(/\r$/, "").replace(/\r/g, " ")).join("\n"));
     const reading = readNote(lines);
     const definitions = [...whole.definitions].sort((a, b) => a.start - b.start || a.labelStart - b.labelStart);
     // where each line's block syntax ends, line by line (the press's block-syntax guard)

@@ -51,13 +51,16 @@ const openers: [string, string][] = [
 
 describe("bug: the append after the last definition block ignores an unclosed region", () => {
     describe.each(openers)("with %s opened by the last definition's continuation line", (_name, opener) => {
-        // Green control: the scanner already knows the note ends inside
-        // something that was never closed. The append just never asks.
-        // (Obsidian runs a region opened by a definition's continuation
-        // on across unindented lines, verified 2026-09-16, so the
-        // list-item rule of ruling A3 does not apply here.)
-        it("the scan reports that the note ends inside the unclosed region", () => {
-            expect(scanDocument(noteEndingInsideAnOpener(opener)).endsProtected).toBe(true);
+        // Control, corrected in step 2 of the runtime swap (2026-10-03):
+        // the region a definition's continuation line opens reaches no
+        // further than the definition, and a label written after a blank
+        // line at the left margin ends the definition (rule D5,
+        // docs/obsidian-reading-rules.md, held to Obsidian's saved answers
+        // by the referee). So an appended definition is not swallowed and
+        // the note does not "end inside" the region; the old pin read it
+        // the other way, as the hand-written scanner did.
+        it("the region ends with the definition, so a definition appended after a blank line is not inside it", () => {
+            expect(scanDocument(noteEndingInsideAnOpener(opener)).endsProtected).toBe(false);
         });
 
         it("the new definition lands outside that region and is a real definition", () => {

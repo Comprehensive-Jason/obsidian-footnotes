@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { readNote } from "../../src/parsing/note-reading";
 import { scanDocument } from "../../src/parsing/markdown-scan";
 import { lintFootnotes } from "../../src/linting/linter";
 
@@ -24,24 +25,25 @@ import { lintFootnotes } from "../../src/linting/linter";
 // untouchable. The "---" twin is already read correctly.
 
 describe("a setext underline under a label line ends the block (the label is heading text)", () => {
-    it.fails("the default lint never rewrites an indented code chunk under a '[^1]: x' / '===' heading", () => {
+    it("the default lint never rewrites an indented code chunk under a '[^1]: x' / '===' heading", () => {
         const doc = "x[^3]\n\n[^1]: x\n===\n\n    chunk [^9]\n\n[^3]: three";
         // Today: "x[^1]\n\n[^2]: x\n===\n\n    chunk [^3]\n\n[^1]: three".
         expect(lintFootnotes(doc)).toContain("    chunk [^9]");
     });
 
-    it.fails("an indented chunk directly under '[^1]: x' / '===' is code", () => {
-        const scan = scanDocument("[^1]: x\n===\n    chunk [^2]\n\n[^2]: two".split("\n"));
-        expect(scan.setextUnderline[1]).toBe(true);
-        expect(scan.isProtected[2]).toBe(true);
+    it("an indented chunk directly under '[^1]: x' / '===' is code", () => {
+        const lines = "[^1]: x\n===\n    chunk [^2]\n\n[^2]: two".split("\n");
+        // the "===" is an underline: block syntax through to its end
+        expect(readNote(lines).blockSyntaxEnd(1)).toBe(Infinity);
+        expect(scanDocument(lines).isProtected[2]).toBe(true);
     });
 
-    it.fails("an indented chunk after a blank under '[^1]: x' / '===' is code", () => {
+    it("an indented chunk after a blank under '[^1]: x' / '===' is code", () => {
         const scan = scanDocument("[^1]: x\n===\n\n    chunk [^2]\n\n[^2]: two".split("\n"));
         expect(scan.isProtected[3]).toBe(true);
     });
 
-    it.fails("quoted: an indented quoted chunk under '> [^1]: x' / '> ===' is code", () => {
+    it("quoted: an indented quoted chunk under '> [^1]: x' / '> ===' is code", () => {
         const scan = scanDocument("> [^1]: x\n> ===\n>     chunk [^2]\n\n[^2]: two".split("\n"));
         expect(scan.isProtected[2]).toBe(true);
     });

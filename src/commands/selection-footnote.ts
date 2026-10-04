@@ -24,7 +24,8 @@ import {
     simulateChanges,
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
-import { maskInlineRegions, scanDocument } from "../parsing/markdown-scan";
+import { maskInlineRegions } from "../parsing/markdown-scan";
+import { linesReadAlike, readNote } from "../parsing/note-reading";
 import {
     autonumFootnoteId,
     landCellDefinitionAppend,
@@ -43,7 +44,6 @@ import {
     isTableDelimiterRow,
     TableCellEditor,
     tableRowCellSpans,
-    tableRowLines,
 } from "../editor/table-cursor";
 
 // Conversion: turning selected text into a footnote (issue #35).
@@ -334,6 +334,34 @@ export function selectionPressHandled(
         showNotice(TableSelectionNotice, 8000);
         return true;
     }
+    // The nesting refusals come first: they name the real reason, where
+    // the reclassification check below would only see that the lines
+    // after a swallowed definition stop being its body.
+    //
+    // A selection that sits inside another footnote's definition, or laps
+    // over one, would nest footnotes inside each other. It is refused just
+    // as the caret presses are (Jason's ruling 2026-08-13). Any overlap at
+    // all counts: starting inside a definition would nest the new footnote
+    // into the old one; swallowing one would nest the old one into the new
+    // footnote. Every definition counts, wherever it sits: one in a
+    // blockquote or callout with its quoted continuation (second review
+    // 2026-09-09, Kimi hunt cycle 3, 2026-09-16), and one in a list item
+    // (Jason's ruling 1, option a, 2026-10-03).
+    if (
+        ctx.reading().definitions.some(
+            (definition) => trimmed.from.line <= definition.end && trimmed.to.line >= definition.start,
+        )
+    ) {
+        showNotice(NestedFootnoteNotice, 8000);
+        return true;
+    }
+    // And a selection that touches any live footnote at all refuses:
+    // a reference, a placeholder, or an inline footnote (nesting is
+    // prevented plugin-wide, 2026-08-24).
+    if (selectionTouchesFootnote(ctx, trimmed.from, trimmed.to)) {
+        showNotice(NestedFootnoteNotice, 8000);
+        return true;
+    }
     // Refuse a selection that cuts protected text here and now, rather
     // than leaving it to the simulation. The born-dead checks only prove
     // that the RESULT is a live footnote; a selection that swallows one
@@ -353,30 +381,6 @@ export function selectionPressHandled(
         replacementReclassifiesDoc(ctx, trimmed.from, trimmed.to, replacement)
     ) {
         showNotice(ProtectedSelectionNotice, 8000);
-        return true;
-    }
-    // A selection that sits inside another footnote's definition, or laps
-    // over one, would nest footnotes inside each other. It is refused just
-    // as the caret presses are (Jason's ruling 2026-08-13). Any overlap at
-    // all counts: starting inside a definition would nest the new footnote
-    // into the old one; swallowing one would nest the old one into the new
-    // footnote. Every definition counts, wherever it sits: one in a
-    // blockquote or callout with its quoted continuation (second review
-    // 2026-09-09, Kimi hunt cycle 3, 2026-09-16), and one in a list item
-    // (Jason's ruling 1, option a, 2026-10-03).
-    if (
-        ctx.reading().definitions.some(
-            (definition) => trimmed.from.line <= definition.end && trimmed.to.line >= definition.start,
-        )
-    ) {
-        showNotice(NestedFootnoteNotice, 8000);
-        return true;
-    }
-    // Finally, a selection that touches any live footnote at all refuses:
-    // a reference, a placeholder, or an inline footnote (nesting is
-    // prevented plugin-wide, 2026-08-24).
-    if (selectionTouchesFootnote(ctx, trimmed.from, trimmed.to)) {
-        showNotice(NestedFootnoteNotice, 8000);
         return true;
     }
     // The new reference sits snug against the text in front of the
@@ -569,7 +573,7 @@ function tableVerdict(
     from: EditorPosition,
     to: EditorPosition,
 ): "none" | "whole" | "cuts" {
-    const rows = tableRowLines(ctx.lines, ctx.scan.isProtected);
+    const rows = ctx.reading().tableRowLines;
     if (!rows[from.line] && !rows[to.line]) return "none";
     if (from.line !== to.line) {
         // A table held whole, edge to edge on its first and last rows,
@@ -655,28 +659,19 @@ function selectionCutsProtectedText(
     from: EditorPosition,
     to: EditorPosition,
 ): boolean {
-    const { lines, scan } = ctx;
+    const { lines } = ctx;
+    const reading = ctx.reading();
     // Frontmatter always starts at line 0, so if the selection overlaps it
     // at all, the `from` edge must be inside it. Checking `from` is enough.
-    if (lines[0] === "---" && scan.isProtected[0]) {
-        for (let j = 1; j < lines.length; j++) {
-            if (/^(---|\.\.\.)\s*$/.test(lines[j])) {
-                if (from.line <= j) return true;
-                break;
-            }
-        }
-    }
-    // The three startsIn* flags each say whether a region that runs over
-    // several lines (a comment, math, or a code fence, quoted ones
-    // included) is still open at the START of a given line. The fence flag
-    // exists because a fence inside a blockquote is invisible to the
-    // endsProtected checks. Found in a 30,000-case soak, 2026-08-20: a
-    // full-line drag inside a quoted fence converted the line, which
-    // dropped its quote marker and killed the fence.
-    const openInto = (line: number) =>
-        scan.startsInComment[line] ||
-        scan.startsInMath[line] ||
-        scan.startsInFence[line];
+    const frontmatter = reading.protectedSpans.find((span) => span.kind === "frontmatter");
+    if (frontmatter && from.line <= frontmatter.endLine) return true;
+    // Whether a region that runs over several lines (a comment, math, or a
+    // code fence, quoted ones included) is still open at the START of a
+    // given line. A fence inside a blockquote counts too: found in a
+    // 30,000-case soak, 2026-08-20, a full-line drag inside a quoted fence
+    // converted the line, which dropped its quote marker and killed the
+    // fence.
+    const openInto = (line: number) => reading.regionOpenAt(line);
     // Suppose the line holding the `from` edge is protected but carries
     // none of those three flags. That is a legitimate edge in one case
     // only: the line is a fence OPENER, whose construct reaches DOWN into
@@ -688,10 +683,10 @@ function selectionCutsProtectedText(
     // close.
     const fenceOpener = (line: number) =>
         line + 1 < lines.length
-            ? scan.startsInFence[line + 1]
-            : scan.endsProtected;
+            ? reading.regionOpenAt(line + 1)
+            : reading.openRegionFrom !== -1;
     if (
-        scan.isProtected[from.line] &&
+        reading.protectedLines[from.line] &&
         !openInto(from.line) &&
         !fenceOpener(from.line)
     ) {
@@ -708,7 +703,7 @@ function selectionCutsProtectedText(
         return true;
     }
     const openAtTo =
-        to.line + 1 < lines.length ? openInto(to.line + 1) : scan.endsProtected;
+        to.line + 1 < lines.length ? openInto(to.line + 1) : reading.openRegionFrom !== -1;
     return caretInsideMaskedSpan(
         ctx.maskedLine(to.line),
         to.ch,
@@ -719,15 +714,19 @@ function selectionCutsProtectedText(
 
 /**
  * Whether replacing the selection with `replacement` would change how
- * Obsidian classifies any line the edit does not itself touch. Protected
- * or not protected, before against after.
+ * Obsidian reads any line the edit does not itself touch: the note reading
+ * of the two texts, compared line by line (linesReadAlike).
  *
  * This is the check that catches a destroyed construct. A selection that
  * swallows a fence delimiter, or that closes or un-closes a region simply
  * by being removed, can leave a result that looks perfectly live. It looks
  * live precisely BECAUSE innocent text elsewhere in the note has just been
  * reclassified, and the checks that test whether the new reference and
- * definition are live cannot see that happen.
+ * definition are live cannot see that happen. A selection that takes one
+ * of a "%%" comment's two lines un-closes it, and every line below
+ * disappears into it (hunt 2026-10-03, pin
+ * bug-cut-comment-delimiter-wrong-toast); a destroyed fence opener turns
+ * its closer into the opener of a new fence.
  */
 function replacementReclassifiesDoc(
     ctx: DocContext,
@@ -735,33 +734,17 @@ function replacementReclassifiesDoc(
     to: EditorPosition,
     replacement: string,
 ): boolean {
-    const before = ctx.scan;
+    const before = ctx.reading();
     const simulated = simulateChanges(ctx.lines, [
         { from, to, text: replacement },
     ]);
-    const after = scanDocument(simulated);
+    const after = readNote(simulated);
     const delta = simulated.length - ctx.lines.length;
-    const changed = (i: number, j: number) =>
-        before.isProtected[i] !== after.isProtected[j] ||
-        before.startsInComment[i] !== after.startsInComment[j] ||
-        before.startsInMath[i] !== after.startsInMath[j] ||
-        // A code fence can change role as well: if the edit destroyed the
-        // opener of a fence, its closer now opens a new fence instead. The
-        // line looks equally protected either way, but it is a different
-        // construct, so this counts as a change too.
-        before.startsInFence[i] !== after.startsInFence[j] ||
-        // A "%%" block comment hides its lines without protecting them
-        // (a reference inside still binds), so it has a flag of its own.
-        // A selection that takes one of its two "%%" lines un-closes it,
-        // and every line below disappears into it (hunt 2026-10-03: the
-        // old append, planned before the edit, happened to refuse this
-        // case on its own; pin bug-cut-comment-delimiter-wrong-toast).
-        before.inCommentBlock[i] !== after.inCommentBlock[j];
     for (let i = 0; i < from.line; i++) {
-        if (changed(i, i)) return true;
+        if (!linesReadAlike(before, i, after, i, "none")) return true;
     }
     for (let i = to.line + 1; i < ctx.lines.length; i++) {
-        if (changed(i, i + delta)) return true;
+        if (!linesReadAlike(before, i, after, i + delta, "none")) return true;
     }
     return false;
 }

@@ -51,11 +51,13 @@ describe("fences in list items accept content-indented closers", () => {
 
     it("an unclosed list fence dies with its item (ruling A3, 2026-09-15; it used to protect to the end of the note)", () => {
         // "swallowed" sits at column 0, outside the item whose content
-        // column is 4, so the item and its fence are over; the blank line
-        // before it stays inside. Obsidian renders "swallowed" as prose.
+        // column is 4, so the item and its fence are over. Obsidian renders
+        // "swallowed" as prose. The blank line before it belongs to nothing
+        // (the note reading, runtime swap step 2, 2026-10-03; the scanner
+        // kept it inside the fence).
         const doc = "10. ```\n    code\n\nswallowed";
         const scan = scanDocument(doc.split("\n"));
-        expect(scan.isProtected).toEqual([true, true, true, false]);
+        expect(scan.isProtected).toEqual([true, true, false, false]);
         expect(scan.endsProtected).toBe(false);
     });
 });

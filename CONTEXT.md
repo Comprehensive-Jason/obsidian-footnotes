@@ -113,7 +113,8 @@ Atomic: one bad caret refuses the lot, one undo reverts the lot.
 **Note reading**:
 The one parse of a note the way Obsidian reads it (remark-parse 8 plus
 Obsidian's rules), remembered per exact text, from which every definition
-with its extent and container is read. It is parsed in **parts**: stretches
+with its extent and container is read, and the protected text and masked
+twin with it. It is parsed in **parts**: stretches
 of lines that read on their own exactly as they read in the whole note,
 each remembered by its text, so a read after an edit parses only the part
 the edit changed.

@@ -1,7 +1,6 @@
 import { Editor, EditorPosition } from "obsidian";
 
 import { EditorWithCm } from "./obsidian-internals";
-import { tableRowLinesOf } from "../parsing/markdown-scan";
 
 // While you edit a table cell, Obsidian runs a separate little editor
 // inside that cell. The main editor's getCursor() does NOT follow your
@@ -280,46 +279,6 @@ export function isTableDelimiterRow(lineText: string): boolean {
     );
 }
 
-/**
- * Which lines belong to a table.
- *
- * The test: take every run of neighboring lines that are not protected text
- * and that carry an unescaped pipe, and count the whole run as a table when
- * its SECOND line is a "| --- |" delimiter row. A line with pipes and no
- * delimiter row under it is only prose ("a | b"), and a table written
- * inside a code fence or a comment is text, not a table.
- *
- * This is what lets the plugin refuse a selection covering part of a table
- * (Jason's ruling 2026-09-04): turning one cell, a few cells, or a row into
- * a footnote shreds whatever stays behind.
- */
-export function tableRowLines(lines: string[], isProtected: boolean[]): boolean[] {
-    const rows = new Array<boolean>(lines.length).fill(false);
-    // the scanner's reader knows which pipe runs Reading view renders as
-    // tables (a run directly under paragraph text is none, Kimi hunt
-    // cycle 3); this reader adds the protection facts the editor has and
-    // never calls a row what the scanner does not (GLM hunt cycle 7,
-    // 2026-09-16: the caret guards refused presses on a paragraph of
-    // literal pipes as if it were a table)
-    const rendered = tableRowLinesOf(lines);
-    const isRowShaped = (i: number) =>
-        !isProtected[i] && rendered[i] && tableRowCellSpans(lines[i]).length > 0;
-    const isDelimiterRow = (i: number) => isTableDelimiterRow(lines[i]);
-    let i = 0;
-    while (i < lines.length) {
-        if (!isRowShaped(i)) {
-            i++;
-            continue;
-        }
-        let end = i;
-        while (end + 1 < lines.length && isRowShaped(end + 1)) end++;
-        if (end > i && isDelimiterRow(i + 1)) {
-            for (let k = i; k <= end; k++) rows[k] = true;
-        }
-        i = end + 1;
-    }
-    return rows;
-}
 
 /**
  * The caret a command should act on. When `cell` is set, that is the caret

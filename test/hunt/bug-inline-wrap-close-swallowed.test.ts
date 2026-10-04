@@ -56,8 +56,17 @@ afterEach(() => {
 const refused = (notice: string = ProtectedCreationNotice) =>
     noticeCalls.some((args) => args[0] === notice);
 
-describe("an emergent math span swallowing the inline wrapper's close bracket", () => {
-    it("the selection conversion refuses instead of landing a corrupted wrap", () => {
+// Revised in step 2 of the runtime swap (2026-10-03): the born-dead check
+// now asks the note reading, and Obsidian's parser matches an inline
+// footnote's brackets before it reads what is inside them (rule E3; the
+// same order as Jason's web-address report of the same day,
+// test/paste-inline-web-address.test.ts). So "^[cost $]" is one whole
+// inline footnote, the "$" inside it pairs with nothing outside, and the
+// wrap lands intact; the 2026-08-25 ground truth was micromark, which
+// has no inline footnotes. A Reading-view look at
+// "before^[cost $] here$y] after" would settle it for good (for Jason).
+describe("an inline wrapper whose text ends in a dollar, with another dollar later on the line", () => {
+    it("the selection conversion lands the wrap intact", () => {
         const selection: { anchor: EditorPosition; head: EditorPosition } = {
             anchor: { line: 0, ch: 7 },
             head: { line: 0, ch: 13 }, // "cost $"
@@ -69,11 +78,11 @@ describe("an emergent math span swallowing the inline wrapper's close bracket", 
             wholeDoc: true,
         });
         selectionPressHandled(fakePlugin(doc), doc, null, "inline");
-        expect(doc.lines[0]).toBe(BEFORE);
-        expect(refused(ProtectedSelectionNotice)).toBe(true);
+        expect(doc.lines[0]).toBe("before^[cost $] here$y] after");
+        expect(refused(ProtectedSelectionNotice)).toBe(false);
     });
 
-    it("the paste insert refuses the same shape at a bare caret", async () => {
+    it("the paste insert lands the same shape at a bare caret", async () => {
         vi.stubGlobal("navigator", {
             clipboard: { readText: () => Promise.resolve("cost $") },
         });
@@ -84,8 +93,8 @@ describe("an emergent math span swallowing the inline wrapper's close bracket", 
             wholeDoc: true,
         });
         await pasteInlineFootnote(fakePlugin(doc));
-        expect(doc.lines[0]).toBe(line);
-        expect(refused()).toBe(true);
+        expect(doc.lines[0]).toBe("before ^[cost $] here$y] after");
+        expect(refused()).toBe(false);
     });
 });
 

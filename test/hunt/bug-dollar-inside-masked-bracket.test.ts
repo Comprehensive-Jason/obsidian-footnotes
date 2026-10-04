@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after-punctuation";
-import { maskLineRegions } from "../../src/parsing/markdown-scan";
+import { maskedLineAt } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // Bug (2026-08-11 review, Kimi): dollarInsideReference walked the RAW line
 // backwards, so a "[^" fragment already masked away as code (or comment)
@@ -12,17 +13,19 @@ import { maskLineRegions } from "../../src/parsing/markdown-scan";
 
 describe("a masked '[^' fragment cannot suppress math (bug-dollar-inside-masked-bracket)", () => {
     it("math after a code span containing '[^' is still masked", () => {
-        const { masked } = maskLineRegions("`[^` $[^1].$ tail");
+        const masked = maskedLineAt(["`[^` $[^1].$ tail"], 0);
         // the code span (0..3) and the whole math span (5..11) are NULed
         expect(masked).toBe("\0\0\0\0 " + "\0".repeat(7) + " tail");
     });
 
-    it("an unclosed $$ after a code span containing '[^' still opens a math region", () => {
-        expect(maskLineRegions("`[^` $$").endsInMath).toBe(true);
+    it("a $$ after a code span containing '[^' still opens math that a later line of the paragraph closes", () => {
+        // a "$$" pair in one paragraph is math across its lines (rule M1);
+        // an opener nothing closes is literal text
+        expect(readNote(["`[^` $$", "x $$"]).regionOpenAt(1)).toBe(true);
     });
 
     it("a dollar inside a REAL reference still never opens math", () => {
-        const { masked } = maskLineRegions("pay [^a$1] now $5 or $6");
+        const masked = maskedLineAt(["pay [^a$1] now $5 or $6"], 0);
         expect(masked).toBe("pay [^a$1] now $5 or $6");
     });
 

@@ -82,7 +82,8 @@ type ProtectedKind =
     | "wikilink"
     | "linkDestination"
     | "inlineCode"
-    | "inlineMath";
+    | "inlineMath"
+    | "imageAlt";
 
 /**
  * A stretch of protected text, from offset `from` up to (not including)
@@ -117,6 +118,19 @@ export interface FootnoteFacts {
     references: ReferenceFact[];
     protectedSpans: ProtectedSpan[];
     blockSyntax: BlockSyntaxFact[];
+    /** The lines that are rows of a table (its header and delimiter row included), outside any footnote's definition: a table inside a definition belongs to the definition. */
+    tableRows: number[];
+    /**
+     * One entry per line: the blocks the line belongs to, from the
+     * outermost in, each as its kind ("blockquote", "listItem",
+     * "paragraph", "heading2", "list.ordered", ...) with a "^" in front
+     * where the block starts on this line. "^paragraph" alone is the first
+     * line of a paragraph at the top level, "paragraph" one of its later
+     * lines, and "" a blank line outside every container. Comparing these
+     * before and after an edit says whether the edit changed how Obsidian
+     * reads a line (see linesReadAlike in note-reading.ts).
+     */
+    lineBlocks: string[];
 }
 
 /** Node types that hold blocks; a child of one of these is a block itself, anything deeper is inline. */
@@ -171,6 +185,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
     const references: ReferenceFact[] = [];
     const protectedSpans: ProtectedSpan[] = [];
     const blockSyntax: BlockSyntaxFact[] = [];
+    const tableRows: number[] = [];
     for (const [line, end] of Object.entries(containerColumns)) if (end > 0) blockSyntax.push({ line: Number(line) - 1, end });
 
     // the offset where each line starts, to turn an offset into a line
@@ -189,11 +204,22 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
     const protect = (kind: ProtectedKind, block: boolean, from: number, to: number) => {
         protectedSpans.push({ kind, block, from, to, startLine: lineAt(from), endLine: lineAt(to) });
     };
+    const lineBlocks: string[][] = lineStarts.map(() => []);
 
     const walk = (node: MarkdownNode, parentType: string, inInlineNote: boolean, container: DefinitionContainer): void => {
         const block = BlockContainers.has(parentType);
         const from = node.position.start.offset;
         const to = node.position.end.offset;
+        if (block) {
+            // The block's kind on every line it covers, marked where it
+            // starts. A quote or a list is only the lines it gathers: where
+            // it starts moves when an edit cuts its first lines, and that
+            // changes how no line reads, so those two carry no mark.
+            const kind = node.type === "heading" ? `heading${node.depth ?? 0}` : node.type === "list" && node.ordered === true ? "list.ordered" : node.type;
+            const first = node.position.start.line - 1;
+            const marked = node.type !== "blockquote" && node.type !== "list";
+            for (let line = first; line <= lastLineOf(node); line++) lineBlocks[line]?.push(marked && line === first ? `^${kind}` : kind);
+        }
         switch (node.type) {
             case "footnoteDefinition": {
                 // the node starts at the line's indentation; the label's "[" comes after it
@@ -252,6 +278,10 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
                 if (lastLineOf(node) > line) blockSyntax.push({ line: lastLineOf(node), end: Infinity });
                 break;
             }
+            case "table":
+                // every line of the table is a row (the delimiter row has no node of its own)
+                if (container.footnotes === 0) for (let line = node.position.start.line - 1; line <= lastLineOf(node); line++) tableRows.push(line);
+                break;
             case "thematicBreak":
                 blockSyntax.push({ line: node.position.start.line - 1, end: Infinity });
                 break;
@@ -260,10 +290,19 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
                 protect("wikilink", false, from + open, to - 2);
                 break;
             }
-            case "link":
             case "image":
+            case "imageReference": {
+                // an image's alt text is not read as Markdown: a reference
+                // written there renders no footnote (GLM hunt cycle 3,
+                // probed in Reading view 2026-09-16)
+                const altEnd = afterLabel(doc, from, to);
+                if (altEnd - 1 > from + 2) protect("imageAlt", false, from + 2, altEnd - 1);
+                if (node.type === "image") protect("linkDestination", false, altEnd, to);
+                break;
+            }
+            case "link":
                 // "[text](destination)": the part after the label; an autolink "<...>" or a bare URL is all destination
-                protect("linkDestination", false, doc[from] === "[" || doc[from] === "!" ? afterLabel(doc, from, to) : from, to);
+                protect("linkDestination", false, doc[from] === "[" ? afterLabel(doc, from, to) : from, to);
                 break;
             case "definition":
                 // a link definition "[label]: url": the part after the label
@@ -282,7 +321,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
         for (const child of node.children ?? []) walk(child, node.type, inInlineNote || node.type === "footnote", inner);
     };
     walk(tree, "", false, { quotes: 0, listItems: 0, footnotes: 0 });
-    return { definitions, references, protectedSpans, blockSyntax };
+    return { definitions, references, protectedSpans, blockSyntax, tableRows, lineBlocks: lineBlocks.map((kinds) => kinds.join(" ")) };
 }
 
 /** The footnote facts of a note, as Obsidian reads it. */
@@ -323,5 +362,7 @@ export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean
         references: facts.references.filter((reference) => reference.line < lastLine),
         protectedSpans: facts.protectedSpans.filter((span) => span.startLine < lastLine),
         blockSyntax: facts.blockSyntax.filter((syntax) => syntax.line < lastLine),
+        tableRows: facts.tableRows.filter((line) => line < lastLine),
+        lineBlocks: facts.lineBlocks.slice(0, lastLine),
     };
 }

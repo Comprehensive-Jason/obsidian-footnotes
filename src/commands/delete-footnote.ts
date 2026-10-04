@@ -7,11 +7,9 @@ import {
 import {
     definitionCuts,
     lazyDefinitionLabelLines,
-    maskProtectedLines,
     normalizeEol,
     removeLineRanges,
     restoreEol,
-    scanDocument,
     underlinedDefinitionLabelLines,
 } from "../parsing/markdown-scan";
 import { readNote } from "../parsing/note-reading";
@@ -68,9 +66,8 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     const folded = name.toLowerCase();
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
     const reading = readNote(lines);
+    const masked = reading.maskedLines();
     const starts = reading.labelLines;
 
     // Every definition of the name goes, wherever it sits: at the top
@@ -102,13 +99,13 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     // no business staying behind under the line above.
     const labelOf = (i: number): boolean =>
         definitionLabelWithName(lines[i], masked[i])?.name.toLowerCase() === folded;
-    for (const i of lazyDefinitionLabelLines(lines, scan, masked, starts)) {
+    for (const i of lazyDefinitionLabelLines(lines)) {
         if (labelOf(i)) {
             blocks.push({ start: i, end: i });
             definitions++;
         }
     }
-    for (const i of underlinedDefinitionLabelLines(lines, scan, masked, starts)) {
+    for (const i of underlinedDefinitionLabelLines(lines)) {
         if (labelOf(i)) {
             blocks.push({ start: i, end: i + 1 });
             definitions++;
@@ -125,7 +122,7 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     let references = 0;
     const cutLines = definitionCut.lines.map((line, i) => {
         // a label line trimmed back to its list marker is done with
-        if (scan.isProtected[i] || cut.has(i) || line !== lines[i]) return line;
+        if (reading.protectedLines[i] || cut.has(i) || line !== lines[i]) return line;
         // rightmost first, so that cutting one keeps the offsets of the
         // ones before it
         const hits = referenceOccurrences(line, masked[i], starts[i])
@@ -144,17 +141,16 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     // lazy label there into a definition (the guards' own comments list
     // the cases).
     const byHand = " would change how Obsidian reads the text around it. Delete it by hand.";
-    // a deleted definition's label line that keeps only its list marker is
-    // meant to stop being a label, so it is not asked to read as before
-    const keptStarts = starts.map((start, i) => start && definitionCut.lines[i] === lines[i]);
-    if (references > 0 && readsDifferently(lines, scan, keptStarts, cutLines)) {
+    // The reference cuts are judged on their own first, so the toast can
+    // say which half was refused; then the whole deletion, against the
+    // note as it was. A deleted definition's label line that keeps only its
+    // list marker counts as cut, like a line a reference was cut from: it
+    // may lose the definition, and nothing else may change with it.
+    if (references > 0 && readsDifferently(lines, cutLines.map((line, i) => (definitionCut.lines[i] === lines[i] ? line : lines[i])))) {
         return { kind: "refused", reason: `Nothing was deleted: removing ${quotedReference(name)}${byHand}` };
     }
     const out = removeLineRanges(cutLines, blocks);
-    if (
-        blocks.length > 0 &&
-        linesReadDifferently(cutLines, references > 0 ? scanDocument(cutLines) : scan, blocks, out)
-    ) {
+    if (linesReadDifferently(lines, { lines: cutLines, ranges: blocks }, out)) {
         return {
             kind: "refused",
             reason: `Nothing was deleted: removing the ${quotedDefinitionLabel(name)} definition${byHand}`,

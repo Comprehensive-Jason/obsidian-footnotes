@@ -61,17 +61,6 @@ describe("a code span / comment / math region crossing an inline %% pair line", 
         expect(out[2]).toContain("[^2]");
     });
 
-    it("an unclosed $$ opened mid-line pairs with the closer after the comment-only line (no phantom math block)", () => {
-        const lines = "x $$ a\n%% c %%\n$$ b [^3]\n\n[^4]: def".split("\n");
-        const scan = scanDocument(lines);
-        const out = maskProtectedLines(lines, scan);
-        // the math runs from the opener to the closer, so the [^3] AFTER
-        // the closer on its line is live - today the closer line opens a
-        // phantom math BLOCK instead, deadening it and the note's tail
-        expect(out[2]).toContain("[^3]");
-        expect(scan.endsProtected).toBe(false);
-    });
-
     it("control: a lone %% BLOCK opener really does end the paragraph (the ender's purpose)", () => {
         const out = masked("a `code\n%%\nspan [^1]` tail");
         // the span cannot cross a comment block: [^1] stays live
@@ -84,9 +73,12 @@ describe("a code span / comment / math region crossing an inline %% pair line", 
     // paragraph too; recorded fact 1c658e2, where Obsidian reads no
     // definition after such a line). So everything from line 2 on is math,
     // and the lint should leave the note as it is. Expected fail until step
-    // 2 of the swap: the scanner still reads the "$$ b" line as the closer
-    // of a pair, so the lint renames and moves text inside the math.
-    it.fails("the math block the \"$$ b\" line opens runs to the end of the note: the lint leaves it alone", () => {
+    // 2 of the swap, when the scanner still read the "$$ b" line as the
+    // closer of a pair and the lint renamed and moved text inside the
+    // math (fixed there: the masked twin comes from the note reading; the
+    // test that had the "$$ b" line close the math opened on line 0 is
+    // gone).
+    it("the math block the \"$$ b\" line opens runs to the end of the note: the lint leaves it alone", () => {
         const doc = "x $$ a\n%% c %%\n$$ b [^3]\n\n[^4]: def\n\ntext[^4]";
         const once = lintFootnotes(doc, {});
         // the "$$ b" line closes the math opened on line 0, so "[^3]"

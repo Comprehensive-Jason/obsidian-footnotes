@@ -12,7 +12,8 @@ import { replaceMinimal } from "../editor/write-back";
 import { rewriteDocument } from "./rewrite-document";
 import { definitionLabel, quotedReference, referenceOccurrences } from "../parsing/footnote-grammar";
 import { footnotePrefix, footnotePrefixProblem } from "../parsing/footnote-prefix";
-import { maskInlineRegions, FootnotePlacement } from "../parsing/markdown-scan";
+import { FootnotePlacement } from "../parsing/markdown-scan";
+import { readNote } from "../parsing/note-reading";
 import { AppWithCommands, AppWithPlugins, readingViewActive, viewEditor, WindowWithVim } from "../editor/obsidian-internals";
 import { activeTableCellEditor, nestedSubEditorOwnsFocus, runOutsideTableCell } from "../editor/table-cursor";
 // The pipeline calls each rule through its catalogue entry (rule.apply), not
@@ -398,8 +399,9 @@ export function sectionHeadingProblem(heading: string): string | null {
     // only a LIVE reference can desync the heading from its copy in the
     // note: an escaped "\[^9]" is literal prose and a "[^9]" in a code
     // span is dead text, and no rule renames either (Kimi hunt cycle 4,
-    // 2026-09-16)
-    const live = referenceOccurrences(heading, maskInlineRegions(heading));
+    // 2026-09-16). The heading is markdown that may run over several lines,
+    // so it is read as a note of its own.
+    const live = referenceOccurrences(heading, readNote(heading.split("\n")).maskedLines().join("\n"));
     if (live.length === 0) return null;
     return `${LintingCanceled}the footnote section heading setting contains a footnote reference (${quotedReference(live[0].name)}), which the lint rules would renumber. Take it out of the heading in the plugin settings.`;
 }

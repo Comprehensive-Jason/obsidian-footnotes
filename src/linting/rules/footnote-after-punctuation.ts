@@ -1,6 +1,5 @@
 import { inlineFootnoteSpans, referenceOccurrences } from "../../parsing/footnote-grammar";
 import { ClosingMarkChars, definitionLabelIn, FootnotePlacement, punctuationAt, referenceLandingAfter } from "../../parsing/markdown-scan";
-import { readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
@@ -171,11 +170,9 @@ export function footnoteAfterPunctuation(markdown: string, placement: FootnotePl
     // a comment opens or closes, the part inside the comment is blanked
     // while the part outside it still gets the swap
     // (bug-comment-boundary-lines).
-    return rewriteDocument(markdown, (_text, { lines, scan, maskedLines }) => {
-        const reading = readNote(lines);
-
+    return rewriteDocument(markdown, (_text, { lines, reading, maskedLines }) => {
         const result = lines.map((line, i) => {
-            if (scan.isProtected[i]) return line;
+            if (reading.protectedLines[i]) return line;
             const masked = maskedLines[i];
             // A definition's own "[^x]:" label is not a reference sitting
             // in front of a colon, so start after it, wherever the

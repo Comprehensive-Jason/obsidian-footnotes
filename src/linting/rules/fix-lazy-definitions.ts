@@ -1,8 +1,4 @@
-import {
-    lazyDefinitionLabelLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../parsing/markdown-scan";
+import { lazyDefinitionLabelLines } from "../../parsing/markdown-scan";
 import { readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
@@ -13,8 +9,8 @@ import { FootnoteRule } from "../rule";
 // of prose (a paragraph, a list item, a quote or callout line) with no
 // blank line between them, Obsidian does not see a definition. It
 // sees more of the paragraph. The project calls such a line a "lazy label";
-// definitionStartLines in the scanner is what decides it. You meant a
-// definition and are one blank line short of it.
+// the note reading is what decides it. You meant a definition and are one
+// blank line short of it.
 //
 // What this rule does: inserts that blank line.
 //
@@ -66,8 +62,7 @@ export function fixLazyDefinitions(markdown: string): string {
 function fixLazyDefinitionsOnce(markdown: string): string {
     return rewriteDocument(markdown, (text, view) => {
         let lines = view.lines;
-        let scan = view.scan;
-        let lazy = lazyDefinitionLabelLines(lines, scan, view.maskedLines, view.definitionStarts);
+        let lazy = lazyDefinitionLabelLines(lines);
         if (lazy.length === 0) return text;
         // labels the rule has decided to leave alone, by line number in the
         // CURRENT numbering (an insertion above one shifts it down by one)
@@ -86,7 +81,6 @@ function fixLazyDefinitionsOnce(markdown: string): string {
             if (at === undefined) break;
             const markers = (QuoteMarkers.exec(lines[at])?.[1] ?? "").trimEnd();
             const trial = [...lines.slice(0, at), markers, ...lines.slice(at)];
-            const trialScan = scanDocument(trial);
             // A blank line goes in only when it makes the label a definition
             // in Obsidian's reading. One that does not, because the line
             // above opens something the blank line would close differently
@@ -96,15 +90,13 @@ function fixLazyDefinitionsOnce(markdown: string): string {
             // more blank line each time (the runtime swap, 2026-10-03; found
             // by the adjacency property). Nor is one that changes which text
             // is protected.
-            if (protectedTextChanged(lines, scan, trial, trialScan) || !readNote(trial).labelLines[at + 1]) {
+            if (protectedTextChanged(lines, trial) || !readNote(trial).labelLines[at + 1]) {
                 skipped.add(at);
                 continue;
             }
             lines = trial;
-            scan = trialScan;
             skipped = new Set([...skipped].map((line) => (line >= at ? line + 1 : line)));
-            const masked = maskProtectedLines(lines, scan);
-            lazy = lazyDefinitionLabelLines(lines, scan, masked, readNote(lines).labelLines);
+            lazy = lazyDefinitionLabelLines(lines);
         }
         return lines.join("\n");
     });
@@ -116,15 +108,12 @@ function fixLazyDefinitionsOnce(markdown: string): string {
  * live, or a live line that became protected. Compared as sorted lists of
  * line contents, so the inserted line's shift does not matter.
  */
-function protectedTextChanged(
-    before: string[],
-    beforeScan: { isProtected: boolean[] },
-    after: string[],
-    afterScan: { isProtected: boolean[] },
-): boolean {
-    const pick = (lines: string[], flags: boolean[]) =>
-        lines.filter((_line, i) => flags[i]).sort().join("\n");
-    return pick(before, beforeScan.isProtected) !== pick(after, afterScan.isProtected);
+function protectedTextChanged(before: string[], after: string[]): boolean {
+    const pick = (lines: string[]) => {
+        const flags = readNote(lines).protectedLines;
+        return lines.filter((_line, i) => flags[i]).sort().join("\n");
+    };
+    return pick(before) !== pick(after);
 }
 
 export const fixLazyDefinitionsRule: FootnoteRule = {

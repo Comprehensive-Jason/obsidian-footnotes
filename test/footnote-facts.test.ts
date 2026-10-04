@@ -103,10 +103,12 @@ describe("footnoteFacts: protected spans", () => {
         ]);
     });
 
-    it("covers a link's destination and title, an autolink, a link definition's URL, and a wikilink's inside", () => {
+    it("covers a link's destination and title, an image's alt text, an autolink, a link definition's URL, and a wikilink's inside", () => {
         const note = '[link](http://x.com/[^2] "t[^3]") ![img](a.png) <http://y.com> [[note|[^4]]] ![[e.png]]\n\n[ref]: http://z.com/a "t"\n';
         expect(spans(note)).toEqual([
             ["linkDestination", false, '(http://x.com/[^2] "t[^3]")'],
+            // an image's alt text is not read as Markdown (GLM hunt cycle 3, probed in Reading view 2026-09-16)
+            ["imageAlt", false, "img"],
             ["linkDestination", false, "(a.png)"],
             ["linkDestination", false, "<http://y.com>"],
             // a wikilink ends at the first "]]" (rule D1), leaving one "]" over
@@ -119,6 +121,7 @@ describe("footnoteFacts: protected spans", () => {
     it("finds a link's label end past nested and escaped brackets", () => {
         expect(spans("[a [b] \\] c](dest) ![x [y]](img.png)\n")).toEqual([
             ["linkDestination", false, "(dest)"],
+            ["imageAlt", false, "x [y]"],
             ["linkDestination", false, "(img.png)"],
         ]);
     });

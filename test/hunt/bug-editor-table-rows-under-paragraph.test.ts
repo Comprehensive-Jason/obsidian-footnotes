@@ -3,7 +3,6 @@
 import { describe, expect, it } from "vitest";
 
 import { docContext } from "../../src/editor/doc-context";
-import { tableRowLines } from "../../src/editor/table-cursor";
 import { warnTableEdgeCaretIfOutside } from "../../src/commands/press-guards";
 import { scanDocument, tableRowLinesOf } from "../../src/parsing/markdown-scan";
 import { fakeEditor } from "../helpers/fake-editor";
@@ -44,23 +43,21 @@ import { fakeEditor } from "../helpers/fake-editor";
 //
 // Settings involved: every creation press's caret guards (the numbered,
 // named, and inline keys) and the selection-to-footnote conversion.
+//
+// Step 2 of the runtime swap (2026-10-03) left one table reader: the note
+// reading's, which reads tables the way Obsidian does (rules C1 to C5);
+// the editor's own reader is gone, and the caret guards and the selection
+// verdicts ask the reading.
 
 const DOC = ["prose", "| a | b |", "| --- |", "| c | d |", "", "tail"];
 
 describe("the editor table reader under plain paragraph text", () => {
-    it("agrees with tableRowLinesOf: a pipe run under prose is no table", () => {
-        const lines = DOC;
-        const scan = scanDocument(lines);
-        expect(tableRowLines(lines, scan.isProtected)).toEqual(
-            tableRowLinesOf(lines),
-        );
+    it("a pipe run under prose is no table", () => {
+        expect(tableRowLinesOf(DOC)).toEqual(DOC.map(() => false));
         // the same under a list item line, the second half of the pinned
         // Reading-view rule
         const itemLines = ["- item", "| a | b |", "| --- |"];
-        const itemScan = scanDocument(itemLines);
-        expect(tableRowLines(itemLines, itemScan.isProtected)).toEqual(
-            tableRowLinesOf(itemLines),
-        );
+        expect(tableRowLinesOf(itemLines)).toEqual([false, false, false]);
     });
 
     it("the caret on the dashes line is NOT refused as a table delimiter", () => {
@@ -75,8 +72,7 @@ describe("the editor table reader under plain paragraph text", () => {
 
     it("control: the same run after a blank line is a table to both readers", () => {
         const lines = ["prose", "", "| a | b |", "| --- |", "| c | d |"];
-        const scan = scanDocument(lines);
-        expect(tableRowLines(lines, scan.isProtected)).toEqual([false, false, true, true, true]);
+        expect(tableRowLinesOf(lines)).toEqual([false, false, true, true, true]);
         expect(scanDocument(lines).isProtected).toEqual([false, false, false, false, false]);
     });
 });

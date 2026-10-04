@@ -47,7 +47,7 @@ describe("the append above an unclosed region keeps the region with its own foot
         ["a math block", "    $$"],
         ["an HTML comment", "    <!--"],
     ] as [string, string][]) {
-        it.fails(`${name}: the region still belongs to [^1] after [^2] is appended`, () => {
+        it(`${name}: the region still belongs to [^1] after [^2] is appended`, () => {
             const lines = ["alpha[^1].", "", "[^1]: one", opener, "    hidden"];
             expect(owner(lines, "hidden")).toBe("1");
             const doc = fakeEditor([...lines], { edits: true });

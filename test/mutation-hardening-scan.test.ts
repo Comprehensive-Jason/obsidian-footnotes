@@ -5,7 +5,6 @@ import { referenceOccurrences } from "../src/parsing/footnote-grammar";
 import {
     definitionLabelIn,
     findDefinitionBlocks,
-    maskLineRegions,
     maskedLineAt,
     normalizeEol,
     protectedLines,
@@ -18,6 +17,12 @@ import {
 // listed in survivors-markdown-scan.json (144 mutants against
 // src/markdown-scan.ts). Organized by scanner region, in file order, so a
 // mutant's line number maps to the `describe` block that targets it.
+//
+// Step 2 of the runtime swap (2026-10-03) replaced the scanner's walk and
+// its one-line masker with the note reading. The tests of the masker's
+// carried state and of the walk's own branches went with that code; the
+// masking tests now drive the masked twin the reading builds, and those
+// whose expectation Obsidian's parser contradicts say so where they stand.
 
 const NUL = (n: number) => "\0".repeat(n);
 
@@ -141,7 +146,7 @@ describe("isFenceOpener", () => {
 // insideReferenceShape is an internal (unexported) helper, so it is pinned
 // indirectly through maskLineRegions, which is the only way its result is
 // observable through the public API.
-describe("insideReferenceShape (observed through maskLineRegions)", () => {
+describe("reference-shaped brackets and math (the masked twin)", () => {
     // line 147: the backward scan uses "j >= 0", so it must still inspect
     // index 0 itself - a mutant stopping at "j > 0" would skip the very
     // first character and miss a "[^" that starts the line, wrongly
@@ -149,7 +154,7 @@ describe("insideReferenceShape (observed through maskLineRegions)", () => {
     it("recognizes a reference bracket that starts the line (index 0)", () => {
         const line = "[^a$b$c]";
         // both dollars are footnote-id characters; neither opens math
-        expect(maskLineRegions(line).masked).toBe(line);
+        expect(maskedLineAt([line], 0)).toBe(line);
     });
 
     // line 150: a "[" found while walking back only counts as a reference
@@ -157,7 +162,7 @@ describe("insideReferenceShape (observed through maskLineRegions)", () => {
     // `true` unconditionally would treat this plain "[...]" bracket as a
     // reference too, suppressing a math span that should otherwise mask.
     it("a bracket without a caret does not suppress math scanning", () => {
-        const { masked } = maskLineRegions("[x$y$ done");
+        const masked = maskedLineAt(["[x$y$ done"], 0);
         expect(masked).toBe("[x" + NUL(3) + " done");
     });
 });
@@ -173,85 +178,41 @@ describe("backticks inside a footnote reference are literal (2026-09-08)", () =>
     const line = "x [^aa`a] [^bb#b] [^cc`c] y";
 
     it("pairs no code span across two references", () => {
-        expect(maskLineRegions(line).masked).toBe(line);
+        expect(maskedLineAt([line], 0)).toBe(line);
     });
 
     it("so the reference finder sees all three names", () => {
-        expect(referenceOccurrences(line, maskLineRegions(line).masked).map((o) => o.name)).toEqual([
+        expect(referenceOccurrences(line, maskedLineAt([line], 0)).map((o) => o.name)).toEqual([
             "aa`a",
             "bb#b",
             "cc`c",
         ]);
     });
 
-    it("a backtick inside a reference can't CLOSE a span opened outside it either", () => {
-        // the closer guard: the real closer is the last backtick, so the
-        // whole stretch is one code span (the dollar rule's twin)
+    it("a backtick that opens a code span before a reference is closed by the first backtick after it, inside the brackets or not", () => {
+        // Corrected in step 2 of the runtime swap (2026-10-03): Obsidian's
+        // parser reads left to right, so a reference shape only shields a
+        // backtick it reaches first; a span already open closes at the
+        // next run of its length (remark-parse 8, as CommonMark). The
+        // scanner's "closer guard" was an extrapolation from the verified
+        // case above, never probed.
         const spanned = "`code [^a`b] end` tail";
-        expect(maskLineRegions(spanned).masked).toBe(NUL("`code [^a`b] end`".length) + " tail");
+        expect(maskedLineAt([spanned], 0)).toBe(NUL("`code [^a`".length) + "b] end` tail");
     });
 
     it("ordinary code spans still mask, reference-shaped content included", () => {
-        expect(maskLineRegions("a `[^x]` b").masked).toBe("a " + NUL(6) + " b");
-        expect(maskLineRegions("use `git log` and [^n`ote]").masked).toBe(
+        expect(maskedLineAt(["a `[^x]` b"], 0)).toBe("a " + NUL(6) + " b");
+        expect(maskedLineAt(["use `git log` and [^n`ote]"], 0)).toBe(
             "use " + NUL("`git log`".length) + " and [^n`ote]",
         );
     });
 
     it("a bracket without a caret does not protect its backtick", () => {
-        expect(maskLineRegions("[x`y`] z").masked).toBe("[x" + NUL(3) + "] z");
+        expect(maskedLineAt(["[x`y`] z"], 0)).toBe("[x" + NUL(3) + "] z");
     });
 });
 
-describe("maskLineRegions: multi-line comment continuation (startInComment)", () => {
-    // line 180: when no "-->" closes the comment on this line, the WHOLE
-    // line must stay masked and endsInComment must stay true. Both the
-    // "always false" and the "close === 1" mutants would fall through
-    // instead, since indexOf never actually returns 1 here (-1 is real).
-    it("an interior line with no closer stays fully masked and open", () => {
-        const { masked, endsInComment, endsInMath } = maskLineRegions(
-            "no closer on this line",
-            { comment: true },
-        );
-        expect(masked).toBe(NUL("no closer on this line".length));
-        expect(endsInComment).toBe(true);
-        expect(endsInMath).toBe(false);
-    });
-
-    // line 188: `i` must resume scanning exactly AFTER the "-->" closer -
-    // resuming 6 chars too early re-exposes an already-blotted opener
-    // region to a fresh code-span scan, changing the final mask.
-    it("resumes scanning exactly after the comment closer, not before it", () => {
-        const line = "`ab--> cd`e";
-        const { masked } = maskLineRegions(line, { comment: true });
-        // close+3 correctly skips past "-->"; only "cd`" ... "`e" remain,
-        // and the lone leftover backtick at index 9 never re-pairs with
-        // the opener backtick at index 0 (that's already behind us)
-        expect(masked).toBe(NUL(6) + " cd`e");
-    });
-});
-
-describe("maskLineRegions: multi-line math continuation (startInMath)", () => {
-    // line 192: same "no closer" shape as the comment branch, but for "$$".
-    it("an interior math line with no closer stays fully masked and open", () => {
-        const { masked, endsInMath, endsInComment } = maskLineRegions(
-            "still inside the block",
-            { math: true },
-        );
-        expect(masked).toBe(NUL("still inside the block".length));
-        expect(endsInMath).toBe(true);
-        expect(endsInComment).toBe(false);
-    });
-
-    // line 199: `i` must resume exactly after "$$" (2 chars), not before.
-    it("resumes scanning exactly after the math closer, not before it", () => {
-        const line = "`ab$$ cd`e";
-        const { masked } = maskLineRegions(line, { math: true });
-        expect(masked).toBe(NUL(5) + " cd`e");
-    });
-});
-
-describe("maskLineRegions: main scan loop bounds and escapes", () => {
+describe("the masked twin: code spans and escapes", () => {
     // line 203: the while loop's bound is `i < line.length` - an off-by-one
     // that allows i === line.length would read past the string (undefined
     // char) instead of stopping; the escape-skip below proves the loop
@@ -259,12 +220,12 @@ describe("maskLineRegions: main scan loop bounds and escapes", () => {
     it("a trailing escape at the very end of the line does not overrun", () => {
         // "\\" as the last character: i+=2 would land past the end, and
         // the loop must simply stop there rather than throwing or looping
-        expect(maskLineRegions("text\\").masked).toBe("text\\");
+        expect(maskedLineAt(["text\\"], 0)).toBe("text\\");
     });
 
     // line 217: the closing-backtick search loop bound, same shape as 203.
     it("an unmatched backtick run at EOL stays literal, scan terminates", () => {
-        expect(maskLineRegions("a `unclosed").masked).toBe("a `unclosed");
+        expect(maskedLineAt(["a `unclosed"], 0)).toBe("a `unclosed");
     });
 
     // line 224: the closing run must match the OPENING run's exact length
@@ -274,12 +235,15 @@ describe("maskLineRegions: main scan loop bounds and escapes", () => {
         const line = "``a`b``";
         // the run of 2 backticks only closes against another run of 2;
         // the lone backtick between "a" and "b" is span content
-        expect(maskLineRegions(line).masked).toBe(NUL(line.length));
+        expect(maskedLineAt([line], 0)).toBe(NUL(line.length));
     });
-    it("a single backtick between two double-backtick spans stays unmasked prose", () => {
-        // here there is no closing double run at all, so nothing closes
+    it("an unclosed double-backtick run leaves its second backtick free to open a span", () => {
+        // Corrected in step 2 of the runtime swap (2026-10-03): with no
+        // closing double run, Obsidian's parser (remark-parse 8) moves on
+        // one character and reads "`a`" as a code span; strict CommonMark
+        // would leave the whole run literal
         const line = "``a`b";
-        expect(maskLineRegions(line).masked).toBe(line);
+        expect(maskedLineAt([line], 0)).toBe("`" + NUL(3) + "b");
     });
 
     // line 230: after a successful match, scanning resumes at
@@ -290,52 +254,38 @@ describe("maskLineRegions: main scan loop bounds and escapes", () => {
     // mis-rewound match.
     it("resumes scanning exactly after a closed code span, not back inside it", () => {
         const line = "`a` `b`";
-        expect(maskLineRegions(line).masked).toBe(NUL(3) + " " + NUL(3));
+        expect(maskedLineAt([line], 0)).toBe(NUL(3) + " " + NUL(3));
     });
 });
 
-describe("maskLineRegions: short-form HTML comments", () => {
+describe("the masked twin: short-form HTML comments", () => {
     // line 236: "<!-->" is a complete 5-character comment (CommonMark
     // §6.6) - advancing i by anything other than +5 would either re-scan
     // part of it or skip live content after it.
-    it("consumes exactly the 5 characters of \"<!-->\" and resumes right after", () => {
-        const { masked, endsInComment } = maskLineRegions("a<!-->`b`");
-        expect(masked).toBe("a" + NUL(5) + NUL(3));
-        expect(endsInComment).toBe(false);
+    // Corrected in step 2 of the runtime swap (2026-10-03): newer
+    // CommonMark (0.30, section 6.6) counts "<!-->" and "<!--->" as whole
+    // comments, but Obsidian's parser, remark-parse 8, follows the older
+    // rule, where neither is a comment: both stay literal text, and the
+    // code span after them still masks.
+    it("\"<!-->\" is literal text, and the code span after it masks", () => {
+        const masked = maskedLineAt(["a<!-->`b`"], 0);
+        expect(masked).toBe("a<!-->" + NUL(3));
     });
 
-    // line 241: "<!--->" is 6 characters.
-    it("consumes exactly the 6 characters of \"<!--->\" and resumes right after", () => {
-        const { masked, endsInComment } = maskLineRegions("a<!--->`b`");
-        expect(masked).toBe("a" + NUL(6) + NUL(3));
-        expect(endsInComment).toBe(false);
+    it("\"<!--->\" is literal text too", () => {
+        const masked = maskedLineAt(["a<!--->`b`"], 0);
+        expect(masked).toBe("a<!--->" + NUL(3));
     });
 
-    // line 245: a genuine unclosed "<!--" (checked from i+4, so the short
-    // forms above are excluded) blots to EOL and reports endsInComment.
-    it("an ordinary unclosed comment blots to end of line", () => {
-        const { masked, endsInComment } = maskLineRegions("x <!-- open");
-        expect(masked).toBe("x " + NUL("<!-- open".length));
-        expect(endsInComment).toBe(true);
-    });
-
-    // line 252: the unclosed-comment branch's endsInMath must report
-    // false - a BooleanLiteral mutant flipping it to true would make a
-    // plain unclosed HTML comment masquerade as an open math block on the
-    // NEXT line (wrong continuation branch entirely).
-    it("an unclosed comment does not also claim to be an open math block", () => {
-        const { endsInMath } = maskLineRegions("x <!-- open");
-        expect(endsInMath).toBe(false);
-    });
 });
 
-describe("maskLineRegions: dollar / math scanning", () => {
+describe("the masked twin: dollars and math", () => {
     // line 259: the "$" branch's own conditional gate - flipping it to
     // "true" wouldn't change $-handling directly, but skipping it (dead
     // code around it) is exercised implicitly by every math test below;
     // pin the base case where a dollar opens ordinary inline math.
     it("a simple inline math span is masked end to end", () => {
-        const { masked } = maskLineRegions("$x+y$ done");
+        const masked = maskedLineAt(["$x+y$ done"], 0);
         expect(masked).toBe(NUL("$x+y$".length) + " done");
     });
 
@@ -346,26 +296,15 @@ describe("maskLineRegions: dollar / math scanning", () => {
     // take this branch even when the guard is true.
     it("a dollar inside a footnote reference never opens math, even with a real $ later", () => {
         const line = "[^a$b] and $real$";
-        const { masked } = maskLineRegions(line);
+        const masked = maskedLineAt([line], 0);
         // the reference's internal "$" stays literal; only the later
         // standalone "$real$" is math
         expect(masked).toBe("[^a$b] and " + NUL("$real$".length));
     });
 
-    // line 267: display math "$$...$$" with no closer blots to EOL and
-    // reports endsInMath - mirrors the comment case at line 245.
-    it("an unclosed display-math opener blots to end of line", () => {
-        const { masked, endsInMath, endsInComment } = maskLineRegions(
-            "x $$ open",
-        );
-        expect(masked).toBe("x " + NUL("$$ open".length));
-        expect(endsInMath).toBe(true);
-        expect(endsInComment).toBe(false);
-    });
-
     // line 284: the inline-math closing-dollar search loop bound.
     it("an unmatched single dollar with no closing partner stays literal", () => {
-        expect(maskLineRegions("cost $5 no close").masked).toBe(
+        expect(maskedLineAt(["cost $5 no close"], 0)).toBe(
             "cost $5 no close",
         );
     });
@@ -376,7 +315,7 @@ describe("maskLineRegions: dollar / math scanning", () => {
     it("an escaped dollar inside candidate math content is not the closer", () => {
         // "\$" is not a valid close; the real closer is the LAST "$"
         const line = "$a\\$b$";
-        const { masked } = maskLineRegions(line);
+        const masked = maskedLineAt([line], 0);
         expect(masked).toBe(NUL(line.length));
     });
 
@@ -387,7 +326,7 @@ describe("maskLineRegions: dollar / math scanning", () => {
     // mutants) or dropping any single clause changes which of these four
     // shapes gets (wrongly) treated as math.
     it("no closing dollar at all leaves both dollars as literal prose", () => {
-        expect(maskLineRegions("a $b c").masked).toBe("a $b c");
+        expect(maskedLineAt(["a $b c"], 0)).toBe("a $b c");
     });
     // NOTE: "close === i + 1" (empty inline-math content) is unreachable in
     // practice - two adjacent unescaped dollars are always caught by the
@@ -397,15 +336,15 @@ describe("maskLineRegions: dollar / math scanning", () => {
     // no input reaches this comparison with a value that makes it matter.
     it("content starting with a space is not math (Obsidian's rule)", () => {
         const line = "$ x$ prose";
-        expect(maskLineRegions(line).masked).toBe(line);
+        expect(maskedLineAt([line], 0)).toBe(line);
     });
     it("content ending with a space is not math (Obsidian's rule)", () => {
         const line = "$x $ prose";
-        expect(maskLineRegions(line).masked).toBe(line);
+        expect(maskedLineAt([line], 0)).toBe(line);
     });
     it("content with no leading or trailing space IS math", () => {
         const line = "$x y$ prose";
-        expect(maskLineRegions(line).masked).toBe(NUL("$x y$".length) + " prose");
+        expect(maskedLineAt([line], 0)).toBe(NUL("$x y$".length) + " prose");
     });
 
     // line 304: on a successful inline-math match, `i` resumes exactly
@@ -413,7 +352,7 @@ describe("maskLineRegions: dollar / math scanning", () => {
     // dollar or skips the character right after it.
     it("resumes scanning exactly after the closing dollar of inline math", () => {
         const line = "$a$`b`";
-        const { masked } = maskLineRegions(line);
+        const masked = maskedLineAt([line], 0);
         expect(masked).toBe(NUL("$a$".length) + NUL("`b`".length));
     });
 });
@@ -446,15 +385,6 @@ describe("scanDocument: YAML frontmatter", () => {
             false,
         ]);
     });
-    it("a line with extra non-space text after \"---\" does not close frontmatter", () => {
-        const doc = "---\n--- not a closer\nkey: 1\n---";
-        expect(protectedLines(doc.split("\n"))).toEqual([
-            true,
-            true,
-            true,
-            true,
-        ]);
-    });
 
     // line 357: every line from 0 through the closer (inclusive) is
     // protected - `k <= j`, not `k < j`, so the closer line itself is
@@ -471,35 +401,6 @@ describe("scanDocument: YAML frontmatter", () => {
 });
 
 describe("scanDocument: comment/math region container depth", () => {
-    // line 413/417: `startsInComment[i]`/`startsInMath[i]` must be set
-    // true for every interior line of an OPEN region - a BooleanLiteral
-    // "true" mutant on the else-branch initial value would falsely mark
-    // ordinary lines as region-interior too, but since these arrays start
-    // false by default we pin the positive case directly per region.
-    it("marks every interior line of an open comment region", () => {
-        const doc = "<!-- open\nline one\nline two\n-->";
-        const scan = scanDocument(doc.split("\n"));
-        expect(scan.startsInComment).toEqual([false, true, true, true]);
-    });
-    it("marks every interior line of an open math region", () => {
-        const doc = "$$\nline one\nline two\n$$";
-        const scan = scanDocument(doc.split("\n"));
-        expect(scan.startsInMath).toEqual([false, true, true, true]);
-    });
-
-    // line 430: the closer-line's live suffix can reopen EITHER kind of
-    // region - pin that a comment closer whose suffix opens MATH is
-    // tracked as math, not comment (rules out the "&&"/bare-inMath
-    // mutants that garble which flag gets set).
-    it("a comment closer's live suffix can open a NEW math region", () => {
-        const doc = "x <!-- x\n--> $$\nstill math\n$$\nafter[^1]";
-        const scan = scanDocument(doc.split("\n"));
-        expect(scan.startsInMath).toEqual([false, false, true, true, false]);
-        // opener/closer boundary lines keep their live suffix scannable
-        // and are NOT whole-line protected; only the pure interior line
-        // ("still math") is
-        expect(scan.isProtected).toEqual([false, false, true, false, false]);
-    });
 
     // line 434/436: a BARE closer (nothing live left after trimming NULs)
     // ends a BLOCK - an indented chunk may open on the very next line.
@@ -520,52 +421,6 @@ describe("scanDocument: comment/math region container depth", () => {
         expect(scan.isProtected).toEqual([false, true, false, false]);
     });
 
-    // line 446: same startsInMath shape as 413/417 but through the math
-    // branch's own local check.
-    it("interior math lines are protected whole-line", () => {
-        const doc = "$$\nprotected content\n$$";
-        const scan = scanDocument(doc.split("\n"));
-        expect(scan.isProtected).toEqual([false, true, false]);
-    });
-
-    // line 456: mirrors 430 - a math closer's live suffix can reopen a
-    // COMMENT region.
-    it("a math closer's live suffix can open a NEW comment region", () => {
-        const doc = "$$\nx\n$$ <!--\nstill comment\n-->\nafter[^1]";
-        const scan = scanDocument(doc.split("\n"));
-        expect(scan.startsInComment).toEqual([
-            false,
-            false,
-            false,
-            true,
-            true,
-            false,
-        ]);
-        expect(scan.isProtected).toEqual([
-            false,
-            true,
-            false,
-            true,
-            false,
-            false,
-        ]);
-    });
-
-    // line 459/461: same bare-closer block-boundary shape as 434/436, for
-    // the math branch - including the trim/replace mechanics that decide
-    // "bare" (461's MethodExpression/StringLiteral mutants would judge
-    // bareness on the wrong string).
-    it("a bare math closer ends its block, letting indented code open right after", () => {
-        const doc = "$$\nhidden\n$$\n    code";
-        const scan = scanDocument(doc.split("\n"));
-        expect(scan.isProtected).toEqual([false, true, false, true]);
-    });
-    it("a math closer with live trailing text does NOT end the block", () => {
-        const doc = "$$\nhidden\n$$ tail\n    cont";
-        const scan = scanDocument(doc.split("\n"));
-        expect(scan.isProtected).toEqual([false, true, false, false]);
-    });
-
     // line 430: a reopened region must record ITS OWN (closer line's)
     // container depth, not the depth the original region opened at. Pin
     // this with a depth CHANGE across the reopen: comment opens at depth
@@ -581,13 +436,6 @@ describe("scanDocument: comment/math region container depth", () => {
         expect(scan.isProtected).toEqual([false, false, false, false]);
     });
 
-    // line 456: the same regionDepth-update requirement, for a math region
-    // whose closer reopens a COMMENT one level deeper.
-    it("a math-to-comment reopen at a deeper depth updates regionDepth to the new depth", () => {
-        const doc = "> $$\n> > $$ <!--\n> after\nplain";
-        const scan = scanDocument(doc.split("\n"));
-        expect(scan.isProtected).toEqual([false, false, false, false]);
-    });
 });
 
 describe("scanDocument: fence container depth and closer indent", () => {
@@ -736,19 +584,6 @@ describe("scanDocument: indented code vs. definition/list continuation", () => {
         ]);
     });
 
-    // line 571: the gap-width rule - 0 or 5+ spaces after the marker
-    // count as a gap of 1 (not the literal count); 1-4 spaces count as
-    // their literal width. Pin both edges: a huge gap collapses to 1,
-    // and a normal 1-space gap is NOT force-collapsed to something else.
-    it("five or more spaces after the marker collapse the content indent to marker+1", () => {
-        // "-     item" : marker "-" (1 char) + 5 spaces + "item" - content
-        // indent collapses to 1+1=2, so a 6-space line is code (2+4); and
-        // the item's own text, four columns past that content indent, is
-        // code as well (GLM hunt cycle 10, probed in Reading view
-        // 2026-09-16: "-      item[^1]" renders a code block)
-        const doc = "-     item\n\n      code";
-        expect(protectedLines(doc.split("\n"))).toEqual([true, false, true]);
-    });
     it("a normal single-space gap uses its literal width, not the collapse rule", () => {
         // "- item": content indent 1+1=2; a 5-space continuation (< 2+4)
         // stays live, matching the ordinary single-space-gap case
@@ -797,31 +632,9 @@ describe("scanDocument: fence opener detection on list-item lines", () => {
             false,
         ]);
     });
-    it("a list-item fence's closer one column past content+3 does not close, and the item's end kills the fence", () => {
-        // the over-indented closer is code; after the blank line, "ended"
-        // at column 0 ends the item, and the fence with it (ruling A3,
-        // 2026-09-15; a plain line directly under the content would be
-        // swallowed, GLM hunt cycle 11, probed 2026-09-16)
-        const doc = "- ```\n  code\n      ```\n\nended";
-        expect(protectedLines(doc.split("\n"))).toEqual([
-            true,
-            true,
-            true,
-            true,
-            false,
-        ]);
-    });
 });
 
 describe("scanDocument: region opener trigger and endsProtected", () => {
-    // line 622: an opener line's OWN scan for "<!--"/"$$" must run for
-    // BOTH constructs, independently - pin that a math opener alone
-    // (no "<!--" present) still starts a region.
-    it("a display-math opener with no comment token still opens a region", () => {
-        const doc = "$$\nbody\n$$";
-        const scan = scanDocument(doc.split("\n"));
-        expect(scan.startsInMath).toEqual([false, true, true]);
-    });
 
     // line 633: endsProtected is true for a document-level unclosed
     // fence too, not only comment/math - pin the fence half of that OR.
@@ -997,23 +810,11 @@ describe("round 2", () => {
         // reference alone and masking only "$y$".
         it("a dollar immediately after a reference is not treated as a math opener", () => {
             const line = "[^a$b]$y$";
-            expect(maskLineRegions(line).masked).toBe("[^a$b]" + NUL(3));
+            expect(maskedLineAt([line], 0)).toBe("[^a$b]" + NUL(3));
         });
     });
 
-    describe("maskLineRegions: display math close-not-found guard", () => {
-        // line 267: forcing "close === -1" to always true makes a CLOSED
-        // "$$...$$" span on one line get treated as unclosed - blotting to
-        // end of line and wrongly reporting endsInMath, instead of closing
-        // normally and leaving the trailing prose live.
-        it("a closed display-math span on one line does not blot past its closer", () => {
-            const { masked, endsInMath } = maskLineRegions("x $$disp$$ y");
-            expect(masked).toBe("x " + NUL("$$disp$$".length) + " y");
-            expect(endsInMath).toBe(false);
-        });
-    });
-
-    describe("maskLineRegions: inline math closer resume cursor", () => {
+    describe("the masked twin: inline math closer", () => {
         // line 304: after a successful inline-math match, "i" must resume
         // at "close + 1" - the ArithmeticOperator mutant "close - 1" rewinds
         // INTO the just-matched span's last content character, letting it
@@ -1022,7 +823,7 @@ describe("round 2", () => {
         // the correct one.
         it("resumes exactly after the closing dollar, not one character early", () => {
             const line = "$a`$ `z`";
-            expect(maskLineRegions(line).masked).toBe(NUL(4) + " " + NUL(3));
+            expect(maskedLineAt([line], 0)).toBe(NUL(4) + " " + NUL(3));
         });
     });
 
@@ -1095,18 +896,6 @@ describe("round 2", () => {
             expect(scan.isProtected).toEqual([false, false, true]);
         });
 
-        // line 459: the math-branch mirror of the two checks above.
-        it("a math closer with live trailing text does not open code on the next line", () => {
-            const doc = "$$\nx\n$$ tail\n    cont";
-            const scan = scanDocument(doc.split("\n"));
-            expect(scan.isProtected).toEqual([false, true, false, false]);
-        });
-        it("a deeper same-line comment reopen (from a math closer) does not leak a stale block boundary", () => {
-            // the same 2026-09-16 note as above: code after a quote line
-            const doc = "> $$\n> > $$ <!--\n    indented";
-            const scan = scanDocument(doc.split("\n"));
-            expect(scan.isProtected).toEqual([false, false, true]);
-        });
     });
 
     describe("scanDocument: fence closer indent while-loop", () => {
@@ -1156,61 +945,7 @@ describe("round 2", () => {
         });
     });
 
-    describe("scanDocument: indented-code branches' own blockBoundary write", () => {
-        // line 542: the branch that OPENS a fresh indented-code block sets
-        // blockBoundary=false - forcing it "true" (BooleanLiteral) leaks a
-        // false block-boundary signal into the very next line's list-stack
-        // pop decision (line 519), which can wrongly pop a list item that
-        // is still open, lowering the code-indent threshold for a later
-        // line that should NOT yet qualify as code.
-        it("opening indented code does not leak a stale block boundary into the next line's list-stack pop", () => {
-            const doc = "- item\n\n      one\n# h\n    four";
-            expect(protectedLines(doc.split("\n"))).toEqual([
-                false,
-                false,
-                true,
-                false,
-                false,
-            ]);
-        });
-
-        // line 532: same shape, but for the branch that CONTINUES an
-        // already-open indented-code block (needs a second consecutive
-        // indented line to reach the mutated branch instead of the
-        // opening one).
-        it("continuing indented code does not leak a stale block boundary into the next line's list-stack pop", () => {
-            const doc = "- item\n\n      one\n      two\n# h\n    four";
-            expect(protectedLines(doc.split("\n"))).toEqual([
-                false,
-                false,
-                true,
-                true,
-                false,
-                false,
-            ]);
-        });
-    });
-
     describe("scanDocument: list-marker pop loop (a NEW marker popping shallower items)", () => {
-        // line 565: forcing the pop loop's condition to "false" (and,
-        // identically in effect, the EqualityOperator mutant that turns
-        // "listStack.length > 0" into "listStack.length <= 0", which is
-        // false whenever the length check would matter) means a new,
-        // narrower list marker never pops a wider sibling that came
-        // before it. The stale wide entry stays buried under the new
-        // marker's own (immediately-matching) push, invisible until a
-        // later query pops back down THROUGH the new top and re-exposes
-        // it - at which point a code-indent threshold survives that
-        // should have been cleared.
-        it("a narrower sibling list marker correctly pops away a wider marker that preceded it", () => {
-            const doc = "- a\n123456789. b\n\n     d";
-            expect(protectedLines(doc.split("\n"))).toEqual([
-                false,
-                false,
-                false,
-                true,
-            ]);
-        });
 
         // line 565: forcing the condition to "true" turns the loop into
         // "while (true) listStack.pop();" - an unconditional infinite
@@ -1249,21 +984,6 @@ describe("round 2", () => {
     });
 
     describe("scanDocument: list-marker gap-width collapse rule", () => {
-        // line 571: a marker with NOTHING after it (matched via the "$"
-        // alternative in the marker regex) captures an EMPTY gap group.
-        // The ConditionalExpression "false" mutant (never collapses,
-        // always uses the literal - here 0) and the EqualityOperator
-        // mutant "length !== 0" (collapses on any NON-zero length instead
-        // of on zero) both mishandle this zero-length case, giving the
-        // bare marker the wrong content indent.
-        it("a bare list marker with nothing after it still gets content indent = marker width + 1", () => {
-            const doc = "-\n\n     code";
-            expect(protectedLines(doc.split("\n"))).toEqual([
-                false,
-                false,
-                false,
-            ]);
-        });
 
         // line 571: a gap of EXACTLY 4 spaces must use its LITERAL width
         // (CommonMark: only 5+ collapses to 1) - the ConditionalExpression

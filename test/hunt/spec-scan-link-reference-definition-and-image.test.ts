@@ -20,6 +20,13 @@ import { definitionStartLines, maskProtectedLines, scanDocument } from "../../sr
 // Obsidian agrees, and whether these shapes turn up in real notes, is
 // open.
 //
+// Since step 2 of the runtime swap (2026-10-03) the masked twin comes from
+// the note reading, Obsidian's own parser rebuilt: it reads the title and
+// the alt text as text no footnote lives in, so those two now read dead,
+// and the address one still reads live (the parser takes "/u" as the
+// address and "[^1]" as text after it, or no definition at all). Reading
+// view has still not been checked for any of the three.
+//
 // Hunt 2026-10-02, round 2, lens context. Cluster X14.
 //
 // Source of truth: CommonMark 4.7 (link reference definitions) and 6.4
@@ -36,7 +43,7 @@ function liveReferences(doc: string): string[] {
 }
 
 describe("spec question: link reference definitions and reference-style images", () => {
-    it.fails("a title of a link reference definition is attribute text, its [^1] dead", () => {
+    it("a title of a link reference definition is attribute text, its [^1] dead", () => {
         expect(liveReferences('[foo]: /url "a [^1] b"\n\nsee [foo]')).toEqual([]);
     });
 
@@ -44,7 +51,7 @@ describe("spec question: link reference definitions and reference-style images",
         expect(liveReferences("[foo]: /u[^1]\n\nsee [foo]")).toEqual([]);
     });
 
-    it.fails("a reference-style image's alt text is dead like an inline image's", () => {
+    it("a reference-style image's alt text is dead like an inline image's", () => {
         expect(liveReferences("![alt[^1]][img]\n\n[img]: /x.png")).toEqual([]);
     });
 });

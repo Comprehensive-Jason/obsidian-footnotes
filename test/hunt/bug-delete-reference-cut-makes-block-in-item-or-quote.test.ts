@@ -50,12 +50,12 @@ describe("an orphan-reference cut never turns a kept line into a new block (insi
     for (const [name, body] of cases) {
         const doc = ["top[^1]", "", ...body, "", "end", "", "[^1]: one"].join("\n");
 
-        it.fails(`Delete orphaned references refuses: ${name}`, () => {
+        it(`Delete orphaned references refuses: ${name}`, () => {
             // Today: the lines listed above the cases.
             expect(keptLines(removeOrphanedFootnoteReferences(doc), body.length)).toEqual(body);
         });
 
-        it.fails(`Delete footnote everywhere refuses: ${name}`, () => {
+        it(`Delete footnote everywhere refuses: ${name}`, () => {
             // Today: "deleted", with the same lines left behind.
             expect(deleteFootnoteEverywhere(doc, "9").kind).toBe("refused");
         });

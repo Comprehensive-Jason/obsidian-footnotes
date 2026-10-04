@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-    maskLineRegions,
-    maskProtectedLines,
-    maskedLineAt,
-} from "../src/parsing/markdown-scan";
+import { maskProtectedLines, maskedLineAt } from "../src/parsing/markdown-scan";
+import { readNote } from "../src/parsing/note-reading";
 
 // Perf helper (2026-08-07): the per-keypress paths need exactly ONE line of
 // the document's masked twin; maskedLineAt must agree with the full
@@ -39,42 +36,38 @@ describe("maskedLineAt", () => {
     });
 });
 
-// the combined one-pass scanner behind all masking (2026-08-10): code spans
-// and comments claim content leftmost-first, CommonMark-style
-describe("maskLineRegions", () => {
+// What the masked twin blots on a line, now read off the note reading
+// (runtime swap, step 2, 2026-10-03; the one-line masker these tests used
+// to drive is gone): code spans and comments claim content leftmost-first,
+// as CommonMark and Obsidian read them, and a comment may run on into the
+// lines of its paragraph.
+describe("the masked twin of a line", () => {
     const NUL = (n: number) => "\0".repeat(n);
 
-    it("masks a comment opener through EOL and reports the open state", () => {
-        const { masked, endsInComment } = maskLineRegions("ab <!-- open");
-        expect(masked).toBe("ab " + NUL("<!-- open".length));
-        expect(endsInComment).toBe(true);
-    });
-
-    it("a line starting in a comment is masked up to its closer", () => {
-        const { masked, endsInComment } = maskLineRegions("gone --> live", {
-            comment: true,
-        });
-        expect(masked).toBe(NUL("gone -->".length) + " live");
-        expect(endsInComment).toBe(false);
+    it("masks a comment from its opener to the end of the line when a later line of the paragraph closes it", () => {
+        const lines = ["ab <!-- open", "gone --> live"];
+        expect(maskedLineAt(lines, 0)).toBe("ab " + NUL("<!-- open".length));
+        expect(readNote(lines).regionOpenAt(1)).toBe(true);
+        // the line the comment closes on is masked up to its closer
+        expect(maskedLineAt(lines, 1)).toBe(NUL("gone -->".length) + " live");
     });
 
     it("a comment claims backticks inside it; code claims openers inside it", () => {
         // comment first: its closer inside the backticks still closes it
-        expect(maskLineRegions("<!-- a `--> ` b").masked).toBe(
-            NUL("<!-- a `-->".length) + " ` b",
-        );
+        expect(maskedLineAt(["x <!-- a `--> ` b"], 0)).toBe("x " + NUL("<!-- a `-->".length) + " ` b");
         // code first: the opener inside the span never starts a comment
-        expect(maskLineRegions("`<!--` b").endsInComment).toBe(false);
+        expect(readNote(["`<!--` b", "after -->"]).regionOpenAt(1)).toBe(false);
     });
 
     it("escaped openers of both kinds are literal", () => {
-        expect(maskLineRegions("\\<!-- x").masked).toBe("\\<!-- x");
-        expect(maskLineRegions("\\`not code` x").masked).toBe("\\`not code` x");
+        expect(maskedLineAt(["\\<!-- x"], 0)).toBe("\\<!-- x");
+        expect(maskedLineAt(["\\`not code` x"], 0)).toBe("\\`not code` x");
     });
 
-    it("short-form comments are complete", () => {
-        expect(maskLineRegions("a <!--> b").endsInComment).toBe(false);
-        expect(maskLineRegions("a <!---> b").endsInComment).toBe(false);
+    it("a comment opener nothing in its paragraph closes is literal text", () => {
+        expect(maskedLineAt(["a <!-- b", "c"], 0)).toBe("a <!-- b");
+        expect(readNote(["a <!--> b", "c"]).regionOpenAt(1)).toBe(false);
+        expect(readNote(["a <!---> b", "c"]).regionOpenAt(1)).toBe(false);
     });
 });
 
@@ -83,11 +76,11 @@ describe("maskLineRegions", () => {
 describe("dollars inside references vs math", () => {
     it("two dollar-signed ids on one line never pair into math", () => {
         const line = "b[^a$9] a[^a$4] end";
-        expect(maskLineRegions(line).masked).toBe(line);
+        expect(maskedLineAt([line], 0)).toBe(line);
     });
 
     it("a reference BETWEEN two dollars is still math content", () => {
-        const { masked } = maskLineRegions("cost $[^7]$ real[^1]");
+        const masked = maskedLineAt(["cost $[^7]$ real[^1]"], 0);
         expect(masked).toBe("cost " + "\0".repeat("$[^7]$".length) + " real[^1]");
     });
 });

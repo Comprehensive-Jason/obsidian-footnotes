@@ -20,11 +20,13 @@ import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove
 // could have taken.
 //
 // Here: [^a] is an ordinary orphaned definition whose cut changes
-// nothing. [^4]'s block owns the math region its body opens, so cutting
-// it takes "$$ tail" along and lands "[^3]: y" directly under the "==="
-// setext underline, reclassifying that lazy label into a real definition
-// (the pinned guard case, bug-orphan-definition-delete-reclassifies).
-// [^a] should still go. Instead nothing is deleted, and the alert says
+// nothing. Cutting [^4] would put "  b" right under the list item "- a"
+// with only a blank line between, so "  b" would stop being a paragraph
+// of its own and become the item's second paragraph. [^a] should still go.
+// (Step 2 of the runtime swap, 2026-10-03, changed the dangerous orphan:
+// the old one, "[^4]: x $$" over "$$ tail", is safe to cut once the math
+// block is read as Obsidian reads it; see
+// bug-orphan-definition-delete-reclassifies.) Instead nothing is deleted, and the alert says
 // both were "left in place: deleting it would change how the lines around
 // it are read" - false for [^a].
 //
@@ -45,14 +47,14 @@ import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove
 describe("one refused orphan vetoing every safe deletion in the same note", () => {
     beforeEach(resetNotices);
 
-    const defsDoc = "[^a]: safe orphan\n\npara\n===\n[^4]: x $$\n$$ tail\n[^3]: y";
+    const defsDoc = "[^a]: safe orphan\n\n- a\n\n[^4]: x\n\n  b";
 
     it("the safe orphaned definition is still deleted", () => {
         expect(removeOrphanedFootnoteDefinitions(defsDoc)).not.toContain("[^a]:");
     });
 
     it("the refused one stays (its cut reclassifies) - must hold before AND after a fix", () => {
-        expect(removeOrphanedFootnoteDefinitions(defsDoc)).toContain("[^4]: x $$");
+        expect(removeOrphanedFootnoteDefinitions(defsDoc)).toContain("[^4]: x");
     });
 
     const refsDoc = "x[^9] here\n\n[^1]: d\n\n[^8]\n\n    indented\n\ntext[^2]\n\n[^2]: d2";
@@ -66,7 +68,7 @@ describe("one refused orphan vetoing every safe deletion in the same note", () =
     });
 
     it("each orphan is judged on its own now: the safe one goes, the refused one stays (fixed 2026-09-16)", () => {
-        expect(removeOrphanedFootnoteDefinitions(defsDoc)).toBe("para\n===\n[^4]: x $$\n$$ tail\n[^3]: y");
+        expect(removeOrphanedFootnoteDefinitions(defsDoc)).toBe("- a\n\n[^4]: x\n\n  b");
         expect(removeOrphanedFootnoteReferences(refsDoc)).toBe("x here\n\n[^1]: d\n\n[^8]\n\n    indented\n\ntext[^2]\n\n[^2]: d2");
     });
 

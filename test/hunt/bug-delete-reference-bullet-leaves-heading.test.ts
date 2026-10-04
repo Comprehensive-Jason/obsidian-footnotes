@@ -33,12 +33,12 @@ function md(lines: string[], name: string): string {
 }
 
 describe("cutting a reference that is a bullet's whole content under a paragraph", () => {
-    it.fails("does not make the paragraph a heading", () => {
+    it("does not make the paragraph a heading", () => {
         const out = md(["Sources:", "- [^1]", "", "[^1]: x"], "1");
         expect(out).not.toBe("Sources:\n-");
     });
 
-    it.fails("the quoted twin: '> Sources:' over '> - [^1]'", () => {
+    it("the quoted twin: '> Sources:' over '> - [^1]'", () => {
         const out = md(["> Sources:", "> - [^1]", "", "[^1]: x"], "1");
         expect(out).not.toBe("> Sources:\n> -");
     });

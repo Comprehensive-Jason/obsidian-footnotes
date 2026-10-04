@@ -19,6 +19,17 @@ import {
     maskProtectedLines,
     scanDocument,
 } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
+
+/** Where each "%%" block comment of `doc` ends, as [line, column just past its closing "%%"], from the note reading. */
+function commentEnds(doc: string): [number, number][] {
+    const lines = doc.split("\n");
+    const starts = [0];
+    for (const line of lines) starts.push(starts[starts.length - 1] + line.length + 1);
+    return readNote(lines)
+        .comments.filter((comment) => comment.block)
+        .map((comment) => [comment.endLine, comment.to - starts[comment.endLine]]);
+}
 
 // Obsidian "%%" comments (Jason, 2026-09-09: "make the plugin behavior
 // match Obsidian's recognition"). Ground truth in the live Reading view
@@ -62,7 +73,8 @@ describe("a %% block comment kills the definitions inside it, not the references
     it("flags the opener, interior, and closer lines, and protects none of them", () => {
         const scan = scanOf("x[^1]\n\n%%\n[^1]: def\n%%\nafter");
         expect(scan.inCommentBlock).toEqual([false, false, true, true, true, false]);
-        expect(scan.commentBlockCloseAt).toEqual([-1, -1, -1, -1, 2, -1]);
+        // the comment ends just past the "%%" that closes it, at column 2 of line 4
+        expect(commentEnds("x[^1]\n\n%%\n[^1]: def\n%%\nafter")).toEqual([[4, 2]]);
         expect(scan.isProtected).toEqual([false, false, false, false, false, false]);
     });
 
@@ -134,7 +146,7 @@ describe("where a block comment ends", () => {
         const doc = "%%\nhidden\nend %% after[^2]\n\n[^2]: two";
         expect(blocksOf(doc)).toEqual(["2@4"]);
         expect(orphanedFootnoteReferenceNames(doc)).toEqual([]);
-        expect(scanOf(doc).commentBlockCloseAt[2]).toBe("end %%".length);
+        expect(commentEnds(doc)).toEqual([[2, "end %%".length]]);
     });
 
     it("with its blockquote: the quote's end closes an unclosed quoted block", () => {

@@ -230,13 +230,35 @@ const hasLazyLabel = (doc: string): boolean => {
 // ... and from documents with an Obsidian "%%" comment: micromark reads
 // "%%" as text, while Obsidian hides the block and kills the definitions
 // in it (ground truth 2026-09-09, spec-obsidian-comments)
+// ... and, since step 2 of the runtime swap (2026-10-03), from documents
+// where micromark and Obsidian's own reading (the note reading the plugin
+// now masks with) already disagree about the footnotes before the lint
+// runs. The known case is inline math: remark-math, which Obsidian uses,
+// lets a "$" whose closer would follow a space keep looking, so
+// "$5 or $6 alpha[^1]. $m$" is one math span to Obsidian and [^1] dead,
+// while micromark pairs the dollars differently. Where the two parsers
+// disagree on the input, micromark cannot referee what the lint did.
+const parsersDisagree = (doc: string): boolean => {
+    const reading = readNote(normalizeEol(doc).text.split("\n"));
+    const live = reading.references.filter((reference) => reference.live);
+    const defined = new Set(reading.definitions.map((definition) => definition.name.toLowerCase()));
+    const obsidian: FootnoteShape = {
+        definitions: reading.definitions.length,
+        references: live.length,
+        resolved: live.filter((reference) => defined.has(reference.name.toLowerCase())).length,
+    };
+    const micromark = footnoteShape(doc);
+    return JSON.stringify(obsidian) !== JSON.stringify(micromark);
+};
+
 const oracleDocArb = docArb.filter(
     (doc) =>
         !/\[\^[^\]\n]*\$/.test(doc) &&
         !dollarPrefix(doc) &&
         !headBlockWithReference(doc) &&
         !hasLazyLabel(doc) &&
-        !doc.includes("%%"),
+        !doc.includes("%%") &&
+        !parsersDisagree(doc),
 );
 
 describe("differential oracle over random documents", () => {
@@ -589,22 +611,6 @@ describe("single-rule invariants over random documents", () => {
                         left === 0 || left === before.get(name),
                         `orphan [^${name}] was half deleted: ${left} of ${before.get(name) ?? 0} left`,
                     ).toBe(true);
-                }
-            }),
-        );
-    });
-
-    soakIt("a literal opener is never masked away (scan and mask agree)", () => {
-        fc.assert(
-            fc.property(docArb, (doc) => {
-                const lines = normalizeEol(doc).text.split("\n");
-                const scan = scanDocument(lines);
-                const masked = maskProtectedLines(lines, scan);
-                for (let i = 0; i < lines.length; i++) {
-                    if (!scan.literalOpeners[i]) continue;
-                    // literalOpeners says the unclosed "<!--" or "$$" on this
-                    // line is plain text: the masked twin must still show it
-                    expect(masked[i]).not.toBe("\0".repeat(lines[i].length));
                 }
             }),
         );

@@ -1,6 +1,5 @@
 import { Editor, EditorPosition } from "obsidian";
 
-import { DocumentScan, maskLineWithScan, maskProtectedLines, scanDocument } from "../parsing/markdown-scan";
 import { NoteReading, readNote } from "../parsing/note-reading";
 import {
     footnoteReferenceMatches,
@@ -30,14 +29,15 @@ export function docLines(doc: Editor): string[] {
  * One press's shared, read-only view of the document (performance item F1).
  *
  * Each step of the cascade used to rebuild the list of lines and re-walk
- * the protection scan for itself, which came to 3–5 passes over the whole
+ * the protection scan for itself, which came to 3 to 5 passes over the whole
  * document per press. Now every step accepts an optional DocContext,
  * falling back to a fresh one so direct callers and unit tests are
  * unaffected, and the command entry points build exactly ONE per press.
  *
- * Masking is lazy: a single line is masked when something asks for it, and
- * the whole masked twin is built and remembered the first time something
- * needs all of it.
+ * Everything in it comes from the note reading (note-reading.ts), which
+ * parses each distinct text once and remembers it. Masking is lazy: a
+ * single line is masked when something asks for it, and the whole masked
+ * twin is built and remembered the first time something needs all of it.
  *
  * The press's own context is built strictly BEFORE any edit the press
  * makes. Creation steps edit last, so it can never go stale within one
@@ -47,12 +47,11 @@ export function docLines(doc: Editor): string[] {
  */
 export interface DocContext {
     lines: string[];
-    scan: DocumentScan;
     /** Line `i` of the masked twin, or "" when `i` is outside the document.
      * Each line is remembered once it has been masked. */
     maskedLine(i: number): string;
     /** The whole masked twin, built once and remembered. */
-    maskedLines(): string[];
+    maskedLines(): readonly string[];
     /** Which lines hold a definition's label, from the note reading. */
     definitionStarts(): boolean[];
     /** The note reading (note-reading.ts): every definition wherever it
@@ -84,28 +83,17 @@ export function docContext(doc: Editor): DocContext {
 
 /** The shared view over `lines`, which need not be in any editor. */
 export function contextOfLines(lines: string[]): DocContext {
-    const scan = scanDocument(lines);
-    const perLine: (string | undefined)[] = new Array<string | undefined>(
-        lines.length,
-    );
-    let full: string[] | null = null;
-    const maskedLine = (i: number): string => {
-        if (i < 0 || i >= lines.length) return "";
-        if (full) return full[i];
-        let masked = perLine[i];
-        if (masked === undefined) {
-            masked = maskLineWithScan(lines, scan, i);
-            perLine[i] = masked;
-        }
-        return masked;
-    };
-    const maskedLines = (): string[] =>
-        full ?? (full = maskProtectedLines(lines, scan));
     let reading: NoteReading | null = null;
     const readingOf = (): NoteReading => reading ?? (reading = readNote(lines));
     let starts: boolean[] | null = null;
     const definitionStarts = (): boolean[] => starts ?? (starts = [...readingOf().labelLines]);
-    return { lines, scan, maskedLine, maskedLines, definitionStarts, reading: readingOf };
+    return {
+        lines,
+        maskedLine: (i) => readingOf().maskedLine(i),
+        maskedLines: () => readingOf().maskedLines(),
+        definitionStarts,
+        reading: readingOf,
+    };
 }
 
 /**

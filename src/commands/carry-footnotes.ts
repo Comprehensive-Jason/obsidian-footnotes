@@ -3,7 +3,7 @@ import { EditorPosition } from "obsidian";
 import { positionAfterRewrite } from "../editor/document-diff";
 import { referenceOccurrences } from "../parsing/footnote-grammar";
 import { orphanedDefinitionBlocks } from "../linting/rules/remove-orphaned-definitions";
-import { definitionCuts, maskProtectedLines, normalizeEol, removeLineRanges, scanDocument } from "../parsing/markdown-scan";
+import { definitionCuts, normalizeEol, removeLineRanges } from "../parsing/markdown-scan";
 import { Definition, readNote } from "../parsing/note-reading";
 
 // Carrying footnote definitions along on copy, cut, and paste (issue #59;
@@ -84,9 +84,8 @@ function selectionHolds(from: EditorPosition, to: EditorPosition, line: number, 
  * names that have nothing to carry.
  */
 function carriedBlocks(lines: string[], from: EditorPosition, to: EditorPosition): { blocks: Definition[]; missing: string[] } {
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
     const reading = readNote(lines);
+    const masked = reading.maskedLines();
     const starts = reading.labelLines;
 
     // every definition the note has, wherever it sits (Jason's ruling 1,
@@ -104,7 +103,7 @@ function carriedBlocks(lines: string[], from: EditorPosition, to: EditorPosition
     // the references on a line; a label defines, it does not point, and
     // referenceOccurrences leaves a definition's own label out
     const referencesOn = (line: number) =>
-        scan.isProtected[line] || !lines[line].includes("[^") ? [] : referenceOccurrences(lines[line], masked[line], starts[line]);
+        reading.protectedLines[line] || !lines[line].includes("[^") ? [] : referenceOccurrences(lines[line], masked[line], starts[line]);
     // the references the selection holds whole, in order
     const queue: string[] = [];
     for (let line = from.line; line <= to.line && line < lines.length; line++) {
@@ -175,9 +174,8 @@ export interface CarriedPastePlan {
  */
 export function planCarriedPaste(destination: string, body: string, carried: CarriedDefinition[]): CarriedPastePlan {
     const lines = normalizeEol(destination).text.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
     const reading = readNote(lines);
+    const masked = reading.maskedLines();
     const starts = reading.labelLines;
 
     // what the destination holds: every name in use (definitions and
@@ -192,7 +190,7 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
         bodies.set(normalisedBody(lines.slice(block.start, block.end + 1), block.labelEnd), block.name);
     }
     for (let i = 0; i < lines.length; i++) {
-        if (scan.isProtected[i] || !lines[i].includes("[^")) continue;
+        if (reading.protectedLines[i] || !lines[i].includes("[^")) continue;
         for (const occurrence of referenceOccurrences(lines[i], masked[i], starts[i])) taken.add(occurrence.name.toLowerCase());
     }
 
@@ -240,11 +238,10 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     // the renames, made right to left on each line so that one keeps the
     // offsets of the ones before it; a line's own label is renamed too
     const rename = (text: string[]): string[] => {
-        const textScan = scanDocument(text);
-        const textMasked = maskProtectedLines(text, textScan);
         const textReading = readNote(text);
+        const textMasked = textReading.maskedLines();
         return text.map((line, i) => {
-            if (textScan.isProtected[i] || !line.includes("[^")) return line;
+            if (textReading.protectedLines[i] || !line.includes("[^")) return line;
             const edits: { start: number; end: number; name: string }[] = [];
             const label = textReading.labelOn(i);
             if (label) edits.push({ start: label.labelStart + 2, end: label.labelEnd - 2, name: label.name });
@@ -378,9 +375,9 @@ export function planCut(
 
     // where a line the deletion keeps sits once the selection is gone
     const moved = (line: number) => (line <= from.line ? line : line - (to.line - from.line));
-    const wasOrphan = new Set(orphanedDefinitionBlocks(lines, scanDocument(lines)).map((block) => block.name.toLowerCase()));
+    const wasOrphan = new Set(orphanedDefinitionBlocks(lines).map((block) => block.name.toLowerCase()));
     const orphanedAt = new Set(
-        orphanedDefinitionBlocks(joined, scanDocument(joined))
+        orphanedDefinitionBlocks(joined)
             .filter((block) => !wasOrphan.has(block.name.toLowerCase()))
             .map((block) => block.start),
     );

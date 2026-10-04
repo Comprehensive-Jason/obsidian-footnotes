@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { maskedLineAt, scanDocument } from "../src/parsing/markdown-scan";
+import { readNote } from "../src/parsing/note-reading";
 
 /**
  * CHARACTERIZATION TESTS. These pin behaviour exactly as it already is, so
@@ -39,7 +40,8 @@ describe("a comment is not closed by a bang closer (characterization)", () => {
     it("closes the comment on a plain closer, leaving the next line live", () => {
         const lines = ["<!-- hidden -->", "[^1]: a definition"];
         const scan = scanDocument(lines);
-        expect(scan.startsInComment).toEqual([false, false]);
+        const reading = readNote(lines);
+        expect(lines.map((_, i) => reading.regionOpenAt(i))).toEqual([false, false]);
         expect(scan.isProtected).toEqual([true, false]);
         // The definition is readable, so the plugin can act on it.
         expect(maskedLineAt(lines, 1)).toBe("[^1]: a definition");
@@ -48,7 +50,8 @@ describe("a comment is not closed by a bang closer (characterization)", () => {
     it("leaves the comment open on a bang closer, so the next line is dead", () => {
         const lines = ["<!-- hidden --!>", "[^1]: a definition"];
         const scan = scanDocument(lines);
-        expect(scan.startsInComment).toEqual([false, true]);
+        const reading = readNote(lines);
+        expect(lines.map((_, i) => reading.regionOpenAt(i))).toEqual([false, true]);
         expect(scan.isProtected).toEqual([true, true]);
         // Obsidian hides this line, so the plugin must not see a definition.
         expect(maskedLineAt(lines, 1)).toBe(dead(lines[1]));
@@ -59,7 +62,7 @@ describe("a comment is not closed by a bang closer (characterization)", () => {
         const none = ["<!-- hidden", "MARK [^1]"];
         const withBang = scanDocument(bang);
         const withNone = scanDocument(none);
-        expect(withBang.startsInComment).toEqual(withNone.startsInComment);
+        expect([readNote(bang).regionOpenAt(1)]).toEqual([readNote(none).regionOpenAt(1)]);
         expect(withBang.isProtected).toEqual(withNone.isProtected);
         expect(maskedLineAt(bang, 1)).toBe(maskedLineAt(none, 1));
         // Both swallow the reference on the second line.

@@ -7,7 +7,7 @@ import {
     maskProtectedLines,
     scanDocument,
 } from "../../src/parsing/markdown-scan";
-import { tableRowLines } from "../../src/editor/table-cursor";
+import { tableRowLinesOf } from "../../src/parsing/markdown-scan";
 
 // A GFM table row need not start with a pipe: "a | b" is a valid row
 // (GFM: "A leading and trailing pipe is also recommended for clarity of
@@ -52,8 +52,7 @@ describe("a definition label directly under a table row without a leading pipe",
 
     it("control: the plugin's own table model accepts the pipe-less table", () => {
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        expect(tableRowLines(lines, scan.isProtected)).toEqual([true, true, false, false, false]);
+        expect(tableRowLinesOf(lines)).toEqual([true, true, false, false, false]);
     });
 
     it("control: the pipe-delimited form is already a definition (the A2 pin)", () => {

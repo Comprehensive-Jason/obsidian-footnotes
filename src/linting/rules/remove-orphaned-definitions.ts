@@ -1,14 +1,6 @@
 import { referenceOccurrences } from "../../parsing/footnote-grammar";
-import {
-    definitionCuts,
-    DocumentScan,
-    maskProtectedLines,
-    normalizeEol,
-    removeLineRanges,
-    restoreEol,
-    scanDocument,
-} from "../../parsing/markdown-scan";
-import { Definition, readNote } from "../../parsing/note-reading";
+import { definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../../parsing/markdown-scan";
+import { Definition, linesReadAlike, readNote } from "../../parsing/note-reading";
 import { FootnoteRule } from "../rule";
 
 // Deleting orphaned definitions, as a rule of its own (2026-08-10).
@@ -47,18 +39,13 @@ interface ReferenceScan {
     blockRefs: string[][];
 }
 
-function scanReferences(
-    lines: string[],
-    scan: DocumentScan,
-    // The alerts pass in the masked twin they have already worked out
-    precomputedMasked?: string[],
-): ReferenceScan {
+function scanReferences(lines: string[]): ReferenceScan {
     // The masked twin is built with the whole note in view: a protected
     // line is nothing but NUL characters, so it matches nothing, and on a
     // line where a comment opens or closes, only the part inside the
     // comment is blanked.
-    const maskedLines = precomputedMasked ?? maskProtectedLines(lines, scan);
     const reading = readNote(lines);
+    const maskedLines = reading.maskedLines();
     const blocks = reading.definitions;
     const indexOf = new Map(blocks.map((block, i) => [block, i]));
 
@@ -134,17 +121,17 @@ function orphanedBlocks(referenceScan: ReferenceScan): Definition[] {
  */
 export function orphanedFootnoteDefinitionNames(
     markdown: string,
-    // The alerts all share ONE pass of normalizing the line endings and
-    // scanning the note, done once and handed round (2026-08-11 review, a
-    // speed fix). Anything calling this on its own leaves it out.
-    precomputed?: { lines: string[]; scan: DocumentScan; masked?: string[] },
+    // The alerts share the note's lines, split once (2026-08-11 review, a
+    // speed fix); the reading is remembered per text. Anything calling this
+    // on its own leaves it out.
+    precomputed?: { lines: string[] },
 ): string[] {
     // No "[^" anywhere in the note means no definitions, and so no
     // orphaned ones. Worth checking first, because this runs on every
     // single lint (speed fix F4).
     if (!markdown.includes("[^")) return [];
     const lines = precomputed?.lines ?? normalizeEol(markdown).text.split("\n");
-    const referenceScan = scanReferences(lines, precomputed?.scan ?? scanDocument(lines), precomputed?.masked);
+    const referenceScan = scanReferences(lines);
     const referenced = new Set(referenceScan.liveRefs.keys());
     for (const refs of referenceScan.blockRefs) {
         for (const name of refs) referenced.add(name);
@@ -168,22 +155,21 @@ export function orphanedFootnoteDefinitionNames(
  * routes to deleting orphaned definitions always agree, however long the
  * chain.
  */
-export function orphanedDefinitionBlocks(lines: string[], scan: DocumentScan): Definition[] {
+export function orphanedDefinitionBlocks(lines: string[], _scan?: object): Definition[] {
     // a definition that is not removable is reported by the alert but
     // never cut, and orphanedBlocks already keeps it alive
-    return orphanedBlocks(scanReferences(lines, scan));
+    return orphanedBlocks(scanReferences(lines));
 }
 
 /**
  * `lines` with `dead` cut out (definitionCuts, removeLineRanges), or null
  * when the cut would change how Obsidian reads a line it keeps
- * (linesReadDifferently). `scan` is the scan of `lines`.
+ * (linesReadDifferently).
  */
-function cutDefinitionsIfClean(lines: string[], scan: DocumentScan, dead: readonly Definition[]): string[] | null {
+function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[]): string[] | null {
     const cut = definitionCuts(lines, dead);
     const out = removeLineRanges(cut.lines, cut.ranges);
-    const cutScan = cut.lines === lines ? scan : scanDocument(cut.lines);
-    return linesReadDifferently(cut.lines, cutScan, cut.ranges, out) ? null : out;
+    return linesReadDifferently(lines, cut, out) ? null : out;
 }
 
 /**
@@ -194,8 +180,7 @@ function cutDefinitionsIfClean(lines: string[], scan: DocumentScan, dead: readon
 export function removeOrphanedFootnoteDefinitions(markdown: string): string {
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");
-    const scan = scanDocument(lines);
-    if (orphanedDefinitionBlocks(lines, scan).length === 0) return markdown;
+    if (orphanedDefinitionBlocks(lines).length === 0) return markdown;
     // The same promise the orphan-reference rule makes: a deletion that
     // changes how Obsidian reads a line it did not touch is refused, and
     // that orphan stays for the user to sort out (the alert names it).
@@ -211,60 +196,66 @@ export function removeOrphanedFootnoteDefinitions(markdown: string): string {
     // deletion in the note, and the alert then blamed the safe ones too
     // (Kimi hunt cycle 4, 2026-09-16).
     let current = lines;
-    let currentScan = scan;
     for (;;) {
-        const dead = orphanedDefinitionBlocks(current, currentScan);
+        const dead = orphanedDefinitionBlocks(current);
         if (dead.length === 0) break;
-        let next = cutDefinitionsIfClean(current, currentScan, dead);
+        let next = cutDefinitionsIfClean(current, dead);
         for (const block of dead) {
             if (next !== null) break;
-            next = cutDefinitionsIfClean(current, currentScan, [block]);
+            next = cutDefinitionsIfClean(current, [block]);
         }
         if (next === null) break;
         current = next;
-        currentScan = scanDocument(current);
     }
     if (current === lines) return markdown;
     return restoreEol(current.join("\n"), eol);
 }
 
 /**
- * Whether any line the cut kept is read differently afterwards: protected
- * where it was live, or a definition start where it was not (or the other
- * way round). The kept lines are walked in step with the result; a blank
- * line the cut collapsed is skipped over.
+ * Whether cutting whole lines out of `before` changed how Obsidian reads
+ * any line it kept. `cut` is the cut as definitionCuts gives it: the lines
+ * with every label on a list marker's line trimmed back to the marker, and
+ * the ranges of whole lines removed; `out` is the result. A kept line must
+ * read as it did (linesReadAlike), and a trimmed marker line may only lose
+ * the definition it held. The kept lines are walked in step with the
+ * result; a blank line the cut collapsed is skipped over.
+ *
+ * Cutting a block can put the line below it under a setext underline or a
+ * blank line, which turns a lazy label there into a real definition (Kimi
+ * hunt cycle 2, 2026-09-16), and emptying a marker line right under a
+ * paragraph leaves a "-" that makes the paragraph a heading (hunt
+ * 2026-10-02, cluster D5).
  *
  * Shared with the Delete footnote command, which cuts a definition block
- * the same way (T4, 2026-09-21).
+ * the same way (T4, 2026-09-21), and the conversion to inline footnotes.
  */
 export function linesReadDifferently(
-    lines: string[],
-    scan: DocumentScan,
-    dead: readonly { start: number; end: number }[],
+    before: string[],
+    cut: { lines: string[]; ranges: readonly { start: number; end: number }[] },
     out: string[],
 ): boolean {
-    const starts = readNote(lines).labelLines;
-    const scanAfter = scanDocument(out);
-    const startsAfter = readNote(out).labelLines;
-    const cut = new Set<number>();
-    for (const block of dead) for (let i = block.start; i <= block.end; i++) cut.add(i);
+    const readingBefore = readNote(before);
+    const readingAfter = readNote(out);
+    const removed = new Set<number>();
+    for (const range of cut.ranges) for (let i = range.start; i <= range.end; i++) removed.add(i);
     let j = 0;
-    for (let i = 0; i < lines.length; i++) {
-        if (cut.has(i)) continue;
+    for (let i = 0; i < before.length; i++) {
+        if (removed.has(i)) continue;
+        const kept = cut.lines[i];
         // a blank line removeLineRanges put in (in front of a "---" the cut
         // would have promoted to the note's first line, or between a kept
         // paragraph and a setext underline) keeps the kept line reading as
         // it did, so it is stepped over (GLM hunt cycle 11, 2026-09-16:
         // the guard's own blank made the rule refuse a clean cut)
-        while (j < out.length && out[j] === "" && lines[i] !== "") j++;
-        if (out[j] !== lines[i]) {
+        while (j < out.length && out[j] === "" && kept !== "") j++;
+        if (out[j] !== kept) {
             // a blank line the cut merged away, or dropped from the end of
             // the note (removeLineRanges takes the separator blank with a
             // block cut from the end)
-            if (lines[i].trim() === "") continue;
+            if (kept.trim() === "") continue;
             return true;
         }
-        if (scan.isProtected[i] !== scanAfter.isProtected[j] || starts[i] !== startsAfter[j]) return true;
+        if (!linesReadAlike(readingBefore, i, readingAfter, j, kept === before[i] ? "none" : "cut")) return true;
         j++;
     }
     return false;

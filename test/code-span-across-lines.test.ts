@@ -10,6 +10,7 @@ import {
 } from "../src/parsing/markdown-scan";
 import { fakePlugin } from "./helpers/fake-plugin";
 import { messages, resetNotices } from "./helpers/notices";
+import { readNote } from "../src/parsing/note-reading";
 
 // A code span that wraps across lines (B30, Jason's check in Obsidian
 // 2026-09-16). CommonMark lets a backtick run close on a later line of the
@@ -35,8 +36,9 @@ describe("a code span that wraps across lines", () => {
         const lines = ["a `one", "two[^7]", "three` b"];
         const scan = scanDocument(lines);
         expect(scan.isProtected).toEqual([false, true, false]);
-        expect(scan.startsInCode).toEqual([0, 1, 1]);
-        expect(scan.codeOpenerAt).toEqual([2, -1, -1]);
+        // the span is open at the start of the two lines after its opener
+        const reading = readNote(lines);
+        expect(lines.map((_, i) => reading.regionOpenAt(i))).toEqual([false, true, true]);
     });
 
     it("the reference inside reserves no number and is no orphan", () => {
@@ -89,7 +91,7 @@ describe("a code span that wraps across lines", () => {
         const scan = scanDocument(lines);
         const masked = maskProtectedLines(lines, scan);
         expect(masked[1]).toBe("\0".repeat("close`".length) + " live[^1] " + "\0".repeat("<!-- hidden[^9]".length));
-        expect(scan.startsInComment[2]).toBe(true);
+        expect(readNote(lines).regionOpenAt(2)).toBe(true);
         expect(masked[2]).toBe("\0".repeat("still hidden -->".length) + " back[^2]");
     });
 

@@ -5,8 +5,7 @@ import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
 
 import { noticeLintAlerts, definitionsInsideTableNames } from "../../src/linting/lint-alerts";
-import { tableRowLines } from "../../src/editor/table-cursor";
-import { scanDocument } from "../../src/parsing/markdown-scan";
+import { tableRowLinesOf } from "../../src/parsing/markdown-scan";
 
 // A definition label wedged between two rows of a table breaks the table
 // either way (Obsidian ends the table at the label and folds the rows
@@ -41,7 +40,7 @@ describe("a definition label inside a pipe-less GFM table", () => {
 
     it("the scanner reads the pipe-less rows as a table (the pinned reading)", () => {
         const lines = PIPELESS.split("\n");
-        expect(tableRowLines(lines, scanDocument(lines).isProtected).slice(0, 2)).toEqual([true, true]);
+        expect(tableRowLinesOf(lines).slice(0, 2)).toEqual([true, true]);
     });
 
     it("is named by the definitions-inside-tables alert, like the piped twin", () => {

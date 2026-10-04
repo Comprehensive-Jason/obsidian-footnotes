@@ -23,7 +23,7 @@ function md(lines: string[], name: string): string {
 }
 
 describe("cutting a reference out of '[[^1]^2]'", () => {
-    it.fails("does not assemble a live reference to another footnote", () => {
+    it("does not assemble a live reference to another footnote", () => {
         expect(md(["a [[^1]^2] b", "", "[^1]: x", "[^2]: y"], "1")).not.toContain("a [^2] b");
     });
 });

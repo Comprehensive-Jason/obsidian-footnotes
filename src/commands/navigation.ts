@@ -65,7 +65,7 @@ export function shouldJumpFromDefinitionToReference(
         // ruling, 2026-09-15). Its own "[^x]" is a live reference to
         // Obsidian, so the search below skips this line.
         const hit = definitionLabelWithName(lineText, ctx.maskedLine(line));
-        if (hit && !ctx.scan.isProtected[line] && !ctx.scan.inCommentBlock[line]) {
+        if (hit && !ctx.reading().protectedLines[line] && !ctx.reading().commentLines[line]) {
             definitionName = hit.name;
             ownLabelLine = line;
         }

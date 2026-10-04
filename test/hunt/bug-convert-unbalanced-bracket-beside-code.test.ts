@@ -26,7 +26,7 @@ import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-sca
 // inside the code span, so it escapes nothing.
 
 describe("an unbalanced '[' outside code next to a ']' inside code", () => {
-    it.fails("the output is still an inline footnote to the plugin's own scanner", () => {
+    it("the output is still an inline footnote to the plugin's own scanner", () => {
         const out = convertNormalFootnotesToInline("x[^1]\n\n[^1]: see [note and `a]`").markdown;
         // Today out is "x^[see [note and `a]`]", which the scanner reads as no inline footnote.
         const lines = out.split("\n");

@@ -12,9 +12,12 @@ import { protectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 
 describe("unclosed comment/math regions die with their blockquote", () => {
     it("a quoted unclosed $$ ends at the quote's end", () => {
+        // the "$$" line is part of the display math block, as a fence's
+        // own line is part of its code block (the note reading, runtime
+        // swap step 2, 2026-10-03; the scanner kept the opener line live)
         const doc = "> $$\n> x = 1\n\nafter[^1]\n\n[^1]: def";
         expect(protectedLines(doc.split("\n"))).toEqual([
-            false,
+            true,
             true,
             false,
             false,
@@ -35,17 +38,20 @@ describe("unclosed comment/math regions die with their blockquote", () => {
         ]);
     });
 
-    it("an unquoted lazy line also ends the quoted region", () => {
-        // CommonMark: lazy continuation is for paragraphs only - an
-        // unprefixed line ends the quote, and the region with it
+    it("an unquoted line does NOT end a quoted $$ block (rule B4)", () => {
+        // Corrected in step 2 of the runtime swap (2026-10-03): CommonMark
+        // keeps lazy continuation for paragraphs, but Obsidian's parser
+        // runs fences, "$$" blocks, and HTML blocks inside quotes and items
+        // on through column-0 lines (rule B4, docs/obsidian-reading-rules.md,
+        // held to Obsidian's saved answers by the referee)
         const doc = "> $$\nlazy[^1]";
-        expect(protectedLines(doc.split("\n"))).toEqual([false, false]);
+        expect(protectedLines(doc.split("\n"))).toEqual([true, true]);
     });
 
     it("a document-level unclosed region still protects to EOF", () => {
         const doc = "$$\nx\n\nswallowed[^1]";
         const scan = scanDocument(doc.split("\n"));
-        expect(scan.isProtected).toEqual([false, true, true, true]);
+        expect(scan.isProtected).toEqual([true, true, true, true]);
         expect(scan.endsProtected).toBe(true);
     });
 

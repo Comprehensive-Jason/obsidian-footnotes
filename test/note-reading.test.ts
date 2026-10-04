@@ -99,11 +99,13 @@ describe("readNote: the cache", () => {
         expect(parseCount()).toBe(before + 2);
     });
 
-    it("forgets the oldest text once it holds more than four", () => {
-        const notes = [0, 1, 2, 3, 4].map((n) => [`note ${n} for the cache[^1]`, "", "[^1]: d"]);
+    it("forgets the oldest text once it holds more than eight", () => {
+        // eight since step 2 of the runtime swap (2026-10-03): asking where
+        // an unclosed region starts reads the note with a line added
+        const notes = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((n) => [`note ${n} for the cache[^1]`, "", "[^1]: d"]);
         for (const note of notes) readNote(note);
         const before = parseCount();
-        readNote(notes[4]);
+        readNote(notes[8]);
         readNote(notes[1]);
         expect(parseCount()).toBe(before);
         readNote(notes[0]);

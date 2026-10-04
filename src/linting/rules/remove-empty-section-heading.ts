@@ -1,4 +1,5 @@
-import { findLineRunEnd, normalizeEol, restoreEol, scanDocument } from "../../parsing/markdown-scan";
+import { findLineRunEnd, normalizeEol, restoreEol } from "../../parsing/markdown-scan";
+import { readNote } from "../../parsing/note-reading";
 
 // Jason's ask, 2026-09-25: when a plugin action leaves nothing under the
 // footnote section heading, the heading goes too, if the "Remove empty
@@ -23,9 +24,9 @@ export function removeEmptySectionHeading(markdown: string, sectionHeading: stri
     if (sectionHeading === "") return markdown;
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");
-    const scan = scanDocument(lines);
+    const reading = readNote(lines);
     const headingLines = sectionHeading.split("\n");
-    const end = findLineRunEnd(lines, scan.isProtected, headingLines, scan.inCommentBlock);
+    const end = findLineRunEnd(lines, reading.protectedLines, headingLines, reading.commentLines);
     if (end === -1) return markdown;
     for (let i = end + 1; i < lines.length; i++) {
         if (lines[i].trim() !== "") return markdown;

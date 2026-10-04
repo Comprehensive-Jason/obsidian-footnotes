@@ -57,21 +57,38 @@ import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-fo
 const quotedDoc = "text[^1]\n\n[^1]: def\n\npara\n\n> <div>\n> more html";
 const itemDoc = "text[^1]\n\n[^1]: def\n\npara\n\n- <div>\n  more html";
 
+// Revised in step 2 of the runtime swap (2026-10-03). The 2026-09-16
+// probe put "[^1]: def" DIRECTLY under the quoted "<div>" block, where it
+// is swallowed as a lazy line. What the plugin writes at the end of a note
+// goes after a blank line (move-to-bottom always puts one in, and so does
+// the append), and a blank line ends a "<div>" HTML block (CommonMark's
+// type 6, stock in Obsidian's parser) and the quote or list item around
+// it. So whether a note "ends protected" is now asked exactly that way,
+// with a definition appended after a blank line (NoteReading.openRegionFrom),
+// and a "<div>" block at the end of a note no longer holds the
+// definitions back. An HTML block that a blank line does not end ("<pre>",
+// "<!--", and the other CommonMark types 1 to 5) still does. A live
+// Reading-view look at "> <div>" / "> more html" / "" / "[^1]: def" would
+// settle it for good (for Jason).
 describe("a note that ends inside an HTML block opened inside a container", () => {
-    it("REFUTED: the note ends protected, since a line appended at column 0 is swallowed by the quoted HTML block", () => {
-        expect(scanDocument(quotedDoc.split("\n")).endsProtected).toBe(true);
+    it("a definition appended after a blank line is not swallowed by the quoted HTML block", () => {
+        expect(scanDocument(quotedDoc.split("\n")).endsProtected).toBe(false);
     });
 
-    it("REFUTED: the list-item HTML block swallows the append too", () => {
-        expect(scanDocument(itemDoc.split("\n")).endsProtected).toBe(true);
+    it("nor by the list-item HTML block", () => {
+        expect(scanDocument(itemDoc.split("\n")).endsProtected).toBe(false);
     });
 
-    it("REFUTED: move-to-bottom rightly leaves such a note untouched", () => {
-        expect(moveFootnoteDefinitionsToBottom(quotedDoc, "")).toBe(quotedDoc);
+    it("move-to-bottom gathers the definition under the block, after a blank line", () => {
+        expect(moveFootnoteDefinitionsToBottom(quotedDoc, "")).toBe("text[^1]\n\npara\n\n> <div>\n> more html\n\n[^1]: def");
     });
 
-    it("control: an HTML block opened at the column-0 end of the note is ends-protected", () => {
-        expect(scanDocument("text[^1]\n\n<div>\nmore html".split("\n")).endsProtected).toBe(true);
+    it("control: a blank line ends a \"<div>\" block at the column-0 end of the note too", () => {
+        expect(scanDocument("text[^1]\n\n<div>\nmore html".split("\n")).endsProtected).toBe(false);
+    });
+
+    it("control: a \"<pre>\" block, which no blank line ends, runs on over an appended definition", () => {
+        expect(scanDocument("text[^1]\n\n<pre>\nmore html".split("\n")).endsProtected).toBe(true);
     });
 
     it("control: an unclosed DOCUMENT-LEVEL fence still refuses (pinned behavior)", () => {

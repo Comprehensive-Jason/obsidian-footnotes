@@ -22,7 +22,6 @@ import {
     isTableDelimiterRow,
     TableCellEditor,
     tableRowCellSpans,
-    tableRowLines,
 } from "../editor/table-cursor";
 
 import { BlockSyntaxNotice, NestedFootnoteNotice, NoFootnoteCreated, showNotice } from "../editor/notice";
@@ -110,14 +109,15 @@ export function warnProtectedCaretIfInside(
             false,
         );
     } else {
-        const { scan } = ctx;
+        const reading = ctx.reading();
         const line = cursorPosition.line;
-        if (!scan.isProtected[line] && caretInBlockSyntax(ctx, cursorPosition)) {
+        const lineProtected = reading.protectedLines[line] ?? false;
+        if (!lineProtected && caretInBlockSyntax(ctx, cursorPosition)) {
             showNotice(BlockSyntaxNotice, 8000);
             return true;
         }
         // the same allowance for a caret inside a link on an ordinary line
-        if (!scan.isProtected[line] && linkLikeEndAt(ctx.lines[line] ?? "", cursorPosition.ch) !== -1) {
+        if (!lineProtected && linkLikeEndAt(ctx.lines[line] ?? "", cursorPosition.ch) !== -1) {
             return false;
         }
         // right at the start or end of a line, whether the caret is
@@ -125,14 +125,13 @@ export function warnProtectedCaretIfInside(
         // caret at position 0 of the line that CLOSES a comment, or at the
         // end of a line whose tail opened a region, is inside that region
         // even though the character next to it is on another line.
-        const openAtStart =
-            scan.startsInComment[line] || scan.startsInMath[line];
+        const openAtStart = reading.regionOpenAt(line);
         const openAtEnd =
             line + 1 < ctx.lines.length
-                ? scan.startsInComment[line + 1] || scan.startsInMath[line + 1]
-                : scan.endsProtected;
+                ? reading.regionOpenAt(line + 1)
+                : reading.openRegionFrom !== -1;
         inside =
-            scan.isProtected[line] ||
+            lineProtected ||
             caretInsideMaskedSpan(
                 ctx.maskedLine(line),
                 cursorPosition.ch,
@@ -224,7 +223,7 @@ export function warnTableEdgeCaretIfOutside(
     // a table row always has a pipe, and reading the whole note's rows is
     // not free, so a line without one is settled here
     if (!lineText.includes("|")) return false;
-    if (!tableRowLines(ctx.lines, ctx.scan.isProtected)[cursorPosition.line]) return false;
+    if (!ctx.reading().tableRowLines[cursorPosition.line]) return false;
     if (isTableDelimiterRow(lineText)) {
         showNotice(TableDelimiterNotice, 8000);
         return true;

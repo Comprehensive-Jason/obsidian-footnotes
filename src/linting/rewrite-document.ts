@@ -1,9 +1,9 @@
-import { DocumentScan, maskProtectedLines, normalizeEol, restoreEol, scanDocument } from "../parsing/markdown-scan";
-import { Definition, readNote } from "../parsing/note-reading";
+import { normalizeEol, restoreEol } from "../parsing/markdown-scan";
+import { Definition, NoteReading, readNote } from "../parsing/note-reading";
 
 // The setup and teardown every rewriting rule used to repeat for itself,
 // gathered here (duplicated-logic audit, 2026-09-05). The steps: convert the
-// note's line endings to plain LF, split it into lines, scan it, run the
+// note's line endings to plain LF, split it into lines, read it, run the
 // rule, then put the note's own line endings back.
 //
 // The one subtlety is what happens when the rule changed nothing. Then the
@@ -15,15 +15,21 @@ import { Definition, readNote } from "../parsing/note-reading";
 /**
  * The view of the note a rewriting rule works from.
  *
- * The scan, the masked twin (the copy with protected text blanked out) and
- * the note reading are each worked out the first time they are asked for,
- * then kept. Two reasons: no rule needs all three, and one rule,
- * move-to-bottom, trims `lines` before anything has been scanned.
+ * Everything in it comes from the note reading (note-reading.ts), which
+ * reads each distinct text once and remembers it: the lint hands the note
+ * through its rules in a row, and a rule that changed nothing hands the
+ * next one the same text, which is then not read again (Jason,
+ * 2026-09-09: "if it's free, do it"; the reading's own memory has done it
+ * since step 2 of the runtime swap, 2026-10-03). The reading is asked for
+ * the first time something needs it, because one rule, move-to-bottom,
+ * trims `lines` before anything is read.
  */
 export interface DocumentView {
     readonly lines: string[];
-    readonly scan: DocumentScan;
-    readonly maskedLines: string[];
+    /** The note reading of `lines`: definitions, protected text, the masked twin, and the rest. */
+    readonly reading: NoteReading;
+    /** The masked twin (the copy with protected text blanked out), from the reading. */
+    readonly maskedLines: readonly string[];
     /**
      * One entry per line: true where a definition's label sits, from the
      * note reading.
@@ -38,106 +44,51 @@ export interface DocumentView {
      * were.
      *
      * This is the ONE change to `lines` that is allowed, and only before
-     * anything has been worked out from them. move-to-bottom used to
-     * shorten the array itself. That happened to work, but only because
-     * the scan is done lazily and the shortening came first: read `scan`
-     * anywhere above the trim and it would describe the untrimmed note
-     * (review C7, 2026-09-09).
+     * anything has been read from them. move-to-bottom used to shorten the
+     * array itself. That happened to work, but only because the reading is
+     * done lazily and the shortening came first: read the note anywhere
+     * above the trim and it would describe the untrimmed note (review C7,
+     * 2026-09-09).
      *
-     * So this throws if the scan, the masked twin, or the reading has
-     * already been asked for.
+     * So this throws if the reading has already been asked for.
      */
     trimTrailingBlankLines(): number;
 }
 
-/** The pieces a view works out from its lines, each null until asked for. */
-interface Derived {
-    scan: DocumentScan | null;
-    masked: string[] | null;
-}
-
-// A one-entry memo shared by every view built while one outer
-// rewriteDocument call is running (Jason, 2026-09-09: "if it's free, do
-// it"). The lint pipeline hands the note through eight rules in a row, and
-// each rule builds its own view of the text it receives. On a clean note
-// most rules hand their text back unchanged, so the next rule receives the
-// identical string and used to scan it all over again. Now a view whose
-// text matches the memo starts with the previous view's finished pieces.
-//
-// The memo is keyed on the exact text, so a rule that changed anything
-// gets a fresh scan as before. The rules themselves are untouched: still
-// markdown in, markdown out. The memo is dropped when the outermost call
-// returns, so no note is kept in memory after a lint, and a rule run on its
-// own (as the tests do) behaves exactly as it did before.
-let memoText: string | null = null;
-let memoDerived: Derived | null = null;
-let depth = 0;
-
-function documentView(text: string, lines: string[]): DocumentView {
-    const d: Derived =
-        memoText === text && memoDerived !== null
-            ? { ...memoDerived }
-            : { scan: null, masked: null };
-    // whether anything has been read through THIS view yet (the trim guard)
+function documentView(lines: string[]): DocumentView {
+    // whether anything has been read through this view yet (the trim guard)
     let read = false;
-    // once trimmed, the pieces describe a shorter note than `text`, so they
-    // must not be offered to the next view under this text
-    let trimmed = false;
-    const publish = () => {
-        if (!trimmed) {
-            memoText = text;
-            memoDerived = { ...d };
-        }
+    const reading = (): NoteReading => {
+        read = true;
+        return readNote(lines);
     };
     return {
         lines,
         trimTrailingBlankLines() {
             if (read) {
-                throw new Error("trimTrailingBlankLines must run before the view is scanned");
+                throw new Error("trimTrailingBlankLines must run before the view is read");
             }
             let count = 0;
             while (lines.length > 1 && lines[lines.length - 1] === "") {
                 lines.pop();
                 count++;
             }
-            // pieces inherited from the memo describe the untrimmed note, so
-            // they are only kept when the trim removed nothing (move-to-bottom
-            // trims every time, and usually there is nothing to remove)
-            if (count > 0) {
-                d.scan = null;
-                d.masked = null;
-                trimmed = true;
-            }
             return count;
         },
-        get scan() {
-            read = true;
-            if (d.scan === null) {
-                d.scan = scanDocument(lines);
-                publish();
-            }
-            return d.scan;
+        get reading() {
+            return reading();
         },
         get maskedLines() {
-            read = true;
-            if (d.masked === null) {
-                d.masked = maskProtectedLines(lines, this.scan);
-                publish();
-            }
-            return d.masked;
+            return reading().maskedLines();
         },
-        // the note reading keeps its own memo, keyed by the text
         get definitionStarts() {
-            read = true;
-            return readNote(lines).labelLines;
+            return reading().labelLines;
         },
         get definitions() {
-            read = true;
-            return readNote(lines).definitions;
+            return reading().definitions;
         },
         get blocks() {
-            read = true;
-            return readNote(lines).blocks;
+            return reading().blocks;
         },
     };
 }
@@ -155,16 +106,6 @@ export function rewriteDocument(
     rewrite: (text: string, view: DocumentView) => string,
 ): string {
     const { text, eol } = normalizeEol(markdown);
-    depth++;
-    try {
-        const result = rewrite(text, documentView(text, text.split("\n")));
-        return result === text ? markdown : restoreEol(result, eol);
-    } finally {
-        // the outermost call is over: forget the memo so the note is not
-        // kept alive, and so the next lint starts clean
-        if (--depth === 0) {
-            memoText = null;
-            memoDerived = null;
-        }
-    }
+    const result = rewrite(text, documentView(text.split("\n")));
+    return result === text ? markdown : restoreEol(result, eol);
 }

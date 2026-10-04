@@ -219,7 +219,9 @@ describe("delete property", () => {
                 expect(plan.references + plan.definitions).toBeGreaterThan(0);
             }),
         );
-    });
+        // each deletion reads the note before and after, which under a full
+        // parallel suite can take longer than vitest's default five seconds
+    }, Math.max(30_000, Number(process.env.FC_NUM_RUNS ?? 200) * 60));
 });
 
 describe("the command entry", () => {

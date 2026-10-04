@@ -1,5 +1,6 @@
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { computeNextFootnoteNumber, referenceOccurrences } from "../../parsing/footnote-grammar";
+import { readNote } from "../../parsing/note-reading";
 
 import { rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
@@ -47,8 +48,8 @@ export function applyFootnotePrefix(markdown: string, prefix: string): string {
     // out) is built with the whole note in view, not line by line. That
     // matters on a line where a comment starts or ends: the part inside the
     // comment is blanked, the part outside it stays live.
-    return rewriteDocument(markdown, (text, { lines, scan, maskedLines, definitions, definitionStarts }) => {
-        const isProtected = scan.isProtected;
+    return rewriteDocument(markdown, (text, { lines, maskedLines, definitions, definitionStarts }) => {
+        const isProtected = readNote(lines).protectedLines;
 
         // One walk over the note collects two things at once.
         //
@@ -120,6 +121,17 @@ export function applyFootnotePrefix(markdown: string, prefix: string): string {
         const rewritten = lines.map((line, i) =>
             isProtected[i] ? line : rewriteFootnoteNames(line, maskedLines[i], renameFor),
         );
+        // A rename must leave every footnote a footnote. A prefix holding a
+        // "$" can pair with a dollar earlier on the line: "$6 [^ch-2]" is a
+        // price and a reference, "$6 [^a$ch-2]" is math to Obsidian, and the
+        // footnote would be gone. When the renamed note reads fewer live
+        // references or definitions, the note is left as it was (found by
+        // the conservation property, the runtime swap step 2, 2026-10-03).
+        const live = (note: readonly string[]) => {
+            const reading = readNote(note);
+            return `${reading.references.filter((reference) => reference.live).length}:${reading.definitions.length}`;
+        };
+        if (live(rewritten) !== live(lines)) return text;
         return rewritten.join("\n");
     });
 }

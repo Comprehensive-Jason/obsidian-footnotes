@@ -140,10 +140,14 @@ describe("the protected-caret guard at a line's edges", () => {
     });
 
     it("refuses end of a line whose tail opens MATH the next line continues", () => {
-        // the comment twin above passes even when the guard reads only
-        // startsInComment - this one needs startsInMath of the SAME next line
+        // A "$$" pair inside one paragraph is math, across its lines too
+        // (rule M1, docs/obsidian-reading-rules.md). The old pin had the
+        // closing "$$" on a line of its own, which Obsidian reads as the
+        // start of a display block of its own (rule M2), leaving the
+        // paragraph's "$$" literal text: the note reading follows
+        // Obsidian there (runtime swap, step 2, 2026-10-03).
         expect(
-            guard(["text $$", "E = mc^2", "$$", "after"], {
+            guard(["text $$", "E = mc^2 $$", "after"], {
                 line: 0,
                 ch: "text $$".length,
             }),
@@ -158,11 +162,14 @@ describe("the protected-caret guard at a line's edges", () => {
     });
 
     it("refuses end of the LAST line while a region reaches EOF", () => {
-        // there is no next line to ask, so the document-wide endsProtected
-        // fact stands in for the off-line neighbor; block math opened at
-        // the start of the line's content runs to the end of the note
-        // (a mid-line "<!--" nothing closes is literal text now)
-        expect(guard(["$$ open"], { line: 0, ch: "$$ open".length })).toBe(true);
+        // there is no next line to ask, so whether the note ends inside a
+        // region that never closes stands in for the off-line neighbor.
+        // A "$$" line opens display math only with a line after it (rule
+        // M2), so the region needs a line of its own here; "$$ open" alone
+        // is a paragraph, and a press after it is refused once the
+        // definition appended under it would be born inside the math (the
+        // born-dead check, runtime swap step 2, 2026-10-03)
+        expect(guard(["$$", "open"], { line: 1, ch: "open".length })).toBe(true);
     });
 
     it("allows end of an earlier line when the region only opens BELOW it", () => {

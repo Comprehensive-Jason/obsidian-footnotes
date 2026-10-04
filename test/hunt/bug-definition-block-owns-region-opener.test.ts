@@ -79,11 +79,9 @@ describe("bug: a definition block carries a comment opener away from its closer"
         expect(removeOrphanedFootnoteDefinitions(doc)).toBe("a[^1]\n\n[^1]: one\n%%");
     });
 
-    // The same reading for the HTML twin. Expected fail until step 2 of the
-    // swap: the scanner still reads "<!--" as a comment running to "-->",
-    // which hides "[^1]: one", so the cut looks like it changes how the
-    // rest of the note reads and is refused.
-    it.fails("deleting an orphaned definition takes only its own lines when its HTML opener reaches no further", () => {
+    // The same reading for the HTML twin (fixed in step 2 of the swap,
+    // when protected text moved onto the note reading).
+    it("deleting an orphaned definition takes only its own lines when its HTML opener reaches no further", () => {
         const doc = "a[^1]\n\n[^9]: orphan\n    <!--\n[^1]: one\n-->";
         expect(removeOrphanedFootnoteDefinitions(doc)).toBe("a[^1]\n\n[^1]: one\n-->");
     });

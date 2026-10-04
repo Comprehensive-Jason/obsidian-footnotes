@@ -4,7 +4,8 @@ import type FootnotePlugin from "../main";
 import { contextOfLines, DocContext, definitionNames } from "../editor/doc-context";
 import { composeChanges, mapPosition, simulateChanges, simulatedAnchors } from "../editor/insertion-liveness";
 import { definitionLabel } from "../parsing/footnote-grammar";
-import { findLineRunEnd, scanDocument } from "../parsing/markdown-scan";
+import { findLineRunEnd } from "../parsing/markdown-scan";
+import { readNote } from "../parsing/note-reading";
 
 // Where a new footnote definition goes. This module holds the
 // section-heading setting and the append edit, both of which every
@@ -56,11 +57,15 @@ export function buildDefinitionAppend(
     plugin: FootnotePlugin,
 ): { change: EditorChange; cursor: EditorPosition; prepend?: EditorChange } {
     const lines = ctx.lines;
-    const isProtected = ctx.scan.isProtected;
+    const reading = ctx.reading();
+    const isProtected = reading.protectedLines;
+    // the line where a region that never closes opens (an unclosed fence,
+    // comment, or math block runs to the end of the note), or -1
+    const openFrom = reading.openRegionFrom;
     // the definitions at the top level of the note, the ones the new
     // definition joins; one in a quote, a list item, or another footnote is
     // not somewhere to append (Jason's ruling 1, option a, 2026-10-03)
-    const blocks = ctx.reading().blocks;
+    const blocks = reading.blocks;
     // A line with text on it directly below the new definition gets pulled
     // INTO the definition, because Obsidian carries a definition on into
     // the next line. So when there is content below, add a blank line
@@ -74,7 +79,7 @@ export function buildDefinitionAppend(
     // inside one, and a definition appended there would be born hidden.
     // That case falls through to the walk above the unclosed region below
     // (Claude sweep 2026-09-13).
-    if (blocks.length > 0 && !ctx.scan.endsProtectedAt[blocks[blocks.length - 1].end]) {
+    if (blocks.length > 0 && (openFrom === -1 || blocks[blocks.length - 1].end < openFrom)) {
         const last = blocks[blocks.length - 1];
         const lastLine = last.end;
         // A block that ends on a paragraph line (a lazy continuation
@@ -115,7 +120,7 @@ export function buildDefinitionAppend(
         // on what counts as the existing heading, or running lint twice
         // would keep changing the note instead of settling.
         const headingLines = plugin.settings.footnoteSectionHeading.split("\n");
-        const anchorEnd = findLineRunEnd(lines, isProtected, headingLines, ctx.scan.inCommentBlock);
+        const anchorEnd = findLineRunEnd(lines, isProtected, headingLines, reading.commentLines);
         if (anchorEnd !== -1) {
             let fromLine = anchorEnd;
             let slotText = `\n\n[^${footnoteId}]: `;
@@ -143,7 +148,7 @@ export function buildDefinitionAppend(
 
     let fromLine = lines.length - 1;
     let to: EditorPosition | undefined;
-    if (ctx.scan.endsProtected) {
+    if (openFrom !== -1) {
         // The note ends inside a fence, comment, or math region that was
         // never closed (2026-08-11 review, bug #10). A definition added at
         // the very end would be born inside it as dead text, and the next
@@ -154,7 +159,7 @@ export function buildDefinitionAppend(
         // The trailing-blank trimming must not run in this case, because
         // its range reaches to the end of the note and would delete the
         // unclosed region itself.
-        while (fromLine >= 0 && ctx.scan.endsProtectedAt[fromLine]) fromLine--;
+        fromLine = openFrom - 1;
         while (fromLine >= 0 && lines[fromLine].trim() === "") fromLine--;
         if (fromLine < 0) {
             // The unclosed region starts at line 0, so there is nowhere
@@ -210,7 +215,7 @@ export function buildDefinitionAppend(
     // unclosed region, a line with text on it directly below would be
     // pulled INTO the new definition. Same danger as at the other places a
     // definition can be inserted (the A4 bug again).
-    if (ctx.scan.endsProtected && needsSeparator(fromLine)) text += "\n";
+    if (openFrom !== -1 && needsSeparator(fromLine)) text += "\n";
 
     // The first footnote's section heading may itself start with a "---"
     // divider at the left margin. If the note's first line is also a bare
@@ -226,7 +231,7 @@ export function buildDefinitionAppend(
     let prepend: EditorChange | undefined;
     if (isFirstFootnote && lines[0] === "---" && !isProtected[0]) {
         const candidate = lines.slice(0, fromLine + 1).join("\n") + text;
-        if (scanDocument(candidate.split("\n")).isProtected[0]) {
+        if (readNote(candidate.split("\n")).protectedLines[0]) {
             prepend = { from: { line: 0, ch: 0 }, text: "\n" };
             cursor.line += 1;
         }

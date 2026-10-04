@@ -25,22 +25,22 @@ import { lintFootnotes } from "../../src/linting/linter";
 // and behind a list marker alone.
 
 describe("a fence behind a quote then a list marker ('> - ```')", () => {
-    it.fails("the default lint never rewrites code inside a '> - ```' fence", () => {
+    it("the default lint never rewrites code inside a '> - ```' fence", () => {
         const doc = "> - ```\n>   code [^5]\n>   ```\n> after[^1]\n\n[^1]: d";
         // Today: "> - ```\n>   code [^1]\n>   ```\n> after[^1]\n\n[^2]: d".
         expect(lintFootnotes(doc)).toContain(">   code [^5]");
     });
 
-    it.fails("the fence interior is protected", () => {
+    it("the fence interior is protected", () => {
         const lines = "> - ```\n>   [^9]: fake\n>   ```\n\nreal[^1]\n\n[^1]: real".split("\n");
         expect(scanDocument(lines).isProtected.slice(0, 3)).toEqual([true, true, true]);
     });
 
-    it.fails("code inside it reserves no number", () => {
+    it("code inside it reserves no number", () => {
         expect(computeNextFootnoteNumber("> - ```\n>   code [^5]\n>   ```")).toBe(1);
     });
 
-    it.fails("the quoted line after its closer is not protected", () => {
+    it("the quoted line after its closer is not protected", () => {
         const lines = "> - ```\n>   code\n>   ```\n> after[^1]\n\n[^1]: d".split("\n");
         expect(scanDocument(lines).isProtected[3]).toBe(false);
     });

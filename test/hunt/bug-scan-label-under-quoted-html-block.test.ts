@@ -23,7 +23,7 @@ import { definitionStartLines, maskProtectedLines, scanDocument } from "../../sr
 // protected there; it does not yet mark the line itself.
 
 describe("a label at column 0 directly under a quoted HTML block", () => {
-    it.fails("is swallowed, not a definition", () => {
+    it("is swallowed, not a definition", () => {
         const lines = "text[^1]\n\n> <div>\n> more html\n[^1]: def".split("\n");
         const scan = scanDocument(lines);
         const masked = maskProtectedLines(lines, scan);

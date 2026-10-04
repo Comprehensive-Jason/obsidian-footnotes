@@ -72,7 +72,12 @@ describe("spec question: a rule that changes the arrays in the view it was given
         });
     });
 
-    it.fails("removing a line does not leave the next view a masked twin of the wrong length", () => {
+    // Settled by the runtime swap, step 2 (2026-10-03): the view keeps no
+    // memo of its own any more; every piece comes from the note reading of
+    // the lines the view holds, remembered by their exact text, so a view
+    // whose lines were cut reads the cut lines and the next view reads its
+    // own.
+    it("removing a line does not leave the next view a masked twin of the wrong length", () => {
         rewriteDocument(outerDoc, (text) => {
             capture(text, (v) => {
                 v.lines.pop();
@@ -85,10 +90,15 @@ describe("spec question: a rule that changes the arrays in the view it was given
         });
     });
 
-    it.fails("writing into view.maskedLines does not poison the next view", () => {
+    // Settled the same way (2026-10-03): view.maskedLines is the reading's
+    // masked twin, typed read-only and frozen, so a write forced past the
+    // type fails at once instead of poisoning the next view.
+    it("writing into view.maskedLines does not poison the next view", () => {
         rewriteDocument(outerDoc, (text) => {
             capture(text, (v) => {
-                v.maskedLines[0] = "SCRIBBLED";
+                expect(() => {
+                    (v.maskedLines as string[])[0] = "SCRIBBLED";
+                }).toThrow();
                 return text;
             });
             const next = capture(text);

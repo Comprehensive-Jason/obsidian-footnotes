@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { definitionLabelWithName } from "../../src/parsing/footnote-grammar";
-import { maskLineRegions } from "../../src/parsing/markdown-scan";
+import { maskedLineAt } from "../../src/parsing/markdown-scan";
 import { fakeEditor } from "../helpers/fake-editor";
 import { listExistingFootnoteDefinitions } from "../../src/editor/doc-context";
 
@@ -25,7 +25,7 @@ import { listExistingFootnoteDefinitions } from "../../src/editor/doc-context";
 describe("code-span-shaped names inside definition labels", () => {
     it("definitionLabelWithName finds the definition GFM sees", () => {
         const line = "[^a`b]: c`d";
-        const masked = maskLineRegions(line).masked;
+        const masked = maskedLineAt([line], 0);
         const hit = definitionLabelWithName(line, masked);
         expect(hit).not.toBeNull();
         expect(hit?.name).toBe("a`b");

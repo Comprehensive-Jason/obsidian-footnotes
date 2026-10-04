@@ -2,8 +2,7 @@
 // RESOLVED 2026-09-16: Reading view keeps a reference in the next row live (probed), so a span never crosses a table row; the search stops at rows and a run opened in a row never looks ahead.
 import { describe, expect, it } from "vitest";
 
-import { scanDocument } from "../../src/parsing/markdown-scan";
-import { tableRowLines } from "../../src/editor/table-cursor";
+import { scanDocument, tableRowLinesOf } from "../../src/parsing/markdown-scan";
 
 // SPEC QUESTION, not a confirmed bug: an unclosed backtick run in a table
 // row, with the closing run on a LATER row of the same table.
@@ -48,8 +47,6 @@ describe("spec question: a code span crossing a table's delimiter row", () => {
 
     it("needs a live check: the plugin's own table model still sees the table", () => {
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        // today: the masked delimiter row breaks tableRowLines' run
-        expect(tableRowLines(lines, scan.isProtected)).toEqual([true, true, true]);
+        expect(tableRowLinesOf(lines)).toEqual([true, true, true]);
     });
 });

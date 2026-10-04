@@ -20,10 +20,11 @@
 // reader, is vendored next to this file (remark-parse-list.js) rather than
 // patched inside node_modules (Jason, 2026-10-03).
 //
-// For now this reader is the offline referee that test/obsidian-referee
-// checks against Obsidian's saved answers; the plugin's commands still use
-// the hand-written scanner in markdown-scan.ts (Jason, 2026-10-03: adopt
-// remark-parse 8 in steps, the runtime swap comes later).
+// test/obsidian-referee checks this reader against Obsidian's saved
+// answers, and the plugin's commands read notes through it (the note
+// reading, note-reading.ts): definitions since step 1 of the runtime swap,
+// protected text and the masked twin since step 2 (Jason, 2026-10-03:
+// adopt remark-parse 8 in steps).
 //
 // Terms used below:
 // - A "tokenizer" is remark-parse's word for a reader: a function that looks
@@ -58,6 +59,10 @@ export interface MarkdownNode {
     value?: string;
     /** For a "%%" comment: true for a block comment, false for an inline pair. */
     block?: boolean;
+    /** For a heading: its level, 1 to 6. */
+    depth?: number;
+    /** For a list: whether it is numbered. */
+    ordered?: boolean;
 }
 
 /** A node as a tokenizer builds it; remark-parse adds the position when the node is eaten. */
@@ -82,6 +87,23 @@ interface ParserState {
     tokenizeInline(value: string, now: Point): MarkdownNode[];
     /** Where the current quote's first line starts (an offset), for the callout reader. */
     calloutAt?: number;
+    inlineMethods: string[];
+    inlineTokenizers: Record<string, Tokenizer>;
+    /** Each inline reader's last answer to "where could you next match?", for textLineByLine. */
+    locatorMemo?: Map<string, LocatorAnswer>;
+    /** Where a math opener of each kind last found no closer, for mathWithoutRescans. */
+    mathMemo?: Map<string, { start: number; length: number }>;
+}
+
+/**
+ * An inline reader's answer to "where could you next match?", asked from
+ * offset `from` on a line that ends at offset `end`: the offset of the
+ * match, or -1 for none before the line's end.
+ */
+interface LocatorAnswer {
+    from: number;
+    end: number;
+    at: number;
 }
 
 export interface Tokenizer {
@@ -396,6 +418,44 @@ function doubleDollarMath(tables: ParserTables): void {
 }
 
 /**
+ * A speed-up with no change to the reading. An inline math opener ("$", or
+ * "$$" for rule M1) searches the rest of its run of text for a closer, and
+ * when there is none it is plain text; on a long line of prices ("$5 or $6
+ * and ...") every dollar searched to the end of the line in vain, so the
+ * read took time growing with the line's length squared: a line of 32,000
+ * characters took about a second (measured 2026-10-03, the runtime swap,
+ * step 2). A closer is judged by the characters around it alone, not by
+ * where its opener was, and a search from a later opener walks the same
+ * characters a search from an earlier one walked past it, so once an
+ * opener of one kind finds no closer, no later opener of that kind in the
+ * same run can. The run is recognised by the text left in it shrinking by
+ * exactly as much as the reader moved on.
+ */
+function mathWithoutRescans(tables: ParserTables): void {
+    for (const name of ["math", "doubleDollarMath"]) {
+        const stock = tables.inlineTokenizers[name];
+        const wrapped: Tokenizer = function (eat, value, silent) {
+            if (value.charCodeAt(0) !== 36) return stock.call(this, eat, value, silent);
+            // the kind of opener: a single or a double dollar (remark-math
+            // needs a double closer for a double opener, rule M1 any "$$")
+            const kind = `${name}${value.charCodeAt(1) === 36 ? "$$" : "$"}`;
+            const start = eat.now().offset;
+            const memo = (this.mathMemo ??= new Map<string, { start: number; length: number }>());
+            const dead = memo.get(kind);
+            if (dead !== undefined && start >= dead.start && start - dead.start === dead.length - value.length) return undefined;
+            const result = stock.call(this, eat, value, silent);
+            // an opener with a space or tab after it is no opener; any other
+            // that took nothing found no closer
+            const after = value.charCodeAt(kind.endsWith("$$") ? 2 : 1);
+            if ((result === undefined || result === false) && after !== 32 && after !== 9 && !Number.isNaN(after)) memo.set(kind, { start, length: value.length });
+            return result;
+        };
+        wrapped.locator = stock.locator;
+        tables.inlineTokenizers[name] = wrapped;
+    }
+}
+
+/**
  * A speed-up with no change to the reading: the stock HTML block reader
  * builds a new regular expression from its whole list of tag names every
  * time it is asked, which is at the start of every block and, to check
@@ -437,8 +497,53 @@ function textLineByLine(tables: ParserTables): void {
     const stockText = tables.inlineTokenizers.text;
     tables.inlineTokenizers.text = function (eat, value, silent) {
         const lineEnd = value.indexOf("\n");
-        return stockText.call(this, eat, lineEnd === -1 ? value : value.slice(0, lineEnd + 1), silent);
+        const line = lineEnd === -1 ? value : value.slice(0, lineEnd + 1);
+        if (silent === true) return stockText.call(this, eat, line, silent);
+        // the stock reader, handed the line only up to where the next
+        // reader could match, finds no match before that point and reads
+        // the stretch up to it, exactly as it would have on the whole line
+        return stockText.call(this, eat, line.slice(0, nextInlineMatch(this, eat.now().offset, line)), silent);
     };
+}
+
+/**
+ * Where on `line` (which starts at offset `start` in the note) the next
+ * inline reader could match, counted from the line's second character, as
+ * remark-parse's text reader asks it; the line's length when none can.
+ *
+ * A speed-up with no change to the reading. The text reader asks every
+ * inline reader this question at the start of every stretch of plain text,
+ * and a reader whose mark does not come again on the line (a "~~", a
+ * "%%", a "<") searched the rest of the line each time. On one long line
+ * with many short stretches (a line of 8,000 prices, "$5 or $6 and ...")
+ * that took time growing with the line's length squared: 32,000 characters
+ * took about two seconds (measured 2026-10-03, the runtime swap, step 2).
+ * So each reader's answer is remembered. It holds for any later question on
+ * the same line asked from a point no further on than the match (nothing
+ * matched between), and for every later question when there was no match
+ * at all. Every reader looks for its mark at or after the point it is
+ * asked from, so the remembered answer is the one it would give.
+ */
+function nextInlineMatch(state: ParserState, start: number, line: string): number {
+    const memo = (state.locatorMemo ??= new Map<string, LocatorAnswer>());
+    const from = start + 1;
+    const end = start + line.length;
+    let min = line.length;
+    for (const name of state.inlineMethods) {
+        // a method may be listed with no reader behind it (remark-parse
+        // lists some its options switch off), as the stock text reader knows
+        const reader = state.inlineTokenizers[name] as Tokenizer | undefined;
+        const locator = name === "text" ? undefined : reader?.locator;
+        if (locator === undefined) continue;
+        let known = memo.get(name);
+        if (known === undefined || known.end !== end || known.from > from || (known.at !== -1 && known.at < from)) {
+            const position = locator.call(state, line, 1);
+            known = { from, end, at: position === -1 ? -1 : start + position };
+            memo.set(name, known);
+        }
+        if (known.at !== -1 && known.at - start < min) min = known.at - start;
+    }
+    return min;
 }
 
 /**
@@ -478,6 +583,7 @@ function buildParser(): ParserConstructor {
     wikilinks(tables);
     frontmatter(tables);
     doubleDollarMath(tables);
+    mathWithoutRescans(tables);
     return ObsidianParser;
 }
 

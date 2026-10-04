@@ -2,7 +2,6 @@ import { EditorView, ViewUpdate } from "@codemirror/view";
 import { Notice } from "obsidian";
 
 import { quotedReference, referenceOccurrences } from "../parsing/footnote-grammar";
-import { maskProtectedLines, scanDocument } from "../parsing/markdown-scan";
 import { readNote } from "../parsing/note-reading";
 
 import { showNotice } from "./notice";
@@ -65,10 +64,10 @@ export function stillOrphanedNames(text: string, names: string[]): string[] {
 }
 
 /**
- * Every definition name and every reference name in `lines`, from ONE scan,
- * one masked twin, and the note reading. The two functions above used to mask the document
- * separately (review B4, 2026-09-09). Both sides are judged on the masked
- * twin.
+ * Every definition name and every reference name in `lines`, from the one
+ * note reading and its masked twin. The two functions above used to mask
+ * the document separately (review B4, 2026-09-09). Both sides are judged on
+ * the masked twin.
  *
  * Definition names come back as a map from the lowercased name to the
  * casing actually typed, and when a name is defined more than once the LAST
@@ -78,9 +77,8 @@ export function stillOrphanedNames(text: string, names: string[]): string[] {
  * Reference names come back lowercased.
  */
 function namesIn(lines: string[]): { defined: Map<string, string>; referenced: Set<string> } {
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
     const reading = readNote(lines);
+    const masked = reading.maskedLines();
     const starts = reading.labelLines;
     const defined = new Map<string, string>();
     for (const definition of reading.definitions) defined.set(definition.name.toLowerCase(), definition.name);

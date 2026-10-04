@@ -1,9 +1,6 @@
-import {
-    findLineRunEnd,
-    scanDocument,
-    removeLineRanges,
-} from "../../parsing/markdown-scan";
+import { findLineRunEnd, removeLineRanges } from "../../parsing/markdown-scan";
 import { readNote } from "../../parsing/note-reading";
+import { linesReadDifferently } from "./remove-orphaned-definitions";
 import { DocumentView, rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
@@ -41,7 +38,7 @@ function preserveLeadingThematicBreak(
     rebuilt: string,
 ): string {
     if (firstLineWasProtected || !rebuilt.startsWith("---")) return rebuilt;
-    if (!scanDocument(rebuilt.split("\n")).isProtected[0]) return rebuilt;
+    if (!readNote(rebuilt.split("\n")).protectedLines[0]) return rebuilt;
     return "\n" + rebuilt;
 }
 
@@ -94,15 +91,15 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
     // so the scan can never end up describing the untrimmed note.
     const trailingNewlines = view.trimTrailingBlankLines();
 
-    const { scan, blocks } = view;
-    const isProtected = scan.isProtected;
+    const { reading, blocks } = view;
+    const isProtected = reading.protectedLines;
     if (blocks.length === 0) return text;
 
     // A line added at the end of the note would be inside protected
     // text, because an unclosed code fence or comment runs on to the end
     // of the file. Moving definitions in there would cut them off from
     // their references.
-    if (scan.endsProtected) return text;
+    if (reading.openRegionFrom !== -1) return text;
 
     // Packed label to label, except after a block whose last line is
     // a lazy continuation (a plain column-0 line): the next label
@@ -125,6 +122,13 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
     // next to each other, they become one.
     const body = removeLineRanges(lines, blocks);
     while (body.length > 0 && body[body.length - 1] === "") body.pop();
+    // Taking the definitions out must leave every other line reading as it
+    // did, the promise the orphan rules make for their cuts: a definition
+    // can be all that keeps "   thin prose" under a list item from
+    // becoming that item's second paragraph, and the indented code under
+    // it from waking up as live text (found by the conservation property,
+    // the runtime swap step 2, 2026-10-03). Such a note is left as it is.
+    if (linesReadDifferently(lines, { lines, ranges: blocks }, body)) return text;
 
     // The section-heading setting is markdown that may run over
     // SEVERAL lines, such as "---\n## Footnotes". So the search
@@ -136,18 +140,18 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
     // shared with the heading slot in buildDefinitionAppend. That is
     // what guarantees a note the plugin built comes back unchanged.
     //
-    // The scan here runs on the body with the definitions already cut
+    // The reading here is of the body with the definitions already cut
     // out. That is safe: removing whole definition blocks cannot change
     // which code fences pair with which, so the protected regions come
     // out the same.
     let anchorEnd = -1;
-    const bodyScan = scanDocument(body);
+    const bodyReading = readNote(body);
     if (sectionHeading) {
         anchorEnd = findLineRunEnd(
             body,
-            bodyScan.isProtected,
+            bodyReading.protectedLines,
             sectionHeading.split("\n"),
-            bodyScan.inCommentBlock,
+            bodyReading.commentLines,
         );
     }
 
@@ -182,7 +186,7 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
         // rest[k] is body[offset + k], which is how its scan facts are read
         const offset = body.length - rest.length;
         const indentedCode = (k: number) =>
-            k < rest.length && bodyScan.isProtected[offset + k] && /^(\t| {4})/.test(rest[k]);
+            k < rest.length && bodyReading.protectedLines[offset + k] && /^(\t| {4})/.test(rest[k]);
         if (indentedCode(0)) {
             while (chunkEnd < rest.length) {
                 const line = rest[chunkEnd];

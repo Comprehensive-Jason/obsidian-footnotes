@@ -23,7 +23,7 @@ import { scanDocument } from "../../src/parsing/markdown-scan";
 // lets the line open a list item, whose wide gap then reads as code.
 
 describe("'10.      y' directly under a label line", () => {
-    it.fails("is the footnote's lazy body ('10.' cannot interrupt a paragraph), not code", () => {
+    it("is the footnote's lazy body ('10.' cannot interrupt a paragraph), not code", () => {
         const scan = scanDocument("[^1]: x\n10.      y [^2]\n\nu[^1]\n\n[^2]: two".split("\n"));
         expect(scan.isProtected[1]).toBe(false);
     });

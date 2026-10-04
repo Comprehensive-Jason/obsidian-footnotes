@@ -9,6 +9,7 @@ import {
     maskProtectedLines,
     scanDocument,
 } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // A code span lives inside ONE paragraph: CommonMark lets it wrap across
 // the lines of a paragraph, and the plugin matches (sheet 11's B30,
@@ -57,12 +58,11 @@ function liveReferenceLines(markdown: string): number[] {
 
 describe("a backtick run opened inside a HEADING", () => {
     it("never closes on a later line: the reference in the heading is live", () => {
-        // today: startsInCode[1] = 1 and codeOpenerAt[0] is set - the
-        // plugin masked the heading's tail into a phantom code span
+        // before the fix the plugin masked the heading's tail into a
+        // phantom code span running on into the next line
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        expect(scan.startsInCode[1]).toBe(0);
-        expect(scan.codeOpenerAt[0]).toBe(-1);
+        expect(readNote(lines).regionOpenAt(1)).toBe(false);
+        expect(readNote(lines).maskedLine(0)).toBe(lines[0]);
     });
 
     it("the heading's reference binds its definition (no orphan, no renumber)", () => {

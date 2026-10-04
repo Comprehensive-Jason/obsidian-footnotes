@@ -39,15 +39,15 @@ function liveReferences(doc: string): string[] {
 }
 
 describe("a parenthesised run that is not a link destination", () => {
-    it.fails("'\\[t](a[^1])' has an escaped opener, so it is no link and [^1] is live", () => {
+    it("'\\[t](a[^1])' has an escaped opener, so it is no link and [^1] is live", () => {
         expect(liveReferences("see \\[t](a[^1])\n\n[^1]: one")).toEqual(["0:1"]);
     });
 
-    it.fails("a ']' with no '[' before it opens no link, so 'note](a[^1])' keeps [^1] live", () => {
+    it("a ']' with no '[' before it opens no link, so 'note](a[^1])' keeps [^1] live", () => {
         expect(liveReferences("note](a[^1])\n\n[^1]: one")).toEqual(["0:1"]);
     });
 
-    it.fails("'[t](a b[^1])' is no link (a space needs a quoted title), so [^1] is live", () => {
+    it("'[t](a b[^1])' is no link (a space needs a quoted title), so [^1] is live", () => {
         expect(liveReferences("see [t](a b[^1])\n\n[^1]: one")).toEqual(["0:1"]);
     });
 

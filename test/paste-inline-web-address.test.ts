@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fakeEditor as sharedFakeEditor, FakeEditor } from "./helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "./helpers/fake-plugin";
@@ -27,7 +27,10 @@ import { pasteInlineFootnote } from "../src/commands/insert-or-navigate-footnote
 // addresses are read, not in what an address may hold (the 2026-10-03
 // probe confirmed that case too).
 //
-// Expected to fail until the fix lands.
+// Fixed in step 2 of the runtime swap (2026-10-03): the masked twin the
+// check reads now comes from the note reading, Obsidian's own parser
+// rebuilt, which matches the inline footnote's brackets first and reads
+// the address inside them.
 
 function fakeEditor(line: string, ch: number): FakeEditor {
     return sharedFakeEditor([line], { cursor: { line: 0, ch }, edits: true });
@@ -44,13 +47,16 @@ function fakePlugin(doc: FakeEditor): FootnotePlugin {
     );
 }
 
+// a toast another test file's press left behind must not count here
+beforeEach(resetNotices);
+
 afterEach(() => {
     vi.unstubAllGlobals();
     resetNotices();
 });
 
 describe("Paste as inline footnote with a web address on the clipboard", () => {
-    it.fails("wraps the address in an inline footnote", async () => {
+    it("wraps the address in an inline footnote", async () => {
         vi.stubGlobal("navigator", {
             clipboard: { readText: () => Promise.resolve("https://curriculum.buildingasecondbrain.com/") },
         });
@@ -60,7 +66,7 @@ describe("Paste as inline footnote with a web address on the clipboard", () => {
         expect(messages()).toEqual([]);
     });
 
-    it.fails("wraps words followed by an address", async () => {
+    it("wraps words followed by an address", async () => {
         vi.stubGlobal("navigator", {
             clipboard: { readText: () => Promise.resolve("see https://example.com/page") },
         });

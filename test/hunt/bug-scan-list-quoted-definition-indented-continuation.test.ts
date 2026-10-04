@@ -47,22 +47,22 @@ function liveNames(doc: string): string[] {
 }
 
 describe("a quoted definition inside a list item owns its indented quoted continuation", () => {
-    it.fails("the [^c] in the body is a live reference", () => {
+    it("the [^c] in the body is a live reference", () => {
         // Today: ["0:o", "2:o"], the label counted as a reference and [^c] dead.
         expect(liveNames(DOC)).toContain("3:c");
     });
 
-    it.fails("the orphaned-definition alert does not name [^c]", () => {
+    it("the orphaned-definition alert does not name [^c]", () => {
         // Today: ["c"].
         expect(orphanedFootnoteDefinitionNames(DOC)).toEqual([]);
     });
 
-    it.fails("Delete orphaned definitions keeps '[^c]: cited'", () => {
+    it("Delete orphaned definitions keeps '[^c]: cited'", () => {
         // Today: the "[^c]: cited" line is deleted.
         expect(lintFootnotes(DOC, { removeOrphanedDefinitions: true })).toContain("[^c]: cited");
     });
 
-    it.fails("Delete footnote everywhere on [^c] also cuts the reference in the body", () => {
+    it("Delete footnote everywhere on [^c] also cuts the reference in the body", () => {
         const plan = deleteFootnoteEverywhere(DOC, "c");
         // Today: 0 references cut, "body[^c]" left behind.
         expect(plan.kind === "deleted" ? plan.references : -1).toBe(1);

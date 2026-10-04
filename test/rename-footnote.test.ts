@@ -13,6 +13,7 @@ import {
 } from "../src/commands/rename-footnote";
 import { simulateChanges } from "../src/editor/insertion-liveness";
 import { referenceOccurrences } from "../src/parsing/footnote-grammar";
+import { readNote } from "../src/parsing/note-reading";
 import {
     definitionLabelWithName,
     definitionStartLines,
@@ -272,8 +273,11 @@ describe("rename property", () => {
                             );
                             if (hit) names.add(hit.name.toLowerCase());
                         }
-                        for (const block of findDefinitionBlocks(lines, scan)) {
-                            names.add(block.name.toLowerCase());
+                        // and every definition wherever it sits, one in a list
+                        // item included (Jason's ruling 1, option a,
+                        // 2026-10-03: rename renames those too)
+                        for (const definition of readNote(lines).definitions) {
+                            names.add(definition.name.toLowerCase());
                         }
                         expect(
                             names.has(folded),

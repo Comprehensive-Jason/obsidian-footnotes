@@ -11,7 +11,6 @@ import {
 import { DocContext, docContext } from "../editor/doc-context";
 import { footnotePrefixFromEditor, footnotePrefixProblem } from "../parsing/footnote-prefix";
 import { simulateChanges } from "../editor/insertion-liveness";
-import { maskProtectedLines, scanDocument } from "../parsing/markdown-scan";
 import { Definition, readNote } from "../parsing/note-reading";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { withEditableEditor } from "./insert-or-navigate-footnotes";
@@ -314,14 +313,12 @@ function renameSurvives(
     labelLines: number[],
 ): boolean {
     const simulated = simulateChanges(ctx.lines, changes);
-    // scan once and build one masked twin for all the lines checked below.
-    // The old per-line maskedLineAt rescanned the whole document every
-    // time, so a footnote used on forty lines cost forty-one scans
-    // (review B4).
-    const simulatedScan = scanDocument(simulated);
-    const simulatedMasked = maskProtectedLines(simulated, simulatedScan);
+    // the note as the rename leaves it, read once for all the lines
+    // checked below (a footnote used on forty lines used to cost forty-one
+    // scans, review B4)
     const startsBefore = ctx.definitionStarts();
     const readingAfter = readNote(simulated);
+    const simulatedMasked = readingAfter.maskedLines();
     const startsAfter = readingAfter.labelLines;
     const labelLineSet = new Set(labelLines);
     for (const line of referenceLines) {

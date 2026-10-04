@@ -41,9 +41,16 @@ describe("fix-lazy's skip verdict is state-dependent and skipped labels are neve
         expect(fixLazyDefinitions(once)).toBe(once);
     });
 
-    it("the label whose blank line is safe in the FINAL state gets it in the FIRST run", () => {
+    // Corrected in step 2 of the runtime swap (2026-10-03): once [^37]
+    // gets its blank line, Obsidian reads "$$ tail" as a display math block
+    // (rule M2) inside the list item, and such a block runs on through the
+    // column-0 lines under it (rule B4), so "[^3]: b" is math text, not a
+    // lazy label, and there is nothing to fix there. The scanner read the
+    // "$$" lines as a closed pair and saw a lazy label. The run is still
+    // idempotent, which is what this pin is about.
+    it("the label inside the math block that \"$$ tail\" opens is left alone, in the first run as in the second", () => {
         const out = fixLazyDefinitions(doc);
-        expect(out).toContain("$$ tail\n\n[^3]: b");
+        expect(out).toContain("$$ tail\n[^3]: b");
     });
 
     it("control: the first run's other lazy label gets its blank; the label under a definition's lazy line needs none", () => {

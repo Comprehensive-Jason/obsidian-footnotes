@@ -27,7 +27,7 @@ import { definitionStartLines, maskProtectedLines, scanDocument } from "../../sr
 // item.
 
 describe("a fence inside a quoted list item", () => {
-    it.fails("ends at the quoted line under the item's margin after a blank quote line", () => {
+    it("ends at the quoted line under the item's margin after a blank quote line", () => {
         const lines = "> - item\n>\n>   ```\n>   code\n>\n> [^1]: x\n\nuse[^1]".split("\n");
         const scan = scanDocument(lines);
         const masked = maskProtectedLines(lines, scan);

@@ -1191,6 +1191,20 @@ describe("multi-caret press invariants over random documents", () => {
                     expect([...defsAfter].sort()).toEqual([...defsTyped].sort());
                     return;
                 }
+                // A typed name can make one of the two references dead text:
+                // "$" typed into "[^]$[^]5" pairs with the dollar between the
+                // two placeholders into inline math, which takes the second
+                // reference in (Obsidian's parser reads the "$" first; the
+                // note reading follows it since step 2 of the runtime swap,
+                // 2026-10-03). The second press then refuses, as for any
+                // reference that would be born dead, and edits nothing.
+                const liveTyped = readNote(typedLines).references.filter(
+                    (reference) => reference.live && reference.name.toLowerCase() === name.toLowerCase(),
+                ).length;
+                if (liveTyped < 2) {
+                    expect(doc2.lines).toEqual(typedLines);
+                    return;
+                }
                 // Where the definition would land is born dead to Obsidian (a
                 // "$$" last line under a paragraph opens a math block once a
                 // line follows it, rule M2), the press rightly refuses and
