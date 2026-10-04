@@ -110,6 +110,8 @@ interface ParseInput {
     toString(): string;
     message(): void;
     fail(error: Error): never;
+    /** Whether the text starts the note, so that frontmatter may open it (see parseObsidianMarkdown). */
+    startsNote: boolean;
 }
 
 type ParserConstructor = new (doc: string, file: ParseInput) => ParserTables & { parse(): MarkdownNode };
@@ -354,6 +356,8 @@ const Frontmatter = /^---\n(?:[^\n]*\n)*?---/;
  */
 function frontmatter(tables: ParserTables): void {
     tables.blockTokenizers.frontmatter = function (eat, value, silent) {
+        // a later part of a note, parsed on its own, holds no frontmatter (see parseObsidianMarkdown)
+        if (!this.file.startsNote) return undefined;
         const noteStart = this.file.toString().charCodeAt(0) === 0xfeff ? 1 : 0;
         if (eat.now().offset !== noteStart) return undefined;
         const match = Frontmatter.exec(value);
@@ -457,10 +461,26 @@ export function normalizeLineBreaks(text: string): string {
 }
 
 /**
+ * Where the note's frontmatter ends: the offset just past the three dashes
+ * of its closing line, or 0 when the note has none (rule D2, as the
+ * frontmatter reader above reads it). `doc` is the whole note, with its line
+ * breaks normalized.
+ */
+export function frontmatterEnd(doc: string): number {
+    const noteStart = doc.charCodeAt(0) === 0xfeff ? 1 : 0;
+    const match = Frontmatter.exec(doc.slice(noteStart));
+    return match ? noteStart + match[0].length : 0;
+}
+
+/**
  * Parses a note into its tree the way Obsidian reads it. Positions refer to
  * the note with its line breaks normalized to "\n" (normalizeLineBreaks).
+ *
+ * `startsNote` is false when `text` is a later part of a note, read on its
+ * own (the note reading parses a long note in parts, see note-reading.ts):
+ * frontmatter can only open the note itself, so a part never reads it.
  */
-export function parseObsidianMarkdown(text: string): MarkdownNode {
+export function parseObsidianMarkdown(text: string, startsNote = true): MarkdownNode {
     parserClass ??= buildParser();
     const doc = normalizeLineBreaks(text);
     const input: ParseInput = {
@@ -471,6 +491,7 @@ export function parseObsidianMarkdown(text: string): MarkdownNode {
         fail: (error) => {
             throw error;
         },
+        startsNote,
     };
     return new parserClass(doc, input).parse();
 }

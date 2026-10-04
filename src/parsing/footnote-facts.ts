@@ -6,9 +6,10 @@
 //
 // Lines and columns count from 0 here, as everywhere else in the plugin;
 // offsets are character indices into the note with its line breaks
-// normalized to "\n". Today the oracle and the referee suite read these
-// facts (scripts/oracle/reader-facts.ts, test/obsidian-referee.test.ts);
-// the plugin's commands still read the note with markdown-scan.ts.
+// normalized to "\n". The note reading (note-reading.ts) reads these facts
+// for the plugin's commands, part by part (partFacts); the oracle and the
+// referee suite read them for the whole note at once
+// (scripts/oracle/reader-facts.ts, test/obsidian-referee.test.ts).
 
 import { MarkdownNode, normalizeLineBreaks, parseObsidianMarkdown } from "./obsidian-markdown";
 
@@ -256,4 +257,37 @@ function factsOfTree(doc: string, tree: MarkdownNode): FootnoteFacts {
 export function footnoteFacts(text: string): FootnoteFacts {
     const doc = normalizeLineBreaks(text);
     return factsOfTree(doc, parseObsidianMarkdown(doc));
+}
+
+/**
+ * The footnote facts of one part of a note, read on its own, for the note
+ * reading, which parses a long note in parts (see note-reading.ts). `doc`
+ * is the part's text with its line breaks normalized, and its lines and
+ * offsets count from the part's own start.
+ *
+ * `startsNote` says whether the part is the start of the note: only there
+ * may frontmatter be read. `borrowsLine` says whether the part's last line
+ * is borrowed: not its own, but the first line of the part after it, added
+ * to show where this part ends. The part ends cleanly when the borrowed
+ * line starts a block of its own at the top level, the way it does in the
+ * whole note: then the facts of the lines before it are the whole note's
+ * facts for those lines, and they are returned. When the borrowed line is
+ * taken into something above it (a paragraph's lazy line, a list's next
+ * item, a code block or comment still open), the part does not end there,
+ * and the result is null.
+ */
+export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean): FootnoteFacts | null {
+    const tree = parseObsidianMarkdown(doc, startsNote);
+    const facts = factsOfTree(doc, tree);
+    if (!borrowsLine) return facts;
+    // where the borrowed line starts, as an offset and as a line
+    const last = doc.lastIndexOf("\n") + 1;
+    let lastLine = 0;
+    for (let i = doc.indexOf("\n"); i !== -1; i = doc.indexOf("\n", i + 1)) lastLine++;
+    if (!(tree.children ?? []).some((block) => block.position.start.offset === last)) return null;
+    return {
+        definitions: facts.definitions.filter((definition) => definition.start < lastLine),
+        references: facts.references.filter((reference) => reference.line < lastLine),
+        protectedSpans: facts.protectedSpans.filter((span) => span.startLine < lastLine),
+    };
 }

@@ -60,7 +60,8 @@
       "scripts/readme-gifs/*.js"
     ],
     "ignore": [
-      "vitest.stryker.config.mts"
+      "vitest.stryker.config.mts",
+      "scripts/oracle/generate.d.mts"
     ],
     "ignoreBinaries": [
       "Obsidian.com",
