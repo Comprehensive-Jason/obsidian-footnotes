@@ -131,6 +131,8 @@ export interface FootnoteFacts {
      * reads a line (see linesReadAlike in note-reading.ts).
      */
     lineBlocks: string[];
+    /** Every inline footnote "^[...]" that starts and ends on one line: its line, the column of its "^", and the column of its closing "]". */
+    inlineNotes: { line: number; open: number; close: number }[];
 }
 
 /** Node types that hold blocks; a child of one of these is a block itself, anything deeper is inline. */
@@ -205,6 +207,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
         protectedSpans.push({ kind, block, from, to, startLine: lineAt(from), endLine: lineAt(to) });
     };
     const lineBlocks: string[][] = lineStarts.map(() => []);
+    const inlineNotes: { line: number; open: number; close: number }[] = [];
 
     const walk = (node: MarkdownNode, parentType: string, inInlineNote: boolean, container: DefinitionContainer): void => {
         const block = BlockContainers.has(parentType);
@@ -242,6 +245,12 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
                 });
                 break;
             }
+            case "footnote":
+                // an inline footnote "^[...]"; one running over several lines is left out
+                if (node.position.start.line === node.position.end.line) {
+                    inlineNotes.push({ line: node.position.start.line - 1, open: node.position.start.column - 1, close: node.position.end.column - 2 });
+                }
+                break;
             case "footnoteReference":
                 references.push({ name: node.label ?? "", line: node.position.start.line - 1, start: node.position.start.column - 1, end: node.position.end.column - 1, live: !inInlineNote });
                 break;
@@ -321,7 +330,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
         for (const child of node.children ?? []) walk(child, node.type, inInlineNote || node.type === "footnote", inner);
     };
     walk(tree, "", false, { quotes: 0, listItems: 0, footnotes: 0 });
-    return { definitions, references, protectedSpans, blockSyntax, tableRows, lineBlocks: lineBlocks.map((kinds) => kinds.join(" ")) };
+    return { definitions, references, protectedSpans, blockSyntax, tableRows, lineBlocks: lineBlocks.map((kinds) => kinds.join(" ")), inlineNotes };
 }
 
 /** The footnote facts of a note, as Obsidian reads it. */
@@ -364,5 +373,6 @@ export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean
         blockSyntax: facts.blockSyntax.filter((syntax) => syntax.line < lastLine),
         tableRows: facts.tableRows.filter((line) => line < lastLine),
         lineBlocks: facts.lineBlocks.slice(0, lastLine),
+        inlineNotes: facts.inlineNotes.filter((note) => note.line < lastLine),
     };
 }

@@ -111,6 +111,34 @@ export function insideDefinition(ctx: DocContext, line: number): boolean {
 }
 
 /**
+ * A reference whose name holds a square bracket, which the reference
+ * patterns cannot see but Obsidian reads: "[^[]" is a reference to a
+ * footnote named "[" (the oracle asks about such names since 2026-10-03,
+ * commit 6f93a0c). With the caret inside one, the press must not plant a
+ * placeholder into it ("[^[[^]]"); found as the reference it is, the
+ * cascade says the name cannot work, as it does for a typed "]". Asked of
+ * the note reading only when the line holds a "[^" the patterns passed
+ * over (the runtime swap, step 2, 2026-10-03; until then the empty
+ * inline-footnote guard happened to catch "^[]" inside it).
+ */
+function bracketNamedReferenceAt(
+    lineText: string,
+    cursorPosition: EditorPosition,
+    doc: Editor,
+    ctx?: DocContext,
+): { target: ReferenceOccurrence; ctx: DocContext } | null {
+    if (!/\[\^[^\]]*\[|\[\^\]\]/.test(lineText)) return null;
+    ctx ??= docContext(doc);
+    const hit = ctx
+        .reading()
+        .references.find(
+            (reference) =>
+                reference.line === cursorPosition.line && cursorPosition.ch > reference.start && cursorPosition.ch < reference.end,
+        );
+    return hit === undefined ? null : { target: { name: hit.name, start: hit.start, end: hit.end }, ctx };
+}
+
+/**
  * The shared "is the caret on a LIVE reference?" lookup. Cascade steps 2–3
  * and the inline commands all begin with it; there were three
  * byte-identical copies of it before 2026-08-25.
@@ -145,7 +173,7 @@ export function referenceOccurrenceAtCursor(
     }));
     // Stryker disable next-line ConditionalExpression, BlockStatement, LogicalOperator: unit tests cannot cheaply tell the two branches apart, but this gate is NOT only about speed - masking can only ever make a "[^…]" match LONGER, because a NUL counts as a name character, so on a line like "[^a`]:`x]" the masked twin invents a phantom reference where the raw line correctly reads a definition label; the raw-line gate is what keeps that phantom out (hunt 2026-08-25, probe-error adjudication, micromark-verified)
     if (referenceAtCursor(rawReferences, cursorPosition.ch) === null) {
-        return null;
+        return bracketNamedReferenceAt(lineText, cursorPosition, doc, ctx);
     }
     ctx ??= docContext(doc);
     const target = occurrenceAtCursor(

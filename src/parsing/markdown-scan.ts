@@ -132,6 +132,18 @@ export function referenceLandingAfter(text: string, end: number, placement: Foot
             at = close + 1;
             continue;
         }
+        if (c === "]" && text[at + 1] === "[" && text[at + 2] !== "^") {
+            // a reference-style link's "[]" or "[ref]" tail, stepped over
+            // whole the same way: "[text][ref]" written as "[text][^1][ref]"
+            // is no link any more (hunt 2026-10-02, pin
+            // bug-landing-reference-style-link). A "[^" there is the next
+            // footnote's reference, which ends the walk as before.
+            const close = balancedBracketEnd(text, at + 1);
+            if (close !== -1) {
+                at = close + 1;
+                continue;
+            }
+        }
         if (!ClosingMarkChars.includes(c) && !punctuationAt(text, at)) return at;
         if (placement === "before" && punctuationAt(text, at)) {
             // "before": the run of punctuation from here is stepped over
@@ -178,6 +190,23 @@ function escapedAt(line: string, index: number): boolean {
     let backslashes = 0;
     for (let j = index - 1; j >= 0 && line[j] === "\\"; j--) backslashes++;
     return backslashes % 2 === 1;
+}
+
+/** The index of the "]" that closes the "[" at `open`, counting nested square brackets and skipping escaped ones, or -1. */
+function balancedBracketEnd(text: string, open: number): number {
+    let depth = 0;
+    for (let i = open; i < text.length; i++) {
+        if (text[i] === "\\") {
+            i++;
+            continue;
+        }
+        if (text[i] === "[") depth++;
+        else if (text[i] === "]") {
+            depth--;
+            if (depth === 0) return i;
+        }
+    }
+    return -1;
 }
 
 /** The index of the ")" that closes the "(" at `open`, counting nested round brackets, or -1. */
@@ -285,9 +314,18 @@ export function protectedLines(lines: string[]): boolean[] {
  * footnote section heading are the callers).
  */
 export function maskInlineRegions(line: string): string {
-    // a table needs its delimiter row; "| " in front, so the cell's text starts at column 2
-    const row = `| ${line} |`;
-    return readNote([row, "| --- |"]).maskedLine(0).slice(2, 2 + line.length);
+    return cellReading(line).maskedLine(0).slice(2, 2 + line.length);
+}
+
+/** The inline footnote in a table cell's text whose brackets hold column `ch`, read the same way (maskInlineRegions), or null. */
+export function inlineNoteInCell(text: string, ch: number): { open: number; close: number } | null {
+    const note = cellReading(text).inlineNoteAt(0, ch + 2);
+    return note === null ? null : { open: note.open - 2, close: note.close - 2 };
+}
+
+/** The reading of a cell's text as the one cell of a one-row table: a table needs its delimiter row, and "| " goes in front, so the text starts at column 2. */
+function cellReading(text: string) {
+    return readNote([`| ${text} |`, "| --- |"]);
 }
 
 /**

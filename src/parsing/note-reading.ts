@@ -114,6 +114,15 @@ export interface NoteReading {
     lineSpans(line: number): readonly string[];
     /** The live references on `line`, by name in lower case, in order. */
     lineReferences(line: number): readonly string[];
+    /**
+     * The inline footnote "^[...]" on `line` whose brackets hold column
+     * `ch` (from just after its "^" through its closing "]"), the innermost
+     * when one sits in another, or null. Obsidian matches an inline
+     * footnote's brackets before it reads the text inside them, and a
+     * bracket inside a code span does not count, so the reading, not a
+     * bracket count on the line, says where one is.
+     */
+    inlineNoteAt(line: number, ch: number): { open: number; close: number } | null;
 }
 
 /**
@@ -124,6 +133,22 @@ export interface NoteReading {
  * inline footnote).
  */
 export type LineEdit = "none" | "cut" | "rewrite";
+
+/**
+ * Whether `after` reads as many live references and as many definitions as
+ * `before`: a rename must leave every footnote a footnote. A name that
+ * gains a "$" (a footnote-prefix "a$") can pair with a dollar earlier on
+ * its line: "$6 [^ch-2]" is a price and a reference, "$6 [^a$ch-2]" is
+ * math to Obsidian, and the footnote is gone (found by the conservation
+ * property, the runtime swap step 2, 2026-10-03).
+ */
+export function keepsEveryFootnote(before: readonly string[], after: readonly string[]): boolean {
+    const count = (lines: readonly string[]) => {
+        const reading = readNote(lines);
+        return `${reading.references.filter((reference) => reference.live).length}:${reading.definitions.length}`;
+    };
+    return count(before) === count(after);
+}
 
 /** Whether every entry of `part` is in `whole`, as many times. */
 function within(part: readonly string[], whole: readonly string[]): boolean {
@@ -306,6 +331,7 @@ function addPart(into: FootnoteFacts, part: FootnoteFacts, lines: number, offset
     for (const syntax of part.blockSyntax) into.blockSyntax.push({ ...syntax, line: syntax.line + lines });
     for (const row of part.tableRows) into.tableRows.push(row + lines);
     for (const blocks of part.lineBlocks) into.lineBlocks.push(blocks);
+    for (const note of part.inlineNotes) into.inlineNotes.push({ ...note, line: note.line + lines });
 }
 
 /**
@@ -346,7 +372,7 @@ function notePartFacts(text: string, lines: readonly string[], reading: number):
     const frontmatter = frontmatterEnd(text);
     const afterFrontmatter = frontmatter === 0 ? 0 : text.slice(0, frontmatter).split("\n").length;
     const starts = partStarts(lines, afterFrontmatter);
-    const facts: FootnoteFacts = { definitions: [], references: [], protectedSpans: [], blockSyntax: [], tableRows: [], lineBlocks: [] };
+    const facts: FootnoteFacts = { definitions: [], references: [], protectedSpans: [], blockSyntax: [], tableRows: [], lineBlocks: [], inlineNotes: [] };
     let from = 0;
     // the first entry of `starts` after `from`
     let next = 0;
@@ -564,6 +590,14 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
                 for (const reference of facts.references) if (reference.live && reference.line < lineCount) referenceNames[reference.line].push(reference.name.toLowerCase());
             }
             return referenceNames[line] ?? [];
+        },
+        inlineNoteAt(line, ch) {
+            let found: { open: number; close: number } | null = null;
+            for (const note of facts.inlineNotes) {
+                if (note.line !== line || ch <= note.open || ch > note.close) continue;
+                if (found === null || note.open > found.open) found = { open: note.open, close: note.close };
+            }
+            return found;
         },
         regionOpenAt(line) {
             if (line < 0 || line >= lineCount) return false;

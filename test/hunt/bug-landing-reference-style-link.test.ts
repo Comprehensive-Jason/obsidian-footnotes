@@ -52,15 +52,15 @@ const pressAt = (line: string, word: string) => {
 };
 
 describe("a press on the last word of a reference-style link keeps the link", () => {
-    it.fails("collapsed link: the link still renders after the press", () => {
+    it("collapsed link: the link still renders after the press", () => {
         const out = pressAt("see [text][] now", "text");
-        // Today: "see [text][^1][] now", read as the text "see [text]" plus the footnote
+        // Before the fix: "see [text][^1][] now", read as the text "see [text]" plus the footnote
         expect(linkTexts(`${out}\n\n[text]: http://u\n[^1]: n`)).toContain("text");
     });
 
-    it.fails("full link: the link still renders after the press", () => {
+    it("full link: the link still renders after the press", () => {
         const out = pressAt("see [text][ref] now", "text");
-        // Today: "see [text][^1][ref] now", read as the text "see [text]", the
+        // Before the fix: "see [text][^1][ref] now", read as the text "see [text]", the
         // footnote, and a stray link reading "ref"
         expect(linkTexts(`${out}\n\n[ref]: http://u\n[^1]: n`)).toContain("text");
     });

@@ -42,15 +42,15 @@ function roundTrip(lines: string[]) {
 beforeEach(resetNotices);
 
 describe("a ']' inside a code span in a footnote's text", () => {
-    it.fails("normal to inline does not escape the ']' inside the code span", () => {
+    it("normal to inline does not escape the ']' inside the code span", () => {
         const out = convertNormalFootnotesToInline("x[^1]\n\n[^1]: use `a]b` here").markdown;
-        // Today: "x^[use `a\]b` here]".
+        // Before the fix: "x^[use `a\]b` here]".
         expect(out).toBe("x^[use `a]b` here]");
     });
 
-    it.fails("round trip: the code span comes back without a backslash in the code", () => {
+    it("round trip: the code span comes back without a backslash in the code", () => {
         const doc = roundTrip(["x[^1]", "", "[^1]: use `a]b` here"]);
-        // Today the definition comes back as "[^1]: use `a\]b` here".
+        // Before the fix the definition came back as "[^1]: use `a\]b` here".
         expect(doc.lines).toEqual(["x[^1]", "", "[^1]: use `a]b` here"]);
     });
 });

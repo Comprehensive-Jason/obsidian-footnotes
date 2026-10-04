@@ -15,7 +15,6 @@ import { planDefinitionAppend } from "./definition-append";
 import { contextOfLines, DocContext, docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
 import {
     bareInsertionVerdict,
-    inlineFootnoteSpanAt,
     readInlineFootnoteFromClipboard,
 } from "./inline-footnotes";
 import {
@@ -77,7 +76,9 @@ function caretArtifact(
 ): CaretArtifact {
     const lineText = doc.getLine(pos.line);
     const masked = ctx.maskedLine(pos.line);
-    const span = inlineFootnoteSpanAt(masked, pos.ch);
+    // the reading matches an inline footnote's brackets the way Obsidian
+    // does, a bracket in a code span not counted (hunt 2026-10-02, G1)
+    const span = ctx.reading().inlineNoteAt(pos.line, pos.ch);
     if (span !== null) {
         return {
             kind: "inline",

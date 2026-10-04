@@ -296,7 +296,14 @@ export function readsDifferently(before: string[], after: string[], touched: Lin
     for (let i = 0; i < before.length; i++) {
         if (!linesReadAlike(readingBefore, i, readingAfter, i, before[i] === after[i] ? "none" : touched)) return true;
     }
-    return false;
+    // Nor may an edited line become a lazy label, a line shaped like a
+    // definition that Obsidian reads as paragraph text: cutting "[^9]" out
+    // of "[^8][^9]: x" under a line of prose leaves "[^8]: x", which reads
+    // the same, but the next lint's fix for lazy labels would give it its
+    // blank line and make it a second definition of footnote 8, so lint
+    // twice would not be lint once (hunt 2026-10-02, cluster P4).
+    const lazyBefore = new Set(lazyDefinitionLabelLines(before));
+    return lazyDefinitionLabelLines(after).some((line) => before[line] !== after[line] && !lazyBefore.has(line));
 }
 
 /**

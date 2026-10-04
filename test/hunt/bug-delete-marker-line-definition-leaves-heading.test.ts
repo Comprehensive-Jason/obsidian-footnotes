@@ -25,6 +25,16 @@ import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 // Cause: the marker-line path ("trimmed") keeps the bullet and skips both
 // read-differently guards, so nothing notices the paragraph above has
 // changed kind.
+//
+// Open after step 2 of the runtime swap (2026-10-03), for a Reading-view
+// look: the guards now compare the note reading before and after, and
+// the reading (Obsidian's parser rebuilt, remark-parse 8) reads
+// "Notes:" over "- " as a paragraph and an EMPTY LIST ITEM, not a heading:
+// only a bare "-" with nothing after it underlines (it does read "Notes:"
+// over "-" as a heading). The deletion leaves "- " with its space, so the
+// guard sees no change and lets it through. If Reading view shows a
+// heading, the reader's list rule needs fixing; if it shows a paragraph
+// and an empty bullet, these expectations are the ones to change.
 
 // Deletes footnote `name` from `lines` and returns the note, or the plan's kind if nothing was deleted.
 function md(lines: string[], name: string): string {

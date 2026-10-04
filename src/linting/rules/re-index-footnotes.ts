@@ -1,7 +1,7 @@
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { referenceOccurrences, nameForBody } from "../../parsing/footnote-grammar";
 import { definitionCuts, removeLineRanges } from "../../parsing/markdown-scan";
-import { readNote } from "../../parsing/note-reading";
+import { keepsEveryFootnote, readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
 import { FootnoteRule } from "../rule";
@@ -294,11 +294,15 @@ function reindexOnce(
         // Names are matched without regard to case. Every name that is
         // changing is in the map, so no footnote can be renamed onto
         // another one's name.
-        const rewritten = lines.map((line, i) =>
+        const renamed = lines.map((line, i) =>
             protectedLines[i]
                 ? line
                 : rewriteFootnoteNames(line, maskedLines[i], (name) => renames.get(name.toLowerCase()) ?? null),
         );
+        // A rename that would turn a footnote into plain text (a "$"
+        // prefix pairing with an earlier dollar, keepsEveryFootnote) is
+        // left out, and the definitions are only put in order.
+        const rewritten = keepsEveryFootnote(lines, renamed) ? renamed : lines;
 
         // Swap the definition blocks between the places definitions already
         // sit, so that they read in appearance order. Only the definitions

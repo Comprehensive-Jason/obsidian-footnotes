@@ -66,7 +66,7 @@ describe("a bracket typed into the named-footnote placeholder", () => {
         expect(doc.lines[0]).toBe("note [^]]");
     });
 
-    it("'[' is caught by the empty-inline-footnote guard (contrast case)", async () => {
+    it("'[' is read as a reference named '[', whose name cannot work (contrast case)", async () => {
         const doc = sharedFakeEditor(["note "], {
             cursor: { line: 0, ch: 5 },
             edits: true,
@@ -75,8 +75,10 @@ describe("a bracket typed into the named-footnote placeholder", () => {
         const plugin = fakePlugin(doc);
         await plantAndType(doc, plugin, "[");
         await insertNamedFootnote(plugin);
-        // the fragment "[^[]" reads as an empty inline footnote, so SOME
-        // warning fires and nothing is created
+        // the fragment "[^[]" is a reference to a footnote named "[" to
+        // Obsidian (the note reading, since step 2 of the runtime swap,
+        // 2026-10-03; it used to pass for an empty inline footnote), so the
+        // press says the name cannot work and nothing is created
         expect(noticeCalls.length).toBeGreaterThan(0);
         expect(doc.lines[0]).toBe("note [^[]");
     });

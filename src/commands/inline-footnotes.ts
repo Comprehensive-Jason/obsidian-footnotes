@@ -4,7 +4,8 @@ import type FootnotePlugin from "../main";
 
 import { DocContext, docLines, insideDefinition } from "../editor/doc-context";
 import { InsertionVerdict } from "../editor/insertion-liveness";
-import { maskInlineRegions, maskedLineAt } from "../parsing/markdown-scan";
+import { inlineNoteInCell, maskInlineRegions } from "../parsing/markdown-scan";
+import { readNote } from "../parsing/note-reading";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
 import { showNotice } from "../editor/notice";
@@ -56,10 +57,14 @@ export async function readInlineFootnoteFromClipboard(
  * An inline footnote lives on one line, so any run of whitespace, newlines
  * included, becomes a single space, and the result is trimmed.
  *
- * Brackets that balance are left alone, so a pasted markdown link still
- * works. If any bracket does not balance, it would end the "^[...]" early
- * and corrupt the note, so every bare bracket is escaped instead. Brackets
- * that were already escaped as \[ and \] keep the meaning they had.
+ * When "^[text]" already reads as one whole inline footnote, the text is
+ * left as it is: brackets that balance, so a pasted markdown link still
+ * works, and a lone bracket inside a code span, which Obsidian does not
+ * count (a backslash there would show, since code keeps backslashes; hunt
+ * 2026-10-02, pin bug-convert-code-span-bracket-escaped). Otherwise a
+ * bracket would end the "^[...]" early and corrupt the note, so every bare
+ * bracket is escaped instead. Brackets that were already escaped as \[
+ * and \] keep the meaning they had.
  *
  * A trailing backslash left dangling would escape the wrapper's own closing
  * "]", so it is doubled into a literal backslash. Input that is empty, or
@@ -67,6 +72,14 @@ export async function readInlineFootnoteFromClipboard(
  */
 export function sanitizeInlineFootnoteContent(raw: string): string {
     let text = raw.replace(/\s+/g, " ").trim();
+    // an odd number of backslashes at the end leaves one of them escaping
+    // the wrapper's own closing "]". Double it, so it renders as a plain
+    // backslash instead.
+    const trailing = /\\*$/.exec(text);
+    if (trailing && trailing[0].length % 2 === 1) {
+        text += "\\";
+    }
+    if (wrapReadsWhole(text)) return text;
     let depth = 0;
     for (let i = 0; i < text.length; i++) {
         const c = text[i];
@@ -86,14 +99,14 @@ export function sanitizeInlineFootnoteContent(raw: string): string {
             m.length === 2 ? m : `\\${m}`,
         );
     }
-    // an odd number of backslashes at the end leaves one of them escaping
-    // the wrapper's own closing "]". Double it, so it renders as a plain
-    // backslash instead.
-    const trailing = /\\*$/.exec(text);
-    if (trailing && trailing[0].length % 2 === 1) {
-        text += "\\";
-    }
     return text;
+}
+
+/** Whether "^[text]" on a line of its own reads as one inline footnote from its "^" to its last "]", as the note reading finds it. */
+function wrapReadsWhole(text: string): boolean {
+    const wrap = `^[${text}]`;
+    const note = readNote([wrap]).inlineNoteAt(0, 1);
+    return note !== null && note.open === 0 && note.close === wrap.length - 1;
 }
 
 /**
@@ -203,16 +216,20 @@ export function warnEmptyInlineFootnoteIfInside(
 }
 
 /**
- * The inline-footnote span at the caret, worked out against MASKED text.
+ * The inline footnote at the caret, as the note reading finds it, with the
+ * masked line it sits on.
  *
  * A "^[…]"-shaped fragment inside a code fence, inline code, or a comment
  * is plain text, not an inline footnote. Treating it as one made every
  * command do nothing there except show a misleading toast (2026-08-11
- * review bug #7).
+ * review bug #7). And a bracket inside a code span neither opens nor
+ * closes one, while counting brackets on the raw line said it did, so a
+ * press inside "^[press the `[` key]" nested a reference into it (hunt
+ * 2026-10-02, cluster G1): the reading, which matches the brackets the
+ * way Obsidian does, decides.
  *
- * A cheap scan of the raw line comes first, to keep the whole-document
- * masking out of the path every press takes. Masking preserves positions,
- * so the span it reports is still valid against the raw line.
+ * A line with no "^[" at all is settled first, to keep the reading out of
+ * the path most presses take.
  */
 function maskedInlineFootnoteSpan(
     doc: Editor,
@@ -221,19 +238,16 @@ function maskedInlineFootnoteSpan(
 ): { text: string; open: number; close: number } | null {
     if (cell) {
         const raw = cell.state.doc.toString();
-        const ch = cellCaret(cell);
-        if (inlineFootnoteSpanAt(raw, ch) === null) return null;
-        // a cell's text is a single line, so masking that one line is enough
-        const masked = maskInlineRegions(raw);
-        const span = inlineFootnoteSpanAt(masked, ch);
-        return span === null ? null : { text: masked, ...span };
+        if (!raw.includes("^[")) return null;
+        // a cell's text is read as the one cell of a one-row table
+        const span = inlineNoteInCell(raw, cellCaret(cell));
+        return span === null ? null : { text: maskInlineRegions(raw), ...span };
     }
     const pos = cursorPosition ?? doc.getCursor();
-    const raw = doc.getLine(pos.line);
-    if (inlineFootnoteSpanAt(raw, pos.ch) === null) return null;
-    const masked = maskedLineAt(docLines(doc), pos.line);
-    const span = inlineFootnoteSpanAt(masked, pos.ch);
-    return span === null ? null : { text: masked, ...span };
+    if (!doc.getLine(pos.line).includes("^[")) return null;
+    const reading = readNote(docLines(doc));
+    const span = reading.inlineNoteAt(pos.line, pos.ch);
+    return span === null ? null : { text: reading.maskedLine(pos.line), ...span };
 }
 
 /**

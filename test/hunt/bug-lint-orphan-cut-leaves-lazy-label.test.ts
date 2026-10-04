@@ -32,17 +32,17 @@ import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove
 // refuse a cut.
 
 describe("an orphan cut that leaves a lazy label behind", () => {
-    it.fails("the rule alone does not manufacture a lazy label", () => {
+    it("the rule alone does not manufacture a lazy label", () => {
         const out = removeOrphanedFootnoteReferences("a[^8]\n\nprose\n[^8][^9]: x\n\n[^8]: d");
-        // Today: "prose\n[^8]: x" is left. Either refuse the cut, or leave a line that is not label-shaped.
+        // Before the fix: "prose\n[^8]: x" is left. Either refuse the cut, or leave a line that is not label-shaped.
         expect(out).not.toContain("prose\n[^8]: x");
     });
 
-    it.fails("lint is idempotent (placement none, Delete orphaned references on)", () => {
+    it("lint is idempotent (placement none, Delete orphaned references on)", () => {
         const doc = "a[^8] b[^7]\n\nprose line\n[^8][^9]: x\n\n[^8]: eight\n[^7]: seven";
         const options: LintOptions = { placement: "none", removeOrphanedReferences: true };
         const once = lintFootnotes(doc, options);
-        // Today lint 2 adds a blank line above the stray "[^1]: x", making it a second definition.
+        // Before the fix lint 2 added a blank line above the stray "[^1]: x", making it a second definition.
         expect(lintFootnotes(once, options)).toBe(once);
     });
 });

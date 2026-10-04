@@ -556,6 +556,13 @@ describe("creation-command invariants over random documents", () => {
                     typeText(doc, body);
                     const afterTyping = doc.lines.join("\n");
                     const caretAfterTyping = { ...doc.cursor };
+                    // A typed body can break the wrapper the way typing it
+                    // by hand would: a "|" typed into a table row splits the
+                    // cell, so "^[" and "]" land in different cells and
+                    // Obsidian reads no inline footnote there (the note
+                    // reading follows it since step 2 of the runtime swap,
+                    // 2026-10-03). The flow is not judged then.
+                    if (readNote(doc.lines).inlineNoteAt(caretAfterTyping.line, caretAfterTyping.ch) === null) return;
                     await insertInlineFootnote(plugin);
                     // the second press never edits - it hops (filled) or
                     // warns and stays (empty)
