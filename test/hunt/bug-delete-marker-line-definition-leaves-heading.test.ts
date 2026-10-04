@@ -26,15 +26,18 @@ import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 // read-differently guards, so nothing notices the paragraph above has
 // changed kind.
 //
-// Open after step 2 of the runtime swap (2026-10-03), for a Reading-view
-// look: the guards now compare the note reading before and after, and
-// the reading (Obsidian's parser rebuilt, remark-parse 8) reads
-// "Notes:" over "- " as a paragraph and an EMPTY LIST ITEM, not a heading:
-// only a bare "-" with nothing after it underlines (it does read "Notes:"
-// over "-" as a heading). The deletion leaves "- " with its space, so the
-// guard sees no change and lets it through. If Reading view shows a
-// heading, the reader's list rule needs fixing; if it shows a paragraph
-// and an empty bullet, these expectations are the ones to change.
+// SETTLED 2026-10-03 (the runtime swap, step 4), against the live app:
+// Obsidian reads "Notes:" over "- " as a paragraph and an EMPTY LIST ITEM,
+// not a heading (its sections for swap34:d5-bare-dash-space are a
+// paragraph on line 1 and a list on line 2, and for
+// swap34:d5-dash-space-then-item a paragraph and a two-item list; saved in
+// test/obsidian-answers/swap34-probes.json). Only a bare "-" with nothing
+// after it underlines: "Notes:" over "-" is a heading
+// (swap34:d5-bare-dash). micromark, the source of truth this pin was
+// written against, reads it differently from Obsidian. The deletion
+// leaves "- " with its space, so the paragraph stays a paragraph and the
+// bullet stays (Jason's ruling, db29b09), and these expectations now say
+// so; they used to expect the deletion to be refused or reworded.
 
 // Deletes footnote `name` from `lines` and returns the note, or the plan's kind if nothing was deleted.
 function md(lines: string[], name: string): string {
@@ -43,13 +46,13 @@ function md(lines: string[], name: string): string {
 }
 
 describe("emptying a marker-line definition right under a paragraph", () => {
-    it.fails("does not turn the paragraph into a heading", () => {
+    it("keeps the bullet, and the paragraph stays a paragraph over an empty list item", () => {
         const out = md(["Notes:", "- [^i]: defined in the list", "", "p[^i]"], "i");
-        expect(out).not.toBe("Notes:\n- \n\np");
+        expect(out).toBe("Notes:\n- \n\np");
     });
 
-    it.fails("the same under a paragraph followed by another item", () => {
+    it("the same under a paragraph followed by another item", () => {
         const out = md(["text", "- [^i]: first", "- other item", "", "p[^i]"], "i");
-        expect(out).not.toBe("text\n- \n- other item\n\np");
+        expect(out).toBe("text\n- \n- other item\n\np");
     });
 });

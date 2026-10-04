@@ -17,10 +17,15 @@ import { fakeEditor } from "../helpers/fake-editor";
 // footnote. It refuses only an ordinary space, a tab, and a line ending
 // inside a name, so a user who pasted such a name would see it work in
 // Reading view while the plugin ignores it.
-// Why it is a question and not a bug: Obsidian's own Reading view has not
-// been checked, and Obsidian's parser need not agree with micromark here.
-// A no-break space in a name is also rare and invisible, so refusing it
-// may be the kinder behaviour even if Obsidian accepts it.
+// Why it is a question and not a bug: a no-break space in a name is rare
+// and invisible, so refusing it may be the kinder behaviour even though
+// Obsidian accepts it. Obsidian does accept it: its parser and Reading
+// view read "[^a b]" with a no-break space, and with an ideographic space
+// (U+3000), as a working footnote (live answers swap34:name-nbsp and
+// swap34:name-ideographic-space, 2026-10-03, in
+// test/obsidian-answers/swap34-probes.json), as the note reading does
+// since the runtime swap. Creating or renaming to such a name is still
+// refused, and the invalid-name alert still names it, until Jason rules.
 //
 // Hunt 2026-10-02, round 3, lens gram-off. Cluster G8.
 //

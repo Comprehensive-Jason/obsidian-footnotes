@@ -116,8 +116,9 @@ describe("the inline pair NAVIGATES from inside a definition (ruling refined 202
     // Corrected 2026-10-03 (the runtime swap): "[^a`[`b]: c" is a
     // definition named "a`[`b" in the note reading, since remark-footnotes'
     // label reader runs to the first "]" and stops only at whitespace, the
-    // way rule E5 found Obsidian reads a reference's name. Not yet probed in
-    // Reading view for a definition. A press in its text is a press inside a
+    // way rule E5 found Obsidian reads a reference's name. Obsidian reads
+    // and renders it so (live answer swap34:name-bracket-code, with
+    // Reading view, 2026-10-03). A press in its text is a press inside a
     // definition, which nests nothing: no "^[]" is written.
     it("a name holding a bracket still names a definition: the press inside it writes nothing", async () => {
         const doc = fakeEditor(["[^a`[`b]: c"], { line: 0, ch: 10 });

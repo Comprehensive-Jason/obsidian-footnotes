@@ -67,9 +67,14 @@ const itemDoc = "text[^1]\n\n[^1]: def\n\npara\n\n- <div>\n  more html";
 // with a definition appended after a blank line (NoteReading.openRegionFrom),
 // and a "<div>" block at the end of a note no longer holds the
 // definitions back. An HTML block that a blank line does not end ("<pre>",
-// "<!--", and the other CommonMark types 1 to 5) still does. A live
-// Reading-view look at "> <div>" / "> more html" / "" / "[^1]: def" would
-// settle it for good (for Jason).
+// "<!--", and the other CommonMark types 1 to 5) still does. Settled
+// against the live app with Reading view on 2026-10-03 (the runtime swap,
+// step 4): after a blank line, "[^1]: def" is a definition under a quoted
+// "<div>" block, under one in a list item, and under one at the top level,
+// and Reading view renders it; under "<pre>" it is swallowed
+// (swap34:html-quoted-div-blank, swap34:html-item-div-blank,
+// swap34:html-div-blank-top, swap34:html-pre-blank-top in
+// test/obsidian-answers/swap34-probes.json).
 describe("a note that ends inside an HTML block opened inside a container", () => {
     it("a definition appended after a blank line is not swallowed by the quoted HTML block", () => {
         expect(scanDocument(quotedDoc.split("\n")).endsProtected).toBe(false);
