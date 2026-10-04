@@ -5,8 +5,6 @@ import {
     emptyReferenceStart,
     footnoteNameProblem,
     idListIncludes,
-    occurrenceAtCursor,
-    referenceOccurrences,
     referenceText,
 } from "../parsing/footnote-grammar";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
@@ -70,11 +68,9 @@ type CaretArtifact =
     | null;
 
 function caretArtifact(
-    doc: Editor,
     ctx: DocContext,
     pos: EditorPosition,
 ): CaretArtifact {
-    const lineText = doc.getLine(pos.line);
     const masked = ctx.maskedLine(pos.line);
     // the reading matches an inline footnote's brackets the way Obsidian
     // does, a bracket in a code span not counted (hunt 2026-10-02, G1)
@@ -86,13 +82,10 @@ function caretArtifact(
         };
     }
     if (emptyReferenceStart(masked, pos.ch) !== null) return { kind: "empty" };
-    // a lazy label's own "[^x]" counts as a reference (the definition-start
-    // flag says which labels are real), so a caret inside it is inside a
-    // reference, not on plain text (Kimi sweep 2026-09-13)
-    const occurrence = occurrenceAtCursor(
-        referenceOccurrences(lineText, masked, ctx.definitionStarts()[pos.line]),
-        pos.ch,
-    );
+    // a lazy label's own "[^x]" is a live reference to the reading, so a
+    // caret inside it is inside a reference, not on plain text (Kimi sweep
+    // 2026-09-13)
+    const occurrence = ctx.reading().referenceAt(pos.line, pos.ch);
     if (occurrence !== null) return { kind: "ref", name: occurrence.name };
     return null;
 }
@@ -237,7 +230,7 @@ function multiCaretTargets(
     if (ranges.some((range) => comparePositions(range.anchor, range.head) !== 0)) {
         return null;
     }
-    const artifacts = ranges.map((range) => caretArtifact(doc, ctx, range.head));
+    const artifacts = ranges.map((range) => caretArtifact(ctx, range.head));
     if (artifacts.every((artifact) => artifact !== null)) {
         return multiCaretContinuation(
             plugin,

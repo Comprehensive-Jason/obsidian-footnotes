@@ -1,0 +1,16 @@
+[
+{"id":"swap34:br-sic-defined","text":"see [sic][^1] now\n\n[^1]: n","defs":[["1",2,0,2]],"refs":[],"code":[]},
+{"id":"swap34:br-sic-undefined","text":"see [sic][^1] now","defs":[],"refs":[],"code":[]},
+{"id":"swap34:br-link-forms","text":"see [a][^1] and [b][c][^2] and [d][][^3]\n\n[c]: http://u\n[d]: http://v\n[^1]: one\n[^2]: two\n[^3]: three","defs":[["1",4,0,4],["2",5,0,5],["3",6,0,6]],"refs":[["2",0,22],["3",0,36]],"code":[]},
+{"id":"swap34:br-defined-label","text":"see [a][^1] now\n\n[a]: http://u\n[^1]: one","defs":[["1",3,0,3]],"refs":[],"code":[]},
+{"id":"swap34:html-quoted-div-blank","text":"text[^1]\n\npara\n\n> <div>\n> more html\n\n[^1]: def","defs":[["1",7,0,7]],"refs":[["1",0,4]],"code":[]},
+{"id":"swap34:html-item-div-blank","text":"text[^1]\n\npara\n\n- <div>\n  more html\n\n[^1]: def","defs":[["1",7,0,7]],"refs":[["1",0,4]],"code":[]},
+{"id":"swap34:html-div-blank-top","text":"text[^1]\n\n<div>\nmore html\n\n[^1]: def","defs":[["1",5,0,5]],"refs":[["1",0,4]],"code":[]},
+{"id":"swap34:html-pre-blank-top","text":"text[^1]\n\n<pre>\nmore html\n\n[^1]: def","defs":[],"refs":[["1",0,4]],"code":[]},
+{"id":"swap34:d5-bare-dash-space","text":"Notes:\n- \n\np[^i]\n\n[^i]: x","defs":[["i",5,0,5]],"refs":[["i",3,1]],"code":[]},
+{"id":"swap34:d5-bare-dash","text":"Notes:\n-\n\np[^i]\n\n[^i]: x","defs":[["i",5,0,5]],"refs":[["i",3,1]],"code":[]},
+{"id":"swap34:d5-dash-space-then-item","text":"text\n- \n- other item\n\np[^i]\n\n[^i]: x","defs":[["i",6,0,6]],"refs":[["i",4,1]],"code":[]},
+{"id":"swap34:name-bracket-code","text":"[^a`[`b]: c\n\nx[^a`[`b] y","defs":[["a`[`b",0,0,0]],"refs":[["a`[`b",2,1]],"code":[]},
+{"id":"swap34:name-nbsp","text":"x[^a b] y\n\n[^a b]: def","defs":[["a b",2,0,2]],"refs":[["a b",0,1]],"code":[]},
+{"id":"swap34:name-ideographic-space","text":"x[^a　b] y\n\n[^a　b]: def","defs":[["a　b",2,0,2]],"refs":[["a　b",0,1]],"code":[]}
+]

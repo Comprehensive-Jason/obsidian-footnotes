@@ -1,4 +1,3 @@
-import { referenceOccurrences } from "../../parsing/footnote-grammar";
 import { definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../../parsing/markdown-scan";
 import { Definition, linesReadAlike, readNote } from "../../parsing/note-reading";
 import { FootnoteRule } from "../rule";
@@ -40,26 +39,21 @@ interface ReferenceScan {
 }
 
 function scanReferences(lines: string[]): ReferenceScan {
-    // The masked twin is built with the whole note in view: a protected
-    // line is nothing but NUL characters, so it matches nothing, and on a
-    // line where a comment opens or closes, only the part inside the
-    // comment is blanked.
     const reading = readNote(lines);
-    const maskedLines = reading.maskedLines();
     const blocks = reading.definitions;
     const indexOf = new Map(blocks.map((block, i) => [block, i]));
 
-    // No definition label ever counts as a reference: a label defines a
-    // footnote, it does not point at one, and counting labels as references
-    // kept orphaned definitions alive. referenceOccurrences leaves a line's
-    // label out when the reading says the line holds one. A LAZY label's
-    // "[^x]" is a reference, because that is how it renders, and it does
-    // keep the definition it points at alive.
+    // The live references, as the note reading finds them. No definition
+    // label ever counts as a reference: a label defines a footnote, it does
+    // not point at one, and counting labels as references kept orphaned
+    // definitions alive. A LAZY label's "[^x]" is a reference, because
+    // that is how it renders, and it does keep the definition it points at
+    // alive.
     const liveRefs = new Map<string, number>();
     const blockRefs: string[][] = blocks.map(() => []);
     for (let i = 0; i < lines.length; i++) {
         const owner = reading.definitionAt(i);
-        for (const { name: raw } of referenceOccurrences(lines[i], maskedLines[i], reading.labelLines[i])) {
+        for (const { name: raw } of reading.referencesOn(i)) {
             const name = raw.toLowerCase();
             if (owner === null) {
                 liveRefs.set(name, (liveRefs.get(name) ?? 0) + 1);

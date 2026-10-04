@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import { PREFIXES } from "./helpers/prefixes";
 import { docArb } from "./arbitraries";
-import { inlineFootnoteSpanAt, sanitizeInlineFootnoteContent } from "../src/commands/inline-footnotes";
+import { sanitizeInlineFootnoteContent } from "../src/commands/inline-footnotes";
 import { endOfWordOffset } from "../src/editor/cursor-motion";
 import { definitionLabelWithName, footnoteReferenceMatches, referenceOccurrences } from "../src/parsing/footnote-grammar";
 import { lineDiffChanges, mapFoldLines } from "../src/editor/document-diff";
@@ -686,8 +686,9 @@ describe("editor helper invariants", () => {
                 const content = sanitizeInlineFootnoteContent(raw);
                 if (content === "") return;
                 const line = `^[${content}]`;
-                // the span must close exactly at the wrapper's own bracket
-                expect(inlineFootnoteSpanAt(line, 1)).toEqual({
+                // the inline footnote must close exactly at the wrapper's
+                // own bracket, as the note reading finds it
+                expect(readNote([line]).inlineNoteAt(0, 1)).toEqual({
                     open: 0,
                     close: line.length - 1,
                 });

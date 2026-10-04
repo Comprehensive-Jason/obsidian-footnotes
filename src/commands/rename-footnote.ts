@@ -2,12 +2,7 @@ import { Editor, EditorChange, EditorPosition, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { ValidatedTextModal } from "./validated-text-modal";
-import {
-    footnoteNameProblem,
-    occurrenceAtCursor,
-    quotedReference,
-    referenceOccurrences,
-} from "../parsing/footnote-grammar";
+import { footnoteNameProblem, quotedReference } from "../parsing/footnote-grammar";
 import { DocContext, docContext } from "../editor/doc-context";
 import { footnotePrefixFromEditor, footnotePrefixProblem } from "../parsing/footnote-prefix";
 import { simulateChanges } from "../editor/insertion-liveness";
@@ -43,24 +38,12 @@ export const RenameTargetNotice =
  *
  * It can come from a live reference (definition BODIES count too: a
  * reference sitting inside one can be renamed), or from the definition
- * label the caret sits inside. Like the navigation guards, this checks the
- * raw line first and only then confirms against the masked twin (the copy
- * of the note with protected text blanked out).
+ * label the caret sits inside. A lazy label (written directly under a line
+ * of prose) and a label inside a %% block comment both have a "[^x]" that
+ * Obsidian counts as a live reference, so both are rename targets through
+ * their reference (Jason's ruling A1, 2026-09-15, after Reading view
+ * showed a commented label giving its definition a second back-arrow).
  */
-/**
- * Whether a "[^x]:" at the start of this line is a label rather than a
- * reference: only a label that starts a definition is one. A lazy label
- * (written directly under a line of prose) and a label inside a %% block
- * comment both have a "[^x]" that Obsidian counts as a live reference,
- * so both are rename targets (Jason's ruling A1, 2026-09-15, after
- * Reading view showed a commented label giving its definition a second
- * back-arrow; this reverses the 2026-09-12 fix that called such a label
- * dead).
- */
-function labelCountsAsLabel(ctx: DocContext, line: number): boolean {
-    return ctx.definitionStarts()[line];
-}
-
 export function renameTargetAtCursor(
     doc: Editor,
     cursorPosition: EditorPosition,
@@ -68,14 +51,7 @@ export function renameTargetAtCursor(
 ): string | null {
     const lineText = doc.getLine(cursorPosition.line);
     if (!lineText.includes("[^")) return null;
-    const occurrence = occurrenceAtCursor(
-        referenceOccurrences(
-            lineText,
-            ctx.maskedLine(cursorPosition.line),
-            labelCountsAsLabel(ctx, cursorPosition.line),
-        ),
-        cursorPosition.ch,
-    );
+    const occurrence = ctx.reading().referenceAt(cursorPosition.line, cursorPosition.ch);
     if (occurrence !== null) return occurrence.name;
     // a definition's label on this line, at the left margin, in a quote, or
     // after a list marker: the caret anywhere before the end of its ":"
@@ -120,11 +96,7 @@ export function renameTargetInSelection(
     if (from.ch === to.ch) return renameTargetAtCursor(doc, from, ctx);
     const lineText = doc.getLine(from.line);
     if (!lineText.includes("[^")) return null;
-    for (const occurrence of referenceOccurrences(
-        lineText,
-        ctx.maskedLine(from.line),
-        labelCountsAsLabel(ctx, from.line),
-    )) {
+    for (const occurrence of ctx.reading().referencesOn(from.line)) {
         if (occurrence.start < to.ch && occurrence.end > from.ch) return occurrence.name;
     }
     const label = ctx.reading().labelOn(from.line);
@@ -214,7 +186,6 @@ export function planFootnoteRename(
     // A definition in a list item is renamed like any other (Jason's ruling
     // 1, option a, 2026-10-03; it used to be refused).
     const definitions = ctx.reading().definitions;
-    const starts = ctx.definitionStarts();
 
     // a collision means the new name already belongs to ANOTHER footnote,
     // whatever its casing. Changing only the casing of the SAME footnote is
@@ -222,27 +193,14 @@ export function planFootnoteRename(
     if (newFolded !== oldFolded) {
         const taken =
             definitions.some((definition) => definition.name.toLowerCase() === newFolded) ||
-            ctx.lines.some(
-                (lineText, line) =>
-                    lineText.includes("[^") &&
-                    referenceOccurrences(lineText, ctx.maskedLine(line), starts[line]).some(
-                        (occurrence) =>
-                            occurrence.name.toLowerCase() === newFolded,
-                    ),
-            );
+            ctx.lines.some((_, line) => ctx.reading().referencesOn(line).some((occurrence) => occurrence.name.toLowerCase() === newFolded));
         if (taken) return { kind: "collision" };
     }
 
     const changes: EditorChange[] = [];
     const referenceLines = new Set<number>();
     for (let line = 0; line < ctx.lines.length; line++) {
-        const lineText = ctx.lines[line];
-        if (!lineText.includes("[^")) continue;
-        for (const occurrence of referenceOccurrences(
-            lineText,
-            ctx.maskedLine(line),
-            starts[line],
-        )) {
+        for (const occurrence of ctx.reading().referencesOn(line)) {
             if (occurrence.name.toLowerCase() !== oldFolded) continue;
             changes.push({
                 from: { line, ch: occurrence.start + 2 },
@@ -316,13 +274,10 @@ function renameSurvives(
     // the note as the rename leaves it, read once for all the lines
     // checked below (a footnote used on forty lines used to cost forty-one
     // scans, review B4)
-    const startsBefore = ctx.definitionStarts();
     const readingAfter = readNote(simulated);
-    const simulatedMasked = readingAfter.maskedLines();
-    const startsAfter = readingAfter.labelLines;
     const labelLineSet = new Set(labelLines);
     for (const line of referenceLines) {
-        const before = referenceOccurrences(ctx.lines[line], ctx.maskedLine(line), startsBefore[line]);
+        const before = ctx.reading().referencesOn(line);
         const expected: { start: number; name: string }[] = [];
         // On the definition's own label line, the label is renamed too and
         // sits before every reference in the body, so the references
@@ -342,7 +297,7 @@ function renameSurvives(
             });
             if (renamed) shift += newName.length - occurrence.name.length;
         }
-        const after = referenceOccurrences(simulated[line], simulatedMasked[line], startsAfter[line]);
+        const after = readingAfter.referencesOn(line);
         if (after.length !== expected.length) return false;
         for (let i = 0; i < expected.length; i++) {
             if (

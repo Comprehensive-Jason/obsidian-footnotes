@@ -1,13 +1,7 @@
 import { Editor, EditorPosition } from "obsidian";
 
-import { NoteReading, readNote } from "../parsing/note-reading";
-import {
-    footnoteReferenceMatches,
-    occurrenceAtCursor,
-    referenceAtCursor,
-    ReferenceOccurrence,
-    referenceOccurrences,
-} from "../parsing/footnote-grammar";
+import { NoteReading, readNote, ReferenceOccurrence } from "../parsing/note-reading";
+import { footnoteNameProblem, referenceShapes } from "../parsing/footnote-grammar";
 
 // One press's shared, read-only view of the document. It depends on nothing
 // but the parsing modules and Obsidian's own types. Split out of the
@@ -111,49 +105,24 @@ export function insideDefinition(ctx: DocContext, line: number): boolean {
 }
 
 /**
- * A reference whose name holds a square bracket, which the reference
- * patterns cannot see but Obsidian reads: "[^[]" is a reference to a
- * footnote named "[" (the oracle asks about such names since 2026-10-03,
- * commit 6f93a0c). With the caret inside one, the press must not plant a
- * placeholder into it ("[^[[^]]"); found as the reference it is, the
- * cascade says the name cannot work, as it does for a typed "]". Asked of
- * the note reading only when the line holds a "[^" the patterns passed
- * over (the runtime swap, step 2, 2026-10-03; until then the empty
- * inline-footnote guard happened to catch "^[]" inside it).
- */
-function bracketNamedReferenceAt(
-    lineText: string,
-    cursorPosition: EditorPosition,
-    doc: Editor,
-    ctx?: DocContext,
-): { target: ReferenceOccurrence; ctx: DocContext } | null {
-    if (!/\[\^[^\]]*\[|\[\^\]\]/.test(lineText)) return null;
-    ctx ??= docContext(doc);
-    const hit = ctx
-        .reading()
-        .references.find(
-            (reference) =>
-                reference.line === cursorPosition.line && cursorPosition.ch > reference.start && cursorPosition.ch < reference.end,
-        );
-    return hit === undefined ? null : { target: { name: hit.name, start: hit.start, end: hit.end }, ctx };
-}
-
-/**
- * The shared "is the caret on a LIVE reference?" lookup. Cascade steps 2–3
+ * The shared "is the caret on a reference?" lookup. Cascade steps 2 and 3
  * and the inline commands all begin with it; there were three
  * byte-identical copies of it before 2026-08-25.
  *
- * The RAW line is checked first, as a cheap gate: this runs on every press,
- * masking needs the whole document, and most presses sit on plain text
- * anyway (performance item F1). Only past that gate is the DocContext built
- * and the masked twin consulted, because a "[^x]" inside a code fence or
- * inline code is plain text and the press should fall through to insertion
- * (#41). referenceOccurrences re-slices each name from the raw line, so a
- * code span inside a name cannot leak NULs into it
- * (bug-masked-name-identity).
+ * The note reading says which references are live and where (the runtime
+ * swap, step 3, 2026-10-03): a "[^x]" inside code, inside an inline
+ * footnote, or in a link's label is plain text, so the press falls through
+ * to creation (#41), and a lazy label's "[^x]" is a live reference. The
+ * name is the one written in the note, casing and all.
+ *
+ * One more thing counts: text shaped like a reference whose name cannot
+ * work, such as "[^my note]". Obsidian reads it as plain text, so the
+ * reading holds no reference there, but the user plainly meant one, and
+ * the cascade says why the name cannot work rather than writing a new
+ * footnote into its brackets.
  *
  * It returns the occurrence together with the context that judged it. Pass
- * that ctx onward, so the press keeps to its one-scan budget.
+ * that ctx onward, so the press reads the note once.
  */
 export function referenceOccurrenceAtCursor(
     lineText: string,
@@ -161,28 +130,17 @@ export function referenceOccurrenceAtCursor(
     doc: Editor,
     ctx?: DocContext,
 ): { target: ReferenceOccurrence; ctx: DocContext } | null {
-    // The gate asks only whether reference-shaped text sits at the caret,
-    // so a label-shaped start of the line counts here too: whether it is a
-    // definition's label or a lazy label's live reference is decided past
-    // the gate, against the document's definition starts (Claude sweep
-    // 2026-09-13: a column-0 lazy label never got that far, and a press
-    // inside it fell through to creation)
-    const rawReferences = footnoteReferenceMatches(lineText, false).map((match) => ({
-        footnote: match[0],
-        startIndex: match.index ?? 0,
-    }));
-    // Stryker disable next-line ConditionalExpression, BlockStatement, LogicalOperator: unit tests cannot cheaply tell the two branches apart, but this gate is NOT only about speed - masking can only ever make a "[^…]" match LONGER, because a NUL counts as a name character, so on a line like "[^a`]:`x]" the masked twin invents a phantom reference where the raw line correctly reads a definition label; the raw-line gate is what keeps that phantom out (hunt 2026-08-25, probe-error adjudication, micromark-verified)
-    if (referenceAtCursor(rawReferences, cursorPosition.ch) === null) {
-        return bracketNamedReferenceAt(lineText, cursorPosition, doc, ctx);
-    }
+    // a line with no "[^" holds no reference: most presses sit on such a
+    // line, and this keeps the reading out of their path (performance item
+    // F1)
+    if (!lineText.includes("[^")) return null;
     ctx ??= docContext(doc);
-    const target = occurrenceAtCursor(
-        referenceOccurrences(
-            lineText,
-            ctx.maskedLine(cursorPosition.line),
-            ctx.definitionStarts()[cursorPosition.line],
-        ),
-        cursorPosition.ch,
-    );
+    const { line, ch } = cursorPosition;
+    const target =
+        ctx.reading().referenceAt(line, ch) ??
+        referenceShapes(lineText, ctx.maskedLine(line)).find(
+            (shape) => ch > shape.start && ch < shape.end && footnoteNameProblem(shape.name) !== null,
+        ) ??
+        null;
     return target === null ? null : { target, ctx };
 }

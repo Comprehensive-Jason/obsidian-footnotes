@@ -1,6 +1,6 @@
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
-import { computeNextFootnoteNumber, referenceOccurrences } from "../../parsing/footnote-grammar";
-import { keepsEveryFootnote, readNote } from "../../parsing/note-reading";
+import { computeNextFootnoteNumber } from "../../parsing/footnote-grammar";
+import { keepsEveryFootnote } from "../../parsing/note-reading";
 
 import { rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
@@ -44,12 +44,11 @@ export function applyFootnotePrefix(markdown: string, prefix: string): string {
     if (!prefix || footnotePrefixProblem(prefix) !== null) return markdown;
     const prefixFolded = prefix.toLowerCase();
 
-    // The masked twin (the copy of the note with protected text blanked
-    // out) is built with the whole note in view, not line by line. That
-    // matters on a line where a comment starts or ends: the part inside the
-    // comment is blanked, the part outside it stays live.
-    return rewriteDocument(markdown, (text, { lines, maskedLines, definitions, definitionStarts }) => {
-        const isProtected = readNote(lines).protectedLines;
+    // The note reading says which references are live and where, read with
+    // the whole note in view: on a line where a code span or a comment
+    // starts or ends, a reference outside it is live and one inside it is
+    // plain text.
+    return rewriteDocument(markdown, (text, { lines, reading, definitions }) => {
 
         // One walk over the note collects two things at once.
         //
@@ -72,14 +71,7 @@ export function applyFootnotePrefix(markdown: string, prefix: string): string {
             }
         };
         for (let i = 0; i < lines.length; i++) {
-            if (isProtected[i]) continue;
-            // referenceOccurrences finds each reference against the masked
-            // twin but cuts the name out of the raw line. That matters
-            // because the rewrite below compares the names as the user
-            // typed them (bug-masked-name-identity).
-            for (const { name } of referenceOccurrences(lines[i], maskedLines[i], definitionStarts[i])) {
-                record(name);
-            }
+            for (const { name } of reading.referencesOn(i)) record(name);
         }
         // then the definitions, in the order they appear, wherever each
         // sits. Skipping the ones inside a blockquote or callout once let a
@@ -91,13 +83,8 @@ export function applyFootnotePrefix(markdown: string, prefix: string): string {
         for (const { name } of definitions) record(name);
 
         // Plain numbers carry on from after the highest-numbered footnote
-        // that already carries the prefix. The masked twin is already built,
-        // so it is passed in rather than made a second time (speed fix F1).
-        let nextNumber = computeNextFootnoteNumber(
-            text,
-            prefix,
-            maskedLines.join("\n"),
-        );
+        // that already carries the prefix.
+        let nextNumber = computeNextFootnoteNumber(reading, prefix);
         const numberedRenames = new Map<string, string>();
         for (const name of order) {
             numberedRenames.set(name, `${prefix}${nextNumber++}`);
@@ -118,9 +105,7 @@ export function applyFootnotePrefix(markdown: string, prefix: string): string {
             return `${prefix}${id}`;
         };
 
-        const rewritten = lines.map((line, i) =>
-            isProtected[i] ? line : rewriteFootnoteNames(line, maskedLines[i], renameFor),
-        );
+        const rewritten = lines.map((line, i) => rewriteFootnoteNames(reading, i, line, renameFor));
         // a rename that would turn a footnote into plain text (a "$" prefix
         // pairing with an earlier dollar) leaves the note as it was
         if (!keepsEveryFootnote(lines, rewritten)) return text;

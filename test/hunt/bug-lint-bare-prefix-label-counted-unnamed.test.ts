@@ -23,16 +23,19 @@ import { countEmptyFootnoteReferences } from "../../src/linting/lint-alerts";
 //
 // Cause: countEmptyFootnoteReferences counts every "[^]" and bare-prefix
 // match in the masked text and never asks which lines start a definition.
+//
+// Fixed 2026-10-03 (the runtime swap, step 3): the bare prefix is counted
+// among the live references the note reading finds, and a label is none.
 
 const FRONTMATTER = "---\nfootnote-prefix: 3.\n---\n";
 
 describe("the unnamed-reference count and a bare-prefix definition label", () => {
-    it.fails("one bare-prefix reference and its definition are ONE unnamed reference", () => {
+    it("one bare-prefix reference and its definition are ONE unnamed reference", () => {
         // Today: 2.
         expect(countEmptyFootnoteReferences(`${FRONTMATTER}x[^3.]\n\n[^3.]: body\n`, "3.")).toBe(1);
     });
 
-    it.fails("a bare-prefix definition with no reference is not an unnamed reference", () => {
+    it("a bare-prefix definition with no reference is not an unnamed reference", () => {
         // Today: 1.
         expect(countEmptyFootnoteReferences(`${FRONTMATTER}x\n\n[^3.]: body\n`, "3.")).toBe(0);
     });

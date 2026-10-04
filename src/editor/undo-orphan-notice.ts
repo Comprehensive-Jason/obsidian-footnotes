@@ -1,7 +1,7 @@
 import { EditorView, ViewUpdate } from "@codemirror/view";
 import { Notice } from "obsidian";
 
-import { quotedReference, referenceOccurrences } from "../parsing/footnote-grammar";
+import { quotedReference } from "../parsing/footnote-grammar";
 import { readNote } from "../parsing/note-reading";
 
 import { showNotice } from "./notice";
@@ -78,15 +78,11 @@ export function stillOrphanedNames(text: string, names: string[]): string[] {
  */
 function namesIn(lines: string[]): { defined: Map<string, string>; referenced: Set<string> } {
     const reading = readNote(lines);
-    const masked = reading.maskedLines();
-    const starts = reading.labelLines;
     const defined = new Map<string, string>();
     for (const definition of reading.definitions) defined.set(definition.name.toLowerCase(), definition.name);
     const referenced = new Set<string>();
     for (let i = 0; i < lines.length; i++) {
-        for (const occurrence of referenceOccurrences(lines[i], masked[i], starts[i])) {
-            referenced.add(occurrence.name.toLowerCase());
-        }
+        for (const occurrence of reading.referencesOn(i)) referenced.add(occurrence.name.toLowerCase());
     }
     return { defined, referenced };
 }

@@ -2,7 +2,6 @@ import {
     definitionLabelWithName,
     quotedDefinitionLabel,
     quotedReference,
-    referenceOccurrences,
 } from "../parsing/footnote-grammar";
 import {
     definitionCuts,
@@ -67,8 +66,6 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");
     const reading = readNote(lines);
-    const masked = reading.maskedLines();
-    const starts = reading.labelLines;
 
     // Every definition of the name goes, wherever it sits: at the top
     // level, in a blockquote or callout with the quoted continuation
@@ -98,7 +95,7 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     // alone, the underlined line together with its underline, which has
     // no business staying behind under the line above.
     const labelOf = (i: number): boolean =>
-        definitionLabelWithName(lines[i], masked[i])?.name.toLowerCase() === folded;
+        definitionLabelWithName(lines[i], reading.maskedLine(i))?.name.toLowerCase() === folded;
     for (const i of lazyDefinitionLabelLines(lines)) {
         if (labelOf(i)) {
             blocks.push({ start: i, end: i });
@@ -122,10 +119,11 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     let references = 0;
     const cutLines = definitionCut.lines.map((line, i) => {
         // a label line trimmed back to its list marker is done with
-        if (reading.protectedLines[i] || cut.has(i) || line !== lines[i]) return line;
+        if (cut.has(i) || line !== lines[i]) return line;
         // rightmost first, so that cutting one keeps the offsets of the
         // ones before it
-        const hits = referenceOccurrences(line, masked[i], starts[i])
+        const hits = reading
+            .referencesOn(i)
             .filter((occurrence) => occurrence.name.toLowerCase() === folded)
             .reverse();
         references += hits.length;

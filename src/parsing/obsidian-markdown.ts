@@ -191,7 +191,23 @@ function percentComments(tables: ParserTables): void {
         const close = openerEnd === value.length ? -1 : value.indexOf("%%", openerEnd);
         const innerEnd = close === -1 ? value.length : close;
         const children = this.tokenizeInline(value.slice(start + 2, innerEnd), along(eat.now(), start + 2));
-        return eat(value.slice(0, close === -1 ? value.length : close + 2))({ type: "percentComment", block: true, children });
+        const comment = eat(value.slice(0, close === -1 ? value.length : close + 2))({ type: "percentComment", block: true, children });
+        if (close !== -1 && value.slice(close + 2, lineEnd(value, close)).trim() !== "") {
+            // Text after the closer on its line is read as a block of its
+            // own, starting just past the "%%". remark-parse places the text
+            // inside a footnote definition by its table of how many
+            // characters each line's containers took, and that table did not
+            // know the "%%" was there, so in "%% [^a]: sees [^b]" the [^b]
+            // was placed two columns early (the metadata cache places it
+            // there too). The plugin edits the note by these columns since
+            // step 3 of the runtime swap (2026-10-03), so the table is told,
+            // as the callout reader tells it of a title's marker. It is told
+            // only now: the comment's own text and its end are placed
+            // without the closer counted.
+            const line = comment.position.end.line;
+            this.offset[line] = (this.offset[line] ?? 0) + close + 2 - (value.lastIndexOf("\n", close) + 1);
+        }
+        return comment;
     };
     const inline: Tokenizer = function (eat, value, silent) {
         if (!value.startsWith("%%")) return undefined;

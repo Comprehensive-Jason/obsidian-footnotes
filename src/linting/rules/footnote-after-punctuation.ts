@@ -1,5 +1,5 @@
-import { inlineFootnoteSpans, referenceOccurrences } from "../../parsing/footnote-grammar";
 import { ClosingMarkChars, definitionLabelIn, FootnotePlacement, punctuationAt, referenceLandingAfter } from "../../parsing/markdown-scan";
+import { NoteReading } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
@@ -22,49 +22,50 @@ interface MovableUnit {
     reference: boolean;
 }
 
-// Swap each run of references and inline footnotes with the run of
-// punctuation after it, within one stretch of a line.
+// The references and inline footnotes on line `i` from column `from` on,
+// as the note reading finds them, with their columns counted from `from`.
 //
-// The references come from referenceOccurrences, so everything the shared
-// grammar refuses to count as a reference is refused here too: an escaped
-// "\[^1]" is literal prose, and the brackets of an "^[...]" inline footnote
-// belong to that footnote. This file used to find them with a regular
-// expression of its own, which swapped those shapes as well and so turned
+// The reading says which references are live, so everything Obsidian does
+// not read as a reference stays where it is: an escaped "\[^1]" is literal
+// prose, a name holding a space is prose too (Claude sweep 2026-09-13),
+// and a reference-shaped string inside an inline footnote's body belongs
+// to that body (rule E3; footnotes never nest, ADR 1), so it moves with the
+// footnote, not on its own. This file once found references with a regular
+// expression of its own, which swapped such shapes as well and so turned
 // text the user had typed on purpose into a live reference (2026-08-11
 // review, bug #1).
 //
 // An inline footnote moves too, as ONE unit, its whole "^[...]" span with
 // the body untouched (N1 of the 2026-09 feature round; Jason, 2026-09-19:
 // the exclusion was never intended, and inline and normal footnotes should
-// place the same way). The span comes from the grammar's inline scanner,
-// never from treating the footnote's brackets as a reference, which is
-// exactly what bug #1 was. A body that runs onto the next line never
-// closes on this line, so it is not a unit and stays where it is.
+// place the same way). A body that runs onto the next line never closes on
+// this line, so it is not a unit and stays where it is.
+function movableUnits(reading: NoteReading, i: number, from: number): MovableUnit[] {
+    const references = reading
+        .referencesOn(i)
+        .filter((reference) => reference.start >= from)
+        .map((reference) => ({ start: reference.start - from, end: reference.end - from, reference: true }));
+    const notes = reading
+        .inlineNotesOn(i)
+        .filter((note) => note.open >= from)
+        .map((note) => ({ start: note.open - from, end: note.close + 1 - from, reference: false }));
+    return [...references, ...notes].sort((a, b) => a.start - b.start);
+}
+
+// Swap each run of `units` (see movableUnits) with the run of punctuation
+// after it, within one stretch of a line.
 //
-// The searching is done on the masked twin, but the text handed back is
-// built from the original line. Otherwise a footnote name could come out
-// with the blanking characters in it.
+// The punctuation is looked for on the masked twin, but the text handed
+// back is built from the original line. Otherwise a footnote name could
+// come out with the blanking characters in it.
 function swapInSegment(
     original: string,
     masked: string,
+    units: readonly MovableUnit[],
     insideBody = false,
     mayBeLabel = true,
     placement: FootnotePlacement = "after",
 ): string {
-    const spans: MovableUnit[] = inlineFootnoteSpans(masked).map((span) => ({
-        start: span.open,
-        end: span.close + 1,
-        reference: false,
-    }));
-    // a name holding whitespace is prose to Obsidian, not a reference to
-    // move (Claude sweep 2026-09-13); and a reference-shaped string inside
-    // an inline footnote's body belongs to that body (footnotes never nest,
-    // ADR 1), so it moves with the footnote, not on its own
-    const references: MovableUnit[] = referenceOccurrences(original, masked, false)
-        .filter((occurrence) => !/\s/.test(occurrence.name))
-        .filter((occurrence) => !spans.some((span) => occurrence.start >= span.start && occurrence.end <= span.end))
-        .map((occurrence) => ({ start: occurrence.start, end: occurrence.end, reference: true }));
-    const units = [...references, ...spans].sort((a, b) => a.start - b.start);
     let out = "";
     let copied = 0;
     let k = 0;
@@ -194,6 +195,7 @@ export function footnoteAfterPunctuation(markdown: string, placement: FootnotePl
                 swapInSegment(
                     line.slice(prefixLength),
                     masked.slice(prefixLength),
+                    movableUnits(reading, i, prefixLength),
                     prefixLength > bom,
                     i === 0 || lines[i - 1].trim() === "",
                     placement,

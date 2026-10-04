@@ -1,4 +1,4 @@
-import { Definition, readNote } from "./note-reading";
+import { Definition, NoteReading, readNote } from "./note-reading";
 // The basic scanning pieces that the whole-document footnote transforms
 // share: reindex, move-to-bottom, and after-punctuation. Nothing in this
 // file touches an Editor. Lines go in, facts about them come out.
@@ -323,8 +323,11 @@ export function inlineNoteInCell(text: string, ch: number): { open: number; clos
     return note === null ? null : { open: note.open - 2, close: note.close - 2 };
 }
 
-/** The reading of a cell's text as the one cell of a one-row table: a table needs its delimiter row, and "| " goes in front, so the text starts at column 2. */
-function cellReading(text: string) {
+/** Where a table cell's text starts on line 0 of its cellReading: after the "| " in front of it. */
+export const CellTextColumn = 2;
+
+/** The reading of a cell's text as the one cell of a one-row table: a table needs its delimiter row, and "| " goes in front, so the text starts at column 2 of line 0 (CellTextColumn). */
+export function cellReading(text: string): NoteReading {
     return readNote([`| ${text} |`, "| --- |"]);
 }
 

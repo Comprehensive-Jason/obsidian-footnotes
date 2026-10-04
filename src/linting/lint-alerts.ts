@@ -1,6 +1,6 @@
 import type FootnotePlugin from "../main";
 import { footnotePrefix, footnotePrefixProblem } from "../parsing/footnote-prefix";
-import { definitionLabelWithName, maskProtectedLines, normalizeEol } from "../parsing/markdown-scan";
+import { definitionLabelWithName, normalizeEol } from "../parsing/markdown-scan";
 import { readNote } from "../parsing/note-reading";
 import {
     escapedAt,
@@ -8,10 +8,9 @@ import {
     InvalidNameCharacters,
     quotedDefinitionLabel,
     quotedReference,
-    referenceOccurrences,
+    referenceShapes,
     referenceText,
 } from "../parsing/footnote-grammar";
-import { inlineFootnoteSpanAt } from "../parsing/footnote-grammar";
 import { duplicateFootnoteDefinitionNames, mergeDuplicateFootnoteDefinitions } from "./rules/merge-duplicate-definitions";
 import {
     orphanedFootnoteDefinitionNames,
@@ -48,54 +47,40 @@ import { addReferenceOrDeleteDefinition, showNotice } from "../editor/notice";
  * prefix is impossible to tell from a name somebody chose. So the lint says
  * so instead, and the user should name or delete the fragment.
  */
-export function countEmptyFootnoteReferences(
-    markdown: string,
-    prefix = "",
-    // The alerts all share ONE pass of normalizing the line endings and
-    // building the masked twin, done once and handed round (2026-08-11
-    // review, a speed fix). Anything calling this on its own leaves it out.
-    masked?: readonly string[],
-): number {
+export function countEmptyFootnoteReferences(markdown: string, prefix = ""): number {
     // Obsidian matches footnote names without regard to case, and so does
     // every other prefix comparison in the plugin, so "[^P.]" under the
-    // prefix "p." is the placeholder too. The search folds case whenever a
-    // prefix is in play (Kimi sweep 2026-09-13); "[^]" has no letters to
-    // fold.
-    const fold = (text: string) => (prefix ? text.toLowerCase() : text);
-    const needles = prefix ? ["[^]", fold(referenceText(prefix))] : ["[^]"];
-    // Masking can only ever take these strings away, never add one, so if
-    // the raw text does not contain them at all, neither will the masked
-    // twin. This runs on every single lint and most notes have no "[^]" in
-    // them, so bailing out here skips building the masked twin for the
-    // whole note (speed fix F4).
-    const haystack = fold(markdown);
-    if (!needles.some((needle) => haystack.includes(needle))) return 0;
+    // prefix "p." is the placeholder too (Kimi sweep 2026-09-13).
+    const folded = prefix.toLowerCase();
+    // This runs on every single lint and most notes have neither shape in
+    // them, so a note without one is settled before it is read (speed fix
+    // F4).
+    const haystack = markdown.toLowerCase();
+    if (!haystack.includes("[^]") && (prefix === "" || !haystack.includes(referenceText(folded)))) return 0;
+    const lines = normalizeEol(markdown).text.split("\n");
+    const reading = readNote(lines);
     let count = 0;
-    const lines =
-        masked ?? maskProtectedLines(normalizeEol(markdown).text.split("\n"));
-    for (const raw of lines) {
-        const line = fold(raw);
-        for (const needle of needles) {
-            for (
-                let i = 0;
-                (i = line.indexOf(needle, i)) !== -1;
-                i += needle.length
-            ) {
-                // a backslash in front of the "[" makes it literal text,
-                // as everywhere else in the plugin: "\[^]" is prose about
-                // footnote syntax, not an abandoned placeholder (Kimi hunt
-                // cycle 1, 2026-09-16; renders literally in Reading view)
-                if (escapedAt(raw, i)) continue;
-                // "^[^]" is an inline footnote whose body is a caret, and
-                // a "[^]" inside a longer inline footnote's body is that
-                // body's literal text: Reading view renders both as inline
-                // footnotes (Kimi hunt cycle 4, probed 2026-09-16), so
-                // neither is a placeholder the user abandoned
-                if (i > 0 && raw[i - 1] === "^" && !escapedAt(raw, i - 1)) continue;
-                if (inlineFootnoteSpanAt(raw, i) !== null) continue;
-                count++;
-            }
+    for (let i = 0; i < lines.length; i++) {
+        // "[^]" is no reference to the reading, so it is found on the
+        // masked twin, where protected text holds none
+        const masked = reading.maskedLine(i);
+        for (let at = 0; (at = masked.indexOf("[^]", at)) !== -1; at += "[^]".length) {
+            // a backslash in front of the "[" makes it literal text, as
+            // everywhere else in the plugin: "\[^]" is prose about footnote
+            // syntax, not an abandoned placeholder (Kimi hunt cycle 1,
+            // 2026-09-16; renders literally in Reading view)
+            if (escapedAt(masked, at)) continue;
+            // "^[^]" is an inline footnote whose body is a caret, and a
+            // "[^]" inside a longer inline footnote's body is that body's
+            // literal text: Reading view renders both as inline footnotes
+            // (Kimi hunt cycle 4, probed 2026-09-16), so neither is a
+            // placeholder the user abandoned
+            if (reading.inlineNoteAt(i, at) !== null) continue;
+            count++;
         }
+        // the bare prefix is a live reference to the reading, so its own
+        // definition label and a copy in an inline footnote are left out
+        if (prefix !== "") count += reading.referencesOn(i).filter((reference) => reference.name.toLowerCase() === folded).length;
     }
     return count;
 }
@@ -117,12 +102,8 @@ export function orphanSafePrefixFor(
 // Unlike the orphan and duplicate alerts, this one is not tied to a
 // setting. No rule is ever allowed to delete an empty reference, so there
 // is no toggle that could make this alert unnecessary; it always speaks.
-function noticeEmptyReferences(
-    markdown: string,
-    prefix: string,
-    masked: readonly string[],
-) {
-    const count = countEmptyFootnoteReferences(markdown, prefix, masked);
+function noticeEmptyReferences(markdown: string, prefix: string) {
+    const count = countEmptyFootnoteReferences(markdown, prefix);
     if (count === 0) return;
     const hint = prefix ? `"[^]" or the bare prefix "[^${prefix}]"` : '"[^]"';
     showNotice(
@@ -334,15 +315,15 @@ function noticeDuplicateDefinitions(
  * fixed automatically: there is no telling which name they meant. So the
  * lint reports it instead (Jason's L-series pass, 2026-09-08).
  *
- * Fakes inside protected text do not count. Names containing brackets never
- * get here, because such text cannot form a reference in the first place.
- * Any arguments after `lines` are accepted for the tests written when this
- * took the scanner's facts; the note reading supplies them now.
+ * Fakes inside protected text do not count. A name holding a space is no
+ * reference to Obsidian at all ("[^my note]" is plain text), so it is
+ * found by its shape (referenceShapes); every other name comes from the
+ * note reading's live references and definitions. Any arguments after
+ * `lines` are accepted for the tests written when this took the scanner's
+ * facts; they are not read.
  */
 export function invalidFootnoteNames(lines: string[], ..._unused: unknown[]): string[] {
     const reading = readNote(lines);
-    const masked = reading.maskedLines();
-    const starts = reading.labelLines;
     const names: string[] = [];
     const seen = new Set<string>();
     const consider = (name: string) => {
@@ -352,13 +333,17 @@ export function invalidFootnoteNames(lines: string[], ..._unused: unknown[]): st
         names.push(name);
     };
     for (let i = 0; i < lines.length; i++) {
-        for (const { name } of referenceOccurrences(lines[i], masked[i], starts[i])) consider(name);
+        if (!lines[i].includes("[^")) continue;
+        // the live references, and the names holding a space, which only
+        // their shape shows, in the order they stand on the line
+        const spaced = referenceShapes(lines[i], reading.maskedLine(i)).filter(({ name }) => /\s/.test(name));
+        for (const { name } of [...reading.referencesOn(i), ...spaced].sort((a, b) => a.start - b.start)) consider(name);
     }
     // every definition's name, wherever it sits: a quoted one used to go
     // unchecked because only column-0 blocks were read (Kimi sweep
     // 2026-09-13), and one in a list item counts the same (Jason's ruling
     // 1, option a, 2026-10-03)
-    for (const definition of readNote(lines).definitions) consider(definition.name);
+    for (const definition of reading.definitions) consider(definition.name);
     return names;
 }
 
@@ -387,12 +372,10 @@ function noticeInvalidNames(lines: string[]) {
  *
  * Fakes inside protected text do not count. Any arguments after `lines`
  * are accepted for the tests written when this took the scanner's facts;
- * the note reading supplies them now.
+ * they are not read.
  */
 export function nestedFootnoteDefinitionNames(lines: string[], ..._unused: unknown[]): string[] {
     const reading = readNote(lines);
-    const masked = reading.maskedLines();
-    const starts = reading.labelLines;
     const names: string[] = [];
     // One entry per NAME, ignoring case, the same way the duplicate and
     // orphan alerts do it. A name defined twice with both copies nested
@@ -410,9 +393,8 @@ export function nestedFootnoteDefinitionNames(lines: string[], ..._unused: unkno
         for (let i = span.start; i <= span.end && !nested; i++) {
             const startAt = i === span.start ? span.labelEnd : 0;
             nested =
-                referenceOccurrences(lines[i], masked[i], starts[i]).some(
-                    (occurrence) => occurrence.start >= startAt,
-                ) || lineHasInlineFootnote(masked[i]);
+                reading.referencesOn(i).some((occurrence) => occurrence.start >= startAt) ||
+                reading.inlineNotesOn(i).some((note) => note.open >= startAt);
         }
         if (nested && !seen.has(span.name.toLowerCase())) {
             seen.add(span.name.toLowerCase());
@@ -422,20 +404,6 @@ export function nestedFootnoteDefinitionNames(lines: string[], ..._unused: unkno
     return names;
 }
 
-
-/**
- * True when this masked line holds a live inline footnote, the self-
- * contained "^[...]" form.
- */
-function lineHasInlineFootnote(masked: string): boolean {
-    for (let i = 0; i < masked.length - 1; i++) {
-        if (masked[i] !== "^" || masked[i + 1] !== "[") continue;
-        const span = inlineFootnoteSpanAt(masked, i + 2);
-        if (span?.open === i) return true;
-        if (span) i = span.close;
-    }
-    return false;
-}
 
 function noticeNestedFootnotes(lines: string[]) {
     const names = nestedFootnoteDefinitionNames(lines);
@@ -552,8 +520,7 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string) {
     if (!markdown.includes("[^")) return;
     const prefix = orphanSafePrefixFor(plugin, markdown);
     const lines = normalizeEol(markdown).text.split("\n");
-    const masked = readNote(lines).maskedLines();
-    noticeEmptyReferences(markdown, prefix, masked);
+    noticeEmptyReferences(markdown, prefix);
     noticeOrphanedReferences(plugin, markdown, prefix, { lines });
     noticeLazyDefinitions(lines);
     noticeUnderlinedDefinitions(lines);

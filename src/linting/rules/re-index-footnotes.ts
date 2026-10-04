@@ -1,7 +1,7 @@
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
-import { referenceOccurrences, nameForBody } from "../../parsing/footnote-grammar";
+import { nameForBody } from "../../parsing/footnote-grammar";
 import { definitionCuts, removeLineRanges } from "../../parsing/markdown-scan";
-import { keepsEveryFootnote, readNote } from "../../parsing/note-reading";
+import { keepsEveryFootnote, NoteReading, readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
 import { FootnoteRule } from "../rule";
@@ -60,33 +60,22 @@ export interface ReindexOptions {
 
 /**
  * The reference names, each listed once, in the order they first appear in
- * the text outside protected regions. They come back lower-cased, because
- * Obsidian treats footnote names as the same whatever their case: "[^Note]"
- * and "[^note]" are one footnote, both for ordering and for identity.
+ * the text, as the note reading finds the live ones. They come back
+ * lower-cased, because Obsidian treats footnote names as the same whatever
+ * their case: "[^Note]" and "[^note]" are one footnote, both for ordering
+ * and for identity.
  *
- * A definition's own "[^name]:" label does not count as a reference;
- * referenceOccurrences leaves it out on a line the note reading says holds
- * one. A reference inside a definition's body does count.
+ * A definition's own "[^name]:" label does not count as a reference; a
+ * reference inside a definition's body does, and so does a lazy label's
+ * own "[^x]", which really is a reference. A name holding a space is prose
+ * to Obsidian, so it takes no slot in the order (Kimi hunt cycle 1,
+ * 2026-09-16: the slot went unused and the real footnotes started at 2).
  */
-function referenceAppearanceOrder(
-    lines: string[],
-    maskedLines: readonly string[],
-    starts: readonly boolean[],
-): string[] {
+function referenceAppearanceOrder(reading: NoteReading, lineCount: number): string[] {
     const order: string[] = [];
     const seen = new Set<string>();
-    for (let i = 0; i < lines.length; i++) {
-        // A protected line is nothing but NUL characters in the masked
-        // twin, so it matches nothing. referenceOccurrences cuts each name
-        // out of the raw line rather than the twin
-        // (bug-masked-name-identity). And a lazy label's own "[^x]" really
-        // is a reference, so it takes its place in the order here.
-        for (const { name } of referenceOccurrences(lines[i], maskedLines[i], starts[i])) {
-            // a name holding whitespace is prose to Obsidian; the rewrite
-            // never renames it, so it takes no slot in the order either
-            // (Kimi hunt cycle 1, 2026-09-16: the slot went unused and the
-            // real footnotes started at 2)
-            if (/\s/.test(name)) continue;
+    for (let i = 0; i < lineCount; i++) {
+        for (const { name } of reading.referencesOn(i)) {
             const id = name.toLowerCase();
             if (!seen.has(id)) {
                 seen.add(id);
@@ -183,11 +172,9 @@ function reindexOnce(
         // These are all replaced further down if orphan deletion rewrites
         // the note part way through this pass
         let lines = view.lines;
-        let protectedLines = view.reading.protectedLines;
-        let maskedLines = view.maskedLines;
-        let starts = view.definitionStarts;
+        let reading = view.reading;
         let definitions = view.definitions;
-        let referenceOrder = referenceAppearanceOrder(lines, maskedLines, starts);
+        let referenceOrder = referenceAppearanceOrder(reading, lines.length);
 
         if (!keepOrphans) {
             // The shared orphan-finding code. It follows chains of any
@@ -205,12 +192,9 @@ function reindexOnce(
                 // with which.
                 const cut = definitionCuts(lines, orphans);
                 lines = removeLineRanges(cut.lines, cut.ranges);
-                const reading = readNote(lines);
-                protectedLines = reading.protectedLines;
-                maskedLines = reading.maskedLines();
-                starts = reading.labelLines;
+                reading = readNote(lines);
                 definitions = reading.definitions;
-                referenceOrder = referenceAppearanceOrder(lines, maskedLines, starts);
+                referenceOrder = referenceAppearanceOrder(reading, lines.length);
             }
         }
 
@@ -294,11 +278,7 @@ function reindexOnce(
         // Names are matched without regard to case. Every name that is
         // changing is in the map, so no footnote can be renamed onto
         // another one's name.
-        const renamed = lines.map((line, i) =>
-            protectedLines[i]
-                ? line
-                : rewriteFootnoteNames(line, maskedLines[i], (name) => renames.get(name.toLowerCase()) ?? null),
-        );
+        const renamed = lines.map((line, i) => rewriteFootnoteNames(reading, i, line, (name) => renames.get(name.toLowerCase()) ?? null));
         // A rename that would turn a footnote into plain text (a "$"
         // prefix pairing with an earlier dollar, keepsEveryFootnote) is
         // left out, and the definitions are only put in order.

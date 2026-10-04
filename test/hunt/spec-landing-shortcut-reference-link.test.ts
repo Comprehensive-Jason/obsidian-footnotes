@@ -62,7 +62,16 @@ describe("spec question: a press on the last word of a shortcut reference link",
         expect(linkTexts(`${out}\n\n${LinkAddress}\n[^1]: n`)).toContain("text");
     });
 
-    it.fails("the whole numbered press (insert at end of word on) keeps the link", async () => {
+    // Passes since 2026-10-03 (the runtime swap, step 3), by refusing: the
+    // press asks the note reading whether its new reference is live, and
+    // Obsidian reads "[text][^1]" as a reference link whatever follows,
+    // with no footnote in it, with or without a "[text]:" line (live
+    // answers swap34:br-sic-defined, swap34:br-sic-undefined, and
+    // swap34:br-defined-label in test/obsidian-answers/swap34-probes.json;
+    // Reading view agrees). So the press is born dead and writes nothing,
+    // and the link stays. Where the footnote should go instead is still
+    // the open question above.
+    it("the whole numbered press (insert at end of word on) keeps the link", async () => {
         const lines = ["see [text] now", "", LinkAddress];
         const doc = fakeEditor(lines, { cursor: { line: 0, ch: 6 }, edits: true, wholeDoc: true });
         await insertAutonumFootnote(
@@ -79,7 +88,7 @@ describe("spec question: a press on the last word of a shortcut reference link",
                 doc,
             ),
         );
-        // Today: line 0 reads "see [text][^1] now" and the link is gone
+        // Before: line 0 read "see [text][^1] now" and the link was gone
         expect(linkTexts(doc.lines.join("\n"))).toContain("text");
     });
 });

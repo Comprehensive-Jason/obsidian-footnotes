@@ -54,6 +54,19 @@ describe("footnoteFacts: references", () => {
         expect(footnoteFacts("%%\nhidden [^1]\n%%\n").references.map((r) => [r.name, r.line, r.live])).toEqual([["1", 1, true]]);
     });
 
+    it("places a reference in a definition after a %% closer at its column in the text (the runtime swap, step 3, 2026-10-03)", () => {
+        // remark-parse placed it two columns early, short by the "%%", and
+        // so does Obsidian's metadata cache (the referee lists the note);
+        // the plugin edits the note by these columns
+        const text = "%%\nhidden\n%% [^a]: sees [^b]\n\n[^b]: b\n";
+        const facts = footnoteFacts(text);
+        expect(facts.references.map((r) => [r.name, r.line, r.start, r.end])).toEqual([["b", 2, 14, 18]]);
+        expect(facts.definitions.map((d) => [d.name, d.start, d.labelStart, d.labelEnd])).toEqual([
+            ["a", 2, 3, 8],
+            ["b", 4, 0, 5],
+        ]);
+    });
+
     it("reports lines of the note with Windows line breaks as the plugin counts them", () => {
         const facts = footnoteFacts("a[^1]\r\n\r\n[^1]: d\r\n");
         expect(facts.references.map((r) => [r.line, r.start])).toEqual([[0, 1]]);

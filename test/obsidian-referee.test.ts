@@ -27,7 +27,14 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 //   scripts/oracle/generate.mjs): a few hundred the reader agreed on, spread
 //   over the run, and whole notes behind each rule found that night;
 // - overnight-probes: that night's shrunk reproducers and the families
-//   written to pin each new rule down.
+//   written to pin each new rule down;
+// - swap34-probes: the shapes steps 1 and 2 of the runtime swap left
+//   resting on the reader alone, asked of the live app (with Reading view)
+//   on 2026-10-03: a bracketed word right before a reference, a blank line
+//   ending a "<div>" block (in a quote, in a list item, at the top level)
+//   against a "<pre>" one, "Notes:" over a bare "- " or "-", a label whose
+//   name holds a code span with a bracket, and names holding a no-break or
+//   an ideographic space.
 //
 // The comparison is the live oracle's own (scripts/oracle/compare.mts), so a
 // note agrees here exactly when `npm run oracle -- check --reader` would find
@@ -36,18 +43,22 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 // notes, run the live oracle with --answers (TESTING.md) and add the file to
 // AnswerFiles.
 
-const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes"];
+const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes", "swap34-probes"];
 
 /**
  * Notes on which the reader and Obsidian still disagree, by id, with the
- * reason. Both left today are places where the metadata cache reports a
- * live reference at the wrong column: the two sides agree that it is live
+ * reason. Every one left today is a place where the metadata cache reports
+ * a live reference at the wrong column: the two sides agree that it is live
  * and on which line, and the reader's column is the one in the text. The
- * reader keeps the true column (the plugin will edit by it), so these stay
+ * reader keeps the true column (the plugin edits by it), so these stay
  * listed rather than copied (the overnight oracle run, 2026-10-03: about
- * 140 of 20,000 notes, every one of these two shapes).
+ * 140 of 20,000 notes, every one of the first two shapes; the third found
+ * when the plugin began editing references by the reader's columns, the
+ * runtime swap step 3, 2026-10-03).
  */
 const KnownDisagreements: Record<string, string> = {
+    "fact:e3eba8c-percent-closer-definition-body-live":
+        'A footnote definition after a "%%" closer on the same line: the metadata cache places the text of the definition as if the "%%" were not there ("%% [^a]: sees [^b]" puts [^b] at column 13, not 15), the same shortfall as on an opener line below.',
     "night:cs-pct-sp-ref":
         'Text on a "%%" opener line: the metadata cache places it as if the line\'s indentation and the "%%" were not there ("%% a[^1]" puts [^1] at column 3, not 5; "  %% a[^1]" at 3, not 7; in a quote or a list item, short by the "%%" alone). Varied in out-fam-cs: the line after the opener, a closer line with text, and inline pairs are placed right.',
     "night:cs-ord-co-lazy-text":

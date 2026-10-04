@@ -38,6 +38,23 @@ import { frontmatterEnd } from "./obsidian-markdown";
 /** A definition as the reading gives it: name, label line and columns, last line, container. */
 export type Definition = DefinitionFact;
 
+/**
+ * A "[^name]" on a line: the name as written, casing and all (fold case to
+ * compare two names), the column of its "[", and the column just past its
+ * "]".
+ */
+export interface ReferenceOccurrence {
+    name: string;
+    start: number;
+    end: number;
+}
+
+/** An inline footnote "^[...]" on a line: the column of its "^" and the column of its closing "]". */
+interface InlineNoteSpan {
+    open: number;
+    close: number;
+}
+
 /** One note, read once. */
 export interface NoteReading {
     /** Every definition in the note, wherever it sits, in the order of their labels. */
@@ -114,6 +131,28 @@ export interface NoteReading {
     lineSpans(line: number): readonly string[];
     /** The live references on `line`, by name in lower case, in order. */
     lineReferences(line: number): readonly string[];
+    /**
+     * The live references on `line`, in order (the runtime swap, step 3,
+     * 2026-10-03). A reference is live where Obsidian reads one: not in
+     * protected text, not escaped, not inside an inline footnote (rule E3),
+     * not a link's text or label ("[Smith][^1]" is a link), and never a
+     * definition's own label, which defines a footnote rather than pointing
+     * at one. A lazy label's "[^x]" is a live reference, as it renders. A
+     * name holding a space or a tab is no reference at all, so such text is
+     * not here.
+     */
+    referencesOn(line: number): readonly ReferenceOccurrence[];
+    /**
+     * The live reference on `line` whose brackets strictly hold column `ch`,
+     * or null. The caret right after the "]" or right before the "[" is
+     * outside, so a press there makes a new footnote next to it instead of
+     * jumping (issue #49).
+     */
+    referenceAt(line: number, ch: number): ReferenceOccurrence | null;
+    /** The "[^name]" part of every definition label on `line`, in order: where a rename rewrites the label's name. */
+    labelsOn(line: number): readonly ReferenceOccurrence[];
+    /** The inline footnotes on `line` that no other inline footnote holds, in order, each wholly on the line. */
+    inlineNotesOn(line: number): readonly InlineNoteSpan[];
     /**
      * The inline footnote "^[...]" on `line` whose brackets hold column
      * `ch` (from just after its "^" through its closing "]"), the innermost
@@ -533,9 +572,23 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
     let commentLines: readonly boolean[] | null = null;
     let openRegion: number | null = null;
     let tableRowLines: readonly boolean[] | null = null;
-    // every stretch of protected text and "%%" comment touching each line, and every live reference on it
+    // every stretch of protected text and "%%" comment touching each line
     let spanKinds: string[][] | null = null;
-    let referenceNames: string[][] | null = null;
+    // the live references, the labels, and the outermost inline footnotes
+    // on each line, in order, worked out the first time something asks
+    let referencesByLine: ReferenceOccurrence[][] | null = null;
+    const referencesOn = (line: number): readonly ReferenceOccurrence[] => {
+        if (referencesByLine === null) {
+            referencesByLine = Array.from({ length: lineCount }, () => [] as ReferenceOccurrence[]);
+            for (const { name, line: at, start, end, live } of facts.references) {
+                if (live && at < lineCount) referencesByLine[at].push({ name, start, end });
+            }
+            for (const list of referencesByLine) list.sort((a, b) => a.start - b.start);
+        }
+        return referencesByLine[line] ?? [];
+    };
+    let labelsByLine: ReferenceOccurrence[][] | null = null;
+    let inlineNotesByLine: InlineNoteSpan[][] | null = null;
 
     return {
         definitions,
@@ -591,12 +644,31 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
             }
             return spanKinds[line] ?? [];
         },
-        lineReferences(line) {
-            if (referenceNames === null) {
-                referenceNames = Array.from({ length: lineCount }, () => [] as string[]);
-                for (const reference of facts.references) if (reference.live && reference.line < lineCount) referenceNames[reference.line].push(reference.name.toLowerCase());
+        lineReferences: (line) => referencesOn(line).map((reference) => reference.name.toLowerCase()),
+        referencesOn,
+        referenceAt: (line, ch) => referencesOn(line).find((reference) => ch > reference.start && ch < reference.end) ?? null,
+        labelsOn(line) {
+            if (labelsByLine === null) {
+                labelsByLine = Array.from({ length: lineCount }, () => [] as ReferenceOccurrence[]);
+                // the label's "[^name]" runs from its "[" to just before its ":"
+                for (const { name, start, labelStart, labelEnd } of definitions) labelsByLine[start].push({ name, start: labelStart, end: labelEnd - 1 });
             }
-            return referenceNames[line] ?? [];
+            return labelsByLine[line] ?? [];
+        },
+        inlineNotesOn(line) {
+            if (inlineNotesByLine === null) {
+                inlineNotesByLine = Array.from({ length: lineCount }, () => [] as InlineNoteSpan[]);
+                const sorted = [...facts.inlineNotes].sort((a, b) => a.line - b.line || a.open - b.open);
+                for (const { line: at, open, close } of sorted) {
+                    const list = inlineNotesByLine[at] as InlineNoteSpan[] | undefined;
+                    if (list === undefined) continue;
+                    // one inside the last one kept is held by it
+                    const last = list.at(-1);
+                    if (last !== undefined && open < last.close) continue;
+                    list.push({ open, close });
+                }
+            }
+            return inlineNotesByLine[line] ?? [];
         },
         inlineNoteAt(line, ch) {
             let found: { open: number; close: number } | null = null;

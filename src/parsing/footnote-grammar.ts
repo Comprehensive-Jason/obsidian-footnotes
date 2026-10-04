@@ -1,4 +1,4 @@
-import { maskProtectedLines } from "./markdown-scan";
+import { NoteReading, readNote, type ReferenceOccurrence } from "./note-reading";
 
 // The label reader lives over in markdown-scan, beside the block walker
 // that needs it, because markdown-scan sits below this module and so cannot
@@ -25,11 +25,6 @@ export { definitionLabelWithName } from "./markdown-scan";
  * each time.
  */
 export const AllReferences = /\[\^([^[\]]+)\]/g;
-/**
- * Numbered references AND numbered definitions. Either one reserves its
- * number, so autonumbering will not hand that number out again.
- */
-const AllNumberedReferences = /\[\^(\d+)\]/g;
 /** Pulls the name out of one reference string. The name is match[2]. */
 export const ExtractNameFromFootnote = /(\[\^)([^[\]]+)(?=\])/;
 
@@ -77,19 +72,6 @@ export function footnoteReferenceMatches(
         matches.push(match);
     }
     return matches;
-}
-
-/**
- * One reference found by referenceOccurrences: the name as the user typed
- * it, plus where the whole "[^name]" sits on the line.
- */
-export interface ReferenceOccurrence {
-    /** The name exactly as typed, casing and all. Fold case to compare two names. */
-    name: string;
-    /** Index of the opening "[". */
-    start: number;
-    /** Index just past the closing "]". */
-    end: number;
 }
 
 /**
@@ -147,24 +129,6 @@ export function referenceOccurrences(
  * reference followed by a colon.
  */
 const LabelPrefix = /^(?:[ \t]*(?:>|(?:[-+*]|\d{1,9}[.)])(?:[ \t]+\[[ xX]\])?(?=[ \t])))*[ \t]*(?:(?:\[![^\]]*\][+-]?|%%|---)[ \t]*)?$/;
-
-/**
- * The reference whose brackets strictly contain the column `ch`, or null.
- * It follows the same "inside" rule as referenceAtCursor, and is for
- * callers that already hold a list from referenceOccurrences, with its
- * masked match and raw name paired up. The cascade's re-checks against the
- * masked twin used to copy the match-then-re-cut dance instead (2026-08-11
- * review, for cleanliness).
- */
-export function occurrenceAtCursor(
-    occurrences: ReferenceOccurrence[],
-    ch: number,
-): ReferenceOccurrence | null {
-    for (const occurrence of occurrences) {
-        if (ch > occurrence.start && ch < occurrence.end) return occurrence;
-    }
-    return null;
-}
 
 /** One inline footnote on a line: where its "^" is and where its closing "]" is. */
 export interface InlineFootnoteSpan {
@@ -226,21 +190,6 @@ export function inlineFootnoteSpans(lineText: string): InlineFootnoteSpan[] {
 }
 
 /**
- * The inline footnote whose brackets contain position `ch` on `lineText`,
- * or null when there is none. "Inside" runs from just after the "^"
- * through the closing "]" itself.
- */
-export function inlineFootnoteSpanAt(
-    lineText: string,
-    ch: number,
-): InlineFootnoteSpan | null {
-    for (const span of inlineFootnoteSpans(lineText)) {
-        if (ch > span.open && ch <= span.close) return span;
-    }
-    return null;
-}
-
-/**
  * Whether the character at `index` is escaped by a backslash, meaning an
  * ODD number of backslashes sits directly in front of it. (Backslashes pair
  * off and escape each other, so an even run leaves the next character
@@ -253,6 +202,33 @@ export function escapedAt(line: string, index: number): boolean {
     let backslashes = 0;
     for (let j = index - 1; j >= 0 && line[j] === "\\"; j--) backslashes++;
     return backslashes % 2 === 1;
+}
+
+/**
+ * Every stretch of `line` SHAPED like a reference, "[^name]" with a name
+ * holding no square bracket, whatever Obsidian makes of it. Which
+ * references are live, and where, is the note reading's to say
+ * (NoteReading.referencesOn); this exists only to explain a name that
+ * cannot work. Obsidian reads "[^my note]" as plain text, so the reading
+ * holds no reference there, yet the user plainly meant one: the press
+ * says why the name cannot work instead of writing a footnote into its
+ * brackets, and the lint names it in its invalid-name alert.
+ *
+ * Pass the line's masked twin as `masked`, so that protected text holds no
+ * shape; the name is cut from the raw `line`. An escaped "\[^x]" is
+ * literal prose and "^[^x]" the text of an inline footnote, so neither is
+ * a shape.
+ */
+export function referenceShapes(line: string, masked: string): ReferenceOccurrence[] {
+    const shapes: ReferenceOccurrence[] = [];
+    for (const match of masked.matchAll(/\[\^[^[\]]+\]/g)) {
+        const start = match.index;
+        if (escapedAt(masked, start)) continue;
+        if (masked[start - 1] === "^" && !escapedAt(masked, start - 1)) continue;
+        const end = start + match[0].length;
+        shapes.push({ name: line.slice(start + 2, end - 1), start, end });
+    }
+    return shapes;
 }
 
 /**
@@ -365,49 +341,38 @@ export function emptyReferenceStart(
     return null;
 }
 
-// One more than the highest numbered reference or definition in the text.
-// Gaps in the numbering are not filled back in, and named footnotes don't
-// count. A number inside a code block or the frontmatter reserves nothing
-// (#41). When a `prefix` is given, only references carrying it count
-// ("[^2.7]" under the prefix "2."), and plain numbered references belong to
-// the "" prefix alone.
-export function computeNextFootnoteNumber(
-    markdownText: string,
-    prefix = "",
-    // A caller that already holds the document's masked twin (a press
-    // context, or a lint rule) passes it in so the masking is not done
-    // twice. It must be the masked twin of this same `markdownText`
-    // (performance item F1).
-    masked: string = maskProtectedLines(markdownText.split("\n")).join("\n"),
-): number {
-    const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/**
+ * One more than the highest numbered footnote in the note: the next free
+ * number. Every reference counts, live or not, and every definition, so a
+ * number in use anywhere is never handed out again; gaps are not filled
+ * back in, and named footnotes do not count. A number inside a code block
+ * or the frontmatter is no footnote and reserves nothing (#41). When a
+ * `prefix` is given, only names carrying it count ("[^2.7]" under the
+ * prefix "2."), and plain numbers belong to the "" prefix alone.
+ *
+ * The footnotes come from the note reading (the runtime swap, step 3,
+ * 2026-10-03). A caller that holds the reading passes it; the note's text
+ * is read the same way, and a reading is remembered, so a caller that
+ * passes the text it just read costs nothing more.
+ */
+export function computeNextFootnoteNumber(note: NoteReading | string, prefix = ""): number {
+    const reading = typeof note === "string" ? readNote(note.split("\n")) : note;
     // The "i" flag matters here: footnote names are case-insensitive in
     // Obsidian, so "[^P.1]" lives in the prefix "p."'s namespace and must
     // reserve its number. A case-sensitive scan let the next insert mint a
     // name that collided with it.
-    const numberedReferences = prefix
-        ? new RegExp(`\\[\\^${escaped}(\\d+)\\]`, "gi")
-        : AllNumberedReferences;
+    const numbered = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\d+)$`, "i");
     let currentMax = 1;
-    for (const match of masked.matchAll(numberedReferences)) {
-        const start = match.index;
-        // The same two exclusions footnoteReferenceMatches makes: an
-        // escaped "\[^9]" is literal prose (bug-escaped-marker), and
-        // "^[^9]" is the text of an inline footnote
-        // (bug-inline-footnote-double-parse).
-        if (escapedAt(masked, start)) continue;
-        if (masked[start - 1] === "^" && !escapedAt(masked, start - 1)) {
-            continue;
-        }
+    for (const { name } of [...reading.references, ...reading.definitions]) {
+        const match = numbered.exec(name);
+        if (match === null) continue;
         const value = Number(match[1]);
         // A run of digits too big to survive the trip through Number is
         // treated as a name, not a number. So is one whose SUCCESSOR is too
         // big: past MAX_SAFE_INTEGER, minting value + 1 would create a name
         // this very scan then skips, so the name after it would repeat
         // (bug-autonumber-unsafe-integer).
-        if (!Number.isSafeInteger(value) || !Number.isSafeInteger(value + 1)) {
-            continue;
-        }
+        if (!Number.isSafeInteger(value) || !Number.isSafeInteger(value + 1)) continue;
         currentMax = Math.max(currentMax, value + 1);
     }
     return currentMax;

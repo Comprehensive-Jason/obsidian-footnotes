@@ -6,7 +6,6 @@ import {
     escapedAt,
     footnoteNameProblem,
     idListIncludes,
-    referenceOccurrences,
     referenceText,
 } from "../parsing/footnote-grammar";
 import {
@@ -18,14 +17,14 @@ import {
 import { commandHotkeys } from "../editor/obsidian-internals";
 import { planDefinitionAppend } from "./definition-append";
 import { contextOfLines, DocContext, docContext, docLines, listExistingFootnoteDefinitions } from "../editor/doc-context";
-import { bareInsertionVerdict, inlineFootnoteSpanAt, sanitizeInlineFootnoteContent } from "./inline-footnotes";
+import { bareInsertionVerdict, sanitizeInlineFootnoteContent } from "./inline-footnotes";
 import {
     caretInsideMaskedSpan,
     simulateChanges,
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
-import { maskInlineRegions } from "../parsing/markdown-scan";
-import { linesReadAlike, readNote } from "../parsing/note-reading";
+import { cellReading, CellTextColumn, maskInlineRegions } from "../parsing/markdown-scan";
+import { linesReadAlike, NoteReading, readNote } from "../parsing/note-reading";
 import {
     autonumFootnoteId,
     landCellDefinitionAppend,
@@ -232,10 +231,10 @@ export function selectionPressHandled(
             return true;
         }
         // Nested footnotes are refused inside table cells too, under the
-        // same plugin-wide ruling (2026-08-24).
-        // a definition cannot live in a cell, so a label-shaped "[^x]:"
-        // there is a reference (labelIsDefinition false)
-        if (spanTouchesFootnote(cellText, maskedCell, from, to, false)) {
+        // same plugin-wide ruling (2026-08-24). The cell's text is read as
+        // the one cell of a one-row table, where a label-shaped "[^x]:" is
+        // a reference, as it is in the note.
+        if (spanTouchesFootnote(cellReading(cellText), 0, from + CellTextColumn, to + CellTextColumn)) {
             showNotice(NestedFootnoteNotice, 8000);
             return true;
         }
@@ -509,50 +508,31 @@ function trimSelectionEdges(
 }
 
 /**
- * Whether the range from `from` up to `to` on one line touches any live
- * footnote: a reference, an empty "[^]" placeholder, or an inline
- * footnote.
+ * Whether the range from `from` up to `to` on line `line` touches any
+ * footnote: a live reference, an empty "[^]" placeholder, or an inline
+ * footnote, as the note reading finds them.
  *
  * Any overlap counts. Containing one whole would nest it in the new
- * footnote's body; overlapping one only partly would cut it in half.
+ * footnote's body; overlapping one only partly would cut it in half. A
+ * lazy label's "[^x]" is a live reference, and a selection over it nests
+ * that reference into the new footnote (Kimi and Claude sweeps
+ * 2026-09-13).
  *
  * Fakes do not count. A fake is reference-shaped text that is not really a
- * footnote, usually because it sits in code, math, or a comment. Those are
- * blanked out in the masked twin (the copy of the line with protected text
- * blotted out), which is what this reads.
+ * footnote, usually because it sits in code, math, or a comment.
  */
-function spanTouchesFootnote(
-    lineText: string,
-    masked: string,
-    from: number,
-    to: number,
-    // whether a label-shaped start of the line is a definition's label
-    // (definitionStartLines decides); a LAZY label's "[^x]" is a live
-    // reference, and a selection over it nests that reference into the new
-    // footnote (Kimi and Claude sweeps 2026-09-13)
-    labelIsDefinition = true,
-): boolean {
-    for (const occurrence of referenceOccurrences(lineText, masked, labelIsDefinition)) {
-        if (occurrence.start < to && occurrence.end > from) return true;
-    }
-    for (
-        let i = 0;
-        (i = masked.indexOf("[^]", i)) !== -1;
-        i += "[^]".length
-    ) {
+function spanTouchesFootnote(reading: NoteReading, line: number, from: number, to: number): boolean {
+    if (reading.referencesOn(line).some((occurrence) => occurrence.start < to && occurrence.end > from)) return true;
+    // the placeholder is no reference to the reading, so it is found on
+    // the masked twin, where protected text holds none
+    const masked = reading.maskedLine(line);
+    for (let i = 0; (i = masked.indexOf("[^]", i)) !== -1; i += "[^]".length) {
         // an escaped "\[^]" is prose about footnotes, not a placeholder
         // (Kimi hunt cycle 5, 2026-09-16; the alert already knew)
-        if (escapedAt(lineText, i)) continue;
+        if (escapedAt(masked, i)) continue;
         if (i < to && i + "[^]".length > from) return true;
     }
-    for (let i = 0; i < masked.length - 1; i++) {
-        if (masked[i] !== "^" || masked[i + 1] !== "[") continue;
-        const span = inlineFootnoteSpanAt(masked, i + 2);
-        if (span?.open !== i) continue;
-        if (span.open < to && span.close + 1 > from) return true;
-        i = span.close;
-    }
-    return false;
+    return reading.inlineNotesOn(line).some((note) => note.open < to && note.close + 1 > from);
 }
 
 /**
@@ -615,7 +595,7 @@ function selectionTouchesFootnote(
         const lineText = ctx.lines[line] ?? "";
         const start = line === from.line ? from.ch : 0;
         const end = line === to.line ? to.ch : lineText.length;
-        if (spanTouchesFootnote(lineText, ctx.maskedLine(line), start, end, ctx.definitionStarts()[line])) {
+        if (spanTouchesFootnote(ctx.reading(), line, start, end)) {
             return true;
         }
     }

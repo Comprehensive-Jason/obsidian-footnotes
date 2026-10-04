@@ -11,6 +11,7 @@ import { pasteInlineFootnote } from "../../src/commands/insert-or-navigate-footn
 import { ProtectedSelectionNotice } from "../../src/commands/selection-footnote";
 import { ProtectedCreationNotice } from "../../src/editor/insertion-liveness";
 import { inlineWrapLandsIntact } from "../../src/commands/inline-footnotes";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (hunt 2026-08-25, contexts lens; skeptic-confirmed): every
 // inline-footnote liveness check verifies only the wrapper's OPEN
@@ -103,6 +104,6 @@ describe("inlineWrapLandsIntact's own contract (2026-08-25 mutation audit)", () 
         // span opens at 0 and closes at 4; probing at=1 with wrapLength 4
         // makes the close test alone pass (1 + 4 - 1 === 4) - only the
         // open check refuses
-        expect(inlineWrapLandsIntact("^[ab]", 1, 4)).toBe(false);
+        expect(inlineWrapLandsIntact(readNote(["^[ab]"]), 0, 1, 4)).toBe(false);
     });
 });

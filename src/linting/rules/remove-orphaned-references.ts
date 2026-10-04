@@ -1,7 +1,4 @@
-import {
-    definitionLabelWithName,
-    referenceOccurrences,
-} from "../../parsing/footnote-grammar";
+import { definitionLabelWithName } from "../../parsing/footnote-grammar";
 import { LineEdit, linesReadAlike, readNote } from "../../parsing/note-reading";
 import {
     lazyDefinitionLabelLines,
@@ -23,10 +20,12 @@ import { FootnoteRule } from "../rule";
 //
 //  - Names are compared without regard to case, so a definition written
 //    with different capitals still counts as that reference's definition.
-//  - A name Obsidian will not accept, one with a space or a backtick in it,
-//    is not a footnote there either. Deleting "[^my note]" would destroy
-//    ordinary prose, so those stay. The creation path already warns about
-//    such names.
+//  - A name holding a space is no footnote to Obsidian: "[^my note]" is
+//    ordinary prose, and the note reading holds no reference there, so it
+//    is never deleted (the lint's invalid-name alert speaks for it). A name
+//    holding a backtick is refused for creation but renders as a footnote
+//    (probed in Reading view 2026-09-16), so an orphaned one is an orphan
+//    like any other (Kimi hunt cycle 2).
 //  - The note's own bare-prefix placeholder, "[^2.]" in a note whose prefix
 //    is "2.", is a footnote the user is in the middle of naming. The
 //    unnamed-reference alert speaks for it. Deleting it from under the
@@ -106,14 +105,6 @@ function isOrphan(
     const folded = name.toLowerCase();
     if (definitions.has(folded)) return false;
     if (lazyLabels.has(folded)) return false;
-    // a name holding whitespace is prose to Obsidian ("[^my note]" renders
-    // as text), so deleting it would destroy ordinary writing. A name
-    // holding a backtick is refused for CREATION but renders as a footnote
-    // (probed in Reading view 2026-09-16), so an orphaned one is an orphan
-    // like any other; exempting it let reindex rename it into a plain
-    // orphan that the next lint then ate, so lint twice was not lint once
-    // (Kimi hunt cycle 2)
-    if (/\s/.test(name)) return false;
     if (orphanSafeFolded !== "" && folded === orphanSafeFolded) return false;
     return true;
 }
@@ -139,8 +130,6 @@ export function orphanedFootnoteReferenceNames(
     if (!markdown.includes("[^")) return [];
     const lines = precomputed?.lines ?? normalizeEol(markdown).text.split("\n");
     const reading = readNote(lines);
-    const masked = reading.maskedLines();
-    const starts = reading.labelLines;
     const definitions = definitionNamesFolded(lines);
     const lazyLabels = new Set([
         ...lazyDefinitionLabelNames(lines).map((n) => n.toLowerCase()),
@@ -151,8 +140,8 @@ export function orphanedFootnoteReferenceNames(
 
     const names: string[] = [];
     const seen = new Set<string>();
-    for (let i = 0; i < masked.length; i++) {
-        for (const { name } of referenceOccurrences(lines[i], masked[i], starts[i])) {
+    for (let i = 0; i < lines.length; i++) {
+        for (const { name } of reading.referencesOn(i)) {
             if (!isOrphan(name, definitions, lazyLabels, orphanSafeFolded)) continue;
             const folded = name.toLowerCase();
             if (!seen.has(folded)) {
@@ -181,8 +170,6 @@ export function removeOrphanedFootnoteReferences(
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");
     const reading = readNote(lines);
-    const masked = reading.maskedLines();
-    const starts = reading.labelLines;
     const definitions = definitionNamesFolded(lines);
     const lazyLabels = new Set([
         ...lazyDefinitionLabelNames(lines).map((n) => n.toLowerCase()),
@@ -194,12 +181,11 @@ export function removeOrphanedFootnoteReferences(
     // the orphans on each line, rightmost first so that cutting one keeps
     // the offsets of the ones before it
     const orphansOn = (i: number): { start: number; end: number }[] =>
-        reading.protectedLines[i]
-            ? []
-            : referenceOccurrences(lines[i], masked[i], starts[i])
-                  .filter(({ name }) => isOrphan(name, definitions, lazyLabels, orphanSafeFolded))
-                  .map(({ start, end }) => ({ start, end }))
-                  .reverse();
+        reading
+            .referencesOn(i)
+            .filter(({ name }) => isOrphan(name, definitions, lazyLabels, orphanSafeFolded))
+            .map(({ start, end }) => ({ start, end }))
+            .reverse();
     if (!lines.some((_, i) => orphansOn(i).length > 0)) return markdown;
 
     // A cut that changes how Obsidian reads ANY line is refused, and the
@@ -215,8 +201,7 @@ export function removeOrphanedFootnoteReferences(
 
     const orphanNames: string[] = [];
     for (let i = 0; i < lines.length; i++) {
-        if (reading.protectedLines[i]) continue;
-        for (const { name } of referenceOccurrences(lines[i], masked[i], starts[i])) {
+        for (const { name } of reading.referencesOn(i)) {
             const folded = name.toLowerCase();
             if (isOrphan(name, definitions, lazyLabels, orphanSafeFolded) && !orphanNames.includes(folded)) {
                 orphanNames.push(folded);
@@ -226,13 +211,13 @@ export function removeOrphanedFootnoteReferences(
     let current = lines;
     for (const folded of orphanNames) {
         const now = readNote(current);
-        const trial = current.map((line, i) => {
-            if (now.protectedLines[i]) return line;
-            return referenceOccurrences(line, now.maskedLine(i), now.labelLines[i])
+        const trial = current.map((line, i) =>
+            now
+                .referencesOn(i)
                 .filter(({ name }) => name.toLowerCase() === folded)
                 .reverse()
-                .reduce((text, { start, end }) => cutOne(text, start, end), line);
-        });
+                .reduce((text, { start, end }) => cutOne(text, start, end), line),
+        );
         if (trial.every((line, i) => line === current[i])) continue;
         if (readsDifferently(current, trial)) continue;
         current = trial;

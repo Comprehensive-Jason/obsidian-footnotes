@@ -2,7 +2,7 @@ import { Editor, EditorChange, EditorPosition } from "obsidian";
 import { NoFootnoteCreated } from "./notice";
 
 import { contextOfLines, DocContext, docLines, insideDefinition } from "./doc-context";
-import { escapedAt, referenceOccurrences } from "../parsing/footnote-grammar";
+import { escapedAt } from "../parsing/footnote-grammar";
 
 // The born-dead safety kit. One question: once the text lands, will it
 // still MEAN what it says?
@@ -388,17 +388,11 @@ export function verifyLiveFootnoteInsertion(opts: {
     const label = ctx.reading().labelOn(opts.definitionLabelLine);
     const definitionLive = label !== null && label.movable && label.end >= opts.definitionLabelLine + bodyExtraLines;
     if (!definitionLive) return "dead";
-    const starts = ctx.definitionStarts();
     const everyReferenceLive = opts.anchors.every((anchor) =>
-        referenceOccurrences(
-            opts.lines[anchor.line],
-            ctx.maskedLine(anchor.line),
-            starts[anchor.line],
-        ).some(
-            (occurrence) =>
-                occurrence.start === anchor.ch &&
-                occurrence.name === opts.footnoteId,
-        ),
+        ctx
+            .reading()
+            .referencesOn(anchor.line)
+            .some((occurrence) => occurrence.start === anchor.ch && occurrence.name === opts.footnoteId),
     );
     if (!everyReferenceLive) return "dead";
     return opts.anchors.some((anchor) => insideDefinition(ctx, anchor.line)) ? "nested" : "live";

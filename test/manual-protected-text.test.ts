@@ -11,7 +11,6 @@ import { ProtectedCreationNotice } from "../src/editor/insertion-liveness";
 import { lintFootnotes } from "../src/linting/linter";
 import { noticeLintAlerts } from "../src/linting/lint-alerts";
 import { computeNextFootnoteNumber } from "../src/parsing/footnote-grammar";
-import { maskProtectedLines, scanDocument } from "../src/parsing/markdown-scan";
 import { fakeEditor as sharedFakeEditor, FakeEditor } from "./helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "./helpers/fake-plugin";
 import { messages, noticed, resetNotices } from "./helpers/notices";
@@ -250,9 +249,7 @@ describe("sheet 11: the lint and the protected regions", () => {
     it("the numbered command reserves nothing from any protected shape", () => {
         // [^9], [^8], [^7], [^90], [^c2], [^f1], [^f2], [^88], the escaped
         // [^9] and the inline footnote's content are all dead text
-        const lines = LINT_NOTE.split("\n");
-        const masked = maskProtectedLines(lines, scanDocument(lines)).join("\n");
-        expect(computeNextFootnoteNumber(masked, "", masked)).toBe(1);
+        expect(computeNextFootnoteNumber(LINT_NOTE)).toBe(1);
     });
 });
 

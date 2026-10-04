@@ -22,10 +22,7 @@ import { computeNextFootnoteNumber, definitionLabelWithName, footnoteNameProblem
 import { docContext } from "../src/editor/doc-context";
 import { endOfWordForSelection, startOfWordOffset } from "../src/editor/cursor-motion";
 import { planFootnoteRename } from "../src/commands/rename-footnote";
-import {
-    inlineFootnoteSpanAt,
-    sanitizeInlineFootnoteContent,
-} from "../src/commands/inline-footnotes";
+import { sanitizeInlineFootnoteContent } from "../src/commands/inline-footnotes";
 import {
     insertAutonumFootnote,
     insertInlineFootnote,
@@ -613,15 +610,12 @@ describe("creation-command invariants over random documents", () => {
                             // the pasted inline footnote must CLOSE where the
                             // sanitizer promised - an unbalanced clipboard
                             // that escaped sanitizing would run away here
-                            const line = doc.lines.find(
+                            const at = doc.lines.findIndex(
                                 (l, i) => l !== lines[i] && l.includes(inserted),
                             );
-                            expect(line).toBeDefined();
-                            const start = (line as string).indexOf(inserted);
-                            const span = inlineFootnoteSpanAt(
-                                line as string,
-                                start + 2,
-                            );
+                            expect(at).not.toBe(-1);
+                            const start = doc.lines[at].indexOf(inserted);
+                            const span = readNote(doc.lines).inlineNoteAt(at, start + 1);
                             expect(span).not.toBeNull();
                             if (span?.open === start) {
                                 expect(span.close).toBe(

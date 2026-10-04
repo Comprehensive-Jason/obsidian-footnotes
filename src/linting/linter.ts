@@ -10,7 +10,7 @@ import { jumpToFootnoteDefinition } from "../commands/navigation";
 import { docContext } from "../editor/doc-context";
 import { replaceMinimal } from "../editor/write-back";
 import { rewriteDocument } from "./rewrite-document";
-import { definitionLabel, quotedReference, referenceOccurrences } from "../parsing/footnote-grammar";
+import { definitionLabel, quotedReference } from "../parsing/footnote-grammar";
 import { footnotePrefix, footnotePrefixProblem } from "../parsing/footnote-prefix";
 import { FootnotePlacement } from "../parsing/markdown-scan";
 import { readNote } from "../parsing/note-reading";
@@ -401,7 +401,9 @@ export function sectionHeadingProblem(heading: string): string | null {
     // span is dead text, and no rule renames either (Kimi hunt cycle 4,
     // 2026-09-16). The heading is markdown that may run over several lines,
     // so it is read as a note of its own.
-    const live = referenceOccurrences(heading, readNote(heading.split("\n")).maskedLines().join("\n"));
+    const headingLines = heading.split("\n");
+    const reading = readNote(headingLines);
+    const live = headingLines.flatMap((_, i) => reading.referencesOn(i));
     if (live.length === 0) return null;
     return `${LintingCanceled}the footnote section heading setting contains a footnote reference (${quotedReference(live[0].name)}), which the lint rules would renumber. Take it out of the heading in the plugin settings.`;
 }

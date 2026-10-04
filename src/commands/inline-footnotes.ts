@@ -5,15 +5,16 @@ import type FootnotePlugin from "../main";
 import { DocContext, docLines, insideDefinition } from "../editor/doc-context";
 import { InsertionVerdict } from "../editor/insertion-liveness";
 import { inlineNoteInCell, maskInlineRegions } from "../parsing/markdown-scan";
-import { readNote } from "../parsing/note-reading";
+import { NoteReading, readNote } from "../parsing/note-reading";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
 import { showNotice } from "../editor/notice";
 import { readingViewActive } from "../editor/obsidian-internals";
 // Inline footnotes, the self-contained "^[...]" form. This file holds
 // sanitizing pasted content so it is safe as a body and the two caret
-// guards every command shares (the span scanner moved down to the grammar
-// on 2026-09-21). Split out of the all-in-one commands file 2026-08-11.
+// guards every command shares; where an inline footnote starts and ends is
+// the note reading's to say (NoteReading.inlineNoteAt). Split out of the
+// all-in-one commands file 2026-08-11.
 
 /**
  * The last stretch of both paste commands, shared by the single-caret and
@@ -114,18 +115,19 @@ function wrapReadsWhole(text: string): boolean {
  * 2026-09-05). "Born-dead" means an insertion that would not be a live
  * footnote the moment it lands.
  *
- * The question this answers: with `text` written at `at`, does it still
- * read as what it is on the MASKED simulated line? An inline footnote has
- * to survive as one whole span, because pasted content can carry code of
- * its own that gets masked INSIDE the brackets. Anything else, a reference
- * or a placeholder, has to come back byte for byte. If it does not, the
- * insertion completed some markdown construct around itself and would be
- * born inside protected text.
+ * The question this answers: with `text` written at column `at` of line
+ * `line`, does it still read as what it is in `after`, the reading of the
+ * note as the edit leaves it? An inline footnote has to read as one whole
+ * inline footnote, because pasted content can carry code of its own INSIDE
+ * the brackets. Anything else, the empty "[^]" placeholder, has to come
+ * back byte for byte on the masked twin. If it does not, the insertion
+ * completed some markdown construct around itself and would be born inside
+ * protected text.
  */
-export function insertionLandsIntact(masked: string, at: number, text: string): boolean {
+export function insertionLandsIntact(after: NoteReading, line: number, at: number, text: string): boolean {
     return text.startsWith("^[")
-        ? inlineWrapLandsIntact(masked, at, text.length)
-        : masked.slice(at, at + text.length) === text;
+        ? inlineWrapLandsIntact(after, line, at, text.length)
+        : after.maskedLine(line).slice(at, at + text.length) === text;
 }
 
 /**
@@ -140,48 +142,28 @@ export function insertionLandsIntact(masked: string, at: number, text: string): 
  * comes with its definition.
  */
 export function bareInsertionVerdict(after: DocContext, anchors: EditorPosition[], text: string): InsertionVerdict {
-    if (!anchors.every((at) => insertionLandsIntact(after.maskedLine(at.line), at.ch, text))) return "dead";
+    if (!anchors.every((at) => insertionLandsIntact(after.reading(), at.line, at.ch, text))) return "dead";
     return anchors.some((at) => insideDefinition(after, at.line)) ? "nested" : "live";
 }
 
 /**
- * Whether a just-inserted inline-footnote wrapper at `at` survives INTACT
- * on the masked simulated line. The span must open exactly at the wrapper's
- * "^" AND close on the wrapper's own "]".
+ * Whether a just-inserted inline-footnote wrapper at column `at` of line
+ * `line` reads INTACT in `after`, the reading of the note as the edit
+ * leaves it: an inline footnote that opens exactly at the wrapper's "^" AND
+ * closes on the wrapper's own "]".
  *
  * That second half matters. Checking only the opening accepted a wrap whose
- * closing bracket a newly formed "$…$" pair had swallowed. The bracket walk
- * then latched onto some unrelated later "]", and the rendered line was
- * math eating the prose around it (hunt 2026-08-25,
+ * closing bracket a newly formed "$…$" pair had swallowed, and the rendered
+ * line was math eating the prose around it (hunt 2026-08-25,
  * bug-inline-wrap-close-swallowed).
  *
  * This is the ONE test every writer of an inline wrap uses: insertion at
  * the caret, paste, multi-caret skeletons, writes into a table cell, and
  * converting a selection.
  */
-export function inlineWrapLandsIntact(
-    masked: string,
-    at: number,
-    wrapLength: number,
-): boolean {
-    const span = inlineFootnoteSpanAt(masked, at + 2);
-    return (
-        span !== null && span.open === at && span.close === at + wrapLength - 1
-    );
-}
-
-// The span scanner (inlineFootnoteSpanAt, and the inlineFootnoteSpans
-// enumerator the punctuation rule uses) lives in parsing/footnote-grammar
-// since 2026-09-21, so the linting layer can read inline spans without
-// importing this editor-facing module. It is re-exported here for the
-// callers that always found it here.
-import { inlineFootnoteSpanAt } from "../parsing/footnote-grammar";
-export { inlineFootnoteSpanAt };
-
-/** The position just past an inline footnote's closing bracket, when `ch` sits inside one. Null when it does not. */
-export function inlineFootnoteExitCh(lineText: string, ch: number): number | null {
-    const span = inlineFootnoteSpanAt(lineText, ch);
-    return span === null ? null : span.close + 1;
+export function inlineWrapLandsIntact(after: NoteReading, line: number, at: number, wrapLength: number): boolean {
+    const note = after.inlineNoteAt(line, at + 1);
+    return note !== null && note.open === at && note.close === at + wrapLength - 1;
 }
 
 /**

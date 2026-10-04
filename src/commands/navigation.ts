@@ -11,7 +11,6 @@ import {
 import {
     definitionLabelWithName,
     idListIncludes,
-    referenceOccurrences,
 } from "../parsing/footnote-grammar";
 import { openFootnotePopup, popupEditingAvailable } from "./footnote-popup";
 
@@ -75,19 +74,16 @@ export function shouldJumpFromDefinitionToReference(
         // differently from its definition's label ("[^Note]" and "[^note]:"
         // are the same footnote). Lowercase both before comparing.
         const name = definitionName.toLowerCase();
-        const masked = ctx.maskedLines();
 
         // find the FIRST place this footnote is referenced. A label defines
         // a footnote wherever it appears; it never counts as a reference to
-        // it. referenceOccurrences therefore skips a line's own label,
-        // whether it starts the line or sits in a blockquote. Without that,
-        // jumping could land on a blockquoted duplicate's label, a target
-        // that is not really there (parallel-review probe 2026-08-10;
-        // the exclusion was centralized 2026-09-08).
-        const useStarts = ctx.definitionStarts();
-        for (let i = 0; i < masked.length; i++) {
+        // it, so the reading leaves every label out, whether it starts the
+        // line or sits in a blockquote. Without that, jumping could land on
+        // a blockquoted duplicate's label, a target that is not really
+        // there (parallel-review probe 2026-08-10).
+        for (let i = 0; i < lines.length; i++) {
             if (i === ownLabelLine) continue;
-            for (const use of referenceOccurrences(lines[i], masked[i], useStarts[i])) {
+            for (const use of ctx.reading().referencesOn(i)) {
                 if (use.name.toLowerCase() !== name) continue;
                 const newCursorPos = { line: i, ch: use.end };
                 moveCursorAndSetJumpPoint(doc, cursorPosition, newCursorPos, plugin, undefined, true);

@@ -3,14 +3,13 @@
 // reference-shaped strings are live, and which lines the plugin protects.
 //
 // It calls the readers exactly as the commands and the lint do: the note
-// reading (src/parsing/note-reading.ts) for definitions, protected text,
-// and the masked twin, and the reference reader over that twin
-// (referenceOccurrences) for live references, so a disagreement found here
-// is a disagreement in the shipped plugin.
+// reading (src/parsing/note-reading.ts) for definitions, live references
+// (NoteReading.referencesOn, since step 3 of the runtime swap,
+// 2026-10-03), and protected text, so a disagreement found here is a
+// disagreement in the shipped plugin.
 // run-oracle.mjs bundles this file with esbuild for Node, the way
 // scripts/generate-corpora.ts is run.
 
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
 import { normalizeEol } from "../../src/parsing/markdown-scan";
 import { readNote } from "../../src/parsing/note-reading";
 
@@ -39,8 +38,6 @@ export interface PluginFacts {
 export function pluginFacts(text: string): PluginFacts {
     const lines = normalizeEol(text).text.split("\n");
     const reading = readNote(lines);
-    const masked = reading.maskedLines();
-    const starts = reading.labelLines;
 
     const definitions: PluginDefinition[] = reading.definitions.map((definition) => ({
         name: definition.name,
@@ -51,7 +48,7 @@ export function pluginFacts(text: string): PluginFacts {
 
     const references: PluginReference[] = [];
     for (let i = 0; i < lines.length; i++) {
-        for (const occurrence of referenceOccurrences(lines[i], masked[i], starts[i])) {
+        for (const occurrence of reading.referencesOn(i)) {
             references.push({ name: occurrence.name, line: i, column: occurrence.start });
         }
     }

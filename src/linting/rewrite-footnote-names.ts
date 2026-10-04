@@ -1,34 +1,29 @@
-import { referenceOccurrences, referenceText } from "../parsing/footnote-grammar";
+import { referenceText } from "../parsing/footnote-grammar";
+import { NoteReading } from "../parsing/note-reading";
 
 /**
- * Return `line` with every live reference renamed, and its definition's
- * label too when the line holds one. `resolve` picks the new name for each
- * old one; returning null means leave that name alone.
+ * Line `i` of the note `reading` read, `line`, with every live reference
+ * renamed, and every definition label on it too. `resolve` picks the new
+ * name for each old one; returning null means leave that name alone.
  *
  * This is the single renaming walk that the apply-prefix and reindex rules
  * each used to carry their own copy of (duplicated-logic audit,
  * 2026-09-05).
  *
- * How it works. Every "[^name]" on the line is found against the masked
- * twin (the copy of the line with protected text blanked out) and cut into
- * the line by its position, so a reference-shaped string inside a code span
- * is left alone. A label "[^name]:" is renamed by the same cut as a
- * reference, since only the name between "[^" and "]" changes, whether it
- * sits at the left margin, behind a quote marker, or after a list marker
- * (Jason's ruling 1, option a, 2026-10-03: a definition in a list item is
- * renamed like any other). So the walk does not need to know whether the
- * line holds a label at all.
- *
- * `masked` is this line's masked twin, worked out with the whole note in
- * view.
+ * How it works. The reading says where each live reference and each label
+ * sits (the runtime swap, step 3, 2026-10-03), and each is cut into the
+ * line by its position, so reference-shaped text inside a code span, an
+ * inline footnote, or a link's label is left alone, and so is a name
+ * holding a space, which Obsidian reads as plain text. A label "[^name]:"
+ * is renamed by the same cut as a reference, since only the name between
+ * "[^" and "]" changes, whether it sits at the left margin, behind a quote
+ * marker, or after a list marker (Jason's ruling 1, option a, 2026-10-03).
  */
-export function rewriteFootnoteNames(line: string, masked: string, resolve: (name: string) => string | null): string {
+export function rewriteFootnoteNames(reading: NoteReading, i: number, line: string, resolve: (name: string) => string | null): string {
     let result = "";
     let copied = 0;
-    for (const { name, start, end } of referenceOccurrences(line, masked, false)) {
-        // a name holding whitespace is prose to Obsidian, not a footnote,
-        // so it is never renamed into one (Claude sweep 2026-09-13)
-        if (/\s/.test(name)) continue;
+    const occurrences = [...reading.labelsOn(i), ...reading.referencesOn(i)].sort((a, b) => a.start - b.start);
+    for (const { name, start, end } of occurrences) {
         const newName = resolve(name);
         if (newName === null) continue;
         result += line.slice(copied, start) + referenceText(newName);

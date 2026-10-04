@@ -4,7 +4,7 @@ import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { resetNotices } from "../helpers/notices";
 import { handleCopy, resetCarryRegister } from "../../src/commands/carry-footnotes-hooks";
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+import { footnoteFacts } from "../../src/parsing/footnote-facts";
 
 // BUG (performance): every Ctrl+C with a selection reads the whole note,
 // even when the selection holds no footnote at all.
@@ -32,21 +32,26 @@ import { definitionStartLines, maskProtectedLines, scanDocument } from "../../sr
 // needs only the selection.
 //
 // Cause: handleCopy calls remember, which calls carriedDefinitions on the
-// whole note before it looks at the selection. carriedDefinitions starts
-// by scanning every line of the note (scanDocument, maskProtectedLines,
-// definitionStartLines), whatever the selection holds.
+// whole note before it looks at the selection. carriedDefinitions started
+// by reading every line of the note, whatever the selection holds.
+//
+// Fixed 2026-10-03 (the runtime swap, step 3): a selection with no "[^"
+// on its lines leaves the note unread. The note reading remembers what it
+// read, so each run below copies from a note no reading has seen (every
+// line carries the run's own tag), and the baseline is one read of such a
+// note from scratch (footnoteFacts, which remembers nothing).
 
-/** A 20,000-line note: 18,000 lines of prose, one in nine citing a footnote, then 2,000 definitions. */
-function hugeNote(): string[] {
+/** A 20,000-line note: 18,000 lines of prose, one in nine citing a footnote, then 2,000 definitions; `tag` starts every line, so no two notes share a line. */
+function hugeNote(tag: string): string[] {
     const lines: string[] = [];
     let n = 0;
     for (let i = 0; i < 18000; i++) {
         if (i % 9 === 0 && n < 2000) {
             n++;
-            lines.push(`Line ${i} cites a source[^${n}] and goes on a little.`);
-        } else lines.push(i % 10 === 9 ? "" : `Line ${i} is plain prose without footnotes, long enough to scan.`);
+            lines.push(`${tag} line ${i} cites a source[^${n}] and goes on a little.`);
+        } else lines.push(i % 10 === 9 ? "" : `${tag} line ${i} is plain prose without footnotes, long enough to scan.`);
     }
-    for (let k = 1; k <= 2000; k++) lines.push(`[^${k}]: Definition number ${k} with some text.`);
+    for (let k = 1; k <= 2000; k++) lines.push(`[^${k}]: ${tag} definition number ${k} with some text.`);
     return lines;
 }
 
@@ -70,12 +75,13 @@ function clipboardEvent() {
     return event;
 }
 
-/** The fastest of three runs of `run`, in milliseconds. */
-function best(run: () => void): number {
+/** The fastest of three runs of `run`, each handed its own fresh note, in milliseconds; the notes are built before the clock starts. */
+function best(name: string, run: (lines: string[]) => void): number {
     let min = Infinity;
     for (let i = 0; i < 3; i++) {
+        const lines = hugeNote(`${name}${i}`);
         const started = performance.now();
-        run();
+        run(lines);
         min = Math.min(min, performance.now() - started);
     }
     return min;
@@ -86,16 +92,10 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
-const lines = hugeNote();
-
 describe("copy on a 20,000-line note with 2,000 footnotes", () => {
-    it.fails("Ctrl+C of ten plain characters (no footnote anywhere in the selection) costs far less than one scan of the note", () => {
-        const scan = best(() => {
-            const s = scanDocument(lines);
-            const m = maskProtectedLines(lines, s);
-            definitionStartLines(lines, s, (i) => m[i]);
-        });
-        const copy = best(() => {
+    it("Ctrl+C of ten plain characters (no footnote anywhere in the selection) costs far less than one read of the note", () => {
+        const scan = best("read", (lines) => footnoteFacts(lines.join("\n")));
+        const copy = best("copy", (lines) => {
             resetCarryRegister();
             const from = { line: 1, ch: 0 };
             const to = { line: 1, ch: 10 };
@@ -103,8 +103,8 @@ describe("copy on a 20,000-line note with 2,000 footnotes", () => {
             handleCopy(fakePlugin({ carryFootnotesOnCopy: true }, doc), clipboardEvent() as never);
         });
         // a selection without "[^" can need no definition, so a cheap
-        // check would leave it to the editor without reading the note.
-        // Today: the copy takes about as long as one scan, or longer.
+        // check leaves it to the editor without reading the note (before
+        // the fix the copy took about as long as one read, or longer)
         expect(copy).toBeLessThan(scan / 4);
     }, 60000);
 });

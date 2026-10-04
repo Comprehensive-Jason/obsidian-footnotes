@@ -55,17 +55,17 @@ describe("a run of references before a colon at the line's start", () => {
         expect(footnoteAfterPunctuation("para\n    [^1]: x")).toBe("para\n    :[^1] x");
     });
 
-    // OPEN 2026-09-16: the reference grammar itself reads a "[^2]:" at the
-    // start of a segment as a label shape (referenceOccurrences finds no
-    // reference in " [^2]: x"), so the swap never sees it; whether Obsidian
-    // renders "[^1]: [^2]: x" with a live [^2] was not probed. Left as an
-    // expected failure until it is.
-    it("a reference at the START of a definition's body crosses its colon too", () => {
-        // the body is sliced off the label before the swap runs, and the
-        // same guard sees "[^2]: x" at the slice's start and reads it as a
-        // label again. It is body text: "[^1]: [^2]: x" is a definition
-        // whose body is a reference, a colon, and an x.
-        expect(footnoteAfterPunctuation("[^1]: [^2]: x")).toBe("[^1]: :[^2] x");
+    // SETTLED 2026-10-03 (the runtime swap, step 3): Obsidian reads
+    // "[^1]: [^2]: x" as TWO definitions on one line, [^2] nested in [^1]
+    // (rule E2 in docs/obsidian-reading-rules.md; the saved answers
+    // probe:e2-nested-label and pin:bug-punctuation-run-before-colon-stays#1
+    // in test/obsidian-answers/ list both labels as definitions and no
+    // reference). So the "[^2]:" at the start of the body is a label, and
+    // the rule leaves it alone like any other label. This test used to
+    // expect "[^1]: :[^2] x", on the guess that the body was a reference
+    // and a colon, which the probe did not bear out.
+    it("a label at the START of a definition's body is a nested definition's label, and stays", () => {
+        expect(footnoteAfterPunctuation("[^1]: [^2]: x")).toBe("[^1]: [^2]: x");
     });
 
     it("control: a real label is never mangled (one name, then colon)", () => {

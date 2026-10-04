@@ -1,7 +1,6 @@
 import { EditorPosition } from "obsidian";
 
 import { positionAfterRewrite } from "../editor/document-diff";
-import { referenceOccurrences } from "../parsing/footnote-grammar";
 import { orphanedDefinitionBlocks } from "../linting/rules/remove-orphaned-definitions";
 import { definitionCuts, normalizeEol, removeLineRanges } from "../parsing/markdown-scan";
 import { Definition, readNote } from "../parsing/note-reading";
@@ -84,9 +83,12 @@ function selectionHolds(from: EditorPosition, to: EditorPosition, line: number, 
  * names that have nothing to carry.
  */
 function carriedBlocks(lines: string[], from: EditorPosition, to: EditorPosition): { blocks: Definition[]; missing: string[] } {
+    // A selection with no "[^" on its lines holds no reference, so it needs
+    // no definition, and the note is not read at all: a copy of plain prose
+    // on a 20,000-line note used to cost a whole reading of it (hunt
+    // 2026-10-02, pin bug-carry-plain-copy-scans-note).
+    if (!lines.slice(from.line, to.line + 1).some((line) => line.includes("[^"))) return { blocks: [], missing: [] };
     const reading = readNote(lines);
-    const masked = reading.maskedLines();
-    const starts = reading.labelLines;
 
     // every definition the note has, wherever it sits (Jason's ruling 1,
     // option a, 2026-10-03: one in a list item is carried too), by
@@ -100,14 +102,11 @@ function carriedBlocks(lines: string[], from: EditorPosition, to: EditorPosition
         blocksOf.set(folded, [...(blocksOf.get(folded) ?? []), block]);
     }
 
-    // the references on a line; a label defines, it does not point, and
-    // referenceOccurrences leaves a definition's own label out
-    const referencesOn = (line: number) =>
-        reading.protectedLines[line] || !lines[line].includes("[^") ? [] : referenceOccurrences(lines[line], masked[line], starts[line]);
-    // the references the selection holds whole, in order
+    // the references the selection holds whole, in order; a label
+    // defines, it does not point, so the reading leaves it out
     const queue: string[] = [];
     for (let line = from.line; line <= to.line && line < lines.length; line++) {
-        for (const occurrence of referencesOn(line)) {
+        for (const occurrence of reading.referencesOn(line)) {
             if (selectionHolds(from, to, line, occurrence.start, occurrence.end)) queue.push(occurrence.name);
         }
     }
@@ -139,7 +138,7 @@ function carriedBlocks(lines: string[], from: EditorPosition, to: EditorPosition
         // met right after it, as a reader meets them (preorder), before
         // the selection's later references
         const inner: string[] = [];
-        for (let line = block.start; line <= block.end; line++) inner.push(...referencesOn(line).map((occurrence) => occurrence.name));
+        for (let line = block.start; line <= block.end; line++) inner.push(...reading.referencesOn(line).map((occurrence) => occurrence.name));
         queue.unshift(...inner);
     }
     return { blocks: carried, missing };
@@ -175,8 +174,6 @@ export interface CarriedPastePlan {
 export function planCarriedPaste(destination: string, body: string, carried: CarriedDefinition[]): CarriedPastePlan {
     const lines = normalizeEol(destination).text.split("\n");
     const reading = readNote(lines);
-    const masked = reading.maskedLines();
-    const starts = reading.labelLines;
 
     // what the destination holds: every name in use (definitions and
     // references, folded), and every definition body by its normalised
@@ -190,8 +187,7 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
         bodies.set(normalisedBody(lines.slice(block.start, block.end + 1), block.labelEnd), block.name);
     }
     for (let i = 0; i < lines.length; i++) {
-        if (reading.protectedLines[i] || !lines[i].includes("[^")) continue;
-        for (const occurrence of referenceOccurrences(lines[i], masked[i], starts[i])) taken.add(occurrence.name.toLowerCase());
+        for (const occurrence of reading.referencesOn(i)) taken.add(occurrence.name.toLowerCase());
     }
 
     // the final name of every incoming name, folded
@@ -239,15 +235,8 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     // offsets of the ones before it; a line's own label is renamed too
     const rename = (text: string[]): string[] => {
         const textReading = readNote(text);
-        const textMasked = textReading.maskedLines();
         return text.map((line, i) => {
-            if (textReading.protectedLines[i] || !line.includes("[^")) return line;
-            const edits: { start: number; end: number; name: string }[] = [];
-            const label = textReading.labelOn(i);
-            if (label) edits.push({ start: label.labelStart + 2, end: label.labelEnd - 2, name: label.name });
-            for (const occurrence of referenceOccurrences(line, textMasked[i], textReading.labelLines[i])) {
-                edits.push({ start: occurrence.start + 2, end: occurrence.end - 1, name: occurrence.name });
-            }
+            const edits = [...textReading.labelsOn(i), ...textReading.referencesOn(i)].map(({ start, end, name }) => ({ start: start + 2, end: end - 1, name }));
             return edits
                 .filter((edit) => {
                     const target = finalName.get(edit.name.toLowerCase());

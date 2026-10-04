@@ -13,7 +13,6 @@ import {
     idListIncludes,
     InvalidNameCharacters,
     quotedReference,
-    referenceOccurrences,
     referenceText,
 } from "../parsing/footnote-grammar";
 import { openFootnotePopup, popupEditingAvailable } from "./footnote-popup";
@@ -37,7 +36,7 @@ import {
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
 import { lintAfterFootnoteCreation } from "../linting/linter";
-import { maskInlineRegions, maskedLineAt } from "../parsing/markdown-scan";
+import { cellReading, CellTextColumn, maskInlineRegions, maskedLineAt } from "../parsing/markdown-scan";
 import { warnDefinitionCaretIfInside, warnTableEdgeCaretIfOutside, warnProtectedCaretIfInside } from "./press-guards";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
@@ -131,7 +130,7 @@ function dispatchCellEditIfLive(
     from = Math.max(0, Math.min(from, cellText.length));
     to = Math.max(from, Math.min(to, cellText.length));
     const simulatedCell = cellText.slice(0, from) + text + cellText.slice(to);
-    if (!insertionLandsIntact(maskInlineRegions(simulatedCell), from, text)) {
+    if (!insertionLandsIntact(cellReading(simulatedCell), 0, from + CellTextColumn, text)) {
         showNotice(ProtectedCreationNotice, 8000);
         return false;
     }
@@ -168,13 +167,8 @@ export function referenceOrdinalAtCursor(
 ): number {
     const wanted = footnoteId.toLowerCase();
     let ordinal = 0;
-    const ordinalStarts = ctx.definitionStarts();
     for (let line = 0; line <= cursor.line && line < ctx.lines.length; line++) {
-        for (const occurrence of referenceOccurrences(
-            ctx.lines[line],
-            ctx.maskedLine(line),
-            ordinalStarts[line],
-        )) {
+        for (const occurrence of ctx.reading().referencesOn(line)) {
             if (occurrence.name.toLowerCase() !== wanted) continue;
             if (line === cursor.line) {
                 if (cursor.ch > occurrence.start && cursor.ch <= occurrence.end) {
@@ -200,13 +194,8 @@ export function positionAfterReference(
 ): EditorPosition | null {
     const wanted = footnoteId.toLowerCase();
     let seen = 0;
-    const restoreStarts = ctx.definitionStarts();
     for (let line = 0; line < ctx.lines.length; line++) {
-        for (const occurrence of referenceOccurrences(
-            ctx.lines[line],
-            ctx.maskedLine(line),
-            restoreStarts[line],
-        )) {
+        for (const occurrence of ctx.reading().referencesOn(line)) {
             if (occurrence.name.toLowerCase() !== wanted) continue;
             if (seen === ordinal) return { line, ch: occurrence.end };
             seen++;
@@ -225,9 +214,8 @@ export function positionAfterReference(
  * press just to read its first few lines (a performance item from the
  * 2026-08-11 review).
  *
- * The numbering scan only ever reads masked text. Its first argument
- * exists so it can work out a default mask, so the masked twin (the copy
- * of the note with protected text blanked out) is handed to it twice.
+ * The numbering reads the note's footnotes from the press's own reading,
+ * so a number inside code reserves nothing.
  *
  * Three places used to work this out for themselves; this is now the one
  * home for it (duplicated-logic audit, 2026-09-05).
@@ -239,8 +227,7 @@ export function autonumFootnoteId(
 ): string | null {
     const prefix = activeFootnotePrefix(plugin, footnotePrefixFromEditor(doc));
     if (prefix === null) return null;
-    const masked = ctx.maskedLines().join("\n");
-    return `${prefix}${computeNextFootnoteNumber(masked, prefix, masked)}`;
+    return `${prefix}${computeNextFootnoteNumber(ctx.reading(), prefix)}`;
 }
 
 // Stryker disable all: this hands off to the popup against the live

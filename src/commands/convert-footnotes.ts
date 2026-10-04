@@ -1,4 +1,3 @@
-import { inlineFootnoteSpans, referenceOccurrences } from "../parsing/footnote-grammar";
 import { normalizeEol, removeLineRanges, restoreEol } from "../parsing/markdown-scan";
 import { Definition, readNote } from "../parsing/note-reading";
 import { linesReadDifferently } from "../linting/rules/remove-orphaned-definitions";
@@ -82,8 +81,6 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");
     const reading = readNote(lines);
-    const masked = reading.maskedLines();
-    const starts = reading.labelLines;
     const unchanged = (skipped: ConversionToInline["skipped"], refused?: string): ConversionToInline => ({
         markdown,
         converted: 0,
@@ -110,25 +107,20 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
     }
     if (found.size === 0) return unchanged([]);
 
-    // every live reference, by lower-cased name, with whether it sits
-    // inside a definition's body or an inline footnote (where a converted
-    // reference would nest). A definition's own label is not a reference
-    // (referenceOccurrences leaves it out); a lazy label's "[^x]" is one,
-    // as it renders.
+    // every reference, by lower-cased name, with whether it sits inside a
+    // definition's body or an inline footnote, where a converted reference
+    // would nest. The reading lists both kinds: the live ones, and the ones
+    // inside an inline footnote, which Obsidian reads as that footnote's
+    // text (rule E3) and which would nest once converted. A definition's
+    // own label is not a reference; a lazy label's "[^x]" is one, as it
+    // renders.
     type Ref = { line: number; start: number; end: number; nested: boolean };
     const refs = new Map<string, Ref[]>();
     const tableRows = reading.tableRowLines;
-    for (let i = 0; i < lines.length; i++) {
-        if (reading.protectedLines[i] || !lines[i].includes("[^")) continue;
-        const spans = inlineFootnoteSpans(masked[i]);
-        for (const occurrence of referenceOccurrences(lines[i], masked[i], starts[i])) {
-            const folded = occurrence.name.toLowerCase();
-            const inSpan = spans.some((span) => occurrence.start > span.open && occurrence.end <= span.close + 1);
-            refs.set(folded, [
-                ...(refs.get(folded) ?? []),
-                { line: i, start: occurrence.start, end: occurrence.end, nested: insideDefinition[i] || inSpan },
-            ]);
-        }
+    const inOrder = [...reading.references].sort((a, b) => a.line - b.line || a.start - b.start);
+    for (const { name, line, start, end, live } of inOrder) {
+        const folded = name.toLowerCase();
+        refs.set(folded, [...(refs.get(folded) ?? []), { line, start, end, nested: insideDefinition[line] || !live }]);
     }
 
     // decide each name, in the order its definitions appear
@@ -156,8 +148,10 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
             skip("empty");
             continue;
         }
-        const maskedBody = masked[block.start].slice(bodyStart);
-        if (referenceOccurrences(body, maskedBody, false).length > 0 || inlineFootnoteSpans(maskedBody).length > 0) {
+        const bodyHoldsFootnote =
+            reading.references.some((reference) => reference.line === block.start && reference.start >= bodyStart) ||
+            reading.inlineNotesOn(block.start).some((note) => note.open >= bodyStart);
+        if (bodyHoldsFootnote) {
             skip("its body holds a footnote");
             continue;
         }
@@ -249,8 +243,6 @@ const nothingToConvert: ConversionToNormal = { converted: 0, definitions: 0, mer
 export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Editor): ConversionToNormal {
     const ctx = docContext(doc);
     const lines = ctx.lines;
-    const masked = ctx.maskedLines();
-    const starts = ctx.definitionStarts();
     // the lines that belong to some definition's body, wherever it sits
     const insideDefinition = new Array<boolean>(lines.length).fill(false);
     for (const definition of ctx.reading().definitions) {
@@ -267,8 +259,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
     // body's key for merging (the body as written, trimmed)
     const spans: { line: number; open: number; close: number; body: string }[] = [];
     for (let i = 0; i < lines.length; i++) {
-        if (ctx.reading().protectedLines[i] || !lines[i].includes("^[")) continue;
-        for (const span of inlineFootnoteSpans(masked[i])) {
+        for (const span of ctx.reading().inlineNotesOn(i)) {
             const body = lines[i].slice(span.open + 2, span.close).trim();
             if (body === "") {
                 skip("empty");
@@ -297,16 +288,14 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
     // already been toasted by activeFootnotePrefix
     const prefix = activeFootnotePrefix(plugin, footnotePrefixFromEditor(doc));
     if (prefix === null) return { ...nothingToConvert, skipped };
-    const maskedText = masked.join("\n");
-    let nextNumber = computeNextFootnoteNumber(maskedText, prefix, maskedText);
+    let nextNumber = computeNextFootnoteNumber(ctx.reading(), prefix);
     const named = plugin.settings.footnoteNaming === "named";
     // every name the note uses, folded, so a generated name never collides
     const taken = new Set<string>();
     if (named) {
         for (const name of listExistingFootnoteDefinitions(doc, ctx)) taken.add(name.toLowerCase());
         for (let i = 0; i < lines.length; i++) {
-            if (ctx.reading().protectedLines[i] || !lines[i].includes("[^")) continue;
-            for (const occurrence of referenceOccurrences(lines[i], masked[i], starts[i])) taken.add(occurrence.name.toLowerCase());
+            for (const occurrence of ctx.reading().referencesOn(i)) taken.add(occurrence.name.toLowerCase());
         }
     }
     const idOf = new Map<string, string>();

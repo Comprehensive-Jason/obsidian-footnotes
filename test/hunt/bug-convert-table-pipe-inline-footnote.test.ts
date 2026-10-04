@@ -20,11 +20,15 @@ import { convertInlineFootnotesToNormal } from "../../src/commands/convert-footn
 // every unescaped pipe before it reads any inline syntax, even inside
 // other inline spans. To keep a pipe inside a cell it has to be escaped
 // ("\|"), and the escaped twin already converts correctly.
+//
+// Fixed 2026-10-03 (the runtime swap, step 3): the conversion takes its
+// inline footnotes from the note reading, which reads the row's cells
+// first, so "^[a" and "b]" are two cells' text and no inline footnote.
 
 beforeEach(resetNotices);
 
 describe("an inline footnote with a bare pipe in a table row", () => {
-    it.fails("'^[a | b]' with a bare pipe in a table row is two cells, not an inline footnote, and stays", () => {
+    it("'^[a | b]' with a bare pipe in a table row is two cells, not an inline footnote, and stays", () => {
         const lines = ["| x^[a | b] | c |", "| - | - | - |"];
         const doc = fakeEditor(lines, { wholeDoc: true, edits: true, cursor: { line: 0, ch: 0 } });
         convertInlineFootnotesToNormal(fakePlugin({}, doc), doc);

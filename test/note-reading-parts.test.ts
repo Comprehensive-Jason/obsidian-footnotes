@@ -162,7 +162,7 @@ const Soak = Number(process.env.FC_NUM_RUNS ?? 200) / 200;
 const AnswerEdits = Math.round(2 * Soak);
 const GeneratedEdits = Math.round(3 * Soak);
 
-const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes"];
+const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes", "swap34-probes"];
 
 describe("the note reading in parts reads every note as one parse of the whole note does", () => {
     for (const file of AnswerFiles) {
