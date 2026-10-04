@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { endOfWordOffset } from "../../src/editor/cursor-motion";
+import { InsideLinkNotice } from "../../src/editor/notice";
+import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 
@@ -70,8 +72,11 @@ describe("spec question: a press on the last word of a shortcut reference link",
     // swap34:br-defined-label in test/obsidian-answers/swap34-probes.json;
     // Reading view agrees). So the press is born dead and writes nothing,
     // and the link stays. Where the footnote should go instead is still
-    // the open question above.
+    // the open question above. The refusal says why in its own words (Jason's
+    // ruling, 2026-10-04; before it, the press showed the protected-text
+    // notice).
     it("the whole numbered press (insert at end of word on) keeps the link", async () => {
+        resetNotices();
         const lines = ["see [text] now", "", LinkAddress];
         const doc = fakeEditor(lines, { cursor: { line: 0, ch: 6 }, edits: true, wholeDoc: true });
         await insertAutonumFootnote(
@@ -90,5 +95,6 @@ describe("spec question: a press on the last word of a shortcut reference link",
         );
         // Before: line 0 read "see [text][^1] now" and the link was gone
         expect(linkTexts(doc.lines.join("\n"))).toContain("text");
+        expect(messages()).toEqual([InsideLinkNotice]);
     });
 });

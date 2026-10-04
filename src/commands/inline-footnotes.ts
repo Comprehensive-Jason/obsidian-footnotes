@@ -3,7 +3,7 @@ import { Editor, EditorPosition, MarkdownView } from "obsidian";
 import type FootnotePlugin from "../main";
 
 import { DocContext, docLines, insideDefinition } from "../editor/doc-context";
-import { InsertionVerdict } from "../editor/insertion-liveness";
+import { deadInsertionVerdict, InsertionVerdict } from "../editor/insertion-liveness";
 import { inlineNoteInCell, maskInlineRegions } from "../parsing/cell-reading";
 import { NoteReading, readNote } from "../parsing/note-reading";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
@@ -112,29 +112,39 @@ function wrapReadsWhole(text: string): boolean {
  * note as the edit leaves it? An inline footnote has to read as one whole
  * inline footnote, because pasted content can carry code of its own INSIDE
  * the brackets. Anything else, the empty "[^]" placeholder, has to come
- * back byte for byte on the masked twin. If it does not, the insertion
- * completed some markdown construct around itself and would be born inside
+ * back byte for byte on the masked twin, and must not open inside a link:
+ * "[sic][^]" is a reference link to Obsidian, so the name typed into it
+ * would never make a footnote (Jason's ruling, 2026-10-04).
+ *
+ * The answer: "live" when it reads as itself; "link" when it does not and
+ * a link took it in (deadInsertionVerdict); "dead" when it completed some
+ * other markdown construct around itself and would be born inside
  * protected text.
  */
-export function insertionLandsIntact(after: NoteReading, line: number, at: number, text: string): boolean {
-    return text.startsWith("^[")
+export function landingVerdict(after: NoteReading, line: number, at: number, text: string): "live" | "dead" | "link" {
+    const intact = text.startsWith("^[")
         ? inlineWrapLandsIntact(after, line, at, text.length)
-        : after.maskedLine(line).slice(at, at + text.length) === text;
+        : after.maskedLine(line).slice(at, at + text.length) === text && !after.insideLink(line, at);
+    return intact ? "live" : deadInsertionVerdict(after, { line, ch: at });
 }
 
 /**
  * The verdict for `text` written with no definition alongside it (an
  * inline footnote, the empty "[^]" placeholder) at every one of `anchors`,
- * judged on `after`, the note as the edit leaves it. "dead" when one of
- * them would not read as itself (insertionLandsIntact), "nested" when one
- * lands on a line that belongs to a definition, which is what filling the
- * empty line right under a definition does (ADR 0001; hunt 2026-10-02,
- * pin bug-press-blank-line-under-definition-nests), otherwise "live". The
- * same three answers verifyLiveFootnoteInsertion gives a reference that
- * comes with its definition.
+ * judged on `after`, the note as the edit leaves it. The first one that
+ * would not read as itself decides: "link" when a link took it in, "dead"
+ * otherwise (landingVerdict). "nested" when one lands on a line that
+ * belongs to a definition, which is what filling the empty line right
+ * under a definition does (ADR 0001; hunt 2026-10-02, pin
+ * bug-press-blank-line-under-definition-nests), otherwise "live". The same
+ * answers verifyLiveFootnoteInsertion gives a reference that comes with
+ * its definition.
  */
 export function bareInsertionVerdict(after: DocContext, anchors: EditorPosition[], text: string): InsertionVerdict {
-    if (!anchors.every((at) => insertionLandsIntact(after.reading(), at.line, at.ch, text))) return "dead";
+    for (const at of anchors) {
+        const landed = landingVerdict(after.reading(), at.line, at.ch, text);
+        if (landed !== "live") return landed;
+    }
     return anchors.some((at) => insideDefinition(after, at.line)) ? "nested" : "live";
 }
 

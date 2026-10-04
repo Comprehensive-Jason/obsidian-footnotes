@@ -27,7 +27,7 @@ import {
     listExistingFootnoteDefinitions,
     referenceOccurrenceAtCursor,
 } from "../editor/doc-context";
-import { bareInsertionVerdict, insertionLandsIntact } from "./inline-footnotes";
+import { bareInsertionVerdict, landingVerdict } from "./inline-footnotes";
 import {
     InsertionVerdict,
     ProtectedCreationNotice,
@@ -40,19 +40,21 @@ import { cellReading, CellTextColumn, maskInlineRegions } from "../parsing/cell-
 import { warnDefinitionCaretIfInside, warnTableEdgeCaretIfOutside, warnProtectedCaretIfInside } from "./press-guards";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
-import { NestedFootnoteNotice, showNotice } from "../editor/notice";
+import { InsideLinkNotice, NestedFootnoteNotice, showNotice } from "../editor/notice";
 
 /**
  * The refusal for a creation whose result is not "live" (see
  * verifyLiveFootnoteInsertion): a reference that would land inside a
  * definition gets the nesting notice, the same one a caret inside a
- * definition gets, and anything else that would be born dead gets
- * `deadNotice`. Shared by every press that writes a reference with its
- * definition. True means the press was refused.
+ * definition gets; one that Obsidian would read as part of a link gets the
+ * link notice (Jason's ruling, 2026-10-04); and anything else that would be
+ * born dead gets `deadNotice`. Shared by every press that writes a
+ * reference. True means the press was refused.
  */
 export function refusedCreation(verdict: InsertionVerdict, deadNotice: string): boolean {
     if (verdict === "live") return false;
-    showNotice(verdict === "nested" ? NestedFootnoteNotice : deadNotice, 8000);
+    const notices = { nested: NestedFootnoteNotice, link: InsideLinkNotice, dead: deadNotice };
+    showNotice(notices[verdict], 8000);
     return true;
 }
 
@@ -130,8 +132,7 @@ function dispatchCellEditIfLive(
     from = Math.max(0, Math.min(from, cellText.length));
     to = Math.max(from, Math.min(to, cellText.length));
     const simulatedCell = cellText.slice(0, from) + text + cellText.slice(to);
-    if (!insertionLandsIntact(cellReading(simulatedCell), 0, from + CellTextColumn, text)) {
-        showNotice(ProtectedCreationNotice, 8000);
+    if (refusedCreation(landingVerdict(cellReading(simulatedCell), 0, from + CellTextColumn, text), ProtectedCreationNotice)) {
         return false;
     }
     cell.dispatch({

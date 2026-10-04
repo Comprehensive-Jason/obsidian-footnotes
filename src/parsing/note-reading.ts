@@ -65,6 +65,8 @@ export interface NoteReading {
     readonly references: FootnoteFacts["references"];
     /** The stretches of protected text: code, math, comments, frontmatter, and the like. */
     readonly protectedSpans: FootnoteFacts["protectedSpans"];
+    /** Every link, reference link, image, and wikilink, in the order the note reads them (see insideLink). */
+    readonly links: FootnoteFacts["links"];
     /** One entry per line: true where the label of some definition sits on the line. Shared by every caller of the same text, so never changed. */
     readonly labelLines: boolean[];
     /** The definition whose label sits on `line` (the first, when one line holds two), or null. */
@@ -162,6 +164,15 @@ export interface NoteReading {
      * bracket count on the line, says where one is.
      */
     inlineNoteAt(line: number, ch: number): { open: number; close: number } | null;
+    /**
+     * Whether column `ch` of `line` falls inside a link-like construct: an
+     * inline link, a reference link, an image, or a wikilink, from its first
+     * character up to its last. A "[^name]" whose "[" sits there is read as
+     * part of the link, not as a footnote: "[sic][^1]" is a reference link
+     * whose label is "^1" (Jason's ruling on its refusal notice,
+     * 2026-10-04).
+     */
+    insideLink(line: number, ch: number): boolean;
 }
 
 /**
@@ -384,6 +395,7 @@ function addPart(into: FootnoteFacts, part: FootnoteFacts, lines: number, offset
     for (const row of part.tableRows) into.tableRows.push(row + lines);
     for (const blocks of part.lineBlocks) into.lineBlocks.push(blocks);
     for (const note of part.inlineNotes) into.inlineNotes.push({ ...note, line: note.line + lines });
+    for (const link of part.links) into.links.push({ ...link, startLine: link.startLine + lines, endLine: link.endLine + lines });
 }
 
 /**
@@ -424,7 +436,7 @@ function notePartFacts(text: string, lines: readonly string[], reading: number):
     const frontmatter = frontmatterEnd(text);
     const afterFrontmatter = frontmatter === 0 ? 0 : text.slice(0, frontmatter).split("\n").length;
     const starts = partStarts(lines, afterFrontmatter);
-    const facts: FootnoteFacts = { definitions: [], references: [], protectedSpans: [], blockSyntax: [], tableRows: [], lineBlocks: [], inlineNotes: [] };
+    const facts: FootnoteFacts = { definitions: [], references: [], protectedSpans: [], blockSyntax: [], tableRows: [], lineBlocks: [], inlineNotes: [], links: [] };
     let from = 0;
     // the first entry of `starts` after `from`
     let next = 0;
@@ -601,6 +613,7 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
         blocks: Object.freeze(definitions.filter((definition) => definition.movable)),
         references: facts.references,
         protectedSpans: facts.protectedSpans,
+        links: facts.links,
         labelLines: Object.freeze(labels.map((label) => label !== null)) as boolean[],
         labelOn: (line) => labels[line] ?? null,
         definitionAt(line) {
@@ -684,6 +697,12 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
             }
             return found;
         },
+        insideLink: (line, ch) =>
+            facts.links.some(
+                (link) =>
+                    (line > link.startLine || (line === link.startLine && ch >= link.start)) &&
+                    (line < link.endLine || (line === link.endLine && ch < link.end)),
+            ),
         regionOpenAt(line) {
             if (line < 0 || line >= lineCount) return false;
             const start = lineStarts[line];

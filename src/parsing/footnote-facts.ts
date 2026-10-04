@@ -113,6 +113,24 @@ interface BlockSyntaxFact {
     end: number;
 }
 
+/**
+ * A link-like construct: an inline link "[text](url)", a reference link
+ * "[text][label]" or "[text]", an image, or a wikilink "[[...]]". It runs
+ * from column `start` of line `startLine` up to (not including) column
+ * `end` of line `endLine`. A "[^name]" written inside one is part of the
+ * link, not a footnote: "[sic][^1]" is a reference link whose label is
+ * "^1" (Jason's ruling on its refusal notice, 2026-10-04).
+ */
+interface LinkFact {
+    startLine: number;
+    start: number;
+    endLine: number;
+    end: number;
+}
+
+/** The node types read as a LinkFact. */
+const LinkNodes = new Set(["link", "linkReference", "image", "imageReference", "wikiLink"]);
+
 export interface FootnoteFacts {
     definitions: DefinitionFact[];
     references: ReferenceFact[];
@@ -133,6 +151,8 @@ export interface FootnoteFacts {
     lineBlocks: string[];
     /** Every inline footnote "^[...]" that starts and ends on one line: its line, the column of its "^", and the column of its closing "]". */
     inlineNotes: { line: number; open: number; close: number }[];
+    /** Every link-like construct, in the order the note reads them. */
+    links: LinkFact[];
 }
 
 /** Node types that hold blocks; a child of one of these is a block itself, anything deeper is inline. */
@@ -208,6 +228,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
     };
     const lineBlocks: string[][] = lineStarts.map(() => []);
     const inlineNotes: { line: number; open: number; close: number }[] = [];
+    const links: LinkFact[] = [];
 
     const walk = (node: MarkdownNode, parentType: string, inInlineNote: boolean, container: DefinitionContainer): void => {
         const block = BlockContainers.has(parentType);
@@ -222,6 +243,13 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
             const first = node.position.start.line - 1;
             const marked = node.type !== "blockquote" && node.type !== "list";
             for (let line = first; line <= lastLineOf(node); line++) lineBlocks[line]?.push(marked && line === first ? `^${kind}` : kind);
+        }
+        // A link-like construct is noted whole, so a press can tell a
+        // reference that would be read as part of a link from one that would
+        // land in protected text, and say which it is (NoteReading.insideLink).
+        if (LinkNodes.has(node.type)) {
+            const { start, end } = node.position;
+            links.push({ startLine: start.line - 1, start: start.column - 1, endLine: end.line - 1, end: end.column - 1 });
         }
         switch (node.type) {
             case "footnoteDefinition": {
@@ -330,7 +358,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
         for (const child of node.children ?? []) walk(child, node.type, inInlineNote || node.type === "footnote", inner);
     };
     walk(tree, "", false, { quotes: 0, listItems: 0, footnotes: 0 });
-    return { definitions, references, protectedSpans, blockSyntax, tableRows, lineBlocks: lineBlocks.map((kinds) => kinds.join(" ")), inlineNotes };
+    return { definitions, references, protectedSpans, blockSyntax, tableRows, lineBlocks: lineBlocks.map((kinds) => kinds.join(" ")), inlineNotes, links };
 }
 
 /** The footnote facts of a note, as Obsidian reads it. */
@@ -377,5 +405,6 @@ export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean
         tableRows: facts.tableRows.filter((line) => line < lastLine),
         lineBlocks: facts.lineBlocks.slice(0, lastLine),
         inlineNotes: facts.inlineNotes.filter((note) => note.line < lastLine),
+        links: facts.links.filter((link) => link.startLine < lastLine),
     };
 }

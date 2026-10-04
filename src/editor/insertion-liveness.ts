@@ -3,6 +3,7 @@ import { NoFootnoteCreated } from "./notice";
 
 import { contextOfLines, DocContext, docLines, insideDefinition } from "./doc-context";
 import { escapedAt } from "../parsing/footnote-grammar";
+import type { NoteReading } from "../parsing/note-reading";
 
 // The born-dead safety kit. One question: once the text lands, will it
 // still MEAN what it says?
@@ -345,11 +346,27 @@ export function caretInsideMaskedSpan(
 
 /**
  * What a creation's result means once it lands: "live" when it reads as
- * the footnote it promised; "dead" when something died (the caller shows
- * ProtectedCreationNotice and refuses); "nested" when a reference landed
- * inside a definition (the caller shows NestedFootnoteNotice and refuses).
+ * the footnote it promised; "link" when a reference died because Obsidian
+ * reads it as part of a link (the caller shows InsideLinkNotice and
+ * refuses); "dead" when something else died, in code, math, or other
+ * protected text (the caller shows ProtectedCreationNotice and refuses);
+ * "nested" when a reference landed inside a definition (the caller shows
+ * NestedFootnoteNotice and refuses). The cause is decided here, once, so
+ * every press shows the right notice without a check of its own (Jason's
+ * ruling, 2026-10-04).
  */
-export type InsertionVerdict = "live" | "dead" | "nested";
+export type InsertionVerdict = "live" | "dead" | "link" | "nested";
+
+/**
+ * The verdict for an insertion at `at` that did not land as itself: "link"
+ * when the reading puts its first character inside a link, a reference
+ * link, an image, or a wikilink, "dead" otherwise. "[sic][^1]" is a
+ * reference link whose label is "^1", so the "[" of "[^1]" sits inside the
+ * link (Jason's ruling, 2026-10-04).
+ */
+export function deadInsertionVerdict(after: NoteReading, at: EditorPosition): "dead" | "link" {
+    return after.insideLink(at.line, at.ch) ? "link" : "dead";
+}
 
 /**
  * The shared born-dead verdict for any insertion that comes with a
@@ -367,7 +384,9 @@ export type InsertionVerdict = "live" | "dead" | "nested";
  * hunt 2026-10-02, pin bug-press-blank-line-under-definition-nests).
  *
  * One dead or nested landing refuses the whole press. Every "dead" failure
- * mode was found by the command-press property suite (2026-08-12).
+ * mode was found by the command-press property suite (2026-08-12). A
+ * reference that dies inside a link gets "link" instead, so the press can
+ * say so (deadInsertionVerdict; Jason's ruling, 2026-10-04).
  */
 export function verifyLiveFootnoteInsertion(opts: {
     /** the note as the transaction leaves it */
@@ -388,12 +407,16 @@ export function verifyLiveFootnoteInsertion(opts: {
     const label = ctx.reading().labelOn(opts.definitionLabelLine);
     const definitionLive = label !== null && label.movable && label.end >= opts.definitionLabelLine + bodyExtraLines;
     if (!definitionLive) return "dead";
-    const everyReferenceLive = opts.anchors.every((anchor) =>
-        ctx
-            .reading()
-            .referencesOn(anchor.line)
-            .some((occurrence) => occurrence.start === anchor.ch && occurrence.name === opts.footnoteId),
+    // the first reference that would not read as a live "[^id]" at its spot
+    // decides the verdict, and the reading says why: a link took it in, or
+    // something else did
+    const deadAnchor = opts.anchors.find(
+        (anchor) =>
+            !ctx
+                .reading()
+                .referencesOn(anchor.line)
+                .some((occurrence) => occurrence.start === anchor.ch && occurrence.name === opts.footnoteId),
     );
-    if (!everyReferenceLive) return "dead";
+    if (deadAnchor !== undefined) return deadInsertionVerdict(ctx.reading(), deadAnchor);
     return opts.anchors.some((anchor) => insideDefinition(ctx, anchor.line)) ? "nested" : "live";
 }

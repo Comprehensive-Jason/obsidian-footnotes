@@ -40,6 +40,13 @@ export const MultiCaretNestedNotice = NoFootnotesCreated + NestingRule;
  * protected-text notice. */
 export const BlockSyntaxNotice = NoFootnoteCreated + "a footnote here would break the line's formatting. Move the caret into the text.";
 
+/** A press whose new reference Obsidian would read as part of a link, a
+ * reference link, an image, or a wikilink: the caret on the last word of
+ * "[sic]" writes "[sic][^1]", a reference link with no footnote in it
+ * (Jason's wording, 2026-10-04). Code, math, and comments keep the
+ * protected-text notice. */
+export const InsideLinkNotice = NoFootnoteCreated + "Obsidian would read it as part of a link.";
+
 /** The advice for a definition nothing references. The navigation press and
  * the lint alert give the same advice. */
 export function addReferenceOrDeleteDefinition(name: string): string {

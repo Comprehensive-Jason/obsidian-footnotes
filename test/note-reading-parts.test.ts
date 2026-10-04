@@ -111,6 +111,7 @@ function difference(lines: string[]): string | null {
         ["definitions", reading.definitions, definitions],
         ["references", reading.references, whole.references],
         ["protected text", reading.protectedSpans, whole.protectedSpans],
+        ["links", reading.links, whole.links],
         ["block syntax", lines.map((_, line) => reading.blockSyntaxEnd(line)), syntaxEnds],
     ] as const) {
         const got = JSON.stringify(read);
