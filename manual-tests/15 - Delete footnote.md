@@ -1,6 +1,6 @@
 # 15: delete footnote definition and all references (2026-09-21)
 
-Claude: automated coverage lives in test/delete-footnote.test.ts (the transform, its refusals, a property over random notes, and the command entry); run `npm test` before this sheet. What is left here needs the live app: how the toast reads, undo grouping, the right-click menu, the popup, and the phone.
+Claude: automated coverage lives in test/delete-footnote.test.ts (the transform, its refusals, a property over random notes, and the command entry); run `npm test` before this sheet. What is left here needs the live app: how the toast reads, undo grouping, the right-click menu, and the popup. The phone check is on sheet P (moved 2026-10-04).
 
 Settings: defaults. Undo between checks. Every fixture is already in this note: a footnote cited twice[^twice] and again here[^twice], a right-click fixture[^menu], and a chained one[^chain] whose definition cites another footnote.
 
@@ -22,12 +22,6 @@ Run **Delete footnote everywhere** from the command palette with the caret in ea
 ## Compare with Obsidian's own item
 
 - [ ] Right-click the first `[^twice]` and choose Obsidian's own **Delete footnote and reference**: only that one reference and the definition go, and the second `[^twice]` is left behind (the core behaviour this command exists to fix; Jason's report 2026-09-19). Undo.
-
-## The phone
-
-(There is no long-press twin on the phone: Obsidian owns that menu there. The route is the toolbar icon or the command palette after a long press selects the name, as for rename on sheet P.)
-
-- [ ] On the phone, long-press `[^menu]` so the word is selected, then tap the command's toolbar icon: the deletion happens and the toast reads well at phone width
 
 [^twice]: cited twice
 [^menu]: the right-click fixture

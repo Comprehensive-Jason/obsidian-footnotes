@@ -28,12 +28,12 @@ The smoke suite drives the real plugin inside the running sandbox vault (Obsidia
 | 11 | Protected text and read-only views: creation guards, Reading view, lint, Obsidian `%%` comments | 2 |
 | 12 | Lint triggers (on save, on creation) and the settings page | 5 |
 | 14 | Definition labels directly after a prose line are prose (Obsidian's rule, matched 2026-09-09) | 2 |
-| 15 | Delete footnote everywhere: the command, the right-click menu, undo, the phone (added 2026-09-21) | 9 |
+| 15 | Delete footnote everywhere: the command, the right-click menu, undo (added 2026-09-21; its phone check moved to sheet P on 2026-10-04) | 8 |
 | 16 | Footnote reference placement: the dropdown, inserting under each placement, the lint rule under Before (added 2026-09-21) | 8 |
 | 17 | Converting between footnote styles: both commands, undo, the transclusion round trip (added 2026-09-21) | 7 |
 | 18 | Copying, cutting, and pasting footnotes: the real clipboard, a second note, other apps, the phone (added 2026-09-22), and a cut in a search box or the title left alone (2026-10-04) | 12 |
 | 19 | The September 2026 feature round in one sitting: sheets 15 to 18 gathered, plus the inline-footnote lint change and the icons; 19b is its paste-target companion (added 2026-09-22) | 42 |
-| P | Phone and mobile emulation, run on its own once a beta reaches the phone (lettered rather than numbered on 2026-10-04 so it stands apart from the desktop sheets), with the beta-only speed test on the "Footnote Speed Test" notes (added 2026-10-04) | 10 |
+| P | Phone and mobile emulation, run on its own once a beta reaches the phone (lettered rather than numbered on 2026-10-04 so it stands apart from the desktop sheets), with the beta-only speed test on the "Footnote Speed Test" notes (added 2026-10-04) and sheet 15's Delete footnote everywhere check | 11 |
 
 Inter-plugin compatibility sheets live separately in the repo's `compat-tests/` folder (vault mirror: "Footnote Compat Tests"); they need other plugins installed and follow different pass/fail rules.
 
