@@ -235,8 +235,15 @@ export function partParseCounts(): { parsed: number; unclean: number } {
     return { ...partCounts };
 }
 
-/** How many readings back a remembered part may last have been used before it is forgotten: the parts of the last four readings stay. */
-const PartMemory = 4;
+/**
+ * How many readings back a remembered part may last have been used before
+ * it is forgotten: the parts of the last eight readings stay. A lint reads
+ * five or six texts, among them each rule's output and the guards' trial
+ * texts, so with four a lint's renamed note was forgotten by the next lint
+ * and parsed afresh, about 190 parts on a 5,600-line note (the runtime
+ * swap step 2, 2026-10-03).
+ */
+const PartMemory = 8;
 
 /**
  * A line as the parser should see it. A line may end in a stray "\r" when a
