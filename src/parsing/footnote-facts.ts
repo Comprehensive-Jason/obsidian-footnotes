@@ -354,12 +354,15 @@ export function footnoteFacts(text: string): FootnoteFacts {
  * whole note: then the facts of the lines before it are the whole note's
  * facts for those lines, and they are returned. When the borrowed line is
  * taken into something above it (a paragraph's lazy line, a list's next
- * item, a code block or comment still open), the part does not end there,
- * and the result is null.
+ * item, a code block or comment still open), or a link definition's label
+ * is still open at the end (the one reader that looks further than the
+ * line after a block; see linkDefinitionsAtTheEnd in obsidian-markdown.ts),
+ * the part does not end there, and the result is null.
  */
 export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean): FootnoteFacts | null {
-    const { tree, containerColumns } = parseObsidianNote(doc, startsNote);
+    const { tree, containerColumns, readsPastEnd } = parseObsidianNote(doc, startsNote);
     if (!borrowsLine) return factsOfTree(doc, tree, containerColumns);
+    if (readsPastEnd) return null;
     // where the borrowed line starts, as an offset and as a line
     const last = doc.lastIndexOf("\n") + 1;
     if (!(tree.children ?? []).some((block) => block.position.start.offset === last)) return null;

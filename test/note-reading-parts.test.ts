@@ -159,6 +159,9 @@ function joined(notes: readonly string[], seed: number): string[] {
  * property tests' runs (TESTING.md: FC_NUM_RUNS=5000 gives 25 times as many).
  */
 const Soak = Number(process.env.FC_NUM_RUNS ?? 200) / 200;
+
+/** FC_SEED shifts every seed below, so a soak can run on other notes and other edits than the everyday run's. */
+const Seed = Number(process.env.FC_SEED ?? 0);
 const AnswerEdits = Math.round(2 * Soak);
 const GeneratedEdits = Math.round(3 * Soak);
 
@@ -168,14 +171,33 @@ describe("the note reading in parts reads every note as one parse of the whole n
     for (const file of AnswerFiles) {
         it(`Obsidian's saved answers: ${file}, then edited at random`, () => {
             const answers = JSON.parse(readFileSync(new URL(`./obsidian-answers/${file}.json`, import.meta.url), "utf8")) as SavedAnswer[];
-            expect(differences(answers.map((answer) => answer.text), AnswerEdits, 20261003)).toEqual([]);
+            expect(differences(answers.map((answer) => answer.text), AnswerEdits, 20261003 + Seed)).toEqual([]);
         }, 120000 * Soak);
     }
 
     it("generated notes, joined into longer ones, then edited at random", () => {
-        const notes = joined([...generateNotes(20261010, 1500), ...generateBroadNotes(20261011, 1500)], 20261012);
-        expect(differences(notes, GeneratedEdits, 20261013)).toEqual([]);
+        const notes = joined([...generateNotes(20261010 + Seed, 1500), ...generateBroadNotes(20261011 + Seed, 1500)], 20261012 + Seed);
+        expect(differences(notes, GeneratedEdits, 20261013 + Seed)).toEqual([]);
     }, 120000 * Soak);
+
+    // A link definition's label runs to the first "]" wherever it is, over
+    // blank lines too: remark-parse 8 reads "[" alone on a line, then a
+    // paragraph, then "[^1]: def" as one link definition, and so does
+    // Obsidian (live answers swap34:lrd-label-blank-para and
+    // swap34:lrd-label-parts-repro, 2026-10-03; Reading view shows no
+    // footnote). Cut off at a part's end, the label found no "]" and the
+    // part read a paragraph and a footnote instead. The first note is the
+    // one the parts test found at FC_NUM_RUNS=3000 (the runtime swap, step
+    // 2); the others run the label over enough paragraphs that some part
+    // starts inside it whatever the part starts are.
+    it("reads a link definition whose label runs over blank lines as the whole note does", () => {
+        const notes = [
+            "[\n  - nested item\n\n\n$$\nText\n$$1.       [^1]: def\n",
+            ["[", "", ...Array.from({ length: 60 }, (_, i) => [`Paragraph ${i} of the open label.`, ""]).flat(), "[^1]: def", "", "x[^1]"].join("\n"),
+            ["[a", "", ...Array.from({ length: 60 }, (_, i) => [`Line ${i} in the label`, ""]).flat(), "b]:", "", "", "http://u", "", "x[^1]", "", "[^1]: d"].join("\n"),
+        ];
+        expect(notes.map((note) => difference(note.split("\n")))).toEqual(notes.map(() => null));
+    });
 
     it("tries a longer part when a part does not end cleanly, which the notes above do often", () => {
         const before = partParseCounts();

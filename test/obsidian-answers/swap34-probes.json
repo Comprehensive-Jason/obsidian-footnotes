@@ -12,5 +12,10 @@
 {"id":"swap34:d5-dash-space-then-item","text":"text\n- \n- other item\n\np[^i]\n\n[^i]: x","defs":[["i",6,0,6]],"refs":[["i",4,1]],"code":[]},
 {"id":"swap34:name-bracket-code","text":"[^a`[`b]: c\n\nx[^a`[`b] y","defs":[["a`[`b",0,0,0]],"refs":[["a`[`b",2,1]],"code":[]},
 {"id":"swap34:name-nbsp","text":"x[^a b] y\n\n[^a b]: def","defs":[["a b",2,0,2]],"refs":[["a b",0,1]],"code":[]},
-{"id":"swap34:name-ideographic-space","text":"x[^a　b] y\n\n[^a　b]: def","defs":[["a　b",2,0,2]],"refs":[["a　b",0,1]],"code":[]}
+{"id":"swap34:name-ideographic-space","text":"x[^a　b] y\n\n[^a　b]: def","defs":[["a　b",2,0,2]],"refs":[["a　b",0,1]],"code":[]},
+{"id":"swap34:lrd-label-blank-para","text":"[\n\npara\n\n[^1]: def\n\nx[^1]","defs":[],"refs":[["1",6,1]],"code":[]},
+{"id":"swap34:lrd-label-blank-text","text":"[a\n\nb]: /url\n\nx[^1]\n\n[^1]: d","defs":[["1",6,0,6]],"refs":[["1",4,1]],"code":[]},
+{"id":"swap34:lrd-label-parts-repro","text":"[\n  - nested item\n\n\n$$\nText\n$$1.       [^1]: def\n\nx[^1]","defs":[],"refs":[["1",8,1]],"code":[]},
+{"id":"swap34:lrd-label-x-blank","text":"[x\n\n[^1]: d\n\nuse[^1]","defs":[],"refs":[["1",4,3]],"code":[]},
+{"id":"swap34:lrd-label-after-para","text":"see\n\n[\nmore\n\n[^1]: d\n\nuse[^1]","defs":[],"refs":[["1",7,3]],"code":[]}
 ]

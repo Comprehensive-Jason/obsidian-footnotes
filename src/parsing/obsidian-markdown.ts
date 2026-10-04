@@ -134,6 +134,8 @@ interface ParseInput {
     fail(error: Error): never;
     /** Whether the text starts the note, so that frontmatter may open it (see parseObsidianNote). */
     startsNote: boolean;
+    /** Set when a link definition's reading at the top level would change with more text after the end (see linkDefinitionsAtTheEnd). */
+    readsPastEnd?: boolean;
 }
 
 type ParserConstructor = new (doc: string, file: ParseInput) => ParserTables & { parse(): MarkdownNode; offset: Record<number, number> };
@@ -472,6 +474,45 @@ function mathWithoutRescans(tables: ParserTables): void {
 }
 
 /**
+ * A link definition, "[label]: destination", is the one block reader that
+ * looks past the line after it. Its label runs to the first "]" wherever
+ * that is, over blank lines too, and after the ":" it skips any number of
+ * line breaks, blank lines included, to find the destination (remark-parse
+ * 8, tokenize/definition.js). So "[" alone on a line, a paragraph, and
+ * then "[^1]: def" read as one link definition, and Obsidian reads it so
+ * too: Reading view shows no footnote (live answers
+ * swap34:lrd-label-blank-para and swap34:lrd-label-parts-repro,
+ * 2026-10-03).
+ *
+ * The note reading parses a note in parts (note-reading.ts), and a part
+ * ends where a later part may read on its own. Read alone, a part cut off
+ * inside such a label finds no "]" and reads a paragraph instead, a
+ * different reading of lines the part owns. So this reader, at the top
+ * level, notes when it took nothing but WOULD have taken a definition had
+ * the text gone on: a "]: x" or an "x" written after the end completes
+ * one. The part is then not ended there (partFacts in footnote-facts.ts),
+ * and is tried again with more of the note, as a part whose fence is still
+ * open is (found by test/note-reading-parts.test.ts at FC_NUM_RUNS=3000,
+ * the runtime swap, step 2, 2026-10-03). Nothing about the reading
+ * changes.
+ */
+function linkDefinitionsAtTheEnd(tables: ParserTables): void {
+    // remark-footnotes' own reader, which leaves "[^" to the footnote readers
+    const stockDefinition = tables.blockTokenizers.definition;
+    tables.blockTokenizers.definition = function (eat, value, silent) {
+        const result = stockDefinition.call(this, eat, value, silent);
+        if (result === undefined || result === false) {
+            const text = this.file.toString();
+            // only a reader that was handed the rest of the note is cut off by its end
+            if (eat.now().offset + value.length === text.length && ["]: x", "x"].some((more) => stockDefinition.call(this, eat, value + more, true) === true)) {
+                this.file.readsPastEnd = true;
+            }
+        }
+        return result;
+    };
+}
+
+/**
  * A speed-up with no change to the reading: the stock HTML block reader
  * builds a new regular expression from its whole list of tag names every
  * time it is asked, which is at the start of every block and, to check
@@ -590,6 +631,7 @@ function buildParser(): ParserConstructor {
     // inline notes "^[...]" are read too; facts treat everything inside one as dead (rule E3)
     (remarkFootnotes as unknown as RemarkPlugin).call(host, { inlineNotes: true });
 
+    linkDefinitionsAtTheEnd(tables);
     percentComments(tables);
     calloutTitles(tables);
     listLazyLines(tables);
@@ -638,8 +680,15 @@ export function frontmatterEnd(doc: string): number {
  * to place the text of nested blocks, so it is exactly where the line's
  * text starts inside its containers. Lines count from 1, as remark-parse
  * counts them, and a line no container touched is missing.
+ *
+ * `readsPastEnd` says whether a link definition at the top level would
+ * read differently with more text after the end (linkDefinitionsAtTheEnd),
+ * which matters only to a part of a note.
  */
-export function parseObsidianNote(text: string, startsNote = true): { tree: MarkdownNode; containerColumns: Readonly<Record<number, number>> } {
+export function parseObsidianNote(
+    text: string,
+    startsNote = true,
+): { tree: MarkdownNode; containerColumns: Readonly<Record<number, number>>; readsPastEnd: boolean } {
     parserClass ??= buildParser();
     const doc = normalizeLineBreaks(text);
     const input: ParseInput = {
@@ -654,5 +703,5 @@ export function parseObsidianNote(text: string, startsNote = true): { tree: Mark
     };
     const parser = new parserClass(doc, input);
     const tree = parser.parse();
-    return { tree, containerColumns: parser.offset };
+    return { tree, containerColumns: parser.offset, readsPastEnd: input.readsPastEnd === true };
 }

@@ -33,8 +33,9 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 //   on 2026-10-03: a bracketed word right before a reference, a blank line
 //   ending a "<div>" block (in a quote, in a list item, at the top level)
 //   against a "<pre>" one, "Notes:" over a bare "- " or "-", a label whose
-//   name holds a code span with a bracket, and names holding a no-break or
-//   an ideographic space.
+//   name holds a code span with a bracket, names holding a no-break or an
+//   ideographic space, and a link definition's label running over blank
+//   lines (which swallows a footnote's label below it).
 //
 // The comparison is the live oracle's own (scripts/oracle/compare.mts), so a
 // note agrees here exactly when `npm run oracle -- check --reader` would find
