@@ -50,6 +50,15 @@ export interface NoteReading {
     labelOn(line: number): Definition | null;
     /** The innermost definition whose lines, label line to last line, take in `line`, or null. */
     definitionAt(line: number): Definition | null;
+    /**
+     * The column where the block syntax at the start of `line` ends and its
+     * text begins: past quote markers, list markers and task boxes, the
+     * indentation of a list item's lines, a callout's marker, a footnote's
+     * label, and a heading's "#" marks; 0 when the line starts with its
+     * text. Infinity for a line that is block syntax to its end: a thematic
+     * break, a setext underline, a heading with no text.
+     */
+    blockSyntaxEnd(line: number): number;
 }
 
 /** How many notes the reading remembers. A press reads the note as it is and as it will be after the edit, and a lint passes each rule's output to the next, so a handful covers both. */
@@ -180,6 +189,7 @@ function addPart(into: FootnoteFacts, part: FootnoteFacts, lines: number, offset
     for (const span of part.protectedSpans) {
         into.protectedSpans.push({ ...span, from: span.from + offset, to: span.to + offset, startLine: span.startLine + lines, endLine: span.endLine + lines });
     }
+    for (const syntax of part.blockSyntax) into.blockSyntax.push({ ...syntax, line: syntax.line + lines });
 }
 
 /**
@@ -220,7 +230,7 @@ function notePartFacts(text: string, lines: readonly string[], reading: number):
     const frontmatter = frontmatterEnd(text);
     const afterFrontmatter = frontmatter === 0 ? 0 : text.slice(0, frontmatter).split("\n").length;
     const starts = partStarts(lines, afterFrontmatter);
-    const facts: FootnoteFacts = { definitions: [], references: [], protectedSpans: [] };
+    const facts: FootnoteFacts = { definitions: [], references: [], protectedSpans: [], blockSyntax: [] };
     let from = 0;
     // the first entry of `starts` after `from`
     let next = 0;
@@ -262,6 +272,8 @@ function readingOf(facts: FootnoteFacts, lineCount: number): NoteReading {
     for (const definition of definitions) labels[definition.start] ??= definition;
     // which definition owns each line, worked out the first time it is asked
     let owners: (Definition | null)[] | null = null;
+    const syntaxEnds = new Map<number, number>();
+    for (const { line, end } of facts.blockSyntax) syntaxEnds.set(line, Math.max(syntaxEnds.get(line) ?? 0, end));
     return {
         definitions,
         blocks: Object.freeze(definitions.filter((definition) => definition.movable)),
@@ -280,6 +292,7 @@ function readingOf(facts: FootnoteFacts, lineCount: number): NoteReading {
             }
             return owners[line] ?? null;
         },
+        blockSyntaxEnd: (line) => syntaxEnds.get(line) ?? 0,
     };
 }
 

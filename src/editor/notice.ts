@@ -34,6 +34,12 @@ const NestingRule = "footnotes can't be nested inside other footnotes.";
 export const NestedFootnoteNotice = NoFootnoteCreated + NestingRule;
 export const MultiCaretNestedNotice = NoFootnotesCreated + NestingRule;
 
+/** A press with the caret in a line's block syntax: a quote or list marker, a
+ * task box, a heading's "#" marks, a thematic break, a setext underline
+ * (Jason's wording, 2026-10-03). Code, math, and comments keep the
+ * protected-text notice. */
+export const BlockSyntaxNotice = NoFootnoteCreated + "a footnote here would break the line's formatting. Move the caret into the text.";
+
 /** The advice for a definition nothing references. The navigation press and
  * the lint alert give the same advice. */
 export function addReferenceOrDeleteDefinition(name: string): string {

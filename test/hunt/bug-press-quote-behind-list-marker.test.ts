@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { ProtectedCreationNotice } from "../../src/editor/insertion-liveness";
-import { scanDocument } from "../../src/parsing/markdown-scan";
+import { BlockSyntaxNotice } from "../../src/editor/notice";
+import { readNote } from "../../src/parsing/note-reading";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { noticed, resetNotices } from "../helpers/notices";
@@ -29,14 +29,18 @@ import { noticed, resetNotices } from "../helpers/notices";
 // over "  > ===" is a level-1 heading inside that quote (a one-line
 // paragraph, so Obsidian's one-line setext rule of 94f830b applies too).
 //
-// Cause: the guard in src/commands/press-guards.ts reads the quote markers
+// Cause: the guard in src/commands/press-guards.ts read the quote markers
 // with /^(\s*>)+/ at the very start of the line, so a ">" behind a list
-// marker is never seen. The scan's setextUnderline flag is not set for an
-// underline inside a quote inside a list item, so the underline guard
-// does not fire either.
+// marker was never seen, and the scan's setextUnderline flag was not set
+// for an underline inside a quote inside a list item.
 //
-// (The caret at ch 0 of "- > quoted", in front of the LIST marker, is a
-// separate question: spec-press-caret-inside-block-syntax.)
+// Fixed 2026-10-03 with Jason's block-syntax ruling: the press refuses
+// whenever the caret sits in the block syntax the note reading finds at
+// the start of its line, whatever the containers, with the notice of that
+// ruling (BlockSyntaxNotice).
+//
+// (The caret at ch 0 of "- > quoted", in front of the LIST marker, is
+// spec-press-caret-inside-block-syntax, ruled the same day.)
 
 // The settings around the press: insert at end of word on, everything
 // else that could move text afterwards off.
@@ -65,12 +69,12 @@ describe("ruling 4 one container deeper: a quote marker behind a list marker", (
         [["1. > quoted in an ordered item"], 3],
         [["- item", "", "  - > deeper"], 4],
     ] as [string[], number][]) {
-        it.fails(`refuses with the caret at ch ${ch} of ${JSON.stringify(lines[lines.length - 1])}`, async () => {
+        it(`refuses with the caret at ch ${ch} of ${JSON.stringify(lines[lines.length - 1])}`, async () => {
             const doc = await press(lines, lines.length - 1, ch);
-            // Today: the reference is written in front of the ">", as in
+            // Before the fix: the reference was written in front of the ">", as in
             // "- [^1]> quoted in a list item".
             expect(doc.lines).toEqual(lines);
-            expect(noticed(ProtectedCreationNotice)).toBe(true);
+            expect(noticed(BlockSyntaxNotice)).toBe(true);
         });
     }
 
@@ -85,16 +89,15 @@ describe("ruling 5 one container deeper: a setext underline in a quote in a list
     beforeEach(resetNotices);
     const lines = ["- > Setext", "  > ==="];
 
-    it.fails("the scan marks the underline", () => {
-        // Today: [false, false].
-        expect(scanDocument(lines).setextUnderline).toEqual([false, true]);
+    it("the reading reads the underline as block syntax to its end", () => {
+        expect(readNote(lines).blockSyntaxEnd(1)).toBe(Infinity);
     });
 
-    it.fails("a press on the underline refuses instead of writing into it", async () => {
+    it("a press on the underline refuses instead of writing into it", async () => {
         const doc = await press(lines, 1, 5);
-        // Today: the underline becomes "  > =[^1]==" and "[^1]: " is appended.
+        // Before the fix: the underline became "  > =[^1]==" and "[^1]: " was appended.
         expect(doc.lines).toEqual(lines);
-        expect(noticed(ProtectedCreationNotice)).toBe(true);
+        expect(noticed(BlockSyntaxNotice)).toBe(true);
     });
 
     it("control: the same underline in a plain quote refuses", async () => {

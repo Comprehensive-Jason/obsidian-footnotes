@@ -25,7 +25,7 @@ import {
     tableRowLines,
 } from "../editor/table-cursor";
 
-import { NestedFootnoteNotice, NoFootnoteCreated, showNotice } from "../editor/notice";
+import { BlockSyntaxNotice, NestedFootnoteNotice, NoFootnoteCreated, showNotice } from "../editor/notice";
 // The press guards. A footnote key has been pressed: does anything OTHER
 // than creation own this press? An empty placeholder gets a warning, a
 // filled inline footnote hops the caret out of itself, and protected text,
@@ -112,6 +112,10 @@ export function warnProtectedCaretIfInside(
     } else {
         const { scan } = ctx;
         const line = cursorPosition.line;
+        if (!scan.isProtected[line] && caretInBlockSyntax(ctx, cursorPosition)) {
+            showNotice(BlockSyntaxNotice, 8000);
+            return true;
+        }
         // the same allowance for a caret inside a link on an ordinary line
         if (!scan.isProtected[line] && linkLikeEndAt(ctx.lines[line] ?? "", cursorPosition.ch) !== -1) {
             return false;
@@ -127,18 +131,8 @@ export function warnProtectedCaretIfInside(
             line + 1 < ctx.lines.length
                 ? scan.startsInComment[line + 1] || scan.startsInMath[line + 1]
                 : scan.endsProtected;
-        // A caret in front of a blockquote marker would write the
-        // reference before the ">" and drop the line out of its quote,
-        // and a caret on a setext underline would write into the underline
-        // and turn the heading above back into prose; both refuse with
-        // this same toast, as the table delimiter-row press does (Jason's
-        // rulings 4 and 5, 2026-09-20).
-        const markerRun = (ctx.lines[line] ?? "").match(/^(\s*>)+/);
-        const beforeQuoteMarker = markerRun !== null && cursorPosition.ch < markerRun[0].length;
         inside =
             scan.isProtected[line] ||
-            beforeQuoteMarker ||
-            scan.setextUnderline[line] ||
             caretInsideMaskedSpan(
                 ctx.maskedLine(line),
                 cursorPosition.ch,
@@ -149,6 +143,28 @@ export function warnProtectedCaretIfInside(
     if (!inside) return false;
     showNotice(ProtectedCreationNotice, 8000);
     return true;
+}
+
+/**
+ * Whether the caret sits in the block syntax at the start of its line: in
+ * front of or inside a quote marker, a list marker, a task box, or a
+ * heading's "#" marks, or anywhere on a thematic break or a setext
+ * underline. A footnote written there breaks the line's formatting:
+ * "[^1]- item" is no list item, "[^1]> text" drops out of its quote,
+ * "#[^1]# Heading" is no heading, and "==[^1]=" no longer makes the line
+ * above a heading. So the press refuses (Jason's rulings 4 and 5,
+ * 2026-09-20, extended on 2026-10-03 to every kind of block syntax).
+ *
+ * The note reading says where each line's text starts inside its
+ * containers, so this is one rule for every shape, and a dash that starts
+ * no list item ("-5 degrees") is text like any other. A line inside a
+ * definition is left to the nesting guard, which refuses every press
+ * there with its own notice.
+ */
+function caretInBlockSyntax(ctx: DocContext, cursorPosition: EditorPosition): boolean {
+    const reading = ctx.reading();
+    if (cursorPosition.ch >= reading.blockSyntaxEnd(cursorPosition.line)) return false;
+    return reading.definitionAt(cursorPosition.line) === null;
 }
 
 /** For an untouched "[^7-]" placeholder: the prefix is there, the name is not. */

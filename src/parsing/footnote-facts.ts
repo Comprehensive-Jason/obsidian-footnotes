@@ -11,7 +11,7 @@
 // referee suite read them for the whole note at once
 // (scripts/oracle/reader-facts.ts, test/obsidian-referee.test.ts).
 
-import { MarkdownNode, normalizeLineBreaks, parseObsidianMarkdown } from "./obsidian-markdown";
+import { MarkdownNode, normalizeLineBreaks, parseObsidianNote } from "./obsidian-markdown";
 
 /**
  * What holds a definition, counted from the outside in: how many quotes or
@@ -99,10 +99,24 @@ interface ProtectedSpan {
     endLine: number;
 }
 
+/**
+ * How far into a line its block syntax reaches: the column where the line's
+ * own text starts, after quote markers, list markers and task boxes, the
+ * indentation that keeps it inside a list item, a footnote's label, a
+ * callout's marker, and a heading's "#" marks. `end` is Infinity for a
+ * line that is block syntax through to its end: a thematic break, a setext
+ * underline, an ATX heading with no text.
+ */
+interface BlockSyntaxFact {
+    line: number;
+    end: number;
+}
+
 export interface FootnoteFacts {
     definitions: DefinitionFact[];
     references: ReferenceFact[];
     protectedSpans: ProtectedSpan[];
+    blockSyntax: BlockSyntaxFact[];
 }
 
 /** Node types that hold blocks; a child of one of these is a block itself, anything deeper is inline. */
@@ -147,11 +161,17 @@ function afterLabel(doc: string, from: number, end: number): number {
     return end;
 }
 
-/** Reads the facts off a parsed tree of `doc` (the normalized note). */
-function factsOfTree(doc: string, tree: MarkdownNode): FootnoteFacts {
+/**
+ * Reads the facts off a parsed tree of `doc` (the normalized note).
+ * `containerColumns` is what the containers took at the start of each line
+ * (see parseObsidianNote), counted from line 1.
+ */
+function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly<Record<number, number>>): FootnoteFacts {
     const definitions: DefinitionFact[] = [];
     const references: ReferenceFact[] = [];
     const protectedSpans: ProtectedSpan[] = [];
+    const blockSyntax: BlockSyntaxFact[] = [];
+    for (const [line, end] of Object.entries(containerColumns)) if (end > 0) blockSyntax.push({ line: Number(line) - 1, end });
 
     // the offset where each line starts, to turn an offset into a line
     const lineStarts = [0];
@@ -223,6 +243,18 @@ function factsOfTree(doc: string, tree: MarkdownNode): FootnoteFacts {
             case "inlineMath":
                 protect("inlineMath", false, from, to);
                 break;
+            case "heading": {
+                // an ATX heading's "#" marks run up to its text, and a
+                // setext heading's underline is its own line, all syntax
+                const first = node.children?.[0];
+                const line = node.position.start.line - 1;
+                blockSyntax.push({ line, end: first ? first.position.start.column - 1 : Infinity });
+                if (lastLineOf(node) > line) blockSyntax.push({ line: lastLineOf(node), end: Infinity });
+                break;
+            }
+            case "thematicBreak":
+                blockSyntax.push({ line: node.position.start.line - 1, end: Infinity });
+                break;
             case "wikiLink": {
                 const open = doc[from] === "!" ? 3 : 2;
                 protect("wikilink", false, from + open, to - 2);
@@ -250,13 +282,14 @@ function factsOfTree(doc: string, tree: MarkdownNode): FootnoteFacts {
         for (const child of node.children ?? []) walk(child, node.type, inInlineNote || node.type === "footnote", inner);
     };
     walk(tree, "", false, { quotes: 0, listItems: 0, footnotes: 0 });
-    return { definitions, references, protectedSpans };
+    return { definitions, references, protectedSpans, blockSyntax };
 }
 
 /** The footnote facts of a note, as Obsidian reads it. */
 export function footnoteFacts(text: string): FootnoteFacts {
     const doc = normalizeLineBreaks(text);
-    return factsOfTree(doc, parseObsidianMarkdown(doc));
+    const { tree, containerColumns } = parseObsidianNote(doc);
+    return factsOfTree(doc, tree, containerColumns);
 }
 
 /**
@@ -277,17 +310,18 @@ export function footnoteFacts(text: string): FootnoteFacts {
  * and the result is null.
  */
 export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean): FootnoteFacts | null {
-    const tree = parseObsidianMarkdown(doc, startsNote);
-    if (!borrowsLine) return factsOfTree(doc, tree);
+    const { tree, containerColumns } = parseObsidianNote(doc, startsNote);
+    if (!borrowsLine) return factsOfTree(doc, tree, containerColumns);
     // where the borrowed line starts, as an offset and as a line
     const last = doc.lastIndexOf("\n") + 1;
     if (!(tree.children ?? []).some((block) => block.position.start.offset === last)) return null;
     let lastLine = 0;
     for (let i = doc.indexOf("\n"); i !== -1; i = doc.indexOf("\n", i + 1)) lastLine++;
-    const facts = factsOfTree(doc, tree);
+    const facts = factsOfTree(doc, tree, containerColumns);
     return {
         definitions: facts.definitions.filter((definition) => definition.start < lastLine),
         references: facts.references.filter((reference) => reference.line < lastLine),
         protectedSpans: facts.protectedSpans.filter((span) => span.startLine < lastLine),
+        blockSyntax: facts.blockSyntax.filter((syntax) => syntax.line < lastLine),
     };
 }

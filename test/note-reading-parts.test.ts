@@ -101,10 +101,14 @@ function difference(lines: string[]): string | null {
     const whole = footnoteFacts(lines.join("\n"));
     const reading = readNote(lines);
     const definitions = [...whole.definitions].sort((a, b) => a.start - b.start || a.labelStart - b.labelStart);
+    // where each line's block syntax ends, line by line (the press's block-syntax guard)
+    const syntaxEnds = lines.map(() => 0);
+    for (const { line, end } of whole.blockSyntax) syntaxEnds[line] = Math.max(syntaxEnds[line], end);
     for (const [what, read, expected] of [
         ["definitions", reading.definitions, definitions],
         ["references", reading.references, whole.references],
         ["protected text", reading.protectedSpans, whole.protectedSpans],
+        ["block syntax", lines.map((_, line) => reading.blockSyntaxEnd(line)), syntaxEnds],
     ] as const) {
         const got = JSON.stringify(read);
         const want = JSON.stringify(expected);

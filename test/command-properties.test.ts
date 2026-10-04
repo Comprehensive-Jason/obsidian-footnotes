@@ -340,6 +340,23 @@ describe("creation-command invariants over random documents", () => {
         );
     });
 
+    // Jason's block-syntax ruling (2026-10-03): a press never writes into the
+    // block syntax at the start of a line (quote and list markers, task
+    // boxes, a heading's marks, thematic breaks, setext underlines), since
+    // that would un-list an item, drop a line out of its quote, or turn a
+    // heading back into prose. Inside a definition the nesting guard refuses
+    // instead, so those lines are left to it.
+    soakIt("a press with the caret in a line's block syntax edits nothing", async () => {
+        await fc.assert(
+            fc.asyncProperty(pressArb, async ({ lines, cursor, command, settings }) => {
+                const reading = readNote(lines);
+                if (cursor.ch >= reading.blockSyntaxEnd(cursor.line) || reading.definitionAt(cursor.line) !== null) return;
+                const doc = await press(lines, cursor, command, settings);
+                expect(doc.lines.join("\n")).toBe(lines.join("\n"));
+            }),
+        );
+    });
+
     soakIt("raw-shape deltas stay inside each command's contract", async () => {
         await fc.assert(
             fc.asyncProperty(pressArb, async ({ lines, cursor, command, settings }) => {
@@ -1605,11 +1622,16 @@ describe("press definition-census invariants over random documents", () => {
                         ),
                     );
                     // An in-item definition has no label shape of its own on
-                    // its line ("    [^x]: ..." under "- item"), and a press
-                    // in front of the item's marker un-lists the item, so
-                    // its line reads as indented code: still there, word
-                    // for word, only reclassified (Jason's ruling 1, option
-                    // a, 2026-10-03, made such definitions count here)
+                    // its line ("    [^x]: ..." under "- item"). A press on
+                    // the blank line between the item's first line and the
+                    // definition ends the item there, so the definition's
+                    // line reads as indented code: still there, word for
+                    // word, only reclassified, as typing on that line would
+                    // do it (Jason's ruling 1, option a, 2026-10-03, made
+                    // such definitions count here). A press in front of the
+                    // item's marker, which would un-list the item, refuses
+                    // instead (Jason's block-syntax ruling, 2026-10-03;
+                    // test/press-guards-quote-and-underline.test.ts pins it).
                     const inItemLabels = new Set(
                         readNote(lines)
                             .definitions.filter((d) => d.name.toLowerCase() === name.toLowerCase())

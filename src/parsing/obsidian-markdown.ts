@@ -110,11 +110,11 @@ interface ParseInput {
     toString(): string;
     message(): void;
     fail(error: Error): never;
-    /** Whether the text starts the note, so that frontmatter may open it (see parseObsidianMarkdown). */
+    /** Whether the text starts the note, so that frontmatter may open it (see parseObsidianNote). */
     startsNote: boolean;
 }
 
-type ParserConstructor = new (doc: string, file: ParseInput) => ParserTables & { parse(): MarkdownNode };
+type ParserConstructor = new (doc: string, file: ParseInput) => ParserTables & { parse(): MarkdownNode; offset: Record<number, number> };
 
 /** A remark plugin of this era: it registers itself on `this.Parser`. */
 type RemarkPlugin = (this: { Parser: ParserConstructor }, options?: object) => void;
@@ -356,7 +356,7 @@ const Frontmatter = /^---\n(?:[^\n]*\n)*?---/;
  */
 function frontmatter(tables: ParserTables): void {
     tables.blockTokenizers.frontmatter = function (eat, value, silent) {
-        // a later part of a note, parsed on its own, holds no frontmatter (see parseObsidianMarkdown)
+        // a later part of a note, parsed on its own, holds no frontmatter (see parseObsidianNote)
         if (!this.file.startsNote) return undefined;
         const noteStart = this.file.toString().charCodeAt(0) === 0xfeff ? 1 : 0;
         if (eat.now().offset !== noteStart) return undefined;
@@ -507,8 +507,17 @@ export function frontmatterEnd(doc: string): number {
  * `startsNote` is false when `text` is a later part of a note, read on its
  * own (the note reading parses a long note in parts, see note-reading.ts):
  * frontmatter can only open the note itself, so a part never reads it.
+ *
+ * With the tree comes how many characters at the start of each line the
+ * note's containers took as their own syntax: quote markers, list markers
+ * with their task box and the space after them, the indentation that puts
+ * a line inside a list item, a callout's marker, and a footnote's label and
+ * indentation. remark-parse keeps this count per line (its "offset" table)
+ * to place the text of nested blocks, so it is exactly where the line's
+ * text starts inside its containers. Lines count from 1, as remark-parse
+ * counts them, and a line no container touched is missing.
  */
-export function parseObsidianMarkdown(text: string, startsNote = true): MarkdownNode {
+export function parseObsidianNote(text: string, startsNote = true): { tree: MarkdownNode; containerColumns: Readonly<Record<number, number>> } {
     parserClass ??= buildParser();
     const doc = normalizeLineBreaks(text);
     const input: ParseInput = {
@@ -521,5 +530,7 @@ export function parseObsidianMarkdown(text: string, startsNote = true): Markdown
         },
         startsNote,
     };
-    return new parserClass(doc, input).parse();
+    const parser = new parserClass(doc, input);
+    const tree = parser.parse();
+    return { tree, containerColumns: parser.offset };
 }
