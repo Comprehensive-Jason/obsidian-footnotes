@@ -278,13 +278,13 @@ export function footnoteFacts(text: string): FootnoteFacts {
  */
 export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean): FootnoteFacts | null {
     const tree = parseObsidianMarkdown(doc, startsNote);
-    const facts = factsOfTree(doc, tree);
-    if (!borrowsLine) return facts;
+    if (!borrowsLine) return factsOfTree(doc, tree);
     // where the borrowed line starts, as an offset and as a line
     const last = doc.lastIndexOf("\n") + 1;
+    if (!(tree.children ?? []).some((block) => block.position.start.offset === last)) return null;
     let lastLine = 0;
     for (let i = doc.indexOf("\n"); i !== -1; i = doc.indexOf("\n", i + 1)) lastLine++;
-    if (!(tree.children ?? []).some((block) => block.position.start.offset === last)) return null;
+    const facts = factsOfTree(doc, tree);
     return {
         definitions: facts.definitions.filter((definition) => definition.start < lastLine),
         references: facts.references.filter((reference) => reference.line < lastLine),

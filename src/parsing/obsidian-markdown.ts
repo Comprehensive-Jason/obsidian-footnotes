@@ -415,6 +415,33 @@ function htmlBlockPrecheck(tables: ParserTables): void {
 }
 
 /**
+ * A speed-up with no change to the reading. To find where a stretch of
+ * plain text ends, remark-parse's text reader asks every inline reader
+ * where it could next match, and each one searches the rest of the run of
+ * inline text being read (a paragraph, a heading, a "%%" comment) to its
+ * end, every time. A run is usually a few lines, but a "%%" left open near
+ * the top of a long note makes the rest of the note one run, and then every
+ * stretch of text searched the rest of the note again: on the 5,600-line
+ * speed-test note one read took about 3 seconds, and on the 22,400-line
+ * one a minute and a half (measured 2026-10-03, the speed brief).
+ *
+ * So the text reader is handed the text only up to the end of the current
+ * line, and its search stops there. A stretch of text then ends at a line's
+ * end at the latest, where every inline reader is tried and, finding
+ * nothing to match, the text goes on; each reader still starts exactly
+ * where its search would have sent it, because what the readers look for
+ * (a "[", a "%%", a "`", ...) never runs across a line break, except a hard
+ * line break, whose spaces and "\n" stay inside the line handed over.
+ */
+function textLineByLine(tables: ParserTables): void {
+    const stockText = tables.inlineTokenizers.text;
+    tables.inlineTokenizers.text = function (eat, value, silent) {
+        const lineEnd = value.indexOf("\n");
+        return stockText.call(this, eat, lineEnd === -1 ? value : value.slice(0, lineEnd + 1), silent);
+    };
+}
+
+/**
  * The parser class, built once: remark-parse 8 with its own copy of the
  * reader tables (so registering readers never changes the stock Parser),
  * the math and footnote plugins, then Obsidian's readers.
@@ -447,6 +474,7 @@ function buildParser(): ParserConstructor {
     listLazyLines(tables);
     tablePipeStyles(tables);
     htmlBlockPrecheck(tables);
+    textLineByLine(tables);
     wikilinks(tables);
     frontmatter(tables);
     doubleDollarMath(tables);
