@@ -31,7 +31,7 @@ The smoke suite drives the real plugin inside the running sandbox vault (Obsidia
 | 15 | Delete footnote everywhere: the command, the right-click menu, undo (added 2026-09-21; its phone check moved to sheet P on 2026-10-04) | 8 |
 | 16 | Footnote reference placement: the dropdown, inserting under each placement, the lint rule under Before (added 2026-09-21) | 8 |
 | 17 | Converting between footnote styles: both commands, undo, the transclusion round trip (added 2026-09-21; its phone check moved to sheet P on 2026-10-04) | 6 |
-| 18 | Copying, cutting, and pasting footnotes: the real clipboard, a second note, other apps (added 2026-09-22), and a cut in a search box or the title left alone (2026-10-04); 18b is its paste-target companion and its phone checks moved to sheet P (both 2026-10-04) | 10 |
+| 18 | Copying, cutting, and pasting footnotes: the real clipboard, a second note, other apps (added 2026-09-22), and a cut in the search box or the title left alone (2026-10-04); 18b is its paste-target companion and its phone checks moved to sheet P (both 2026-10-04) | 11 |
 | 19 | The September 2026 feature round in one sitting: sheets 15 to 18 gathered, plus the inline-footnote lint change and the icons; 19b is its paste-target companion (added 2026-09-22); its phone checks moved to sheet P (2026-10-04) | 37 |
 | P | Phone and mobile emulation, run on its own once a beta reaches the phone (lettered rather than numbered on 2026-10-04 so it stands apart from the desktop sheets), with the beta-only speed test on the "Footnote Speed Test" notes (added 2026-10-04) and the phone checks of sheets 15, 17, 18, and 19 | 16 |
 
