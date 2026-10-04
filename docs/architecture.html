@@ -436,7 +436,7 @@
   <p class="eyebrow">Footnote Shortcut · plugin structure</p>
   <h1>What the plugin is made of, one layer at a time</h1>
   <p class="lede">Four layers of source code stacked so that each one only leans on the layer below it, wrapped in a testing scaffold that is bigger than the plugin itself. This page walks the stack from the bottom up.</p>
-  <p class="stamp">Claude: drafted 2026-09-09 from a read of the code and kept current through 2026-09-25 (version 0.3.0-beta.2, the September 2026 feature round; the counts are from the tree on that day). Terms follow CONTEXT.md: a <em>reference</em> is the <code>[^1]</code> in your text, a <em>definition</em> is the <code>[^1]: …</code> line that holds the note.</p>
+  <p class="stamp">Claude: drafted 2026-09-09 from a read of the code and kept current through 2026-10-03 (version 0.3.0-beta.2, the September 2026 feature round, and the runtime swap that moved the plugin onto Obsidian's own parser; the counts are from the tree on that day). Terms follow CONTEXT.md: a <em>reference</em> is the <code>[^1]</code> in your text, a <em>definition</em> is the <code>[^1]: …</code> line that holds the note.</p>
   <div class="legend">
     <span>Colour key, used on every figure and heading:</span>
     <span class="chip l-parsing">parsing</span>
@@ -451,8 +451,8 @@
 </header>
 
 <div class="stats">
-  <div class="stat" style="--st: var(--commands)"><div class="n">47</div><div class="l">source files, 18,357 lines (about 40% of them comments)</div></div>
-  <div class="stat" style="--st: var(--scaffold)"><div class="n">404</div><div class="l">test files (223 of them are pinned bugs)</div></div>
+  <div class="stat" style="--st: var(--commands)"><div class="n">54</div><div class="l">source files, 17,097 lines (about 40% of them comments)</div></div>
+  <div class="stat" style="--st: var(--scaffold)"><div class="n">567</div><div class="l">test files (316 of them are pinned bugs)</div></div>
   <div class="stat" style="--st: var(--commands)"><div class="n">10</div><div class="l">commands you can bind to a key</div></div>
   <div class="stat" style="--st: var(--linting)"><div class="n">8</div><div class="l">lint rules, run in a fixed order, plus one sweep</div></div>
 </div>
@@ -461,7 +461,7 @@
 <div class="prose">
 <h2><sup>0</sup>The whole thing in four sentences</h2>
 <ol class="four">
-  <li class="f-parsing"><span><b>Parsing</b> reads your note once and tells everyone else what is real: which lines are protected (code, math, comments, frontmatter), which <code>[^x]:</code> lines are true definitions, and where each definition block starts and ends.</span></li>
+  <li class="f-parsing"><span><b>Parsing</b> reads your note once, the way Obsidian reads it, and tells everyone else what is real: which text is protected (code, math, comments, frontmatter), which <code>[^x]</code> are live references, which <code>[^x]:</code> lines are true definitions, and where each definition ends.</span></li>
   <li class="f-commands"><span><b>A press</b> of a hotkey falls down a fixed ladder of questions (is there a selection? several carets? is the caret already on a footnote?) and the first rung that applies handles it. Nothing is written until a rehearsal proves the new footnote would actually work.</span></li>
   <li class="f-linting"><span><b>Lint</b> is eight small text-in, text-out functions run in a fixed order inside one undo step. Anything lint refuses to fix on its own, it tells you about in a notice.</span></li>
   <li class="f-scaffold"><span><b>Everything outside <code>src/</code></b> exists to prove those three sentences stay true after every change: unit tests, random-document properties, mutation testing, a script that drives the real app, and 20 manual sheets.</span></li>
@@ -484,50 +484,57 @@
   </div>
   <div class="gap"><span>loads</span></div>
   <div class="band l-plumbing">
-    <div><span class="name">plumbing</span><span class="count">main.ts + settings.ts · 2 files · 926 lines</span></div>
+    <div><span class="name">plumbing</span><span class="count">main.ts + settings.ts · 2 files · 942 lines</span></div>
     <div class="what">Registers the 10 commands and 9 icons, loads and migrates settings, installs the save hook and the vim hook, and puts it all back on unload.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-commands">commands</span><span class="chip l-linting">linting</span><span class="chip l-editor">editor</span><span class="chip l-parsing">parsing</span></div>
   </div>
   <div class="gap"><span>calls</span></div>
   <div class="band l-commands">
-    <div><span class="name">commands/</span><span class="count">17 files · 7,150 lines</span></div>
+    <div><span class="name">commands/</span><span class="count">18 files · 7,033 lines</span></div>
     <div class="what">The press: claims, guards, jumps, create, the popup, rename, the prefix dialog. And the whole-note commands: delete everywhere, the two style conversions, and the copy, cut, and paste hooks that carry definitions along.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-linting">linting</span><span class="chip l-editor">editor</span><span class="chip l-parsing">parsing</span></div>
   </div>
   <div class="gap"><span>calls (one function: lint right after creating a footnote)</span></div>
   <div class="band l-linting">
-    <div><span class="name">linting/</span><span class="count">15 files · 3,900 lines</span></div>
-    <div class="what">The 8 rules and the empty-heading sweep, the pipeline that runs them in order, the shared rewrite engine (with its scan memo), the shared rename engine, and the alerts.</div>
+    <div><span class="name">linting/</span><span class="count">15 files · 3,492 lines</span></div>
+    <div class="what">The 8 rules and the empty-heading sweep, the pipeline that runs them in order, the shared rewrite engine, the shared rename engine, and the alerts.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-editor">editor</span><span class="chip l-parsing">parsing</span></div>
   </div>
   <div class="gap"><span>calls</span></div>
   <div class="band l-editor">
-    <div><span class="name">editor/</span><span class="count">9 files · 2,140 lines</span></div>
+    <div><span class="name">editor/</span><span class="count">9 files · 2,200 lines</span></div>
     <div class="what">Helpers between the note and the live editor: DocContext, caret motion, table cells, the insertion rehearsal, the shared write-back (a line diff that keeps folds, the caret, and other panes in place), notices, and the quarantine for undocumented Obsidian internals.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-parsing">parsing</span></div>
   </div>
   <div class="gap"><span>calls</span></div>
   <div class="band l-parsing">
-    <div><span class="name">parsing/</span><span class="count">7 files · 4,840 lines</span></div>
-    <div class="what">The note reading (Obsidian's own parser, rebuilt from remark-parse 8), the scanner and the masked twin, the footnote grammar, and the prefix reader. Pure text in, facts out.</div>
+    <div><span class="name">parsing/</span><span class="count">10 files · 3,430 lines</span></div>
+    <div class="what">The note reading (Obsidian's own parser, rebuilt from remark-parse 8, read in parts and remembered) with its masked twin, the footnote grammar, the landing walk, the label shapes, and the prefix reader. Pure text in, facts out.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-obsidian">nothing</span></div>
   </div>
 </div>
 <p class="figcaption"><b>Figure 1.</b> Each band lists the layers it imports from, taken from the real import statements. Reading top to bottom, every "leans on" chip points further down the stack. Small exceptions are noted below.</p>
 </div>
 <div class="prose">
-<p>The biggest file in the plugin, <code>parsing/markdown-scan.ts</code> at 2,790 lines, imports nothing but the note reading. It is pure text logic: give it lines, get back facts about those lines. That is why it can be tested thousands of times per second without Obsidian running, and why the mutation tester can chew on it.</p>
-<p>A few imports do point the wrong way, and they are worth knowing about because they are where the layers leak. The prefix reader in parsing imports the notice helper and the plugin class. The linter imports the popup and one navigation jump from commands, because lint on save has to close an open popup first and the after-creation lint has to land the caret. (The lint alerts used to import the inline-footnote scanner from commands too; on 2026-09-21 that scanner moved down into the grammar.) None of these is a bug, but each one is a reason the "parsing is pure" claim is true of the scanner and grammar, not the whole folder.</p>
+<p>The parsing files import nothing from the layers above, with the one exception below. The note reading, the parser it is built on, and the small text walks around them are pure text logic: give them lines, get back facts about those lines. That is why they can be tested thousands of times per second without Obsidian running, and why the mutation tester can chew on them.</p>
+<p>A few imports do point the wrong way, and they are worth knowing about because they are where the layers leak. The prefix reader in parsing imports the notice helper and the plugin class. The linter imports the popup and one navigation jump from commands, because lint on save has to close an open popup first and the after-creation lint has to land the caret. (The lint alerts used to import the inline-footnote scanner from commands too; since the runtime swap of 2026-10-03 the inline footnotes come from the note reading.) None of these is a bug, but each one is a reason the "parsing is pure" claim is true of the reading and the grammar, not the whole folder.</p>
 </div>
 </section>
 
 <section data-layer="parsing">
 <div class="prose">
 <h2><sup>2</sup>Parsing: reading the note</h2>
-<p>Everything above this layer asks it the same three questions. <em>Is this spot protected? Is this line a real definition? Where does this definition block end?</em> The answers are harder than they look because Obsidian's Markdown has a lot of places where <code>[^1]</code> is just text.</p>
+<p>Everything above this layer asks it the same few questions. <em>Is this spot protected? Is this <code>[^x]</code> a live reference? Is this line a real definition, and where does it end?</em> The answers are harder than they look because Obsidian's Markdown has a lot of places where <code>[^1]</code> is just text.</p>
+
+<h3>The note reading: Obsidian's own parser, rebuilt</h3>
+<p>Every answer comes from the <strong>note reading</strong> (<code>parsing/note-reading.ts</code>): one parse of the note the way Obsidian reads it. Obsidian's Reading view, its metadata cache, and Publish share one Markdown parser, a fork of remark-parse 8, so <code>parsing/obsidian-markdown.ts</code> starts from the real remark-parse 8 with the footnote and math plugins of the same era and adds Obsidian's own rules on top, each written from Obsidian's observed answers and named by letter and number in <code>docs/obsidian-reading-rules.md</code>: callouts, wikilinks, <code>%%</code> comments, tables, frontmatter, and the rest. <code>parsing/footnote-facts.ts</code> reads what the plugin needs off the tree: every definition with its last line and its container, every reference with whether it is live, every stretch of protected text, the block syntax at the start of each line, the table rows, and the inline footnotes. Until October 2026 a hand-written scanner of about 2,800 lines answered these questions by approximating each rule; the runtime swap of 2026-10-03 replaced it in four steps (definitions, then protected text, then references, then deleting what was left).</p>
+<p>The reader is held to Obsidian by the <strong>referee</strong>: <code>scripts/oracle</code> asks the live app (its metadata cache and Reading view) about notes and saves the answers, and <code>test/obsidian-referee.test.ts</code> checks the reader against about 6,800 of them on every test run, failing on any disagreement but three known spots where Obsidian's metadata cache reports a wrong column.</p>
+
+<h3>Parts, remembered by their text</h3>
+<p>Parsing a long note takes a noticeable moment, more on a phone, and a press reads the note several times (as it is, with the new reference, with the new definition). So the reading parses a note in <strong>parts</strong> and remembers each part by its exact text: an edit changes one part, and a read after an edit parses only that part again. A part may start at a line in the first column after a blank line, or at a label line, picked by a small hash of the line's own text so that an edit never moves the part starts around it. Each part is parsed together with the first line of the next, and ends cleanly only when that borrowed line starts a block of its own; when it does not (a fence still open, a list going on, a link definition's label still open), the part is tried again with more of the note joined to it. <code>test/note-reading-parts.test.ts</code> holds the reading in parts to one parse of the whole note, over every saved Obsidian answer and thousands of generated notes edited at random. On the sandbox vault's speed-test notes (desktop, 2026-10-03), a press after an edit takes about 10, 42, and 133 ms on notes of 1,091, 5,634, and 22,386 lines, and a full lint about 24, 71, and 292 ms.</p>
 
 <h3>Protected text and the masked twin</h3>
-<p>A code block, an inline code span, a math span, an HTML comment (<code>&lt;!-- --&gt;</code>), and the frontmatter are all places where footnote syntax means nothing. The scanner walks the whole note once and marks every such region. Then it builds the <strong>masked twin</strong>: a copy of the note where every protected character is replaced by a blank placeholder (a NUL byte) of the same width. The region rules follow the real app rather than a spec: a closing dollar sign that is directly followed by a digit does not close a math span, so "pay $5 or [^1]$6" is prose with a live reference, exactly as Reading view shows it.</p>
+<p>A code block, an inline code span, a math span, an HTML comment or block, the frontmatter, a link's destination, and a wikilink's inside are all places where footnote syntax means nothing. The reading knows each one as a stretch of <strong>protected text</strong>, and builds from them the <strong>masked twin</strong>: a copy of the note where every protected character is replaced by a blank placeholder (a NUL byte) of the same width. The rules are Obsidian's, not a spec's: a closing dollar sign that is directly followed by a digit does not close a math span, so "pay $5 or [^1]$6" is prose with a live reference, exactly as Reading view shows it.</p>
 </div>
 <div class="figure">
 <div class="twin">
@@ -538,27 +545,27 @@
   <span class="lbl">column</span>
   <span class="idx">0····5····10···15···20···25···30···35···40···45</span>
 </div>
-<p class="figcaption"><b>Figure 2.</b> The twin is the same length as the original, so column 4 on the twin is column 4 on the raw line. Every search for a reference runs against the twin, then the name is sliced back out of the raw line. Only the green <code>[^1]</code> survives; the two red ones are <em>fakes</em>.</p>
+<p class="figcaption"><b>Figure 2.</b> The twin is the same length as the original, so column 4 on the twin is column 4 on the raw line. Which references are live the reading says itself; the twin answers the few questions it does not, such as where an empty <code>[^]</code> placeholder sits or where the punctuation after a word ends. Only the green <code>[^1]</code> is live; the two red ones are <em>fakes</em>.</p>
 </div>
 <div class="prose">
-<p>Why a same-length copy instead of just deleting the protected parts? Because every position the scanner finds has to be handed to the editor as a line and column to edit. Keeping the widths identical means nobody has to translate coordinates. It also means a footnote name that contains a code span masks into NULs and can never accidentally equal a real name, which is a whole family of bugs the tests pin.</p>
+<p>Why a same-length copy instead of just deleting the protected parts? Because every position the reading finds has to be handed to the editor as a line and column to edit. Keeping the widths identical means nobody has to translate coordinates, and every column the reading reports is a column in the text: where Obsidian's own metadata cache misplaces one (text after a <code>%%</code> on its line), the reader keeps the true column and the referee lists the difference.</p>
 
 <h3>Obsidian's own comments are the odd one out</h3>
-<p>Obsidian's <code>%% %%</code> comments are hidden in Reading view, but Obsidian still <em>parses</em> them. Checked against the live app on about eighty shapes: a reference inside a comment binds to its definition and takes a number in order of appearance (only its superscript is hidden), while a definition inside a block comment is dead. So these comments are deliberately not protected and not masked. The scanner records them with a separate flag that only the definition readers consult: no definition may start inside a block comment, and the lint alert never reports a label there. A <code>%%</code> at the start of a line with no partner on that line opens a block that runs to the next <code>%%</code> anywhere later; a mid-line pair is an inline comment and pairs only within its own line. This is the September 9 scanner change, pinned by 29 checks.</p>
+<p>Obsidian's <code>%% %%</code> comments are hidden in Reading view, but Obsidian still <em>parses</em> them. Checked against the live app: a reference inside a comment binds to its definition and takes a number in order of appearance (only its superscript is hidden), while a definition inside a block comment is dead. So the reading reads a comment's text like any other, and its references count (Jason's ruling A1), while the masked twin leaves the comment's text in place; the lint names a label written inside a block comment. A <code>%%</code> alone at the start of a line opens a block that runs to the next <code>%%</code> anywhere later; a pair on one line is an inline comment.</p>
 
 <h3>Definition starts and the lazy label</h3>
-<p>A line that looks like <code>[^1]: text</code> is usually a definition. But if it sits directly under a line of prose with no blank line between, Obsidian treats it as a continuation of that paragraph, plain text with a live <code>[^1]</code> reference in it. The project calls this a <strong>lazy label</strong>. The scanner decides which label lines are real definition starts and which are lazy, and every command and every rule asks it rather than guessing. This rule diverges from the GitHub-flavoured Markdown reference parser, which is why the test suite's cross-check against that parser deliberately skips documents with a lazy label. As of September 9 there is a lint rule that repairs the situation by inserting the missing blank line (section 4); with it switched off, lint alerts about the label instead. One nuance the same ground-truth session settled: a line holding an HTML comment counts as a block, so a label directly under it is a real definition, whereas a line holding an inline <code>%% %%</code> comment is a paragraph line, so a label under it stays lazy.</p>
-<p>Once the real starts are known, the scanner expands each into a <strong>definition block</strong>: the label line plus any four-space-indented continuation lines and the blank lines between them. Blocks are the unit that gets moved to the bottom, merged, or jumped to. Two more shapes the mid-September hunts settled against Reading view: an inline code span that wraps across lines is one span, so the reference-looking text inside it stays a fake on both lines; and an HTML block inside a blockquote or a list item is dead text that ends with its container.</p>
+<p>A line that looks like <code>[^1]: text</code> is usually a definition. But if it sits directly under a line of prose with no blank line between, Obsidian treats it as a continuation of that paragraph, plain text with a live <code>[^1]</code> reference in it. The project calls this a <strong>lazy label</strong>. The reading says which label lines start a definition, and <code>parsing/label-shapes.ts</code> finds the label-shaped lines it says do not, so the lint can name them, the fix-lazy rule can give them their missing blank line (section 4), and a press or a deletion can treat them as the definitions they were meant to be. A label with a setext underline under it is the same story in the other direction: a heading's text, one blank line short of a definition.</p>
+<p>The reading gives every definition its last line, so each is a <strong>definition block</strong>: the label line plus its continuation lines and the blank lines between them. Blocks are the unit that gets moved to the bottom, merged, or jumped to.</p>
 
 <h3>The note reading and definitions in containers</h3>
-<p>Which lines are definitions, and where each one ends, now comes from the <strong>note reading</strong> (<code>parsing/note-reading.ts</code>): one parse of the note with <code>parsing/obsidian-markdown.ts</code>, the remark-parse 8 reader the referee suite holds to Obsidian's own answers, remembered per exact text so a press or a lint parses each text once. Every definition counts wherever it sits, at the top level, in a quote or callout, in a list item, or inside another footnote, and each carries its <strong>container</strong> (Jason's ruling 1, option a, 2026-10-03). Only a <em>movable</em> one, at the top level with nothing but indentation before its label, is ever moved to the bottom or reordered; one in a container stays where it is, and a rule that cannot safely edit it refuses or alerts. Protected text and live references still come from the scanner until step 2 of the swap.</p>
+<p>Which lines are definitions, and where each one ends, now comes from the <strong>note reading</strong> (<code>parsing/note-reading.ts</code>): one parse of the note with <code>parsing/obsidian-markdown.ts</code>, the remark-parse 8 reader the referee suite holds to Obsidian's own answers, remembered per exact text so a press or a lint parses each text once. Every definition counts wherever it sits, at the top level, in a quote or callout, in a list item, or inside another footnote, and each carries its <strong>container</strong> (Jason's ruling 1, option a, 2026-10-03). Only a <em>movable</em> one, at the top level with nothing but indentation before its label, is ever moved to the bottom or reordered; one in a container stays where it is, and a rule that cannot safely edit it refuses or alerts.</p>
 
-<h3>DocContext: scan once per press</h3>
-<p>A hotkey press builds one <code>DocContext</code> in <code>editor/doc-context.ts</code>. It runs the scanner exactly once and then answers every later question from cache: the masked version of a line, the list of definition starts, the list of blocks. The whole cascade of decisions in the next section shares that one object, so a press costs one walk over the note no matter how many questions it asks.</p>
-<p>Lint is different by design: each rule takes a string and returns a string, so each rule builds its own view of the note. That is what lets every rule be tested on its own. Since 2026-09-09 the shared rewrite engine remembers the last scan while a lint is running, so rules that receive the identical text share it. Measured on a book-length note of 25,000 lines, a full lint takes about a tenth of a second, and a normal note lints in a few milliseconds.</p>
+<h3>DocContext: one reading per press</h3>
+<p>A hotkey press builds one <code>DocContext</code> in <code>editor/doc-context.ts</code>. It reads the note once and answers every later question from that one reading: the live references on a line, the reference at the caret, the definitions, the masked version of a line. The whole cascade of decisions in the next section shares that one object, and a check of the note as it will be after the edit is one more reading, mostly of parts already read.</p>
+<p>Lint is different by design: each rule takes a string and returns a string, so each rule builds its own view of the note. That is what lets every rule be tested on its own. The reading remembers each text it read and the parts of the last eight readings, so rules that receive the identical text share one reading, and a rule's output reads mostly from parts already read. On the 22,386-line speed-test note a full lint after an edit takes about three tenths of a second, and a normal note lints in a few milliseconds.</p>
 
 <h3>The prefix reader</h3>
-<p>The third parsing file reads the <code>footnote-prefix</code> property out of the frontmatter with a hand-written reader rather than a real YAML parser, on purpose, so it can run on every keystroke without asking Obsidian's metadata cache. It also enforces two odd rules that come from Obsidian itself: a prefix may not end in a digit (it would collide with plain numbering on reindex) and may not contain <code>#</code> (it breaks Obsidian's footnote hover preview).</p>
+<p><code>parsing/footnote-prefix.ts</code> reads the <code>footnote-prefix</code> property out of the frontmatter with a hand-written reader rather than a real YAML parser, on purpose, so it can run on every keystroke without asking Obsidian's metadata cache. It also enforces two odd rules that come from Obsidian itself: a prefix may not end in a digit (it would collide with plain numbering on reindex) and may not contain <code>#</code> (it breaks Obsidian's footnote hover preview).</p>
 </div>
 </section>
 
@@ -619,7 +626,7 @@
   <div class="no"></div>
 
   <div class="kind"></div>
-  <div class="q step">Build one DocContext: scan the note once. Everything below reads from it.</div>
+  <div class="q step">Build one DocContext: read the note once. Everything below reads from it.</div>
   <div></div>
   <div class="no"></div>
 
@@ -672,16 +679,16 @@
 
 <div class="prose">
 <h3>Rehearsing before writing</h3>
-<p>The "born dead" check is the idea that explains a lot of the code's size. Inserting <code>[^3]</code> at a spot can be swallowed by a backslash before it, or can accidentally close an open <code>$</code> math span so the whole thing becomes math. So <code>editor/insertion-liveness.ts</code> applies the planned edit to a copy of the note, re-scans, and checks that the new reference and definition still count as live footnotes. If not, the press is refused. Multi-caret presses do this for every caret and refuse the entire batch if one would die.</p>
+<p>The "born dead" check is the idea that explains a lot of the code's size. Inserting <code>[^3]</code> at a spot can be swallowed by a backslash before it, or can accidentally close an open <code>$</code> math span so the whole thing becomes math. So <code>editor/insertion-liveness.ts</code> applies the planned edit to a copy of the note, reads the copy, and checks that the new reference and definition are live footnotes in it. If not, the press is refused. Multi-caret presses do this for every caret and refuse the entire batch if one would die.</p>
 
 <h3>Where the reference lands</h3>
-<p>A reference inserted mid-word is moved to the end of the word first. It then steps past every closing mark after the word: closing quotes straight and curly, brackets, the bold and italic markers, a link's <code>(url)</code> tail as a whole, and trailing punctuation. So a footnote on the last word of <em>"some bravo".</em> lands after the quote and the full stop under the default placement, which is what English, Taiwanese, Korean, and Dutch writing do; the <strong>Placement relative to punctuation</strong> setting (2026-09-21) can instead stop the walk in front of the punctuation, as mainland Chinese, Japanese, French and the EU style guide do, or leave the reference exactly at the end of the word, stepping over nothing, not even a closing quote (Jason, 2026-09-22: Don't move means what it says). One walk in the scanner decides this, and the same walk drives the punctuation lint rule, so a note typed the old way lints into the shape the insert now produces.</p>
+<p>A reference inserted mid-word is moved to the end of the word first. It then steps past every closing mark after the word: closing quotes straight and curly, brackets, the bold and italic markers, a link's <code>(url)</code> tail as a whole, and trailing punctuation. So a footnote on the last word of <em>"some bravo".</em> lands after the quote and the full stop under the default placement, which is what English, Taiwanese, Korean, and Dutch writing do; the <strong>Placement relative to punctuation</strong> setting (2026-09-21) can instead stop the walk in front of the punctuation, as mainland Chinese, Japanese, French and the EU style guide do, or leave the reference exactly at the end of the word, stepping over nothing, not even a closing quote (Jason, 2026-09-22: Don't move means what it says). One walk in <code>parsing/landing.ts</code> decides this, and the same walk drives the punctuation lint rule, so a note typed the old way lints into the shape the insert now produces.</p>
 
 <h3>Where the definition lands</h3>
 <p><code>commands/definition-append.ts</code> decides placement in three steps: right after the last existing definition block if there is one; otherwise under the section heading if that setting is on and the heading exists; otherwise at the end of the note, stepping back over trailing blank lines and over any unclosed code fence or math block so the definition never lands inside dead text.</p>
 
 <h3>Selection conversion</h3>
-<p>The 1,240-line <code>selection-footnote.ts</code> handles one thing: turning highlighted text into a footnote. It is long because the refusals are many. It trims whitespace edges, optionally widens to whole words, then refuses selections that cut through a table, cut through protected text, or touch any existing footnote (the plugin never nests footnotes, by decision, see ADR-0001). For the named command it has to open a dialog to ask for a name, and that dialog steals the plugin's own hotkeys so pressing the key again submits it instead of opening a second one. When the selected text begins with a code fence, the definition gets an empty label line and the fence starts on the next line; every other block (a heading, a table, a list, a quote, a math block) shares the label line, because Obsidian renders those there and the scanner agrees.</p>
+<p>The 1,135-line <code>selection-footnote.ts</code> handles one thing: turning highlighted text into a footnote. It is long because the refusals are many. It trims whitespace edges, optionally widens to whole words, then refuses selections that cut through a table, cut through protected text, or touch any existing footnote (the plugin never nests footnotes, by decision, see ADR-0001). For the named command it has to open a dialog to ask for a name, and that dialog steals the plugin's own hotkeys so pressing the key again submits it instead of opening a second one. When the selected text begins with a code fence, the definition gets an empty label line and the fence starts on the next line; every other block (a heading, a table, a list, a quote, a math block) shares the label line, because Obsidian renders those there.</p>
 
 <h3>The three text dialogs</h3>
 <p>Name the footnote, Rename footnote, and Set footnote prefix share one base in <code>validated-text-modal.ts</code>: an explanation, one text box, an error line, and Obsidian's own button row. They are built the way Obsidian builds its Rename heading dialog, so Obsidian's stylesheet places them: a compact centred dialog on the desktop, and on a phone a bottom sheet that Obsidian lifts above the on-screen keyboard. A refused value keeps the field focused and selected, so the correction can be typed at once.</p>
@@ -745,7 +752,7 @@
 <p>All three refuse to run in Reading view, while a popup or table cell owns focus, or when the note's prefix is invalid (reindexing would then collide prefixed and plain numbers).</p>
 
 <div class="callout">
-<p><strong>Never silent.</strong> Every rule that can destroy text is off by default, and when it is off the same condition becomes an alert instead (ADR-0002). So "Footnotes linted" followed by three notices is the design working, not a contradiction. The alerts module shares one scan across all its checks and reports empty placeholders, orphans, lazy labels, labels underlined into a setext heading, duplicates, nesting, invalid names, labels inside <code>%%</code> block comments, and definitions written inside tables.</p>
+<p><strong>Never silent.</strong> Every rule that can destroy text is off by default, and when it is off the same condition becomes an alert instead (ADR-0002). So "Footnotes linted" followed by three notices is the design working, not a contradiction. The alerts module asks one reading for all its checks and reports empty placeholders, orphans, lazy labels, labels underlined into a setext heading, duplicates, nesting, invalid names, labels inside <code>%%</code> block comments, and definitions written inside tables.</p>
 </div>
 
 <h3>Two undo safety nets that are unrelated</h3>
@@ -765,10 +772,10 @@
 <section data-layer="scaffold">
 <div class="prose">
 <h2><sup>6</sup>The scaffold: five ways of checking</h2>
-<p>This is where most of the file count lives, and why the repo feels much larger than an 18,000-line plugin. Each layer catches a different kind of mistake, and each is coloured here by the part of the plugin it mostly protects.</p>
+<p>This is where most of the file count lives, and why the repo feels much larger than a 17,000-line plugin. Each layer catches a different kind of mistake, and each is coloured here by the part of the plugin it mostly protects.</p>
 </div>
 <div class="layers">
-  <div class="layer t1"><span class="k">1</span><span class="t">Unit and property tests</span><span class="c">npm test · 404 files</span><span class="d">93 feature specs, 23 files that pin what the retired manual sheets used to ask a human, and under <span class="mono">test/hunt/</span> 223 bug pins and 62 spec rulings. Plus the properties: random documents are generated, linted, and checked for invariants like "no NUL leaks", "protected text is byte-identical", and a differential oracle that parses each document with an independent Markdown parser before and after and demands the same footnote structure. When a property finds a bug, the shrunk counterexample becomes a permanent pin in <span class="mono">test/hunt/</span>.</span></div>
+  <div class="layer t1"><span class="k">1</span><span class="t">Unit and property tests</span><span class="c">npm test · 567 files</span><span class="d">100 feature specs, 23 files that pin what the retired manual sheets used to ask a human, and under <span class="mono">test/hunt/</span> 316 bug pins and 123 spec rulings. The referee holds the reader to Obsidian's saved answers, and the parts test holds the reading in parts to one parse of the whole note. Plus the properties: random documents are generated, linted, and checked for invariants like "no NUL leaks", "protected text is byte-identical", and a differential oracle that parses each document with an independent Markdown parser before and after and demands the same footnote structure. When a property finds a bug, the shrunk counterexample becomes a permanent pin in <span class="mono">test/hunt/</span>.</span></div>
   <div class="layer t2"><span class="k">2</span><span class="t">Static analysis</span><span class="c">npm run lint · npm run knip</span><span class="d">Type-aware ESLint with the official plugin guidelines, and knip for dead exports and unused dependencies, kept at zero findings.</span></div>
   <div class="layer t3"><span class="k">3</span><span class="t">Mutation testing</span><span class="c">npm run mutation</span><span class="d">Stryker makes small deliberate breakages in the pure modules (all of parsing and linting, the non-DOM parts of the rest) and checks that some test fails. A surviving mutant is a logic change nobody would notice. Local only, before a release; it needs its own slower vitest config because per-mutant bookkeeping breaks under shared workers.</span></div>
   <div class="layer t4"><span class="k">4</span><span class="t">Smoke tests</span><span class="c">npm run test:smoke · 2,780-line script</span><span class="d">Drives the real plugin inside the real app through the Obsidian CLI: deploys the build, makes a scratch note, moves the caret, fires commands, reads the editor back. The only layer that can catch Obsidian changing under the plugin, so the popup and table cells live here.</span></div>
@@ -777,7 +784,7 @@
 <div class="prose">
 <p>Continuous integration on GitHub runs only layers 1 and 2 plus the build. The rest is a pre-release ritual you run by hand.</p>
 
-<h3>Why there are 223 bug files</h3>
+<h3>Why there are 316 bug files</h3>
 <p>The standing rule is that every bug found gets a failing test before it is fixed, and the test stays forever as a regression pin. That many pins means that many bugs were found and fixed that way, most of them by the adversarial hunts (in mid-September 2026 alone, five Kimi cycles, ten GLM cycles, and one Opus cycle found and fixed about a hundred) and the property suite. The spec rulings next to them pin behaviour Jason ruled on after a hunt asked whether it was a bug. They are not clutter you need to read; they are a ratchet. Delete one and the bug it pins can come back unnoticed.</p>
 
 <h3>Things that look like duplicates but are not</h3>
@@ -792,9 +799,9 @@
 <section>
 <div class="prose">
 <h2><sup>7</sup>Where the complexity actually comes from</h2>
-<p>It is fair to ask whether eighteen thousand lines is too many for footnotes. Here is an honest accounting of what the lines are paying for.</p>
+<p>It is fair to ask whether seventeen thousand lines is too many for footnotes. Here is an honest accounting of what the lines are paying for.</p>
 <ul>
-  <li><strong>Obsidian's Markdown has terrain.</strong> Code, math, both kinds of comment, frontmatter, blockquotes, lists, tables, lazy labels, setext headings. Each one is a rule in the scanner, and each rule interacts with the others (a fence inside a blockquote closes when the quote ends). The parsing folder alone is nearly a quarter of the plugin by lines, the scanner file a fifth on its own, and every layer above it carries guards for the same terrain.</li>
+  <li><strong>Obsidian's Markdown has terrain.</strong> Code, math, both kinds of comment, frontmatter, blockquotes, lists, tables, lazy labels, setext headings. Each one is a rule of Obsidian's parser, and each rule interacts with the others (a fence inside a blockquote closes when the quote ends). Since the runtime swap the plugin reads notes with that parser, rebuilt (section 2), instead of approximating each rule by hand; the parsing folder is a fifth of the plugin by lines, and every layer above it still carries guards for the same terrain.</li>
   <li><strong>The plugin promises never to eat your text.</strong> That promise is why every insertion is rehearsed first, why lint refuses edits that would reclassify a line, why destructive rules are off and alert instead, and why selection conversion has more refusals than conversions.</li>
   <li><strong>Two features sit on undocumented ground.</strong> Table-cell editing and the popup both work by reaching into Obsidian internals, and each needs a recovery path for when those internals misbehave.</li>
   <li><strong>The tests outnumber the code by design.</strong> Bug pins accumulate, properties are expensive to write well, and the smoke script is a small program of its own.</li>
@@ -811,7 +818,7 @@
 <div class="table-wrap">
 <table>
   <tr><th>When the problem is…</th><th>Open</th><th>Check with</th></tr>
-  <tr><td>A line is being read as code, protected, or a definition when it should not be (or the reverse)</td><td class="open"><span class="mono"><span class="dot l-parsing"></span>parsing/markdown-scan.ts</span></td><td>Ground truth from the real app: <span class="mono">Obsidian.com eval</span> and the metadata cache's sections; then <span class="mono">test/properties.test.ts</span></td></tr>
+  <tr><td>A line is being read as code, protected, or a definition when it should not be (or the reverse)</td><td class="open"><span class="mono"><span class="dot l-parsing"></span>parsing/obsidian-markdown.ts</span><span class="mono"><span class="dot l-parsing"></span>parsing/footnote-facts.ts</span></td><td>Ground truth from the real app: <span class="mono">npm run oracle -- check notes.json --reader</span>; then <span class="mono">test/obsidian-referee.test.ts</span> and <span class="mono">docs/obsidian-reading-rules.md</span></td></tr>
   <tr><td>The hotkey did the wrong thing for where the caret was</td><td class="open"><span class="mono"><span class="dot l-commands"></span>commands/insert-or-navigate-footnotes.ts</span><span class="mono"><span class="dot l-commands"></span>commands/press-guards.ts</span><span class="mono"><span class="dot l-commands"></span>commands/navigation.ts</span></td><td>The cascade tests and <span class="mono">test/command-properties.test.ts</span></td></tr>
   <tr><td>A new definition landed in the wrong place</td><td class="open"><span class="mono"><span class="dot l-commands"></span>commands/definition-append.ts</span></td><td>Unit tests</td></tr>
   <tr><td>Converting a selection refused or mangled something</td><td class="open"><span class="mono"><span class="dot l-commands"></span>commands/selection-footnote.ts</span></td><td><span class="mono">test/selection-to-footnote.test.ts</span> and the selection properties</td></tr>
@@ -832,14 +839,17 @@
 <span class="l-plumbing">  main.ts                 plugin entry: commands, hooks, migrations
   settings.ts             settings tab and defaults</span>
 <span class="l-parsing">  parsing/                reads the note, knows nothing about Obsidian
-    note-reading.ts         the note reading: every definition, its extent and container
+    note-reading.ts         the note reading, in parts: definitions, references, protected text, the masked twin
     obsidian-markdown.ts    Obsidian's parser, rebuilt from remark-parse 8
     footnote-facts.ts       the facts read off its tree
-    markdown-scan.ts        the scanner and the masked twin
-    footnote-grammar.ts     what a reference and a definition look like
+    footnote-grammar.ts     how a name is spelled, which names may be new, the next number
+    landing.ts              where a reference lands after a word
+    label-shapes.ts         label-shaped lines that are no definition (lazy labels)
+    line-edits.ts           line endings and cutting lines out
+    cell-reading.ts         a table cell's text, read as a one-cell table
     footnote-prefix.ts      the frontmatter prefix reader</span>
 <span class="l-editor">  editor/                 helpers that sit between the note and the editor
-    doc-context.ts          one scan per press, cached
+    doc-context.ts          one reading per press
     insertion-liveness.ts   the born-dead rehearsal
     table-cursor.ts         table-cell sub-editors
     cursor-motion.ts        caret placement and jump points
@@ -859,9 +869,9 @@
     linter.ts               order, triggers, the write-back
     rules/                  the eight rules and the empty-heading sweep
     lint-alerts.ts          the notices
-    rewrite-document.ts     the shared rewrite engine and its scan memo
+    rewrite-document.ts     the shared rewrite engine
     rewrite-footnote-names.ts   the shared rename engine</span>
-<span class="l-scaffold">test/                     404 files: specs, manual-* pins, hunt/ pins, properties, helpers
+<span class="l-scaffold">test/                     567 files: specs, manual-* pins, hunt/ pins, properties, the referee, helpers
 scripts/smoke-test.mjs    drives the real app
 manual-tests/             20 sheets   ·   compat-tests/   2 sheets
 docs/adr/                 the two standing decisions
