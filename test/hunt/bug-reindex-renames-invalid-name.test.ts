@@ -5,7 +5,7 @@ import { lintFootnotes, LintOptions } from "../../src/linting/linter";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
 
 // A name with a backtick in it ("[^tick`a]") is not a footnote to Obsidian
-// at all - it cannot render (manual former sheet 17). The lint's own policy for
+// at all - it cannot render (the manual tricky-footnote-names tests). The lint's own policy for
 // such names, in lint-alerts.ts, is: "a name the user typed by hand ...
 // cannot be fixed automatically: there is no telling which name they
 // meant. So the lint reports it instead" (the invalid-name alert). The
@@ -35,7 +35,7 @@ import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
 // Source of truth: lint-alerts.ts's own stated policy (invalid names are
 // reported, never auto-fixed) + the idempotence invariant pinned in
 // test/properties.test.ts ("lint is idempotent for every document and
-// option combo") + former sheet 17's ground truth that a backticked name cannot
+// option combo") + the manual tricky-footnote-names tests' ground truth that a backticked name cannot
 // render.
 //
 // Settings involved: `Renumber named footnotes` ON (non-default) for the

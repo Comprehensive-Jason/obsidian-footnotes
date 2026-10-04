@@ -94,7 +94,7 @@ function caretArtifact(
  * When EVERY caret sits inside the same kind of footnote thing, the press
  * is not refused. It is the ordinary second press, the one that carries on
  * from where the first left off, aimed at whichever of them comes first in
- * the note (from Jason's A14 report, 2026-08-27: the named multi-caret
+ * the note (from Jason's manual pass, 2026-08-27: the named multi-caret
  * flow had nowhere to go on its second press, and a filled inline footnote
  * could never be hopped back out of).
  *

@@ -27,8 +27,8 @@ import { showNotice } from "./notice";
  * itself used.
  *
  * Both sides are judged by the note reading, so a footnote-shaped decoy
- * inside a code span neither sets the notice off nor holds it back (the A20
- * decoy lesson), and names are compared case-insensitively as everywhere
+ * inside a code span neither sets the notice off nor holds it back (the same
+ * lesson as the popup's code-span decoy), and names are compared case-insensitively as everywhere
  * else. Pure function; exported so unit tests can call it.
  */
 export function orphanedByUndo(before: string, after: string): string[] {

@@ -14,7 +14,7 @@ import { fakeEditor, FakeEditor } from "./helpers/fake-editor";
 import { fakePlugin } from "./helpers/fake-plugin";
 import { messages, noticed, resetNotices } from "./helpers/notices";
 
-// Checks lifted off manual sheet "14 - Footnote prefix" (prune of
+// Checks lifted off manual sheet 08, "Footnote prefix" (prune of
 // 2026-09-20). The sheet's note carries the frontmatter prefix "P-", one
 // prefixed footnote, a plain hand-written reference, and a hand-typed
 // lowercase prefixed reference.

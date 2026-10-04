@@ -242,8 +242,8 @@ describe("lint-on-footnote-creation covers selection conversions (parity, Jason'
     });
 });
 
-describe("the creation lint relands the caret on the seeded definition (A8 report, 2026-08-26)", () => {
-    // Jason's A8 manual pass: with lint-on-creation + reindex on (popup
+describe("the creation lint relands the caret on the seeded definition (Jason's report, 2026-08-26)", () => {
+    // Jason's manual pass: with lint-on-creation + reindex on (popup
     // off), converting a selection while [^5]/[^5]: five sit ABOVE the
     // paragraph left the caret on the WRONG footnote - the lint moves and
     // renumbers the seeded definition, and the empty-definition reland
@@ -664,7 +664,7 @@ describe("selections that refuse", () => {
         expect(noticed(SelectionSpanNotice)).toBe(true);
     });
 
-    it("multiple ranges on the PASTE key get the paste redirect, not the one-stretch toast (A9 report, 2026-09-08)", async () => {
+    it("multiple ranges on the PASTE key get the paste redirect, not the one-stretch toast (Jason's report, 2026-09-08)", async () => {
         // the paste key never converts a selection, however many ranges
         // there are - its body is the clipboard - so the redirect to the
         // converting keys is the only message that helps
@@ -1182,8 +1182,8 @@ describe("selections inside an actively edited table cell", () => {
 // ---------------------------------------------------------------------------
 // the block zoo (2026-08-19): every block construct Obsidian speaks, selected
 // WHOLE inside a conversion - these pin the exact seeded definition so the
-// manual combo sheet (A13) can promise what the note will hold. Rendering
-// inside the footnote/popup is A13's eyeball territory; the text shape is
+// manual block-zoo sheet (sheet 05) can promise what the note will hold.
+// Rendering inside the footnote/popup is sheet 05's eyeball territory; the text shape is
 // pinned here.
 // ---------------------------------------------------------------------------
 
@@ -1209,7 +1209,7 @@ describe("the block zoo converts (2026-08-19)", () => {
         "    below prose",
     ];
 
-    // fixtures are BLANK-PADDED like the A13 sheet (Jason's fix,
+    // fixtures are BLANK-PADDED like sheet 05 (Jason's fix,
     // 2026-08-20): in Live Preview most blocks only render correctly with
     // a blank line between them and surrounding text, so that's the
     // realistic selection shape
@@ -1253,7 +1253,7 @@ describe("the block zoo converts (2026-08-19)", () => {
         expect(await convertBlock(middle)).toEqual(indented(middle));
     });
 
-    it("a fence, a $$ block, and inline math together (the A13 fixture)", async () => {
+    it("a fence, a $$ block, and inline math together (sheet 05's fixture)", async () => {
         const middle = [
             "```",
             "fenced code here",
@@ -1509,7 +1509,7 @@ describe("nested footnotes are prevented in selections (2026-08-24)", () => {
 
 // ---------------------------------------------------------------------------
 // tables are protected against PARTIAL conversion (Jason's ruling 2026-09-04
-// from his A13 pass): moving a cell, a few cells, or a row into a footnote
+// from his manual pass): moving a cell, a few cells, or a row into a footnote
 // shreds the table left behind and yields a body that renders as nothing
 // sensible. Two shapes stay allowed - text INSIDE one cell (source mode
 // here; the cell sub-editor branch can't cross cells by construction), and

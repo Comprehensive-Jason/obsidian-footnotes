@@ -600,7 +600,7 @@ function uniqueEmptyDefinitionName(doc: Editor): string | null {
 }
 
 // The same idea as uniqueEmptyDefinitionName, but for conversions: turning
-// selected text into a footnote (A8 report, 2026-08-26).
+// selected text into a footnote (Jason's report, 2026-08-26).
 //
 // A conversion's new definition is never empty, since it holds the text
 // that was selected. So after a lint that may have both renumbered and
@@ -652,7 +652,7 @@ function uniqueSeededDefinitionName(doc: Editor, body: string): string | null {
  * or moved it. It is found again as the note's only empty definition, or,
  * when `seededBody` is given, as the only definition holding exactly that
  * text. That second route is how a conversion's pre-filled footnote is
- * found again (A8 report, 2026-08-26).
+ * found again (Jason's report, 2026-08-26).
  *
  * The popup arm runs right BEFORE the popup opens. Jason asked for that on
  * 2026-08-27: the note must already look linted the moment the popup

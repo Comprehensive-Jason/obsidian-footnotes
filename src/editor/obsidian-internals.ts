@@ -124,7 +124,7 @@ export function readingViewActive(mdView: {
  * while you type in a property the main editor's caret is still sitting
  * wherever you last clicked in the prose. A footnote press that trusted
  * that stale caret created a footnote far from where you were looking
- * (Jason's A19 pass, 2026-09-04). In Source mode the same press is refused
+ * (Jason's manual pass, 2026-09-04). In Source mode the same press is refused
  * because the caret is on a protected line; this guard is the Live Preview
  * twin of that refusal.
  *

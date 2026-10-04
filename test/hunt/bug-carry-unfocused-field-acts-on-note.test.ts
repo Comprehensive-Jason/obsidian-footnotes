@@ -25,7 +25,7 @@ import { handleCopy, handleCut, resetCarryRegister } from "../../src/commands/ca
 //
 // Hunt 2026-10-02, round 3, lens carry-terrain. Cluster T1.
 //
-// Source of truth: Jason's A19 ruling (commit 316eaad, 2026-09-04): while
+// Source of truth: Jason's ruling (commit 316eaad, 2026-09-04): while
 // the Properties widget owns focus, the main editor's caret is stale, and
 // acting on it "edits prose they are not even looking at". The plugin has
 // propertiesWidgetOwnsFocus for exactly that. carryableSelection's own

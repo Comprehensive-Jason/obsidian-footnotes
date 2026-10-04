@@ -6,7 +6,7 @@ import { lintFootnotes, LintOptions } from "../src/linting/linter";
 import { fakeEditor } from "./helpers/fake-editor";
 import { fakePlugin } from "./helpers/fake-plugin";
 
-// Checks lifted off manual sheet "12 - Section heading already in the
+// Checks lifted off the retired manual sheet "Section heading already in the
 // note" (prune of 2026-09-20). The sheet's shape: the user typed their own
 // "# Footnotes" heading in the MIDDLE of a note, with a definition under
 // it, prose after it, and a stray definition sitting above it (issue #55,
@@ -56,7 +56,7 @@ const ALL_RULES_ON: LintOptions = {
     applyNotePrefix: false,
 };
 
-describe("former sheet 12: inserting while the heading sits mid-note", () => {
+describe("inserting while the heading sits mid-note", () => {
     it("the new definition joins the section under the heading, and the prose below keeps its blank line", async () => {
         const doc = fakeEditor(NOTE, {
             cursor: { line: 0, ch: AFTER_THIS },
@@ -81,7 +81,7 @@ describe("former sheet 12: inserting while the heading sits mid-note", () => {
     });
 });
 
-describe("former sheet 12: linting the fixture", () => {
+describe("linting the fixture", () => {
     it("the stray definition moves down under the heading and is renumbered on the way", () => {
         expect(lintFootnotes(NOTE.join("\n"), ALL_RULES_ON).split("\n")).toEqual([
             "Insert into this sentence for the insertion checks.",

@@ -16,7 +16,7 @@ import { readNote } from "../../src/parsing/note-reading";
 // definition, RESOLVED: "Reading view agrees with micromark"; Jason's A2
 // ruling for the table row), and an indented line after a definition's
 // blank line CONTINUES that definition, where a reference-shaped string
-// "woke up as a live reference" (manual former sheet 20, section I, Jason's
+// "woke up as a live reference" (the manual lint-rules tests, section I, Jason's
 // ruling 2026-09-16 - the same swallowing move-to-bottom must avoid). So
 // the chunk's "[^2]" is a live nested reference to footnote 2, and any
 // renumbering of footnote 2 must rename it too.
@@ -40,7 +40,7 @@ import { readNote } from "../../src/parsing/note-reading";
 // looks deleted, and a citation inside a footnote's continuation text
 // silently changes which footnote it points to.
 //
-// Source of truth: manual former sheet 20 §I ("the code stopped being code and a
+// Source of truth: the manual lint-rules tests, section I ("the code stopped being code and a
 // reference-shaped string inside it woke up as a live reference", Jason's
 // ruling 2026-09-16) + the RESOLVED Reading-view probe recorded in
 // spec-label-after-link-reference-definition.test.ts + the A2 ruling

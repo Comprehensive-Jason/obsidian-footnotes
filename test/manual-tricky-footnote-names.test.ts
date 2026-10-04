@@ -12,7 +12,7 @@ import { fakeEditor as sharedFakeEditor, FakeEditor } from "./helpers/fake-edito
 import { fakePlugin as sharedFakePlugin } from "./helpers/fake-plugin";
 import { messages, noticed, resetNotices } from "./helpers/notices";
 
-// Manual former sheet 17 ("Tricky footnote names", 2026-08-10), moved down into
+// The retired manual sheet "Tricky footnote names" (2026-08-10), moved down into
 // units on 2026-09-20. It replaces all seven of the sheet's checks:
 // backticked names, dollar names, the case pair, names holding "#"
 // (pressed, renamed, and named through the selection modal), the popup's
@@ -96,7 +96,7 @@ function popupPluginFor(doc: FakeEditor): FootnotePlugin {
     } as unknown as FootnotePlugin;
 }
 
-describe("former sheet 17: a backticked name", () => {
+describe("a backticked name", () => {
     beforeEach(resetNotices);
 
     it("a press inside it warns and creates nothing", async () => {
@@ -111,7 +111,7 @@ describe("former sheet 17: a backticked name", () => {
     });
 });
 
-describe("former sheet 17: dollar names", () => {
+describe("dollar names", () => {
     beforeEach(resetNotices);
 
     it("a press inside [^a$1] creates its definition normally", async () => {
@@ -133,7 +133,7 @@ describe("former sheet 17: dollar names", () => {
     });
 });
 
-describe("former sheet 17: a case pair", () => {
+describe("a case pair", () => {
     beforeEach(resetNotices);
 
     it("a press inside [^Note] jumps to the lowercase definition instead of making a second one", async () => {
@@ -147,7 +147,7 @@ describe("former sheet 17: a case pair", () => {
     });
 });
 
-describe('former sheet 17: names holding "#" are refused everywhere', () => {
+describe('names holding "#" are refused everywhere', () => {
     beforeEach(resetNotices);
 
     it("a named press inside [^#y] warns and creates nothing", async () => {
@@ -198,7 +198,7 @@ describe('former sheet 17: names holding "#" are refused everywhere', () => {
     });
 });
 
-describe("former sheet 17: a CJK name", () => {
+describe("a CJK name", () => {
     beforeEach(resetNotices);
 
     it("a press inside [^注] navigates to its definition", async () => {

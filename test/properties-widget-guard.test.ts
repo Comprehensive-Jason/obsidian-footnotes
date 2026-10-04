@@ -17,7 +17,7 @@ import {
     FakeEditor,
 } from "./helpers/fake-editor";
 
-// BUG (Jason's A19 pass, 2026-09-04): in Live Preview the frontmatter is
+// BUG (Jason's manual pass, 2026-09-04): in Live Preview the frontmatter is
 // the Properties widget, which lives OUTSIDE CodeMirror's contentDOM in
 // the sizer - so while the user types in a property field, the main
 // editor's caret is wherever they last clicked in the prose. A footnote

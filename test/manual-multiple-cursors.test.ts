@@ -16,7 +16,7 @@ import {
 } from "../src/commands/insert-or-navigate-footnotes";
 import { SelectionSpanNotice } from "../src/commands/selection-footnote";
 
-// These tests take over the last two checks of manual former sheet 09
+// These tests take over the last two checks of the retired manual sheet
 // ("Multiple cursors") that a machine can settle. Every other box on that
 // sheet was already pinned, either by test/multi-caret.test.ts or by the
 // smoke suite, so after these the sheet has nothing left to check by hand.

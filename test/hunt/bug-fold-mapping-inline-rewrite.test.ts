@@ -9,8 +9,8 @@ import { lintFootnotes } from "../../src/linting/linter";
 // them into one edit spanning both, and the fold that ends (or begins) in
 // that span comes back a line short or does not come back at all.
 //
-// What the user would see: exactly Jason's original complaint from former sheet 20
-// line 27, back again in a narrower form. They fold a heading or a list,
+// What the user would see: exactly Jason's original complaint from his manual
+// lint pass of 2026-09-11, back again in a narrower form. They fold a heading or a list,
 // press Ctrl+S, and the lint runs. The heading is still folded but one line
 // of what was hidden is now showing under it, or the fold is gone entirely
 // and the whole section is open again. Nothing was deleted; every line is
@@ -23,7 +23,7 @@ import { lintFootnotes } from "../../src/linting/linter";
 // list in this note (any of them, including one the lint will edit
 // inside), put the caret on an unchanged line, and Ctrl+S: the note is
 // linted, every fold is still folded, and the caret is still where it
-// was"); manual former sheet 20 line 27, Jason's original fold complaint ("after
+// was"); Jason's original fold complaint from that pass ("after
 // the lint the section is still folded and the caret is still on that line
 // at the same column"); and the module comment on mapFoldLines itself,
 // which licenses exactly one kind of loss and no other: "A fold whose

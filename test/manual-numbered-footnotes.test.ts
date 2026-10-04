@@ -12,7 +12,7 @@ import {
 } from "./helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "./helpers/fake-plugin";
 
-// These tests take over checks that used to sit on manual former sheet 01
+// These tests take over checks that used to sit on the retired manual sheet
 // ("numbered footnotes"). Jason had to do them by hand in Obsidian; they
 // are all about the TEXT a press leaves behind, which the fake editor can
 // see perfectly well, so they belong here instead.
@@ -34,7 +34,7 @@ import { fakePlugin as sharedFakePlugin } from "./helpers/fake-plugin";
 // the same way the sheet did.
 
 // The plugin double the sheet describes: default settings with the popup
-// turned off, because former sheet 01 says "popup OFF (the popup is sheet 02)".
+// turned off, because the retired sheet said "popup OFF (the popup is sheet 02)".
 // `insertAtEndOfWord` is the one knob these tests vary.
 function plugin(doc: FakeEditor, insertAtEndOfWord: boolean): FootnotePlugin {
     return sharedFakePlugin(
@@ -64,7 +64,7 @@ function noteWithCaret(lines: string[], line: number, ch: number): FakeEditor {
     });
 }
 
-describe("former sheet 01: a second insertion numbers on from the first", () => {
+describe("a second insertion numbers on from the first", () => {
     // The sheet's own note: a sentence to insert into, a reference that is
     // already there, and its definition at the bottom.
     const note = () => [
@@ -99,7 +99,7 @@ describe("former sheet 01: a second insertion numbers on from the first", () => 
     });
 });
 
-describe("former sheet 01: insert at end of word ON", () => {
+describe("insert at end of word ON", () => {
     // the sheet's fixture line for this section
     const fixture = "Alpha bravo charlie, end of clause, then more words. 另一句中文。";
 
@@ -116,7 +116,7 @@ describe("former sheet 01: insert at end of word ON", () => {
 // follows the closing quotation mark or bracket AND the punctuation after
 // it, which is the Chicago Manual of Style's rule. The sheet listed nine
 // shapes and asked for a press mid-"bravo" in each.
-describe("former sheet 01: the nine closing marks", () => {
+describe("the nine closing marks", () => {
     const shapes: [string, string][] = [
         ['This is "some bravo".', 'This is "some bravo".[^1]'],
         ["This is 'some bravo'.", "This is 'some bravo'.[^1]"],
@@ -138,7 +138,7 @@ describe("former sheet 01: the nine closing marks", () => {
     }
 });
 
-describe("former sheet 01: links and wikilinks", () => {
+describe("links and wikilinks", () => {
     it("a markdown link takes the reference after the whole (url), never between ']' and '('", async () => {
         const line = "A link: see [some bravo](https://theindex.moe) here.";
         const doc = noteWithCaret([line], 0, line.indexOf("bravo") + 2);
@@ -156,7 +156,7 @@ describe("former sheet 01: links and wikilinks", () => {
     });
 });
 
-describe("former sheet 01: insert at end of word OFF", () => {
+describe("insert at end of word OFF", () => {
     // "Alpha br|avo charlie": the caret sits in the middle of "bravo"
     const fixture = "Alpha bravo charlie";
     const midBravo = 8;

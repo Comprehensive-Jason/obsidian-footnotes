@@ -85,7 +85,7 @@ describe("reindexFootnotes with a prefix namespace", () => {
 
 describe("lintFootnotes prefix awareness (applyNotePrefix - one flag drives both the apply step and namespace-aware reindexing since 2026-08-11)", () => {
     it("unifies plain and prefixed footnotes into one reading-order sequence", () => {
-        // the L11 scenario: plain strays adopt the prefix, then the WHOLE
+        // sheet 09's scenario: plain strays adopt the prefix, then the WHOLE
         // namespace renumbers by appearance - including the pre-existing
         // [^2.5], which is a numbered footnote now, not a named one
         const input =
@@ -123,7 +123,7 @@ describe("lintFootnotes prefix awareness (applyNotePrefix - one flag drives both
         expect(lintFootnotes(once, options)).toBe(once);
     });
 
-    it("prefixes named footnotes through the pipeline (A6 bug)", () => {
+    it("prefixes named footnotes through the pipeline (bug of 2026-07-20)", () => {
         const input =
             "---\nfootnote-prefix: 2.\n---\nx[^note] y[^1] end\n\n[^note]: n\n[^1]: one";
         const expected =

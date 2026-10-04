@@ -964,7 +964,7 @@ describe("creation-command invariants over random documents", () => {
                     await COMMANDS[command](fakePlugin(doc, settings));
                     expect(doc.lines.join("\n")).toBe(lines.join("\n"));
                     // the paste key never converts a selection, so it gives
-                    // its own redirect even here (A9 report 2026-09-08);
+                    // its own redirect even here (Jason's report, 2026-09-08);
                     // the converting keys ask for one stretch
                     const expected =
                         command === "paste" ? SelectionCommandNotice : SelectionSpanNotice;

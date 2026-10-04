@@ -290,7 +290,7 @@ describe("atomic refusals - one bad caret refuses the whole press", () => {
     });
 });
 
-describe("a second press with EVERY caret inside the same footnote continues it (A14 report, 2026-08-27)", () => {
+describe("a second press with EVERY caret inside the same footnote continues it (Jason's report, 2026-08-27)", () => {
     // Jason's report: the named multi-caret flow (skeletons, type the name
     // once) DEAD-ENDED - the second press refused with the atomic toast,
     // and the filled inline flow could never hop back out. When every

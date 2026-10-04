@@ -31,8 +31,8 @@ import { readNote } from "../../src/parsing/note-reading";
 // the plugin counts it live, so reindex hands its number out to it, the
 // punctuation rule moves it, orphan handling judges it, and move-to-bottom
 // can gather definitions around it - protected text rewritten, the promise
-// the linter makes broken (docs/adr/0002's conservation spirit, former sheet 20
-// section I records the indented-chunk-under-a-heading shape).
+// the linter makes broken (docs/adr/0002's conservation spirit, the manual
+// lint-rules tests' section I records the indented-chunk-under-a-heading shape).
 //
 // Source of truth: CommonMark 4.3 (a setext underline heads the directly
 // preceding paragraph, and "[ref]: /url" is a block of its own, so that

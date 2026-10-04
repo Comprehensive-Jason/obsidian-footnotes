@@ -26,7 +26,7 @@ import { readNote } from "../../src/parsing/note-reading";
 // the whole run - pipes and label alike - as one paragraph, so with the
 // gather rule off the user's "[^1]: def" sits there as plain text and no
 // alert ever names it: a silent miss of exactly the shape the
-// lazy-definition alert exists for (former sheet 23), against the never-silent
+// lazy-definition alert exists for (the manual lint-alerts tests), against the never-silent
 // policy (ADR 0002).
 //
 // What the user sees: they typed a definition one blank line short below

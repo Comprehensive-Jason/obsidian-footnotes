@@ -95,7 +95,7 @@ export async function withEditableEditor(
     // property field, the caret the editor reports is the STALE one from
     // before they clicked in, so acting on it edits prose they are not even
     // looking at. Source mode refuses the same press because that caret
-    // counts as protected frontmatter; match it (Jason's A19 pass,
+    // counts as protected frontmatter; match it (Jason's manual pass,
     // 2026-09-04).
     if (propertiesWidgetOwnsFocus(mdView)) {
         showNotice(propertiesFocusNotice, 8000);

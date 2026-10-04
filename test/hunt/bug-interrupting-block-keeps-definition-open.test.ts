@@ -54,7 +54,7 @@
 // pinned cycle-5 enders were caught by.
 //
 // Settings involved: the scan facts themselves; "Move definitions to the
-// bottom" OFF (a supported combo, manual former sheet 20 sections B and C) with
+// bottom" OFF (a supported combo, the manual lint-rules tests, sections B and C) with
 // Reindex or "Delete orphaned references" ON for the consequence tests.
 
 import { describe, expect, it } from "vitest";

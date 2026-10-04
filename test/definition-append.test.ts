@@ -133,12 +133,12 @@ describe("buildDefinitionAppend", () => {
     });
 });
 
-// Bug (A4, reported 2026-07-20): a definition inserted directly above prose gets
+// Bug (reported 2026-07-20): a definition inserted directly above prose gets
 // that prose pulled INTO the footnote - Obsidian lazily continues a
 // definition into the next non-blank line. Every insertion point that can
 // have content below it must keep a blank line between the definition and it.
 describe("blank line between the new definition and following content", () => {
-    it("separates the definition from prose right below the heading slot (A4)", () => {
+    it("separates the definition from prose right below the heading slot", () => {
         const doc = fakeEditor([
             "Intro[^1] text",
             "",

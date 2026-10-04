@@ -113,7 +113,7 @@ describe("the lint does not settle in one run on this shape", () => {
         expect(lintFootnotes(once)).toBe(once);
     });
 
-    it("lint on save does not rewrite the note on the second save (former sheet 21)", () => {
+    it("lint on save does not rewrite the note on the second save (the manual lint-stability contract)", () => {
         const saves = [SETEXT];
         for (let i = 0; i < 3; i++) saves.push(lintFootnotes(saves[saves.length - 1]));
         // it takes three lints to reach a note the fourth leaves alone

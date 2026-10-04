@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { lineDiffChanges } from "../src/editor/document-diff";
 
-// Jason's manual pass, former sheet 20 (2026-09-11): linting unfolded every folded
+// Jason's manual lint pass (2026-09-11): linting unfolded every folded
 // heading and list in the note, and the caret jumped to one of the linted
 // spots. Both came from how the lint wrote its result back: one edit
 // spanning from the first changed character to the last, which replaced

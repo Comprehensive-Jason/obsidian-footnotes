@@ -21,7 +21,7 @@ import { FootnoteRule } from "../rule";
 // sketch left the second body unindented, which Obsidian would render just
 // as well. The trouble is that an unindented line is not part of the
 // definition block, so move-to-bottom would leave it stranded behind (the
-// A4 family of bugs). The indented form looks identical when rendered and
+// swallowed-prose family of bugs). The indented form looks identical when rendered and
 // stays one block.
 
 /**

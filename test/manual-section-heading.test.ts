@@ -6,7 +6,7 @@ import { lintFootnotes, LintOptions } from "../src/linting/linter";
 import { fakeEditor } from "./helpers/fake-editor";
 import { fakePlugin } from "./helpers/fake-plugin";
 
-// Checks lifted off manual sheet "11 - Section heading" (prune of
+// Checks lifted off the retired manual sheet "Section heading" (prune of
 // 2026-09-20). The sheet had a note with no footnotes at all, inserted
 // twice, and then linted twice, once with the single-line heading
 // "# Footnotes" and once with the two-line "---" + "## Footnotes".
@@ -68,7 +68,7 @@ async function insertTwice(heading: string): Promise<string[]> {
     return doc.lines;
 }
 
-describe("former sheet 11: the single-line heading # Footnotes", () => {
+describe("the single-line heading # Footnotes", () => {
     it("the first footnote makes the heading, the second joins it without a twin", async () => {
         expect(await insertTwice("# Footnotes")).toEqual([
             "Insert into this[^1][^2] sentence twice.",
@@ -91,7 +91,7 @@ describe("former sheet 11: the single-line heading # Footnotes", () => {
     });
 });
 
-describe("former sheet 11: the divider heading --- + ## Footnotes", () => {
+describe("the divider heading --- + ## Footnotes", () => {
     const HEADING = "---\n## Footnotes";
 
     it("the first footnote makes a blank line, the divider and the heading; the second joins it", async () => {

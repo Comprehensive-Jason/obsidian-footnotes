@@ -69,7 +69,7 @@ export function buildDefinitionAppend(
     // A line with text on it directly below the new definition gets pulled
     // INTO the definition, because Obsidian carries a definition on into
     // the next line. So when there is content below, add a blank line
-    // after the definition (the A4 bug, 2026-07-20). The caret still lands
+    // after the definition (the swallowed-prose bug, 2026-07-20). The caret still lands
     // on the definition line itself.
     const needsSeparator = (insertLine: number) =>
         insertLine + 1 < lines.length && lines[insertLine + 1].trim() !== "";
@@ -214,7 +214,7 @@ export function buildDefinitionAppend(
     // When the definition sits in the middle of the note, above an
     // unclosed region, a line with text on it directly below would be
     // pulled INTO the new definition. Same danger as at the other places a
-    // definition can be inserted (the A4 bug again).
+    // definition can be inserted (the swallowed-prose bug again).
     if (openFrom !== -1 && needsSeparator(fromLine)) text += "\n";
 
     // The first footnote's section heading may itself start with a "---"

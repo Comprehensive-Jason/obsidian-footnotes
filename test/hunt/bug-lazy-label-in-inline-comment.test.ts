@@ -30,7 +30,7 @@ import { lintFootnotes } from "../../src/linting/linter";
 // comment is dead text, not a definition one blank line short of working,
 // so there is nothing to report and nothing to fix" - the block case is
 // skipped, the inline-pair case is not), plus the lint idempotence
-// contract of former sheets 20 and 21 ("run lint AGAIN - it must say 'No linting
+// contract of the manual lint-rules and lint-stability tests ("run lint AGAIN - it must say 'No linting
 // needed.'").
 //
 // Settings involved: `Fix definitions hidden by a missing blank line`

@@ -14,8 +14,8 @@ import { codeMirrorViewOf } from "./obsidian-internals";
  * transaction. Untouched lines are never rewritten, so a fold on them
  * stays folded and a caret in them stays put. (It used to be one edit from
  * the first changed character to the last, which unfolded everything in
- * between and pushed a caret inside the span to its start: Jason's report,
- * former sheet 20, 2026-09-11.) The edits are worked out by lineDiffChanges; all
+ * between and pushed a caret inside the span to its start: Jason's report
+ * from a manual lint pass, 2026-09-11.) The edits are worked out by lineDiffChanges; all
  * of them are positions in the text BEFORE the rewrite, which is what a
  * transaction expects.
  */

@@ -365,7 +365,7 @@ function landCarriedText(
  * the footnote and the references in it are nested (hunt 2026-10-02, pin
  * bug-carry-paste-below-last-definition-lazy; ADR 0001). The text then
  * gets a blank line in front: the paste-shaped twin of the blank line a
- * new definition gets when text follows it (the A4 bug, 2026-07-20). A
+ * new definition gets when text follows it (the swallowed-prose bug, 2026-07-20). A
  * paste made inside a definition, and a pasted text that starts with a
  * definition label of its own, are where the user put them and get
  * nothing.

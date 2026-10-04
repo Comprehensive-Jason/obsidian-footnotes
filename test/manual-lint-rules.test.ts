@@ -5,12 +5,12 @@ import { noticeLintAlerts } from "../src/linting/lint-alerts";
 import { fakePlugin } from "./helpers/fake-plugin";
 import { messages, resetNotices } from "./helpers/notices";
 
-// Manual former sheet 20, "the lint rules, alone and together", used to ask Jason
+// The retired manual sheet "the lint rules, alone and together" used to ask Jason
 // to set seven settings combos by hand, run Lint footnotes, and eyeball the
 // note against a fence of expected text. That is a pure text outcome, so it
 // belongs here instead of in six hours of hand-testing.
 //
-// This file replaces these boxes of former sheet 20:
+// This file replaces these boxes of that sheet:
 //   A  the all-rules-on fence, the orphan alert naming "3" and "lost",
 //      and the second lint changing nothing
 //   B  the punctuation-only fence, and the closing-mark box under it
@@ -85,7 +85,7 @@ function lintTwice(options: Parameters<typeof lintFootnotes>[1]): {
 
 beforeEach(resetNotices);
 
-describe("former sheet 20 A: every rule on, the defaults", () => {
+describe("section A: every rule on, the defaults", () => {
     const { once, twice } = lintTwice({});
 
     it("matches the sheet's fence", () => {
@@ -121,7 +121,7 @@ describe("former sheet 20 A: every rule on, the defaults", () => {
     });
 });
 
-describe("former sheet 20 B: punctuation only", () => {
+describe("section B: punctuation only", () => {
     const options = { moveDefinitionsToBottom: false, reindex: false };
 
     it("only the references hop: numbers, order, and position are untouched", () => {
@@ -154,7 +154,7 @@ describe("former sheet 20 B: punctuation only", () => {
     });
 });
 
-describe("former sheet 20 C: move to bottom only", () => {
+describe("section C: move to bottom only", () => {
     it("the definitions relocate below the tail in their original order, nothing renumbered", () => {
         expect(
             lintFootnotes(FIXTURE, { fixPunctuation: false, reindex: false }),
@@ -177,7 +177,7 @@ describe("former sheet 20 C: move to bottom only", () => {
     });
 });
 
-describe("former sheet 20 D: reindex only", () => {
+describe("section D: reindex only", () => {
     it("numbers and definition order flip, the comma stays put, the kept orphan is numbered last", () => {
         expect(
             lintFootnotes(FIXTURE, {
@@ -203,7 +203,7 @@ describe("former sheet 20 D: reindex only", () => {
     });
 });
 
-describe("former sheet 20 E: every rule on, plus deleting orphaned definitions", () => {
+describe("section E: every rule on, plus deleting orphaned definitions", () => {
     // the sheet's fence: combo A with the two orphan definitions gone and
     // nothing else different
     const WITHOUT_ORPHANS = [
@@ -250,7 +250,7 @@ describe("former sheet 20 E: every rule on, plus deleting orphaned definitions",
     });
 });
 
-describe("former sheet 20 F: every rule on, plus renumbering named footnotes", () => {
+describe("section F: every rule on, plus renumbering named footnotes", () => {
     it("every footnote becomes a number by appearance order, kept orphans last", () => {
         expect(
             lintFootnotes(FIXTURE, {
@@ -281,7 +281,7 @@ describe("former sheet 20 F: every rule on, plus renumbering named footnotes", (
     });
 });
 
-describe("former sheet 20 G: every rule on, plus the section heading", () => {
+describe("section G: every rule on, plus the section heading", () => {
     const options = { sectionHeading: "# Footnotes" };
     const { once, twice } = lintTwice(options);
 
@@ -312,7 +312,7 @@ describe("former sheet 20 G: every rule on, plus the section heading", () => {
     });
 });
 
-describe("former sheet 20 H: every rule turned off", () => {
+describe("section H: every rule turned off", () => {
     // the sheet's box also asks about the toast, which is raised from the
     // command in main.ts and from the save trigger; neither is reachable
     // from here, so the toast half stays a hand-check on sheet 12
@@ -344,7 +344,7 @@ describe("former sheet 20 H: every rule turned off", () => {
     });
 });
 
-describe("former sheet 20 I: move to bottom past an indented code chunk", () => {
+describe("section I: move to bottom past an indented code chunk", () => {
     // the last line starts with a tab, so it is an indented code block and
     // the "[^89]" in it is dead text. The definition has to be parked BELOW
     // the chunk: parking it above would pull the chunk out of its own block.

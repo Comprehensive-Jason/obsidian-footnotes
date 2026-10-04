@@ -282,7 +282,7 @@ export async function openFootnotePopup(
     //
     // Note that this compares the buffer to the editor for EQUALITY. It
     // used to search the buffer for the "[^id]:" substring, which went
-    // wrong: definition-shaped text inside a code span (the A8 sheet's own
+    // wrong: definition-shaped text inside a code span (a manual sheet's own
     // "`[^name]: …`" checkbox line) matched the STALE buffer straight away.
     // The save below was then skipped, because that stale buffer still
     // equalled what was on disk, and the popup sat there invisible for
@@ -450,7 +450,7 @@ export async function openFootnotePopup(
     // state directly. Both editors call preventDefault on EVERY Escape, not
     // just vim's, so the earlier check for defaultPrevented in the bubble
     // phase never closed the popup at all: a regression from the E28
-    // cleanup, caught by the A3 manual pass (2026-08-13).
+    // cleanup, caught by Jason's manual pass of the popup (2026-08-13).
     //
     // E28's real rule survives by asking vim itself. Whichever editor holds
     // focus and is still in INSERT mode keeps the key, because leaving

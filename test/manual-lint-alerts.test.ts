@@ -5,11 +5,11 @@ import { invalidFootnoteNames, noticeLintAlerts } from "../src/linting/lint-aler
 import { fakePlugin } from "./helpers/fake-plugin";
 import { messages, resetNotices } from "./helpers/notices";
 
-// Manual former sheet 23, "what the linter alerts about instead of fixing". Every
+// The retired manual sheet "what the linter alerts about instead of fixing". Every
 // box on it is an alert's text or a lint's text outcome, both of which a
 // unit test can read, so the whole sheet moves here.
 //
-// This file replaces these boxes of former sheet 23:
+// This file replaces these boxes of that sheet:
 //   the two orphan boxes and the empty-reference box
 //   both "Delete orphaned references / definitions ON" boxes
 //   both boxes under "A definition one blank line short"
@@ -22,7 +22,7 @@ import { messages, resetNotices } from "./helpers/notices";
 //
 // Three of them are marked `it.fails`: the sheet and the code disagree, and
 // each one says below what the code does instead. Nothing is left for a
-// human to judge, so former sheet 23 now says so in two lines.
+// human to judge, so the sheet was retired (2026-09-20).
 //
 // The alerts always describe the text AFTER the lint has run, so every test
 // here lints first and then asks the alerts about the result, exactly as
@@ -87,7 +87,7 @@ const lintedProse = (options: Parameters<typeof lintFootnotes>[1] = {}) =>
 
 beforeEach(resetNotices);
 
-describe("former sheet 23: orphans, strays, and empties", () => {
+describe("orphans, strays, and empties", () => {
     it("an alert names the definitions nothing references, and they stay in the note", () => {
         expect(alertsAfterLint()).toContain(
             'This note has 2 footnote definitions nothing references ("[^lost]", "[^31]"). Add their references in the text, or delete the definitions.',
@@ -132,7 +132,7 @@ describe("former sheet 23: orphans, strays, and empties", () => {
     });
 });
 
-describe("former sheet 23: a definition one blank line short", () => {
+describe("a definition one blank line short", () => {
 
     it("what the code does today: the lint promotes the hidden definition and gathers it", () => {
         const after = lintFootnotes(NOTE, SETTINGS);
@@ -153,7 +153,7 @@ describe("former sheet 23: a definition one blank line short", () => {
     });
 });
 
-describe("former sheet 23: invalid names", () => {
+describe("invalid names", () => {
     it("the alert lists six names and ends with the one rule about characters", () => {
         expect(alertsAfterLint()).toContain(
             `This note has 6 footnotes with invalid names ("[^bad name]", "[^c#d]", "[^#jump]", "[^aa${BT}a]", "[^bb#b]", "[^cc${BT}c]"). Footnote names can't contain spaces, backticks, brackets, or "#".`,
@@ -182,7 +182,7 @@ describe("former sheet 23: invalid names", () => {
     });
 });
 
-describe("former sheet 23: nesting", () => {
+describe("nesting", () => {
     it("an alert names the nesting definition and says nested footnotes don't survive export", () => {
         expect(alertsAfterLint()).toContain(
             'This note has a footnote nested inside another footnote\'s definition ("[^nest]"). Nested footnotes don\'t survive export and most tools can\'t read them. Move it into the text.',
@@ -196,7 +196,7 @@ describe("former sheet 23: nesting", () => {
     });
 });
 
-describe("former sheet 23: code inside a definition body", () => {
+describe("code inside a definition body", () => {
     it("the reference-shaped text in the fenced body survives orphan deletion untouched", () => {
         const after = lintFootnotes(NOTE, { ...SETTINGS, removeOrphanedReferences: true });
         expect(after).toContain(`    ${FENCE}js\n    const ref = "[^99]";\n    ${FENCE}`);
@@ -206,7 +206,7 @@ describe("former sheet 23: code inside a definition body", () => {
     });
 });
 
-describe("former sheet 23: duplicate definitions", () => {
+describe("duplicate definitions", () => {
     it("with merging off, an alert says the footnote is defined more than once and both copies stay", () => {
         expect(alertsAfterLint()).toContain(
             'This note defines "[^dup]" more than once. Obsidian renders only the last definition. Merge them, or turn on "Merge duplicate definitions".',
@@ -223,7 +223,7 @@ describe("former sheet 23: duplicate definitions", () => {
     });
 });
 
-describe("former sheet 23: every alert that lists footnotes", () => {
+describe("every alert that lists footnotes", () => {
     it("no alert ever trails off into an ellipsis", () => {
         const raised = alertsAfterLint();
         expect(raised.length).toBeGreaterThan(0);
@@ -232,7 +232,7 @@ describe("former sheet 23: every alert that lists footnotes", () => {
     });
 });
 
-describe("former sheet 23: definitions inside a list item", () => {
+describe("definitions inside a list item", () => {
     // this section of the sheet runs with every rule on, reindex included
     const ITEMS = [
         "- [^la]: a definition written right after the list marker",

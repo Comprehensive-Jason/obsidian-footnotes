@@ -20,7 +20,7 @@ import { FootnoteRule } from "../rule";
 // new name lands on an existing one.
 //
 // Named footnotes keep their name, behind the prefix: "[^note]" becomes
-// "[^2.note]" (A6 bug, 2026-07-20). The exception is when that prefixed
+// "[^2.note]" (a bug of 2026-07-20). The exception is when that prefixed
 // name is already some other footnote in the note, because the rename would
 // then quietly merge two footnotes into one; such a name is left alone.
 //

@@ -5,13 +5,13 @@ import { noticeLintAlerts } from "../src/linting/lint-alerts";
 import { fakePlugin } from "./helpers/fake-plugin";
 import { messages, resetNotices } from "./helpers/notices";
 
-// Manual former sheet 21, "lint stability paranoia", has one fixture and two
+// The retired manual sheet "lint stability paranoia" had one fixture and two
 // boxes, both of them pure text outcomes: what the lint does to a note
 // whose very first line is a definition with a "---" right under it, and
 // whether a second run churns. Both move here.
 //
-// This file replaces both boxes of former sheet 21. Nothing is left for the sheet,
-// so former sheet 21 now says so in two lines.
+// This file replaces both boxes of that sheet, so the sheet was retired
+// (2026-09-20).
 //
 // Heads up, and the reason one test below is marked `it.fails`: the sheet's
 // first box was written on 2026-08-10, before the 2026-09-16 ruling about
@@ -43,7 +43,7 @@ const FIXTURE_IN_A_NOTE = [
 
 beforeEach(resetNotices);
 
-describe("former sheet 21: a definition on line 1 with a divider under it", () => {
+describe("a definition on line 1 with a divider under it", () => {
 
     it("what the code does today: the note comes back untouched", () => {
         expect(lintFootnotes(FIXTURE)).toBe(FIXTURE);
@@ -68,7 +68,7 @@ describe("former sheet 21: a definition on line 1 with a divider under it", () =
     });
 });
 
-describe("former sheet 21: no churn on a second run", () => {
+describe("no churn on a second run", () => {
     it("linting twice returns the same text, so a second save rewrites nothing", () => {
         // "lint on save" runs exactly this function before the write, so a
         // stable second pass is what "saving twice never rewrites" means

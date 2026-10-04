@@ -116,7 +116,7 @@ export const ProtectedSelectionNotice =
     NoFootnoteCreated + "the selection cuts through code, math, or other protected text. Select all of it or none of it.";
 
 // A selection that takes only PART of a table refuses (Jason's ruling
-// 2026-09-04, from his A13 pass). Moving a cell, a few cells, or a whole
+// 2026-09-04, from his manual pass). Moving a cell, a few cells, or a whole
 // row into a footnote shreds the table that stays behind, and the pipes
 // and dashes that travel render as nothing sensible in the definition.
 // Two cases still work: text inside a single cell converts, because the
@@ -281,7 +281,7 @@ export function selectionPressHandled(
     // matters here: with the checks the other way round, two Alt-dragged
     // ranges got the "one continuous stretch" message, which tells you to
     // fix something that would still not let the paste key convert
-    // (Jason's A9 report 2026-09-08).
+    // (Jason's report, 2026-09-08).
     if (command === "paste") {
         showNotice(SelectionCommandNotice, 8000);
         return true;
@@ -981,7 +981,7 @@ function convertMainSelection(
         // empty definition, cannot work here because a converted definition
         // is never empty. Without the seeded body the caret was left on
         // whatever text the lint's replacement put at its old spot (Jason's
-        // A8 report, 2026-08-26).
+        // report, 2026-08-26).
         seededBody: body,
     });
 }

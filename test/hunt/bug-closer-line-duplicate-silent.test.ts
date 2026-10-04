@@ -39,8 +39,8 @@ import {
 // Source of truth: ADR 0002 ("every content-destroying fix is surfaced as a
 // lint alert instead... duplicate definitions alert rather than merge") +
 // the recorded ground truth that a closer-line label defines its footnote
-// (bug-aftercloser-orphan-silent's own header) + former sheet 23's duplicate
-// section ("an alert says [^dup] is defined more than once"). The
+// (bug-aftercloser-orphan-silent's own header) + the duplicate
+// check of the manual lint-alerts tests ("an alert says [^dup] is defined more than once"). The
 // documented carve-out for BLOCKQUOTED duplicates (C22: merging would need
 // quote-marker-aware continuations) does not cover the closer line, which
 // the orphan alert already treats as alertable. Settings involved:

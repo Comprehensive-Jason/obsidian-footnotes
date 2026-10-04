@@ -29,9 +29,9 @@ import { readNote } from "../../src/parsing/note-reading";
 // GFM table whose label's lazy tail is "c | d").
 //
 // Source of truth: sheet 14 (the label-under-prose rule the move's
-// OUTPUT now violates) + the conservation promise of former sheets 20/21 (lint
-// never changes what renders, with deletions off) + the pinned
-// lazy-continuation ruling (the tail belongs to the first block, so the
+// OUTPUT now violates) + the conservation promise of the manual lint-rules and
+// lint-stability tests (lint never changes what renders, with deletions off)
+// + the pinned lazy-continuation ruling (the tail belongs to the first block, so the
 // only place left to be wrong is the join).
 //
 // Settings involved: `Move definitions to the bottom` (default ON); the

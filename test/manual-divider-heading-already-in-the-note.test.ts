@@ -6,8 +6,8 @@ import { lintFootnotes, LintOptions } from "../src/linting/linter";
 import { fakeEditor } from "./helpers/fake-editor";
 import { fakePlugin } from "./helpers/fake-plugin";
 
-// Checks lifted off manual sheet "13 - Divider heading already in the
-// note" (prune of 2026-09-20). Same shape as former sheet 12, but the user's own
+// Checks lifted off the retired manual sheet "Divider heading already in the
+// note" (prune of 2026-09-20). Same shape as the heading-already-in-the-note tests, but the user's own
 // footnote section is a two-line pair: a "---" divider and a "## Footnotes"
 // heading, sitting in the MIDDLE of the note with prose after it and a
 // stray definition above it.
@@ -59,7 +59,7 @@ const ALL_RULES_ON: LintOptions = {
     applyNotePrefix: false,
 };
 
-describe("former sheet 13: inserting while the divider pair sits mid-note", () => {
+describe("inserting while the divider pair sits mid-note", () => {
     it("the new definition joins the section under the pair, and the prose below keeps its blank line", async () => {
         const doc = fakeEditor(NOTE, {
             cursor: { line: 0, ch: AFTER_THIS },
@@ -86,7 +86,7 @@ describe("former sheet 13: inserting while the divider pair sits mid-note", () =
     });
 });
 
-describe("former sheet 13: linting the fixture", () => {
+describe("linting the fixture", () => {
     it("the stray definition moves down under the pair and is renumbered on the way", () => {
         expect(lintFootnotes(NOTE.join("\n"), ALL_RULES_ON).split("\n")).toEqual([
             "Insert into this sentence for the insertion checks.",

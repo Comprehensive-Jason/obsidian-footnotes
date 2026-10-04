@@ -1,7 +1,7 @@
 // The smallest set of line-range edits that turns one version of a note
 // into another.
 //
-// Why it exists (Jason's report, former sheet 20, 2026-09-11): the lint used to
+// Why it exists (Jason's report from a manual lint pass, 2026-09-11): the lint used to
 // write its result back as ONE edit, from the first changed character to
 // the last. Everything between those two points was replaced wholesale,
 // even the lines that had not changed at all. That threw away every folded

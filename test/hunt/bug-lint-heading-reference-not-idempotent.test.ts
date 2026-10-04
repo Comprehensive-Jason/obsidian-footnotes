@@ -14,7 +14,8 @@ import { lintFootnotes, sectionHeadingProblem } from "../../src/linting/linter";
 // it, and the lint commands cancel with a message that names the
 // reference and points at the setting (the same way an invalid prefix
 // cancels the lint). Source of truth: the lint idempotence contract
-// (former sheet 20: "run lint AGAIN, it must say No linting needed"; former sheet 21).
+// (the manual lint-rules tests: "run lint AGAIN, it must say No linting
+// needed"; the manual lint-stability tests).
 
 const HEADING = "# Footnotes [^9]";
 
@@ -40,7 +41,7 @@ describe("a section heading whose text holds a footnote reference", () => {
         expect(lintFootnotes(once, options)).toBe(once);
     });
 
-    it("control: a plain heading text is found again and the lint settles (former sheets 11/12)", () => {
+    it("control: a plain heading text is found again and the lint settles (the manual section-heading tests)", () => {
         const doc = "text[^1]\n\n# Footnotes\n\n[^1]: a";
         const options = { sectionHeading: "# Footnotes" };
         const once = lintFootnotes(doc, options);

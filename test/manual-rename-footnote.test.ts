@@ -12,7 +12,7 @@ import { simulateChanges } from "../src/editor/insertion-liveness";
 
 import { fakeEditor } from "./helpers/fake-editor";
 
-// Checks lifted off manual sheet "10 - Rename footnote" (prune of
+// Checks lifted off manual sheet 07, "Rename footnote" (prune of
 // 2026-09-20). The sheet's own note is the fixture below, so what these
 // tests say and what Jason would have done by hand line up.
 //

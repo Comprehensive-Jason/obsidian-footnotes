@@ -26,9 +26,9 @@ import { orphanedFootnoteDefinitionNames } from "../../src/linting/rules/remove-
 //
 // So the first lint (with `Delete orphaned definitions` ON) leaves the
 // orphan in place and instead gathers it below the rule (move-to-bottom,
-// former sheet 21's layout), where the definition no longer touches the rule and
+// the manual lint-stability tests' layout), where the definition no longer touches the rule and
 // the SAME cut is clean: the second lint deletes the orphan, the third says
-// nothing. Manual former sheet 20 pins the contract this breaks: "run lint AGAIN
+// nothing. The manual lint-rules tests pin the contract this breaks: "run lint AGAIN
 // (it must say 'No linting needed.')".
 //
 // What the user would see: with the delete toggle on, the first lint
@@ -39,7 +39,7 @@ import { orphanedFootnoteDefinitionNames } from "../../src/linting/rules/remove-
 // Source of truth: the rule's own refusal contract ("a deletion that changes
 // how Obsidian reads a line it did not touch is refused" - the rule here
 // changes NO line's reading, micromark: footnoteDefinition + thematicBreak
-// before, "" + thematicBreak after) + manual former sheet 20's second-lint
+// before, "" + thematicBreak after) + the manual lint-rules tests' second-lint
 // contract + the idempotence property the suite already pins.
 //
 // Settings involved: `Delete orphaned definitions` ON, `Move definitions to

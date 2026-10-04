@@ -81,7 +81,7 @@ export const ClosingMarkChars = "\"'’”)]}」』）】〕》〉*_~=｣］｝�
  *     This is **some bravo**. ->   This is **some bravo**.[^1]
  *
  * That is the Chicago Manual of Style's rule, which English, Taiwanese,
- * Korean and Dutch writing share (Jason's ask, former sheet 01,
+ * Korean and Dutch writing share (Jason's ask on a manual pass,
  * 2026-09-09; it was called "the one every major style guide shares"
  * until the 2026-09-20 research found that mainland Chinese, Japanese,
  * French and the EU style guide put the marker before the punctuation).

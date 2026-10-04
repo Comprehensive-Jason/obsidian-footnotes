@@ -9,7 +9,7 @@ import { lintFootnotes } from "../src/linting/linter";
 //   - plain numbered footnotes convert in first-appearance order
 //   - numbering continues after the highest existing prefixed footnote, so
 //     nothing collides
-//   - named footnotes get the prefix too, keeping their name (A6 bug,
+//   - named footnotes get the prefix too, keeping their name (a bug of
 //     2026-07-20) - unless the prefixed name already exists as another
 //     footnote, which a rename would silently merge
 //   - already-prefixed footnotes are untouched
@@ -36,7 +36,7 @@ describe("applyFootnotePrefix", () => {
         expect(applyFootnotePrefix(input, "2.")).toBe(expected);
     });
 
-    it("prefixes named footnotes, keeping their names (A6 bug)", () => {
+    it("prefixes named footnotes, keeping their names (bug of 2026-07-20)", () => {
         const input = "x[^note] y[^1] end\n\n[^note]: n\n[^1]: one";
         const expected = "x[^2.note] y[^2.1] end\n\n[^2.note]: n\n[^2.1]: one";
         expect(applyFootnotePrefix(input, "2.")).toBe(expected);

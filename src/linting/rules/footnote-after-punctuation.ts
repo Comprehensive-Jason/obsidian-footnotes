@@ -182,8 +182,8 @@ export function footnoteAfterPunctuation(markdown: string, placement: FootnotePl
             // ("> [^1]: def.") are labels just the same (C22); the swap used
             // to mangle those into "> :[^1] def.", and the label of a
             // definition in a list item ("- [^la]: text", even behind a
-            // quote marker) the same way (found by the former sheet 23
-            // tests, 2026-09-20; hunt 2026-10-02, cluster Q1). A lazy
+            // quote marker) the same way (found by the
+            // manual lint-alerts tests, 2026-09-20; hunt 2026-10-02, cluster Q1). A lazy
             // label's start is stepped over too, so the label the user
             // meant stays whole for fix-lazy to repair.
             // a byte order mark in front of a line-0 label is not text

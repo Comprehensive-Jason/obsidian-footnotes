@@ -677,7 +677,7 @@ async function main() {
     await test("popup opens promptly despite a definition-shaped decoy in a code span", async () => {
         // regression (reported 2026-08-26): the popup's buffer-caught-up
         // poll searched the RAW view buffer for "[^id]:", so a code-span
-        // decoy (like A8's own "`[^name]: …`" checkbox text) matched the
+        // decoy (like a manual sheet's own "`[^name]: …`" checkbox text) matched the
         // STALE buffer instantly, the pre-open save was skipped (buffer
         // still equal to disk), and the popup sat invisible ~2s until
         // Obsidian's own debounced autosave finally put the definition on
@@ -785,7 +785,7 @@ async function main() {
     });
 
     await test("a hotkey pressed inside the Live Preview Properties widget refuses instead of editing the stale caret (2026-09-04)", async () => {
-        // Jason's A19 pass: source mode refuses a frontmatter caret, but in
+        // Jason's manual pass: source mode refuses a frontmatter caret, but in
         // Live Preview the frontmatter is the Properties widget, which
         // lives outside CodeMirror's contentDOM - the main editor's caret
         // stayed where the user last clicked in the prose, and the hotkey
@@ -1301,7 +1301,7 @@ async function main() {
 
     await test("Escape closes the popup (regression 2026-08-13)", async () => {
         // the embedded editor preventDefaults every Escape, so the old
-        // defaultPrevented-based close never fired - caught by Jason's A3
+        // defaultPrevented-based close never fired - caught by Jason's popup
         // manual pass; the fix reads the vim state directly in capture phase
         resetSettings({ enablePopupEditor: true });
         await setupNote("Alpha bravo charlie");
@@ -1586,7 +1586,7 @@ async function main() {
     });
 
     await test("popup shows the NEW definition when the creation lint renumbers an older footnote out of its way (2026-09-09)", async () => {
-        // Jason's report, sheet 04: creating a footnote BEFORE the existing
+        // Jason's report: creating a footnote BEFORE the existing
         // [^1] with the creation lint on made the new one [^1] and the old
         // one [^2]; the metadata cache still held the OLD [^1] position, so
         // the popup's embed showed a slice of the note from there
@@ -1632,7 +1632,7 @@ async function main() {
 
     await test("a note that is only a table: a footnote from its last cell lands whole and the table survives (2026-09-09)", async () => {
         await requireVisibleWindow();
-        // Jason's report, sheet 07: with the table as the note's last line,
+        // Jason's report: with the table as the note's last line,
         // the definition append was built from a context read BEFORE the
         // cell edit, so it landed four characters short of the row's new
         // end - inside the reference - and the table widget normalised the
@@ -1655,7 +1655,7 @@ async function main() {
     });
 
     await test("the reading-view toggle from the command palette closes the popup and flips the NOTE (2026-09-11)", async () => {
-        // Jason's report, sheet 04: with the popup open, Toggle reading view
+        // Jason's report: with the popup open, Toggle reading view
         // picked from the palette put the popup's embed into reading view
         // and left the note as it was
         resetSettings({ enablePopupEditor: true, insertAtEndOfWord: false });
@@ -1672,7 +1672,7 @@ async function main() {
     });
 
     await test("lint keeps the caret where it was and leaves folds folded (2026-09-11)", async () => {
-        // Jason's report, sheet 20: linting unfolded every folded heading and
+        // Jason's report: linting unfolded every folded heading and
         // list and jumped the caret to a linted spot. The rewrite is now a
         // set of line edits, so untouched lines keep their folds and the
         // caret maps through untouched text unchanged
@@ -2279,13 +2279,13 @@ async function main() {
         await setupNote("Alpha bravo\n\n# Footnotes\n\ntail here");
         setCursorAndRun(0, 8, CMD_AUTONUM); // mid "bravo"
         // a blank line separates the definition from "tail here" - otherwise
-        // Obsidian lazily pulls the prose into the footnote (A4 bug)
+        // Obsidian lazily pulls the prose into the footnote (the swallowed-prose bug, 2026-07-20)
         await expectEditorText(
             "Alpha bravo[^1]\n\n# Footnotes\n\n[^1]: \n\ntail here",
         );
     });
 
-    await test("definition slotted above prose keeps a blank line between them (A4 bug)", async () => {
+    await test("definition slotted above prose keeps a blank line between them (2026-07-20)", async () => {
         resetSettings({
             enableFootnoteSectionHeading: true,
             footnoteSectionHeading: "# Footnotes",
@@ -2434,7 +2434,7 @@ async function main() {
         // plain strays adopt the prefix AND the whole namespace renumbers
         // by reading order - the pre-existing [^3=5] is a numbered
         // footnote of the namespace, not a named one; named footnotes
-        // keep their name behind the prefix (A6 bug)
+        // keep their name behind the prefix (a bug of 2026-07-20)
         resetSettings({ enableFootnotePrefix: true });
         await setupNote(
             "---\nfootnote-prefix: 3=\n---\nb[^2] a[^1] pre[^3=5] n[^note] end\n\n[^1]: one\n[^2]: two\n[^3=5]: already prefixed\n[^note]: named",

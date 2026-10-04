@@ -13,7 +13,7 @@ import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-foo
 // entirely; nothing could observe the two paths diverging (review D2,
 // 2026-09-09). The fake is unicode-aware now, and this spec pins the hop:
 // mid-word in 中文句子 lands the reference after the word AND past the
-// fullwidth stop, exactly like the Latin case (L16 / former sheet 01).
+// fullwidth stop, exactly like the Latin case (the manual numbered-footnotes tests).
 
 describe("end-of-word insertion on CJK text through the main editor", () => {
     it("hops to the end of the word and past the fullwidth stop", async () => {

@@ -30,7 +30,7 @@ import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after
 //
 // 2. An aliased wikilink, "[[some bravo|alias]]".
 //    The walk has no model of wikilinks at all. The plain "[[some bravo]]"
-//    case in former sheet 01 passes only by luck: "]" happens to be a closing
+//    case in the manual numbered-footnotes tests passes only by luck: "]" happens to be a closing
 //    mark. With an alias the walk stops dead at the "|", so a press on the
 //    target word writes the reference INSIDE the link target and the link
 //    stops resolving.
@@ -42,7 +42,7 @@ import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after
 //    reading B they become a refusal test instead. Either way today's
 //    silent link-breaking is not the answer.
 //
-// Source of truth for the shapes themselves: manual former sheet 01 (the closing
+// Source of truth for the shapes themselves: the manual numbered-footnotes tests (the closing
 // marks list and the "[[some bravo]]" line), TrailingPunctuationChars and
 // ClosingMarkChars in markdown-scan.ts, and the 2026-08-10 CJK ruling as
 // the precedent for how the class grows.

@@ -12,7 +12,7 @@ import {
 import { fakePlugin as sharedFakePlugin } from "./helpers/fake-plugin";
 import { resetNotices } from "./helpers/notices";
 
-// These tests take over checks that used to sit on manual former sheet 03
+// These tests take over checks that used to sit on the retired manual sheet
 // ("inline footnotes"). Both are about where a press leaves the caret and
 // whether it touched the note or the clipboard, which the fake editor can
 // answer.
@@ -62,7 +62,7 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
-describe("former sheet 03: the named hotkey inside a filled inline footnote", () => {
+describe("the named hotkey inside a filled inline footnote", () => {
     it("hops the caret just past the closing bracket and writes nothing", async () => {
         const insideInline = FIXTURE.indexOf("put the caret") + 4;
         const doc = noteWithCaret([FIXTURE], 0, insideInline);
@@ -76,7 +76,7 @@ describe("former sheet 03: the named hotkey inside a filled inline footnote", ()
     });
 });
 
-describe("former sheet 03: the paste hotkey inside a reference that has a definition", () => {
+describe("the paste hotkey inside a reference that has a definition", () => {
     it("jumps to the definition and never reads the clipboard", async () => {
         // count every clipboard read: the whole point of the check is that
         // the copied text is still there for the next real paste

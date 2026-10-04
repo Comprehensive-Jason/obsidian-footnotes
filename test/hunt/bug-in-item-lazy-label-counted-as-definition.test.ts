@@ -17,7 +17,7 @@ import { inItemDefinitionLabels } from "../helpers/in-item";
 //
 //     use[^lc] here
 //
-// The plugin's recorded prose-label rule (former sheet 14, and the shared
+// The plugin's recorded prose-label rule (sheet 14, and the shared
 // generator's own "- item[^91]" / "  [^91]: lazy under a list item" case)
 // says a label directly under a line of prose - paragraph text, a list
 // item, a quote line - is LAZY: Obsidian folds it into the paragraph above
@@ -45,7 +45,7 @@ import { inItemDefinitionLabels } from "../helpers/in-item";
 // pressed on "[^lc]", it navigates to the fake definition (or opens the
 // popup on it) instead of writing a real one.
 //
-// Source of truth: the prose-label rule as former sheet 14 records it and as the
+// Source of truth: the prose-label rule as sheet 14 records it and as the
 // column-0 control below shows it working, the cycle-8 ruling for the
 // quoted spelling, and ADR 0002 (never silent).
 //
