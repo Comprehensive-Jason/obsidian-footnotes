@@ -4,7 +4,8 @@ import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { buildDefinitionAppend } from "../../src/commands/definition-append";
 import { docContext } from "../../src/editor/doc-context";
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (wrong output): when the last definition's body opens a code block,
 // math block, or comment that never closes, a new footnote's definition is
@@ -38,7 +39,7 @@ import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-s
 /** The name of the definition block that owns the line holding `text`, or undefined when no block does. */
 function owner(lines: string[], text: string): string | undefined {
     const at = lines.findIndex((l) => l.includes(text));
-    return findDefinitionBlocks(lines, scanDocument(lines)).find((b) => b.start <= at && at <= b.end)?.name;
+    return readNote(lines).blocks.find((b) => b.start <= at && at <= b.end)?.name;
 }
 
 describe("the append above an unclosed region keeps the region with its own footnote", () => {

@@ -3,8 +3,8 @@
 import { describe, expect, it } from "vitest";
 
 import { orphanedFootnoteReferenceNames } from "../../src/linting/rules/remove-orphaned-references";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import { maskInlineRegions } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // The masker's autolink branch only recognizes a scheme followed by "://":
 // /^<[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s<>]*>/. CommonMark §6.7 asks for a
@@ -40,29 +40,26 @@ describe("a reference inside a no-// autolink (<ftp:x>, <mailto:x>) is dead text
         // Reading view renders "<ftp:x/y[^1]>" as typed with the footnote
         // live (probed 2026-09-16): Obsidian links "scheme://" and email
         // addresses only, and the plugin follows Reading view
-        const masked = maskInlineRegions("see <ftp:x/y[^1]> here");
-        expect(referenceOccurrences("see <ftp:x/y[^1]> here", masked).map((o) => o.name)).toEqual(["1"]);
+        expect(readNote(["see <ftp:x/y[^1]> here"]).referencesOn(0).map((o) => o.name)).toEqual(["1"]);
     });
     it("an email autolink's interior is masked (anything in angle brackets with an \"@\")", () => {
         // "<foo@bar.com[^1]>" and even "<xmpp:a@b[^1]>" render as links
         // with the reference swallowed (probed 2026-09-16)
         for (const line of ["see <foo@bar.com[^1]> here", "see <xmpp:a@b[^1]> here", "see <MAILTO:a@b.c[^1]> here"]) {
-            expect(referenceOccurrences(line, maskInlineRegions(line))).toEqual([]);
+            expect(readNote([line]).referencesOn(0)).toEqual([]);
         }
     });
     it("control: a mailto: without an \"@\" is literal text, reference live (probed 2026-09-16)", () => {
         const line = "see <mailto:x[^1]> here";
-        expect(referenceOccurrences(line, maskInlineRegions(line)).map((o) => o.name)).toEqual(["1"]);
+        expect(readNote([line]).referencesOn(0).map((o) => o.name)).toEqual(["1"]);
     });
 
     it("a mailto: email autolink's interior is masked", () => {
-        const masked = maskInlineRegions("see <mailto:foo@bar.com[^1]> here");
-        expect(referenceOccurrences("see <mailto:foo@bar.com[^1]> here", masked)).toEqual([]);
+        expect(readNote(["see <mailto:foo@bar.com[^1]> here"]).referencesOn(0)).toEqual([]);
     });
 
     it("REFUTED: a tel: scheme is not an autolink to Obsidian either, so its reference is live", () => {
-        const masked = maskInlineRegions("see <tel:+12345[^1]> here");
-        expect(referenceOccurrences("see <tel:+12345[^1]> here", masked).map((o) => o.name)).toEqual(["1"]);
+        expect(readNote(["see <tel:+12345[^1]> here"]).referencesOn(0).map((o) => o.name)).toEqual(["1"]);
     });
 
     it("orphaned-reference listing does not name a reference inside <mailto:a@b.c[^9]>", () => {
@@ -70,12 +67,10 @@ describe("a reference inside a no-// autolink (<ftp:x>, <mailto:x>) is dead text
     });
 
     it("control: the http: autolink is masked (the existing behavior)", () => {
-        const masked = maskInlineRegions("see <http://x[^1]> here");
-        expect(referenceOccurrences("see <http://x[^1]> here", masked)).toEqual([]);
+        expect(readNote(["see <http://x[^1]> here"]).referencesOn(0)).toEqual([]);
     });
 
     it("control: a plain reference outside any autolink stays live", () => {
-        const masked = maskInlineRegions("see <ftp:x/y> and [^1] here");
-        expect(referenceOccurrences("see <ftp:x/y> and [^1] here", masked).map((o) => o.name)).toEqual(["1"]);
+        expect(readNote(["see <ftp:x/y> and [^1] here"]).referencesOn(0).map((o) => o.name)).toEqual(["1"]);
     });
 });

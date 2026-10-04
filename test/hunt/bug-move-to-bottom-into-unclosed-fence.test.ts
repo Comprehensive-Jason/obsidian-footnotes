@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
-import { findDefinitionBlocks } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG: moveFootnoteDefinitionsToBottom relocates a valid definition INTO an
 // unclosed code fence. In the input, "[^1]: def" is a fully valid definition
@@ -21,7 +22,7 @@ describe("bug: move-to-bottom buries a definition inside an unclosed fence", () 
     it("the relocated [^1] definition is still a recognized definition", () => {
         const out = moveFootnoteDefinitionsToBottom(doc);
         const lines = out.split("\n");
-        const blocks = findDefinitionBlocks(lines);
+        const blocks = readNote(lines).blocks;
         expect(blocks.map((b) => b.name)).toContain("1");
     });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { protectedLines } from "../../src/parsing/markdown-scan";
 
 // Sol re-review bug #5 (2026-08-10), ground truth verified against
 // Obsidian's metadataCache ("heading:0-0, code:1-1"): lazy continuation
@@ -12,7 +12,7 @@ import { protectedLines } from "../../src/parsing/markdown-scan";
 describe("indented chunks after non-paragraph blocks are code", () => {
     it("after an ATX heading", () => {
         const doc = "# Title\n    code[^9]\n\nafter\n\n[^9]: def";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             false,
             true,
             false,
@@ -24,7 +24,7 @@ describe("indented chunks after non-paragraph blocks are code", () => {
 
     it("after a closed fence", () => {
         const doc = "```\nf\n```\n    chunk[^9]";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -34,7 +34,7 @@ describe("indented chunks after non-paragraph blocks are code", () => {
 
     it("after a thematic break", () => {
         const doc = "x\n\n---\n    code[^9]";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             false,
             false,
             false,
@@ -46,7 +46,7 @@ describe("indented chunks after non-paragraph blocks are code", () => {
         // the opener and closer lines of a comment that opens at the start
         // of a line are dead too: it is an HTML block (2026-09-15)
         const doc = "<!--\nhidden\n-->\n    chunk[^9]";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -55,14 +55,14 @@ describe("indented chunks after non-paragraph blocks are code", () => {
     });
 
     it("a paragraph's lazy indented continuation stays live", () => {
-        expect(protectedLines("para\n    lazy[^1]".split("\n"))).toEqual([
+        expect(readNote("para\n    lazy[^1]".split("\n")).protectedLines).toEqual([
             false,
             false,
         ]);
     });
 
     it("a definition's indented continuation stays live", () => {
-        expect(protectedLines("[^1]: x\n    cont[^2]".split("\n"))).toEqual([
+        expect(readNote("[^1]: x\n    cont[^2]".split("\n")).protectedLines).toEqual([
             false,
             false,
         ]);

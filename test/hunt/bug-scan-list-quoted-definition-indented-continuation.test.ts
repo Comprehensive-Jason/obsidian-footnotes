@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 import { lintFootnotes } from "../../src/linting/linter";
 import { orphanedFootnoteDefinitionNames } from "../../src/linting/rules/remove-orphaned-definitions";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (data loss): a quoted definition inside a list item loses its
 // indented continuation line, so a reference in that line is dead to the
@@ -40,10 +40,7 @@ const DOC = ["x[^o]", "", "- > [^o]: orphan", "  >     body[^c] more", "", "[^c]
 /** Every live reference in `doc`, as "line:name". */
 function liveNames(doc: string): string[] {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return lines.flatMap((l, i) => referenceOccurrences(l, masked[i], starts[i]).map((o) => `${i}:${o.name}`));
+    return lines.flatMap((_, i) => readNote(lines).referencesOn(i).map((o) => `${i}:${o.name}`));
 }
 
 describe("a quoted definition inside a list item owns its indented quoted continuation", () => {

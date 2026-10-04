@@ -1,24 +1,21 @@
 // Imported from the glm-cycle-10 hunt of 2026-09-16 (OpenCode worktree); rewritten to the probed reading 2026-09-16.
 // PROBED 2026-09-16 (GLM hunt cycle 10, Reading view): a list marker followed by five or more spaces holds indented code ("-      item[^1]" renders a code block reading "item[^1]"), under prose and after a blank line alike, and a line indented to that code carries it on; a "10." with such a gap under prose is paragraph text (the marker cannot interrupt a paragraph) and its reference is live, while after a blank line it is code too; a gap of four spaces is ordinary item text. The scan now protects such lines.
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 
 const refsIn = (doc: string): string[] => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
     const out: string[] = [];
     for (let i = 0; i < lines.length; i++) {
-        for (const { name } of referenceOccurrences(lines[i], masked[i])) {
+        for (const { name } of readNote(lines).referencesOn(i)) {
             out.push(name);
         }
     }
     return out;
 };
 
-const protectedIn = (doc: string): boolean[] => scanDocument(doc.split("\n")).isProtected;
+const protectedIn = (doc: string): readonly boolean[] => readNote(doc.split("\n")).protectedLines;
 
 describe("a list marker with a gap of five or more spaces holds code, not live text", () => {
     it("a bullet's wide-gap text is dead code under prose", () => {

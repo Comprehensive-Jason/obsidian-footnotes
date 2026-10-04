@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { listExistingFootnoteDefinitions } from "../src/editor/doc-context";
-import { referenceOccurrences } from "../src/parsing/footnote-grammar";
-import { maskProtectedLines } from "../src/parsing/markdown-scan";
+
 
 import { fakeEditor } from "./helpers/fake-editor";
+import { readNote } from "../src/parsing/note-reading";
 
 // The document-scanning behavior the navigation cascade is built on:
 // definition names, and reference occurrences with positions. Includes the
@@ -14,10 +14,9 @@ import { fakeEditor } from "./helpers/fake-editor";
 // (2026-08-11 review cleanliness); its pins now exercise the primitives the
 // cascade actually composes: referenceOccurrences over the masked twin.
 function referenceLocations(lines: string[]) {
-    const masked = maskProtectedLines(lines);
     const references: { footnote: string; lineNum: number; startIndex: number }[] = [];
     for (let i = 0; i < lines.length; i++) {
-        for (const occurrence of referenceOccurrences(lines[i], masked[i])) {
+        for (const occurrence of readNote(lines).referencesOn(i)) {
             references.push({
                 footnote: lines[i].slice(occurrence.start, occurrence.end),
                 lineNum: i,
@@ -64,7 +63,7 @@ describe("listExistingFootnoteDefinitions", () => {
     });
 });
 
-describe("reference occurrences with positions (via referenceOccurrences)", () => {
+describe("reference occurrences with positions (via NoteReading.referencesOn)", () => {
     it("records each reference with its line number and start index", () => {
         expect(referenceLocations(["alpha[^1] bravo[^note]"])).toEqual([
             { footnote: "[^1]", lineNum: 0, startIndex: 5 },
@@ -93,9 +92,13 @@ describe("reference occurrences with positions (via referenceOccurrences)", () =
     it("keeps a mid-line reference followed by a literal colon", () => {
         // hunt 2026-07-17: only a column-0 "[^id]:" is a definition; a
         // mid-paragraph "noted[^3]: prose" is a live reference the old
-        // (?!:) lookahead used to drop (grammar spec: reference-regexes tests)
+        // (?!:) lookahead used to drop (grammar spec: reference-regexes
+        // tests). The definition sits after a blank line: directly under
+        // the prose it would be a lazy label, paragraph text whose "[^3]"
+        // is a live reference too (the note reading, as Obsidian reads it,
+        // since the runtime swap of 2026-10-03)
         expect(
-            referenceLocations(["as noted[^3]: more prose", "[^3]: the definition"]),
+            referenceLocations(["as noted[^3]: more prose", "", "[^3]: the definition"]),
         ).toEqual([{ footnote: "[^3]", lineNum: 0, startIndex: 8 }]);
     });
 });

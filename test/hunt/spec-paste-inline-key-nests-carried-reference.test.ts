@@ -4,7 +4,7 @@ import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { resetNotices } from "../helpers/notices";
 import { pasteInlineFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { inlineFootnoteSpans, referenceOccurrences } from "../../src/parsing/footnote-grammar";
+import { readNote } from "../../src/parsing/note-reading";
 
 // spec question: should "Paste as inline footnote" refuse, or strip the
 // references, when the clipboard text holds a reference?
@@ -36,16 +36,13 @@ function stubClipboard(text: string) {
     vi.stubGlobal("navigator", { clipboard: { readText: () => Promise.resolve(text) } });
 }
 
-// The names of live references that sit inside an inline footnote's brackets, on any line.
+// The names of the references that sit inside an inline footnote's
+// brackets, on any line: the note reading lists them as not live, since
+// Obsidian reads them as the inline footnote's text (rule E3).
 function nestedReferences(lines: string[]): string[] {
-    const out: string[] = [];
-    for (const line of lines) {
-        const spans = inlineFootnoteSpans(line);
-        for (const occ of referenceOccurrences(line, line, false)) {
-            if (spans.some((s) => occ.start > s.open && occ.end <= s.close + 1)) out.push(occ.name);
-        }
-    }
-    return out;
+    return readNote(lines)
+        .references.filter((reference) => !reference.live)
+        .map((reference) => reference.name);
 }
 
 const base = {

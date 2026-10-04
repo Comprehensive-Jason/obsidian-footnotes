@@ -2,7 +2,7 @@ import { Editor, EditorChange, EditorPosition } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { safeInsertionCh } from "./insertion-liveness";
-import { FootnotePlacement, linkLikeEndAt, punctuationAt, referenceLandingAfter } from "../parsing/markdown-scan";
+import { FootnotePlacement, linkLikeEndAt, punctuationAt, referenceLandingAfter } from "../parsing/landing";
 import {
     EditorWithCm,
     VaultWithConfig,

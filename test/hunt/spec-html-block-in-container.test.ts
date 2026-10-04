@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove-orphaned-references";
-import { scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // SPEC QUESTIONS, not confirmed bugs: shapes where micromark (CommonMark
 // 0.31) and the plugin's scanner disagree about whether text is dead, and
@@ -46,7 +46,7 @@ describe("spec question: a type-6 HTML block inside a blockquote", () => {
         // micromark: blockquote > html, the [^1] inside is dead; the
         // plugin reads the label as a lazy label whose [^1] is a live
         // reference, so the [^1] line is NOT protected
-        expect(scanDocument(doc.split("\n")).isProtected[1]).toBe(true);
+        expect(readNote(doc.split("\n")).protectedLines[1]).toBe(true);
     });
 
     it("the reference is a true orphan now: its only definition is raw HTML, so the rule may delete it", () => {
@@ -57,19 +57,19 @@ describe("spec question: a type-6 HTML block inside a blockquote", () => {
     });
 
     it("control: at the DOCUMENT level the same <div> is already dead (cycle-1 pin)", () => {
-        expect(scanDocument("<div>\n[^1]: x\n\nuse[^1]".split("\n")).isProtected[1]).toBe(true);
+        expect(readNote("<div>\n[^1]: x\n\nuse[^1]".split("\n")).protectedLines[1]).toBe(true);
     });
 });
 
 describe("spec question: a type-6 HTML block inside a list item", () => {
     it("needs a live check: is the listed <div> dead text to Obsidian?", () => {
-        expect(scanDocument("- <div>\n  [^1]: x\n\nuse[^1]".split("\n")).isProtected[1]).toBe(true);
+        expect(readNote("- <div>\n  [^1]: x\n\nuse[^1]".split("\n")).protectedLines[1]).toBe(true);
     });
 });
 
 describe("spec question: a type-7 HTML block (<custom-el>)", () => {
     it("needs a live check: is the label under <custom-el> dead text to Obsidian?", () => {
         // micromark: html block, dead; plugin: lazy label, live reference
-        expect(scanDocument("<custom-el>\n[^1]: x\n\nuse[^1]".split("\n")).isProtected[1]).toBe(true);
+        expect(readNote("<custom-el>\n[^1]: x\n\nuse[^1]".split("\n")).protectedLines[1]).toBe(true);
     });
 });

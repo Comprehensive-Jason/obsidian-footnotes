@@ -1,8 +1,8 @@
 // Imported from the GLM 5.3 Flash cycle 6 hunt of 2026-09-16 (OpenCode worktree); 1 of 1 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 // REFUTED 2026-09-16 (GLM hunt cycle 6, probed in Reading view): the line is hidden as a link reference definition and the label under it renders a footnote; the plugin's lenient label pattern matches Obsidian.
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 
 // SPEC QUESTION (GLM hunt, cycle after 9, 2026-09-16): CommonMark 4.7
 // forbids an unescaped "[" inside a link reference definition's label,
@@ -41,9 +41,7 @@ const doc = "[a[b]: /url\n[^1]: x";
 describe("spec: does a link reference label with an unescaped [ end the line's paragraph?", () => {
     it("REFUTED: Obsidian takes '[a[b]: /url' as a link reference definition, so the label under it starts", () => {
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(definitionStartLines(lines, scan, (i) => masked[i])).toEqual([
+        expect(readNote(lines).labelLines).toEqual([
             false,
             true,
         ]);

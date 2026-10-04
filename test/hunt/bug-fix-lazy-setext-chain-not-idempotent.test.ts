@@ -2,13 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { lintFootnotes } from "../../src/linting/linter";
 import { fixLazyDefinitions } from "../../src/linting/rules/fix-lazy-definitions";
-import {
-    definitionStartLines,
-    lazyDefinitionLabelLines,
-    maskProtectedLines,
-    scanDocument,
-    underlinedDefinitionLabelLines,
-} from "../../src/parsing/markdown-scan";
+import { lazyDefinitionLabelLines, underlinedDefinitionLabelLines } from "../../src/parsing/label-shapes";
 
 // REVISED 2026-09-16 (Kimi hunt cycle 3, probed in Reading view): Obsidian
 // turns a setext underline into a heading only under a ONE-line paragraph.
@@ -65,9 +59,7 @@ import {
 
 const lazyIn = (doc: string): number[] => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return lazyDefinitionLabelLines(lines, scan, masked, definitionStartLines(lines, scan, (i) => masked[i]));
+    return lazyDefinitionLabelLines(lines);
 };
 
 const SETEXT = ["para", "[^1]: a", "===", "[^2]: b", "", "x[^1] y[^2]"].join("\n");
@@ -80,9 +72,7 @@ describe("fixing a lazy label above a setext underline makes the next label lazy
         // under it and belongs to the underlined-label alert instead
         expect(lazyIn(SETEXT)).toEqual([3]);
         const lines = SETEXT.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(underlinedDefinitionLabelLines(lines, scan, masked, definitionStartLines(lines, scan, (i) => masked[i]))).toEqual([1]);
+        expect(underlinedDefinitionLabelLines(lines)).toEqual([1]);
     });
 
     it("the rule leaves no lazy label behind", () => {

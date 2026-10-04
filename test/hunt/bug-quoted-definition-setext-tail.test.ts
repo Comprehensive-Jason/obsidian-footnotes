@@ -2,12 +2,7 @@
 import { readNote } from "../../src/parsing/note-reading";
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
 import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 
 // A setext underline directly under a definition's LAZY CONTINUATION line
@@ -45,9 +40,7 @@ const quoted = ["> [^2]: body", "> cont", "> ==="];
 
 describe("a quoted definition with a setext underline under its lazy continuation", () => {
     it("quotedDefinitionEnd stops before the underlined line, like the column-0 walker", () => {
-        const scan = scanDocument(quoted);
-        const masked = maskProtectedLines(quoted, scan);
-        const starts = definitionStartLines(quoted, scan, (i) => masked[i]);
+        const starts = readNote(quoted).labelLines;
         expect(starts[0]).toBe(true);
         expect((readNote(quoted).labelOn(0)?.end ?? 0)).toBe(0);
     });
@@ -59,10 +52,7 @@ describe("a quoted definition with a setext underline under its lazy continuatio
 
     it("control: the column-0 walker already stops before the underlined line", () => {
         const lines = ["[^2]: body", "cont", "==="];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-        expect(findDefinitionBlocks(lines, scan, masked, starts)).toEqual([
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
             { name: "2", start: 0, end: 0 },
         ]);
     });

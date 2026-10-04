@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { definitionLabelIn } from "../../src/parsing/markdown-scan";
+import { definitionLabelIn } from "../../src/parsing/label-shapes";
 import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove-orphaned-references";
 
 // Bug #5 (2026-08-11 review, Kimi): BlockquotePrefix didn't consume each

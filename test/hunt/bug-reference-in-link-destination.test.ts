@@ -5,12 +5,13 @@ import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
 
 import { noticeLintAlerts } from "../../src/linting/lint-alerts";
-import { computeNextFootnoteNumber, referenceOccurrences } from "../../src/parsing/footnote-grammar";
+import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
+
 import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove-orphaned-references";
 import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after-punctuation";
 import { applyFootnotePrefix } from "../../src/linting/rules/apply-footnote-prefix";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // A "[^1]" inside a link's destination is URL TEXT, not a footnote: the
 // destination of "[x](https://e.com/[^1])" is the literal string
@@ -41,10 +42,7 @@ import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-sca
 // reindex and the numbered command (the renumbering half).
 
 const refs = (line: string): string[] => {
-    const lines = [line];
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return referenceOccurrences(line, masked[0]).map((o) => o.name);
+    return readNote([line]).referencesOn(0).map((o) => o.name);
 };
 
 describe("a reference-shaped string inside a link destination is URL text, not a footnote", () => {
@@ -125,10 +123,15 @@ describe("a reference-shaped string inside a link destination is URL text, not a
         expect(removeOrphanedFootnoteReferences("see [^1]")).toBe("see");
     });
 
-    it("control: a reference used as link TEXT still counts (it renders as a footnote)", () => {
-        // "[^1](https://e.com/)" - the reference is the link's visible
-        // text, parsed as inline content where footnotes live; only the
-        // destination is off-limits
-        expect(refs("see [^1](https://e.com/)")).toEqual(["1"]);
+    it("control: \"[^1](url)\" is a link whose text is \"^1\", with no footnote in it", () => {
+        // Corrected 2026-10-03 (the runtime swap, step 4): this control
+        // said the "[^1]" was the link's text and still a footnote, as
+        // micromark reads it. Obsidian reads the whole as a link and shows
+        // no footnote, in its metadata cache and in Reading view (live
+        // answer swap34:ref-as-link-text, test/obsidian-answers/
+        // swap34-probes.json), and so does the note reading; with a space
+        // before the "(" it is a footnote again (swap34:ref-as-link-text-space).
+        expect(refs("see [^1](https://e.com/)")).toEqual([]);
+        expect(refs("see [^1] (https://e.com/)")).toEqual(["1"]);
     });
 });

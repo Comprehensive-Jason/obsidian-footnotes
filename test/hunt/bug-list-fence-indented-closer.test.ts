@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { protectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 
 // Sol re-review bug #1 (2026-08-10): a fence opened on a list-item line
 // ("10. ```", "  - ```") closes with a fence indented to the ITEM'S
@@ -14,7 +14,7 @@ import { protectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 describe("fences in list items accept content-indented closers", () => {
     it("a double-digit ordered item's fence closes at its content column", () => {
         const doc = "10. ```\n    fake[^1]\n    ```\n\nafter[^2]\n\n[^2]: def";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -27,7 +27,7 @@ describe("fences in list items accept content-indented closers", () => {
 
     it("a nested bullet's fence closes at its content column", () => {
         const doc = "- outer\n  - ```\n    fake[^1]\n    ```\n\nafter[^2]";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             false,
             true,
             true,
@@ -39,7 +39,7 @@ describe("fences in list items accept content-indented closers", () => {
 
     it("a plain fence still requires a closer within 3 spaces", () => {
         const doc = "```\ncode\n    ```\nstill code\n```\nafter";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -56,8 +56,8 @@ describe("fences in list items accept content-indented closers", () => {
         // (the note reading, runtime swap step 2, 2026-10-03; the scanner
         // kept it inside the fence).
         const doc = "10. ```\n    code\n\nswallowed";
-        const scan = scanDocument(doc.split("\n"));
-        expect(scan.isProtected).toEqual([true, true, false, false]);
-        expect(scan.endsProtected).toBe(false);
+        const reading = readNote(doc.split("\n"));
+        expect(reading.protectedLines).toEqual([true, true, false, false]);
+        expect(reading.openRegionFrom !== -1).toBe(false);
     });
 });

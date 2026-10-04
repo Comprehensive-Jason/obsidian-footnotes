@@ -1,8 +1,8 @@
 // Imported from the GLM 5.3 Flash cycle 6 hunt of 2026-09-16 (OpenCode worktree); 1 of 1 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 // REFUTED 2026-09-16 (GLM hunt cycle 6, probed in Reading view): "para", "===" + tab renders as one paragraph with a literal "===" and the label under it as prose; the plugin's space-only underline patterns match Obsidian.
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 
 // SPEC QUESTION (GLM hunt, cycle after 9, 2026-09-16): a setext underline
 // may be followed by tabs as well as spaces in CommonMark 0.31 (4.3: the
@@ -41,9 +41,7 @@ const doc = "para\n===\t\n[^1]: x\n\ntext[^1]";
 describe("spec: does a trailing tab after a setext underline still make the heading?", () => {
     it("REFUTED: a trailing tab breaks the underline in Obsidian, so the paragraph goes on and the label is lazy", () => {
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(definitionStartLines(lines, scan, (i) => masked[i])).toEqual([
+        expect(readNote(lines).labelLines).toEqual([
             false,
             false,
             false,

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { readNote } from "../../src/parsing/note-reading";
-import { scanDocument } from "../../src/parsing/markdown-scan";
 import { lintFootnotes } from "../../src/linting/linter";
 
 // BUG (wrong output on default settings): when a label line is underlined
@@ -35,16 +34,16 @@ describe("a setext underline under a label line ends the block (the label is hea
         const lines = "[^1]: x\n===\n    chunk [^2]\n\n[^2]: two".split("\n");
         // the "===" is an underline: block syntax through to its end
         expect(readNote(lines).blockSyntaxEnd(1)).toBe(Infinity);
-        expect(scanDocument(lines).isProtected[2]).toBe(true);
+        expect(readNote(lines).protectedLines[2]).toBe(true);
     });
 
     it("an indented chunk after a blank under '[^1]: x' / '===' is code", () => {
-        const scan = scanDocument("[^1]: x\n===\n\n    chunk [^2]\n\n[^2]: two".split("\n"));
-        expect(scan.isProtected[3]).toBe(true);
+        const reading = readNote("[^1]: x\n===\n\n    chunk [^2]\n\n[^2]: two".split("\n"));
+        expect(reading.protectedLines[3]).toBe(true);
     });
 
     it("quoted: an indented quoted chunk under '> [^1]: x' / '> ===' is code", () => {
-        const scan = scanDocument("> [^1]: x\n> ===\n>     chunk [^2]\n\n[^2]: two".split("\n"));
-        expect(scan.isProtected[2]).toBe(true);
+        const reading = readNote("> [^1]: x\n> ===\n>     chunk [^2]\n\n[^2]: two".split("\n"));
+        expect(reading.protectedLines[2]).toBe(true);
     });
 });

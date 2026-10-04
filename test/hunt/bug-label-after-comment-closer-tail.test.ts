@@ -3,11 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { fixLazyDefinitions } from "../../src/linting/rules/fix-lazy-definitions";
 import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphaned-references";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // A multi-line comment that opened MID-LINE is inline HTML, so its closer
 // line keeps whatever live text follows the "-->": "x <!-- a\n--> tail"
@@ -47,17 +44,12 @@ const doc = "use[^1] here\nx <!-- a\n--> tail\n[^1]: the definition";
 
 const startsOf = (markdown: string): boolean[] => {
     const lines = markdown.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return definitionStartLines(lines, scan, (i) => masked[i]);
+    return readNote(lines).labelLines;
 };
 
 const lazyNames = (markdown: string): string[] => {
     const lines = markdown.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return lazyDefinitionLabelNames(lines, scan, masked, starts);
+    return lazyDefinitionLabelNames(lines);
 };
 
 describe("a definition label directly under an inline comment's closer line with tail text", () => {

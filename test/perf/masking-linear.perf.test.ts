@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { maskedLineAt } from "../../src/parsing/markdown-scan";
 
 // Timing pin for review B1 (2026-09-09): insideReferenceShape walked
 // outward from every dollar and backtick candidate, to the start of the
@@ -43,7 +43,7 @@ describe("masking a long line of dollars and backticks", () => {
         let took = Infinity;
         for (let run = 0; run < 3; run++) {
             const started = performance.now();
-            const masked = maskedLineAt([line + " ".repeat(run + 1)], 0);
+            const masked = readNote([line + " ".repeat(run + 1)]).maskedLine(0);
             took = Math.min(took, performance.now() - started);
             expect(masked.length).toBe(line.length + run + 1);
         }
@@ -52,7 +52,7 @@ describe("masking a long line of dollars and backticks", () => {
 
     it.each(shapes.map((s, i) => [i, s] as const))("shape %i masks in linear-ish time", (_i, line) => {
         // warm up, then compare the line with four of it in a row
-        maskedLineAt([line + " warm"], 0);
+        readNote([line + " warm"]).maskedLine(0);
         const one = fastest(line);
         const four = fastest(line.repeat(4));
         expect(four).toBeLessThan(Math.max(8 * one, 40));

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
-import { protectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // Scenario: a label sitting directly under a prose line is not a definition,
 // it is paragraph text, but the scan still counts it as an open definition,
@@ -43,11 +44,11 @@ const lines = ["prose", "[^1]: lazy label", "    ```", "live[^9] text"];
 
 describe("a lazy label must not open a four-space fence", () => {
     it("no line in the note is protected", () => {
-        expect(protectedLines(lines)).toEqual([false, false, false, false]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, false, false]);
     });
 
     it("the note does not end inside protected text", () => {
-        expect(scanDocument(lines).endsProtected).toBe(false);
+        expect(readNote(lines).openRegionFrom !== -1).toBe(false);
     });
 
     it("the reference after the four-space run still reserves its number", () => {

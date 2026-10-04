@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { maskProtectedLines, maskedLineAt } from "../src/parsing/markdown-scan";
 import { readNote } from "../src/parsing/note-reading";
 
 // Perf helper (2026-08-07): the per-keypress paths need exactly ONE line of
-// the document's masked twin; maskedLineAt must agree with the full
-// maskProtectedLines on every line, while only paying inline-masking cost
-// for the line asked about.
+// the document's masked twin; the note reading's maskedLine must agree with
+// its whole masked twin (maskedLines) on every line, while only masking the
+// line asked about.
 
-describe("maskedLineAt", () => {
+describe("NoteReading.maskedLine", () => {
     const cases: string[][] = [
         ["plain text [^1] here", "more `code [^2]` text"],
         ["```", "fenced [^3] fake", "```", "after"],
@@ -21,18 +20,18 @@ describe("maskedLineAt", () => {
         ["\\<!-- literal", "x `<!--` y", "short <!--> form", "live[^10]"],
     ];
 
-    it("matches maskProtectedLines line by line", () => {
+    it("matches the whole masked twin line by line", () => {
         for (const lines of cases) {
-            const full = maskProtectedLines(lines);
+            const full = [...readNote(lines).maskedLines()];
             for (let i = 0; i < lines.length; i++) {
-                expect(maskedLineAt(lines, i)).toBe(full[i]);
+                expect(readNote(lines).maskedLine(i)).toBe(full[i]);
             }
         }
     });
 
     it("returns an empty string for an out-of-range index", () => {
-        expect(maskedLineAt(["only line"], 5)).toBe("");
-        expect(maskedLineAt([], 0)).toBe("");
+        expect(readNote(["only line"]).maskedLine(5)).toBe("");
+        expect(readNote([]).maskedLine(0)).toBe("");
     });
 });
 
@@ -46,26 +45,26 @@ describe("the masked twin of a line", () => {
 
     it("masks a comment from its opener to the end of the line when a later line of the paragraph closes it", () => {
         const lines = ["ab <!-- open", "gone --> live"];
-        expect(maskedLineAt(lines, 0)).toBe("ab " + NUL("<!-- open".length));
+        expect(readNote(lines).maskedLine(0)).toBe("ab " + NUL("<!-- open".length));
         expect(readNote(lines).regionOpenAt(1)).toBe(true);
         // the line the comment closes on is masked up to its closer
-        expect(maskedLineAt(lines, 1)).toBe(NUL("gone -->".length) + " live");
+        expect(readNote(lines).maskedLine(1)).toBe(NUL("gone -->".length) + " live");
     });
 
     it("a comment claims backticks inside it; code claims openers inside it", () => {
         // comment first: its closer inside the backticks still closes it
-        expect(maskedLineAt(["x <!-- a `--> ` b"], 0)).toBe("x " + NUL("<!-- a `-->".length) + " ` b");
+        expect(readNote(["x <!-- a `--> ` b"]).maskedLine(0)).toBe("x " + NUL("<!-- a `-->".length) + " ` b");
         // code first: the opener inside the span never starts a comment
         expect(readNote(["`<!--` b", "after -->"]).regionOpenAt(1)).toBe(false);
     });
 
     it("escaped openers of both kinds are literal", () => {
-        expect(maskedLineAt(["\\<!-- x"], 0)).toBe("\\<!-- x");
-        expect(maskedLineAt(["\\`not code` x"], 0)).toBe("\\`not code` x");
+        expect(readNote(["\\<!-- x"]).maskedLine(0)).toBe("\\<!-- x");
+        expect(readNote(["\\`not code` x"]).maskedLine(0)).toBe("\\`not code` x");
     });
 
     it("a comment opener nothing in its paragraph closes is literal text", () => {
-        expect(maskedLineAt(["a <!-- b", "c"], 0)).toBe("a <!-- b");
+        expect(readNote(["a <!-- b", "c"]).maskedLine(0)).toBe("a <!-- b");
         expect(readNote(["a <!--> b", "c"]).regionOpenAt(1)).toBe(false);
         expect(readNote(["a <!---> b", "c"]).regionOpenAt(1)).toBe(false);
     });
@@ -76,11 +75,11 @@ describe("the masked twin of a line", () => {
 describe("dollars inside references vs math", () => {
     it("two dollar-signed ids on one line never pair into math", () => {
         const line = "b[^a$9] a[^a$4] end";
-        expect(maskedLineAt([line], 0)).toBe(line);
+        expect(readNote([line]).maskedLine(0)).toBe(line);
     });
 
     it("a reference BETWEEN two dollars is still math content", () => {
-        const masked = maskedLineAt(["cost $[^7]$ real[^1]"], 0);
+        const masked = readNote(["cost $[^7]$ real[^1]"]).maskedLine(0);
         expect(masked).toBe("cost " + "\0".repeat("$[^7]$".length) + " real[^1]");
     });
 });

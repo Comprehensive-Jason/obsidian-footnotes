@@ -41,11 +41,6 @@
 import { readNote } from "../../src/parsing/note-reading";
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
 import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 
 describe("a block of its own directly under a quoted definition's label", () => {
@@ -58,9 +53,7 @@ describe("a block of its own directly under a quoted definition's label", () => 
     for (const [name, line] of cases) {
         it(`stops before a ${name} inside the quote`, () => {
             const lines = ["> [^2]: body", line, "", "text[^1]", "", "[^1]: d"];
-            const scan = scanDocument(lines);
-            const masked = maskProtectedLines(lines, scan);
-            const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+            const starts = readNote(lines).labelLines;
             expect(starts[0]).toBe(true);
             expect((readNote(lines).labelOn(0)?.end ?? 0)).toBe(0);
         });
@@ -70,9 +63,7 @@ describe("a block of its own directly under a quoted definition's label", () => 
         // Reading view renders "2: body" as a heading and no footnote
         // (probed 2026-09-16), so the label starts nothing there
         const lines = ["> [^2]: body", "> ---", "", "text[^1]", "", "[^1]: d"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+        const starts = readNote(lines).labelLines;
         expect(starts[0]).toBe(false);
     });
 

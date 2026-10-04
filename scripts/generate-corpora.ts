@@ -31,7 +31,7 @@ import {
     pasteInlineFootnote,
 } from "../src/commands/insert-or-navigate-footnotes";
 import { simulateChanges } from "../src/editor/insertion-liveness";
-import { normalizeEol } from "../src/parsing/markdown-scan";
+import { normalizeEol } from "../src/parsing/line-edits";
 
 const [, , vaultRoot, seedArg] = process.argv;
 if (!vaultRoot) throw new Error("usage: gen.cjs <vault root> <seed>");

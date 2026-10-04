@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { scanDocument } from "../../src/parsing/markdown-scan";
 
 // BUG (wrong output): a line like "10.      y" directly under a label line
 // is read as code, so a reference on it is dead to the plugin.
@@ -24,7 +24,7 @@ import { scanDocument } from "../../src/parsing/markdown-scan";
 
 describe("'10.      y' directly under a label line", () => {
     it("is the footnote's lazy body ('10.' cannot interrupt a paragraph), not code", () => {
-        const scan = scanDocument("[^1]: x\n10.      y [^2]\n\nu[^1]\n\n[^2]: two".split("\n"));
-        expect(scan.isProtected[1]).toBe(false);
+        const reading = readNote("[^1]: x\n10.      y [^2]\n\nu[^1]\n\n[^2]: two".split("\n"));
+        expect(reading.protectedLines[1]).toBe(false);
     });
 });

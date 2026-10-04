@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after-punctuation";
-import { maskedLineAt } from "../../src/parsing/markdown-scan";
 import { readNote } from "../../src/parsing/note-reading";
 
 // Bug (2026-08-11 review, Kimi): dollarInsideReference walked the RAW line
@@ -13,7 +12,7 @@ import { readNote } from "../../src/parsing/note-reading";
 
 describe("a masked '[^' fragment cannot suppress math (bug-dollar-inside-masked-bracket)", () => {
     it("math after a code span containing '[^' is still masked", () => {
-        const masked = maskedLineAt(["`[^` $[^1].$ tail"], 0);
+        const masked = readNote(["`[^` $[^1].$ tail"]).maskedLine(0);
         // the code span (0..3) and the whole math span (5..11) are NULed
         expect(masked).toBe("\0\0\0\0 " + "\0".repeat(7) + " tail");
     });
@@ -25,7 +24,7 @@ describe("a masked '[^' fragment cannot suppress math (bug-dollar-inside-masked-
     });
 
     it("a dollar inside a REAL reference still never opens math", () => {
-        const masked = maskedLineAt(["pay [^a$1] now $5 or $6"], 0);
+        const masked = readNote(["pay [^a$1] now $5 or $6"]).maskedLine(0);
         expect(masked).toBe("pay [^a$1] now $5 or $6");
     });
 

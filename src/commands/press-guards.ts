@@ -12,11 +12,9 @@ import {
     ProtectedCreationNotice,
 } from "../editor/insertion-liveness";
 import { DocContext, docLines, insideDefinition } from "../editor/doc-context";
-import {
-    maskInlineRegions,
-    maskedLineAt,
-    linkLikeEndAt,
-} from "../parsing/markdown-scan";
+import { readNote } from "../parsing/note-reading";
+import { maskInlineRegions } from "../parsing/cell-reading";
+import { linkLikeEndAt } from "../parsing/landing";
 import {
     cellCaret,
     isTableDelimiterRow,
@@ -309,7 +307,7 @@ function caretInsidePlaceholder(
     if (emptyReferenceStart(lineText, pos.ch, placeholder) === null) {
         return false;
     }
-    const maskedLine = maskedLineAt(docLines(doc), pos.line);
+    const maskedLine = readNote(docLines(doc)).maskedLine(pos.line);
     return emptyReferenceStart(maskedLine, pos.ch, placeholder) !== null;
 }
 

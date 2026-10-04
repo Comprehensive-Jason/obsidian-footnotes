@@ -11,7 +11,7 @@ import { PREFIXES } from "./helpers/prefixes";
 import { docArb } from "./arbitraries";
 import { sanitizeInlineFootnoteContent } from "../src/commands/inline-footnotes";
 import { endOfWordOffset } from "../src/editor/cursor-motion";
-import { definitionLabelWithName, footnoteReferenceMatches, referenceOccurrences } from "../src/parsing/footnote-grammar";
+import { definitionLabelWithName } from "../src/parsing/label-shapes";
 import { lineDiffChanges, mapFoldLines } from "../src/editor/document-diff";
 import { lintFootnotes, LintOptions } from "../src/linting/linter";
 import { applyFootnotePrefix } from "../src/linting/rules/apply-footnote-prefix";
@@ -29,15 +29,7 @@ import {
     orphanedFootnoteReferenceNames,
     removeOrphanedFootnoteReferences,
 } from "../src/linting/rules/remove-orphaned-references";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    maskedLineAt,
-    normalizeEol,
-    protectedLines,
-    scanDocument,
-} from "../src/parsing/markdown-scan";
+import { normalizeEol } from "../src/parsing/line-edits";
 
 // Property-based tests (fast-check, adopted 2026-08-10): instead of
 // hand-picked cases, every property is asserted over RANDOMLY GENERATED
@@ -121,15 +113,11 @@ const definitionKeepingOptionsArb: fc.Arbitrary<LintOptions> = optionsArb.map(
 
 function definitionCount(text: string): number {
     const lines = normalizeEol(text).text.split("\n");
-    return findDefinitionBlocks(lines).length;
+    return readNote(lines).blocks.length;
 }
 
 function referenceCount(text: string): number {
-    const masked = maskProtectedLines(normalizeEol(text).text.split("\n"));
-    return masked.reduce(
-        (sum, line) => sum + footnoteReferenceMatches(line).length,
-        0,
-    );
+    return readNote(normalizeEol(text).text.split("\n")).references.filter((reference) => reference.live).length;
 }
 
 // ---------- differential oracle (remark/micromark) ----------
@@ -222,10 +210,7 @@ const dollarPrefix = (doc: string): boolean => /footnote-prefix:[^\n]*\$/.test(d
 // two parsers disagree before the lint ever runs
 const hasLazyLabel = (doc: string): boolean => {
     const lines = normalizeEol(doc).text.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return lazyDefinitionLabelNames(lines, scan, masked, starts).length > 0;
+    return lazyDefinitionLabelNames(lines).length > 0;
 };
 // ... and from documents with an Obsidian "%%" comment: micromark reads
 // "%%" as text, while Obsidian hides the block and kills the definitions
@@ -329,7 +314,7 @@ describe("lint invariants over random documents", () => {
             fc.property(docArb, definitionKeepingOptionsArb, (doc, options) => {
                 const out = lintFootnotes(doc, options);
                 const linesIn = normalizeEol(doc).text.split("\n");
-                const protectedIn = protectedLines(linesIn);
+                const protectedIn = readNote(linesIn).protectedLines;
                 const counts = new Map<string, number>();
                 for (const line of normalizeEol(out).text.split("\n")) {
                     counts.set(line, (counts.get(line) ?? 0) + 1);
@@ -375,11 +360,8 @@ describe("lint invariants over random documents", () => {
                 // must never report a position whose raw slice is not the
                 // reference it claims to be
                 const lines = normalizeEol(doc).text.split("\n");
-                const scan = scanDocument(lines);
-                const masked = maskProtectedLines(lines, scan);
-                const starts = definitionStartLines(lines, scan, (i) => masked[i]);
                 for (let i = 0; i < lines.length; i++) {
-                    for (const occurrence of referenceOccurrences(lines[i], masked[i], starts[i])) {
+                    for (const occurrence of readNote(lines).referencesOn(i)) {
                         expect(lines[i].slice(occurrence.start, occurrence.end)).toBe(
                             `[^${occurrence.name}]`,
                         );
@@ -397,7 +379,7 @@ describe("scanner invariants over random documents", () => {
         fc.assert(
             fc.property(docArb, (doc) => {
                 const lines = normalizeEol(doc).text.split("\n");
-                const masked = maskProtectedLines(lines);
+                const masked = [...readNote(lines).maskedLines()];
                 for (let i = 0; i < lines.length; i++) {
                     expect(masked[i].length).toBe(lines[i].length);
                 }
@@ -412,8 +394,8 @@ describe("scanner invariants over random documents", () => {
                 if (lines.length === 0) return;
                 // nat(60) never sampled the tail of a 61+-line document
                 const i = pick % lines.length;
-                expect(maskedLineAt(lines, i)).toBe(
-                    maskProtectedLines(lines)[i],
+                expect(readNote(lines).maskedLine(i)).toBe(
+                    readNote(lines).maskedLine(i),
                 );
             }),
         );
@@ -428,7 +410,7 @@ describe("scanner invariants over random documents", () => {
                 // every reference found past it (bug-masked-name-identity's
                 // family).
                 const lines = normalizeEol(doc).text.split("\n");
-                const masked = maskProtectedLines(lines);
+                const masked = [...readNote(lines).maskedLines()];
                 for (let i = 0; i < lines.length; i++) {
                     expect(masked[i].length).toBe(lines[i].length);
                     for (let j = 0; j < lines[i].length; j++) {
@@ -587,12 +569,9 @@ describe("single-rule invariants over random documents", () => {
         // old all-or-nothing behavior.
         const liveCounts = (text: string): Map<string, number> => {
             const lines = normalizeEol(text).text.split("\n");
-            const scan = scanDocument(lines);
-            const masked = maskProtectedLines(lines, scan);
-            const starts = definitionStartLines(lines, scan, (i) => masked[i]);
             const counts = new Map<string, number>();
             for (let i = 0; i < lines.length; i++) {
-                for (const { name } of referenceOccurrences(lines[i], masked[i], starts[i])) {
+                for (const { name } of readNote(lines).referencesOn(i)) {
                     const folded = name.toLowerCase();
                     counts.set(folded, (counts.get(folded) ?? 0) + 1);
                 }
@@ -623,9 +602,7 @@ describe("single-rule invariants over random documents", () => {
     soakIt("orphan-reference deletion never changes which lines start a definition", () => {
         const countStarts = (text: string): number => {
             const lines = normalizeEol(text).text.split("\n");
-            const scan = scanDocument(lines);
-            const masked = maskProtectedLines(lines, scan);
-            return definitionStartLines(lines, scan, (i) => masked[i]).filter(Boolean).length;
+            return readNote(lines).labelLines.filter(Boolean).length;
         };
         fc.assert(
             fc.property(docArb, fc.constantFrom("", ...PREFIXES), (doc, prefix) => {
@@ -641,12 +618,9 @@ describe("single-rule invariants over random documents", () => {
     soakIt("the punctuation rule conserves each line's reference names as a multiset", () => {
         const namesOn = (text: string): string[] => {
             const lines = normalizeEol(text).text.split("\n");
-            const scan = scanDocument(lines);
-            const masked = maskProtectedLines(lines, scan);
-            const starts = definitionStartLines(lines, scan, (i) => masked[i]);
             const out: string[] = [];
             for (let i = 0; i < lines.length; i++) {
-                for (const { name } of referenceOccurrences(lines[i], masked[i], starts[i])) {
+                for (const { name } of readNote(lines).referencesOn(i)) {
                     out.push(name.toLowerCase());
                 }
             }
@@ -796,7 +770,7 @@ describe("interrupted-definition invariants over random documents", () => {
             fc.property(interruptedDocArb, definitionKeepingOptionsArb, (doc, options) => {
                 const out = lintFootnotes(doc, options);
                 const linesIn = normalizeEol(doc).text.split("\n");
-                const protectedIn = protectedLines(linesIn);
+                const protectedIn = readNote(linesIn).protectedLines;
                 const counts = new Map<string, number>();
                 for (const line of normalizeEol(out).text.split("\n")) {
                     counts.set(line, (counts.get(line) ?? 0) + 1);
@@ -821,10 +795,10 @@ describe("interrupted-definition invariants over random documents", () => {
         fc.assert(
             fc.property(docArb, (doc) => {
                 const lines = normalizeEol(doc).text.split("\n");
-                const scan = scanDocument(lines);
-                const masked = maskProtectedLines(lines, scan);
+                const scan = readNote(lines);
+                const masked = [...readNote(lines).maskedLines()];
                 for (let i = 0; i < lines.length; i++) {
-                    if (!scan.inCommentBlock[i] || lines[i] === "") continue;
+                    if (!scan.commentLines[i] || lines[i] === "") continue;
                     expect(
                         masked[i],
                         `%% block line ${i} fully blotted: ${JSON.stringify(lines[i])}`,
@@ -852,16 +826,13 @@ describe("definition-body conservation over random documents", () => {
             fc.property(docArb, keepingOptionsArb, (doc, options) => {
                 const text = normalizeEol(doc).text;
                 const lines = text.split("\n");
-                const scan = scanDocument(lines);
-                const masked = maskProtectedLines(lines, scan);
-                const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-                const blocks = findDefinitionBlocks(lines, scan, masked, starts);
+                const blocks = readNote(lines).blocks;
                 const outLines = normalizeEol(lintFootnotes(text, options)).text.split("\n");
                 for (const block of blocks) {
                     let cursor = 0;
                     for (let j = block.start + 1; j <= block.end; j++) {
                         const line = lines[j];
-                        if (line.trim() === "" || referenceOccurrences(line, masked[j]).length > 0) {
+                        if (line.trim() === "" || readNote(lines).referencesOn(j).length > 0) {
                             continue;
                         }
                         let found = -1;
@@ -887,9 +858,8 @@ describe("definition-body conservation over random documents", () => {
             fc.property(docArb, keepingOptionsArb, (doc, options) => {
                 const text = normalizeEol(doc).text;
                 const lines = text.split("\n");
-                const scan = scanDocument(lines);
-                const masked = maskProtectedLines(lines, scan);
-                const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+                const masked = [...readNote(lines).maskedLines()];
+                const starts = readNote(lines).labelLines;
                 const outLines = normalizeEol(lintFootnotes(text, options)).text.split("\n");
                 for (let i = 0; i < lines.length; i++) {
                     if (!starts[i]) continue;
@@ -899,7 +869,7 @@ describe("definition-body conservation over random documents", () => {
                     let cursor = 0;
                     for (let j = i + 1; j <= end; j++) {
                         const line = lines[j];
-                        if (line.trim() === "" || referenceOccurrences(line, masked[j]).length > 0) {
+                        if (line.trim() === "" || readNote(lines).referencesOn(j).length > 0) {
                             continue;
                         }
                         let found = -1;
@@ -928,10 +898,8 @@ describe("scanner and alert invariants", () => {
         fc.assert(
             fc.property(docArb, (doc) => {
                 const lines = normalizeEol(doc).text.split("\n");
-                const scan = scanDocument(lines);
-                const masked = maskProtectedLines(lines, scan);
-                const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-                const blocks = findDefinitionBlocks(lines, scan, masked, starts);
+                const starts = readNote(lines).labelLines;
+                const blocks = readNote(lines).blocks;
                 const blockStarts = new Set(blocks.map((block) => block.start));
                 for (let i = 0; i < lines.length; i++) {
                     if (!starts[i]) continue;
@@ -944,7 +912,7 @@ describe("scanner and alert invariants", () => {
                         `start at line ${i} (${JSON.stringify(lines[i])}) is not a block start`,
                     ).toBe(/^ {0,3}\[\^[^[\]\s]+\]:/.test(lines[i]));
                 }
-                for (const block of findDefinitionBlocks(lines, scan, masked, starts)) {
+                for (const block of readNote(lines).blocks) {
                     expect(
                         starts[block.start],
                         `block starting at line ${block.start} is not a definition start`,
@@ -959,12 +927,10 @@ describe("scanner and alert invariants", () => {
             fc.property(docArb, (doc) => {
                 const text = normalizeEol(doc).text;
                 const lines = text.split("\n");
-                const scan = scanDocument(lines);
-                const masked = maskProtectedLines(lines, scan);
-                const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+                const masked = [...readNote(lines).maskedLines()];
                 const live = new Set<string>();
                 for (let i = 0; i < lines.length; i++) {
-                    for (const { name } of referenceOccurrences(lines[i], masked[i], starts[i])) {
+                    for (const { name } of readNote(lines).referencesOn(i)) {
                         live.add(name.toLowerCase());
                     }
                     const hit = definitionLabelWithName(lines[i], masked[i]);
@@ -978,8 +944,8 @@ describe("scanner and alert invariants", () => {
                     orphanedFootnoteReferenceNames(text),
                     orphanedFootnoteDefinitionNames(text),
                     duplicateFootnoteDefinitionNames(text),
-                    lazyDefinitionLabelNames(lines, scan, masked, starts),
-                    underlinedDefinitionLabelNames(lines, scan, masked, starts),
+                    lazyDefinitionLabelNames(lines),
+                    underlinedDefinitionLabelNames(lines),
                 ];
                 for (const [kind, list] of nameLists.map((names, i) => [i, names] as const)) {
                     for (const name of list) {
@@ -1004,22 +970,22 @@ describe("scanner and alert invariants", () => {
             fc.property(docArb, fc.nat(3), (doc, extra) => {
                 const before = normalizeEol(doc).text.split("\n");
                 const after = [...before, ...Array.from({ length: extra }, () => "")];
-                const scanBefore = scanDocument(before);
-                const scanAfter = scanDocument(after);
-                const maskedBefore = maskProtectedLines(before, scanBefore);
-                const maskedAfter = maskProtectedLines(after, scanAfter);
-                const startsBefore = definitionStartLines(before, scanBefore, (i) => maskedBefore[i]);
-                const startsAfter = definitionStartLines(after, scanAfter, (i) => maskedAfter[i]);
+                const scanBefore = readNote(before);
+                const scanAfter = readNote(after);
+                const maskedBefore = [...readNote(before).maskedLines()];
+                const maskedAfter = [...readNote(after).maskedLines()];
+                const startsBefore = readNote(before).labelLines;
+                const startsAfter = readNote(after).labelLines;
                 for (let i = 0; i < before.length; i++) {
                     expect(
-                        scanAfter.isProtected[i],
+                        scanAfter.protectedLines[i],
                         `line ${i} protection changed: ${JSON.stringify(before[i])}`,
-                    ).toBe(scanBefore.isProtected[i]);
+                    ).toBe(scanBefore.protectedLines[i]);
                     expect(startsAfter[i]).toBe(startsBefore[i]);
                     expect(maskedAfter[i]).toBe(maskedBefore[i]);
                 }
-                const blocksBefore = findDefinitionBlocks(before, scanBefore, maskedBefore, startsBefore);
-                const blocksAfter = findDefinitionBlocks(after, scanAfter, maskedAfter, startsAfter);
+                const blocksBefore = readNote(before).blocks;
+                const blocksAfter = readNote(after).blocks;
                 expect(blocksAfter.map((b) => [b.start, b.end, b.name.toLowerCase()])).toEqual(
                     blocksBefore.map((b) => [b.start, b.end, b.name.toLowerCase()]),
                 );
@@ -1037,14 +1003,11 @@ describe("scanner and alert invariants", () => {
     soakIt("reindex conserves the non-numeric names and numbers the rest within 1..k", () => {
         const nameSets = (text: string): { named: Set<string>; numbered: Set<string> } => {
             const lines = normalizeEol(text).text.split("\n");
-            const scan = scanDocument(lines);
-            const masked = maskProtectedLines(lines, scan);
             const reading = readNote(lines);
-            const starts = reading.labelLines;
             const named = new Set<string>();
             const numbered = new Set<string>();
             for (let i = 0; i < lines.length; i++) {
-                for (const { name } of referenceOccurrences(lines[i], masked[i], starts[i])) {
+                for (const { name } of readNote(lines).referencesOn(i)) {
                     (/^\d+$/.test(name) ? numbered : named).add(name.toLowerCase());
                 }
             }
@@ -1201,7 +1164,7 @@ describe("adjacency sweep over every pair of surface blocks", () => {
         const referenceCountOf = (text: string): number =>
             readNote(normalizeEol(text).text.split("\n")).references.filter((reference) => reference.live).length;
         const definitionCountOf = (text: string): number =>
-            findDefinitionBlocks(normalizeEol(text).text.split("\n")).length;
+            readNote(normalizeEol(text).text.split("\n")).blocks.length;
         for (const doc of counts) {
             const out = lintFootnotes(doc, defaults);
             const baseline = fixLazyDefinitions(doc);
@@ -1223,7 +1186,7 @@ describe("adjacency sweep over every pair of surface blocks", () => {
             // the footnote's body to Obsidian, code to the scanner), the
             // rules still follow the scanner's protection until step 2 of
             // the runtime swap moves it onto the reading (2026-10-03)
-            const scannerProtected = protectedLines(linesIn);
+            const scannerProtected = readNote(linesIn).protectedLines;
             const protectedIn = linesIn.map(() => false);
             for (const span of readNote(linesIn).protectedSpans) {
                 if (!span.block || span.kind === "percentComment") continue;

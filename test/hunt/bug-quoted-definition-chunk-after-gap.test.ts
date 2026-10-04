@@ -1,8 +1,7 @@
 // Imported from the Kimi K3 cycle 5 hunt of 2026-09-16 (OpenCode worktree); 2 of 4 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
 
 // A quoted definition owns its lazy continuation lines and, after a run of
 // empty quote lines, an indented quoted line (quotedDefinitionEnd's own
@@ -36,23 +35,21 @@ import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
 describe("a quoted definition's indented chunk after a blank quote line is live footnote text", () => {
     it("the chunk after a lazy continuation is not protected", () => {
         const lines = ["> [^1]: body", "> cont", ">", ">     chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, false, false]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, false, false]);
     });
 
     it("the reference in the chunk is live", () => {
         const lines = ["> [^1]: body", "> cont", ">", ">     chunk[^73]"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(referenceOccurrences(lines[3], masked[3]).map((o) => o.name)).toEqual(["73"]);
+        expect(readNote(lines).referencesOn(3).map((o) => o.name)).toEqual(["73"]);
     });
 
     it("control: directly after the label line it is already live", () => {
         const lines = ["> [^1]: body", ">", ">     chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, false]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, false]);
     });
 
     it("control: after a plain quoted paragraph it is quoted code", () => {
         const lines = ["> para", ">", ">     chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, true]);
     });
 });

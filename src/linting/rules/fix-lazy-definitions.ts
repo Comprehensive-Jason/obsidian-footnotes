@@ -1,4 +1,4 @@
-import { lazyDefinitionLabelLines } from "../../parsing/markdown-scan";
+import { lazyDefinitionLabelLines } from "../../parsing/label-shapes";
 import { readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";

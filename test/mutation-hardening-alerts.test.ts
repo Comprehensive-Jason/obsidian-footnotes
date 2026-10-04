@@ -12,7 +12,6 @@ import {
     orphanSafePrefixFor,
 } from "../src/linting/lint-alerts";
 import { InvalidNameCharacters } from "../src/parsing/footnote-grammar";
-import { maskProtectedLines, scanDocument } from "../src/parsing/markdown-scan";
 
 // Mutation hardening for the post-lint alert tail (Stryker re-baseline
 // 2026-08-12: lint-alerts scored 19.79% - the merge-duplicates work pinned
@@ -258,8 +257,7 @@ describe("the shared gate", () => {
 describe("the invalid-name alert", () => {
     const names = (markdown: string) => {
         const lines = markdown.split("\n");
-        const scan = scanDocument(lines);
-        return invalidFootnoteNames(lines, scan, maskProtectedLines(lines, scan));
+        return invalidFootnoteNames(lines);
     };
 
     it("finds spaced, backticked, and hashed names in references and definition labels, one entry per name", () => {

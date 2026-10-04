@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
 import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove-orphaned-references";
-import { scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // A blank line inside a blockquote (">" with nothing after it) ends the
 // quote's open block: a lazy continuation cannot cross a blank line, and
@@ -37,7 +38,7 @@ const doc = "> quote\n>\n    code[^1]\n\nafter";
 
 describe("an indented chunk at column 0 directly after a blank quote line", () => {
     it("is indented code (the blank quote line ended the quote's block)", () => {
-        expect(scanDocument(doc.split("\n")).isProtected[2]).toBe(true);
+        expect(readNote(doc.split("\n")).protectedLines[2]).toBe(true);
     });
 
     it("reserves no footnote number", () => {
@@ -49,13 +50,13 @@ describe("an indented chunk at column 0 directly after a blank quote line", () =
     });
 
     it("control: the same chunk after a TRULY blank line is already code", () => {
-        expect(scanDocument("> quote\n\n    code[^1]\n\nafter".split("\n")).isProtected[2]).toBe(true);
+        expect(readNote("> quote\n\n    code[^1]\n\nafter".split("\n")).protectedLines[2]).toBe(true);
     });
 
     it("the same chunk after a quote line with TEXT is code too (Reading view, not CommonMark's lazy rule)", () => {
         // Obsidian renders a code block here as well (probed 2026-09-16),
         // so the pin's original control, which expected a live lazy
         // continuation, went the other way
-        expect(scanDocument("> quote\n> more\n    code[^1]\n\nafter".split("\n")).isProtected[2]).toBe(true);
+        expect(readNote("> quote\n> more\n    code[^1]\n\nafter".split("\n")).protectedLines[2]).toBe(true);
     });
 });

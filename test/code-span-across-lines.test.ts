@@ -3,11 +3,6 @@ import { describe, expect, it } from "vitest";
 import { computeNextFootnoteNumber } from "../src/parsing/footnote-grammar";
 import { noticeLintAlerts } from "../src/linting/lint-alerts";
 import { orphanedFootnoteReferenceNames } from "../src/linting/rules/remove-orphaned-references";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../src/parsing/markdown-scan";
 import { fakePlugin } from "./helpers/fake-plugin";
 import { messages, resetNotices } from "./helpers/notices";
 import { readNote } from "../src/parsing/note-reading";
@@ -21,7 +16,7 @@ import { readNote } from "../src/parsing/note-reading";
 
 const twin = (text: string) => {
     const lines = text.split("\n");
-    return maskProtectedLines(lines, scanDocument(lines));
+    return [...readNote(lines).maskedLines()];
 };
 
 describe("a code span that wraps across lines", () => {
@@ -34,8 +29,8 @@ describe("a code span that wraps across lines", () => {
 
     it("a whole line inside the span is protected, and the closer line is not", () => {
         const lines = ["a `one", "two[^7]", "three` b"];
-        const scan = scanDocument(lines);
-        expect(scan.isProtected).toEqual([false, true, false]);
+        const scan = readNote(lines);
+        expect(scan.protectedLines).toEqual([false, true, false]);
         // the span is open at the start of the two lines after its opener
         const reading = readNote(lines);
         expect(lines.map((_, i) => reading.regionOpenAt(i))).toEqual([false, true, true]);
@@ -52,9 +47,7 @@ describe("a code span that wraps across lines", () => {
 
     it("a label line inside the span is code, not a definition", () => {
         const lines = ["text `open", "[^x]: not a definition", "close` tail"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(definitionStartLines(lines, scan, (i) => masked[i])).toEqual([false, false, false]);
+        expect(readNote(lines).labelLines).toEqual([false, false, false]);
     });
 
     it("a run with no closer anywhere in the paragraph stays literal", () => {
@@ -88,8 +81,7 @@ describe("a code span that wraps across lines", () => {
 
     it("text after the closer is live again, and can open a comment of its own", () => {
         const lines = ["a `open", "close` live[^1] <!-- hidden[^9]", "still hidden --> back[^2]"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
+        const masked = [...readNote(lines).maskedLines()];
         expect(masked[1]).toBe("\0".repeat("close`".length) + " live[^1] " + "\0".repeat("<!-- hidden[^9]".length));
         expect(readNote(lines).regionOpenAt(2)).toBe(true);
         expect(masked[2]).toBe("\0".repeat("still hidden -->".length) + " back[^2]");

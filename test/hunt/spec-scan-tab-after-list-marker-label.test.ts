@@ -5,7 +5,7 @@ import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 import { lintFootnotes } from "../../src/linting/linter";
 import { orphanedFootnoteReferenceNames } from "../../src/linting/rules/remove-orphaned-references";
 import { inItemDefinitionLabels } from "../helpers/in-item";
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // spec question: is "-\t[^a]: def", a label written right after a list
 // marker with a TAB between them, a definition inside the list item, the
@@ -95,7 +95,7 @@ describe("spec question: a label behind a tab after a list marker", () => {
     it("the block reader ends [^1] above '#\\tHeading'", () => {
         const lines = underLabel("#\tHeading");
         // Today: [[2, 3]] (the heading is read as the definition's text).
-        expect(findDefinitionBlocks(lines, scanDocument(lines)).map((b) => [b.start, b.end])).toEqual([[2, 2]]);
+        expect(readNote(lines).blocks.map((b) => [b.start, b.end])).toEqual([[2, 2]]);
     });
 
     it("control: with a space after the marker the plugin already reads a definition", () => {
@@ -104,7 +104,7 @@ describe("spec question: a label behind a tab after a list marker", () => {
         expect(lintFootnotes(spaced, { removeOrphanedReferences: true })).toBe(spaced);
         for (const second of ["- item", "# Heading"]) {
             const lines = underLabel(second);
-            expect(findDefinitionBlocks(lines, scanDocument(lines)).map((b) => [b.start, b.end])).toEqual([[2, 2]]);
+            expect(readNote(lines).blocks.map((b) => [b.start, b.end])).toEqual([[2, 2]]);
         }
     });
 });

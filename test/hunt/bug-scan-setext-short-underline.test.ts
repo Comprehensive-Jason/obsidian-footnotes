@@ -1,12 +1,8 @@
 // Imported from the KIMI sweep of 2026-09-13 (T3 Code worktree); 2 of 3 tests were red there and carry it.fails.
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // "H\n--" is a setext level-2 heading per CommonMark (one or more dashes,
 // exactly like the "=" case the code already handles for the same shape),
@@ -16,9 +12,7 @@ import {
 
 const startsOf = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return definitionStartLines(lines, scan, (i) => masked[i]);
+    return readNote(lines).labelLines;
 };
 
 describe("a label under a one-or-two-dash setext underline is a definition", () => {
@@ -29,7 +23,7 @@ describe("a label under a one-or-two-dash setext underline is a definition", () 
     it("findDefinitionBlocks pairs the label with its reference", () => {
         const lines = "use[^1]\n\nH\n--\n[^1]: x".split("\n");
         expect(
-            findDefinitionBlocks(lines, scanDocument(lines)).map((b) => b.name),
+            readNote(lines).blocks.map((b) => b.name),
         ).toEqual(["1"]);
     });
 

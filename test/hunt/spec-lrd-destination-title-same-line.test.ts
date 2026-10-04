@@ -3,14 +3,11 @@
 // Imported from the GLM 5.3 Flash hunt cycle 12 of 2026-09-16 (this worktree); all pins flipped green 2026-09-16.
 import { describe, expect, it } from "vitest";
 
-import {
-	definitionStartLines,
-	maskProtectedLines,
-	scanDocument,
-} from "../../src/parsing/markdown-scan";
+
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { gfmFootnoteFromMarkdown } from "mdast-util-gfm-footnote";
 import { gfmFootnote } from "micromark-extension-gfm-footnote";
+import { readNote } from "../../src/parsing/note-reading";
 
 // SPEC QUESTION: a link reference definition whose destination line carries
 // a title - "[foo]:" then "/url \"title\"".
@@ -46,8 +43,6 @@ describe("spec: a two-line link reference definition whose destination line also
 	it("lets the footnote label under the pair start a definition, as the bare destination line already does", () => {
 		const doc = '[foo]:\n/url "title"\n[^1]: x';
 		const lines = doc.split("\n");
-		const scan = scanDocument(lines);
-		const masked = maskProtectedLines(lines, scan);
 		const tree = fromMarkdown(doc, {
 			extensions: [gfmFootnote()],
 			mdastExtensions: [gfmFootnoteFromMarkdown()],
@@ -58,7 +53,7 @@ describe("spec: a two-line link reference definition whose destination line also
 			"definition",
 			"footnoteDefinition",
 		]);
-		expect(definitionStartLines(lines, scan, (i) => masked[i])).toEqual([
+		expect(readNote(lines).labelLines).toEqual([
 			false,
 			false,
 			true,
@@ -68,9 +63,7 @@ describe("spec: a two-line link reference definition whose destination line also
 	it("control: a title on its own line already lets the label start", () => {
 		const doc = '[foo]: /url\n"t"\n[^1]: x';
 		const lines = doc.split("\n");
-		const scan = scanDocument(lines);
-		const masked = maskProtectedLines(lines, scan);
-		expect(definitionStartLines(lines, scan, (i) => masked[i])).toEqual([
+		expect(readNote(lines).labelLines).toEqual([
 			false,
 			false,
 			true,

@@ -48,7 +48,7 @@ The suite has five kinds of files:
 - **Properties** (`test/properties.test.ts`) — fast-check invariants over
   randomly generated documents and option combos: lint idempotence, no
   mask (NUL) leakage, protected-region preservation, reference/definition
-  conservation, scanner self-agreement, plus a **differential oracle**
+  conservation, plus a **differential oracle**
   that parses each document with micromark (GFM footnotes + math) before
   and after linting and requires identical footnote structure. Failures
   shrink to a minimal counterexample automatically. The document generator
@@ -185,10 +185,10 @@ Notes for writing new smoke tests:
 
 ## The oracle, Obsidian as the referee: `npm run oracle`
 
-`scripts/oracle/` compares the scanner's reading of a note with Obsidian's
+`scripts/oracle/` compares the plugin's reading of a note with Obsidian's
 own. It needs the live app with the sandbox vault open and is not part of
-the commit bar: run it when a reading fact is contested, after scanner
-work, or as a fuzz before a release.
+the commit bar: run it when a reading fact is contested, after work on the
+reader, or as a fuzz before a release.
 
 Obsidian's side comes from `app.metadataCache.computeMetadataAsync`
 (undocumented), which runs the parser behind Reading view and the metadata
@@ -198,17 +198,22 @@ a definition, so each note is parsed a second time with a definition for
 every undefined name appended (or, when an unclosed block swallows the
 appendix, put at the top); when neither probe leaves the note's own parse
 unchanged, those names' liveness is reported as unknown. The plugin's side
-(`plugin-facts.ts`) calls the scanner's readers the way the commands do:
-column-0 blocks, quoted definitions, in-item labels, live references, and
-protected lines. `compare.mts` lists the disagreements: a definition one
+(`plugin-facts.ts`) asks the note reading the way the commands do, parts
+and all (the hand-written scanner it used to ask is gone since the runtime
+swap of 2026-10-03): every definition with its container and last line,
+the live references, and the protected lines. `compare.mts` lists the
+disagreements: a definition one
 side reads and the other does not, a definition whose last line differs, a
 reference live to one side only, a line of an Obsidian code block the
 plugin leaves unprotected. The offline referee suite uses the same file, so
 the two always judge alike. It is TypeScript that Node runs directly, which
 needs Node 22.18 or later.
 
-With `--reader`, either command compares Obsidian with the remark-parse 8
-reader (`reader-facts.ts`) instead of the scanner. The rules the oracle has
+With `--reader`, either command compares Obsidian with one whole-note
+parse of the remark-parse 8 reader (`reader-facts.ts`), the reader the
+note reading is built on; the two answer alike unless the reading in parts
+goes wrong (test/note-reading-parts.test.ts holds them together). The
+rules the oracle has
 found so far, which the reader's code cites by letter and number, are in
 `docs/obsidian-reading-rules.md`. With `--answers
 <file>`, `check` also saves Obsidian's answers in the packed form of

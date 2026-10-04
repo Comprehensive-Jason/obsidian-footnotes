@@ -51,7 +51,7 @@ import FootnotePlugin from "../../src/main";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { fakeEditor as sharedFakeEditor, FakeEditor } from "../helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "../helpers/fake-plugin";
-import { referenceLandingAfter } from "../../src/parsing/markdown-scan";
+import { referenceLandingAfter } from "../../src/parsing/landing";
 
 const LINE = "see [docs](http://a.com/x\\)y).";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { footnoteReferenceMatches } from "../../src/parsing/footnote-grammar";
+import { readNote } from "../../src/parsing/note-reading";
 import { applyFootnotePrefix } from "../../src/linting/rules/apply-footnote-prefix";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
 
@@ -14,7 +14,8 @@ import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
 
 describe("fixed 2026-08-10: inline footnotes are double-parsed as regular references", () => {
     it("an inline footnote is not also parsed as a regular reference", () => {
-        expect(footnoteReferenceMatches("inline ^[^literal]")).toEqual([]);
+        // the note reading, since the runtime swap (step 3, 2026-10-03)
+        expect(readNote(["inline ^[^literal]"]).referencesOn(0)).toEqual([]);
     });
 
     it("reindex leaves inline-footnote content that resembles an id untouched", () => {

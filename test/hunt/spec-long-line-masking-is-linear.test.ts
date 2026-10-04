@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { maskInlineRegions } from "../../src/parsing/markdown-scan";
+import { maskInlineRegions } from "../../src/parsing/cell-reading";
 
 // Review B1 (2026-09-09): insideReferenceShape walked outward from every
 // dollar and backtick candidate, to the start of the line whenever no

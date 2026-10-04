@@ -3,12 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { lintFootnotes } from "../../src/linting/linter";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // A code span that opens on a definition's label line and closes several
 // lines later keeps every line in between dead (Reading view renders the
@@ -45,10 +41,7 @@ const doc = "x[^1] para\n\n[^1]: a `code\nmore [^2] fake\nspan`\n\ntail";
 
 const blockOf = (text: string, name: string) => {
     const lines = text.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return findDefinitionBlocks(lines, scan, masked, starts).find((b) => b.name === name);
+    return readNote(lines).blocks.find((b) => b.name === name);
 };
 
 describe("a definition whose code span crosses a column-0 no-backtick line", () => {
@@ -65,8 +58,7 @@ describe("a definition whose code span crosses a column-0 no-backtick line", () 
     it("the linted note keeps the [^2] inside the span dead (no live text woke up)", () => {
         const out = lintFootnotes(doc, {});
         const lines = out.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
+        const masked = [...readNote(lines).maskedLines()];
         expect(masked.some((line) => line.includes("[^2]"))).toBe(false);
     });
 

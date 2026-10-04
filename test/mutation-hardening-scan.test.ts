@@ -1,21 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { referenceOccurrences } from "../src/parsing/footnote-grammar";
 
-import {
-    definitionLabelIn,
-    findDefinitionBlocks,
-    maskedLineAt,
-    normalizeEol,
-    protectedLines,
-    removeLineRanges,
-    restoreEol,
-    scanDocument,
-} from "../src/parsing/markdown-scan";
+
+import { definitionLabelIn } from "../src/parsing/label-shapes";
+import { normalizeEol, removeLineRanges, restoreEol } from "../src/parsing/line-edits";
+import { readNote } from "../src/parsing/note-reading";
 
 // These tests exist to kill Stryker survivors from the 2026-08-10 baseline
-// listed in survivors-markdown-scan.json (144 mutants against
-// src/markdown-scan.ts). Organized by scanner region, in file order, so a
+// listed in survivors-markdown-reading.json (144 mutants against
+// src/markdown-reading.ts). Organized by scanner region, in file order, so a
 // mutant's line number maps to the `describe` block that targets it.
 //
 // Step 2 of the runtime swap (2026-10-03) replaced the scanner's walk and
@@ -48,7 +41,7 @@ describe("normalizeEol / restoreEol", () => {
 });
 
 describe("blockquoteDepth (via scanDocument's container-depth reach)", () => {
-    // lines 75-77: the marker scan may skip 0-3 leading spaces before a
+    // lines 75-77: the marker reading may skip 0-3 leading spaces before a
     // ">" - a 4th space is one too many and the ">" stays literal text
     // instead of opening a nested quote. Proven through a fence: a nested
     // quote's fence at depth 2 must protect its body; text that fails to
@@ -57,7 +50,7 @@ describe("blockquoteDepth (via scanDocument's container-depth reach)", () => {
         // "> " (marker+optional space) then exactly 3 more spaces then the
         // nested ">" - the legal CommonMark maximum
         const doc = [">    > ```", "> > body", "> > ```", "after"].join("\n");
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -72,7 +65,7 @@ describe("blockquoteDepth (via scanDocument's container-depth reach)", () => {
         // (2026-08-11, ground-truth probe P10) it is quote-relative
         // INDENTED CODE instead, so the line is protected as code and the
         // next line is live (a fence would have swallowed it)
-        expect(protectedLines(doc.split("\n"))).toEqual([true, false]);
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([true, false]);
     });
 
     // line 81: the ONE optional space after a ">" marker belongs to the
@@ -85,7 +78,7 @@ describe("blockquoteDepth (via scanDocument's container-depth reach)", () => {
         // the blank line ends the quote's fence; a plain line directly
         // under it would be swallowed (GLM hunt cycle 11, probed 2026-09-16)
         const doc = [">```", "", "after"].join("\n");
-        expect(protectedLines(doc.split("\n"))).toEqual([true, false, false]);
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([true, false, false]);
     });
 
     it("a marker's single trailing space is swallowed by the marker, not left in rest", () => {
@@ -93,7 +86,7 @@ describe("blockquoteDepth (via scanDocument's container-depth reach)", () => {
         // closer is indented 4 columns past the marker's own content
         // column (contentIndent 0 + 3 max == 3) - it must NOT close, so
         // everything through "> next" stays inside the open fence
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -134,12 +127,12 @@ describe("isFenceOpener", () => {
     // after it. A tilde fence has no such restriction.
     it("a backtick fence whose info string contains a backtick never opens", () => {
         const doc = ["```info`with`backtick", "still prose[^1]"].join("\n");
-        expect(protectedLines(doc.split("\n"))).toEqual([false, false]);
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([false, false]);
     });
 
     it("a tilde fence with a backtick in its info string still opens", () => {
         const doc = ["~~~info`x`", "code", "~~~"].join("\n");
-        expect(protectedLines(doc.split("\n"))).toEqual([true, true, true]);
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([true, true, true]);
     });
 });
 
@@ -147,14 +140,14 @@ describe("isFenceOpener", () => {
 // indirectly through maskLineRegions, which is the only way its result is
 // observable through the public API.
 describe("reference-shaped brackets and math (the masked twin)", () => {
-    // line 147: the backward scan uses "j >= 0", so it must still inspect
+    // line 147: the backward reading uses "j >= 0", so it must still inspect
     // index 0 itself - a mutant stopping at "j > 0" would skip the very
     // first character and miss a "[^" that starts the line, wrongly
     // treating BOTH id-internal dollars below as math openers/closers.
     it("recognizes a reference bracket that starts the line (index 0)", () => {
         const line = "[^a$b$c]";
         // both dollars are footnote-id characters; neither opens math
-        expect(maskedLineAt([line], 0)).toBe(line);
+        expect(readNote([line]).maskedLine(0)).toBe(line);
     });
 
     // line 150: a "[" found while walking back only counts as a reference
@@ -162,7 +155,7 @@ describe("reference-shaped brackets and math (the masked twin)", () => {
     // `true` unconditionally would treat this plain "[...]" bracket as a
     // reference too, suppressing a math span that should otherwise mask.
     it("a bracket without a caret does not suppress math scanning", () => {
-        const masked = maskedLineAt(["[x$y$ done"], 0);
+        const masked = readNote(["[x$y$ done"]).maskedLine(0);
         expect(masked).toBe("[x" + NUL(3) + " done");
     });
 });
@@ -178,11 +171,11 @@ describe("backticks inside a footnote reference are literal (2026-09-08)", () =>
     const line = "x [^aa`a] [^bb#b] [^cc`c] y";
 
     it("pairs no code span across two references", () => {
-        expect(maskedLineAt([line], 0)).toBe(line);
+        expect(readNote([line]).maskedLine(0)).toBe(line);
     });
 
     it("so the reference finder sees all three names", () => {
-        expect(referenceOccurrences(line, maskedLineAt([line], 0)).map((o) => o.name)).toEqual([
+        expect(readNote([line]).referencesOn(0).map((o) => o.name)).toEqual([
             "aa`a",
             "bb#b",
             "cc`c",
@@ -197,18 +190,18 @@ describe("backticks inside a footnote reference are literal (2026-09-08)", () =>
         // scanner's "closer guard" was an extrapolation from the verified
         // case above, never probed.
         const spanned = "`code [^a`b] end` tail";
-        expect(maskedLineAt([spanned], 0)).toBe(NUL("`code [^a`".length) + "b] end` tail");
+        expect(readNote([spanned]).maskedLine(0)).toBe(NUL("`code [^a`".length) + "b] end` tail");
     });
 
     it("ordinary code spans still mask, reference-shaped content included", () => {
-        expect(maskedLineAt(["a `[^x]` b"], 0)).toBe("a " + NUL(6) + " b");
-        expect(maskedLineAt(["use `git log` and [^n`ote]"], 0)).toBe(
+        expect(readNote(["a `[^x]` b"]).maskedLine(0)).toBe("a " + NUL(6) + " b");
+        expect(readNote(["use `git log` and [^n`ote]"]).maskedLine(0)).toBe(
             "use " + NUL("`git log`".length) + " and [^n`ote]",
         );
     });
 
     it("a bracket without a caret does not protect its backtick", () => {
-        expect(maskedLineAt(["[x`y`] z"], 0)).toBe("[x" + NUL(3) + "] z");
+        expect(readNote(["[x`y`] z"]).maskedLine(0)).toBe("[x" + NUL(3) + "] z");
     });
 });
 
@@ -220,12 +213,12 @@ describe("the masked twin: code spans and escapes", () => {
     it("a trailing escape at the very end of the line does not overrun", () => {
         // "\\" as the last character: i+=2 would land past the end, and
         // the loop must simply stop there rather than throwing or looping
-        expect(maskedLineAt(["text\\"], 0)).toBe("text\\");
+        expect(readNote(["text\\"]).maskedLine(0)).toBe("text\\");
     });
 
     // line 217: the closing-backtick search loop bound, same shape as 203.
-    it("an unmatched backtick run at EOL stays literal, scan terminates", () => {
-        expect(maskedLineAt(["a `unclosed"], 0)).toBe("a `unclosed");
+    it("an unmatched backtick run at EOL stays literal, reading terminates", () => {
+        expect(readNote(["a `unclosed"]).maskedLine(0)).toBe("a `unclosed");
     });
 
     // line 224: the closing run must match the OPENING run's exact length
@@ -235,7 +228,7 @@ describe("the masked twin: code spans and escapes", () => {
         const line = "``a`b``";
         // the run of 2 backticks only closes against another run of 2;
         // the lone backtick between "a" and "b" is span content
-        expect(maskedLineAt([line], 0)).toBe(NUL(line.length));
+        expect(readNote([line]).maskedLine(0)).toBe(NUL(line.length));
     });
     it("an unclosed double-backtick run leaves its second backtick free to open a span", () => {
         // Corrected in step 2 of the runtime swap (2026-10-03): with no
@@ -243,7 +236,7 @@ describe("the masked twin: code spans and escapes", () => {
         // one character and reads "`a`" as a code span; strict CommonMark
         // would leave the whole run literal
         const line = "``a`b";
-        expect(maskedLineAt([line], 0)).toBe("`" + NUL(3) + "b");
+        expect(readNote([line]).maskedLine(0)).toBe("`" + NUL(3) + "b");
     });
 
     // line 230: after a successful match, scanning resumes at
@@ -254,13 +247,13 @@ describe("the masked twin: code spans and escapes", () => {
     // mis-rewound match.
     it("resumes scanning exactly after a closed code span, not back inside it", () => {
         const line = "`a` `b`";
-        expect(maskedLineAt([line], 0)).toBe(NUL(3) + " " + NUL(3));
+        expect(readNote([line]).maskedLine(0)).toBe(NUL(3) + " " + NUL(3));
     });
 });
 
 describe("the masked twin: short-form HTML comments", () => {
     // line 236: "<!-->" is a complete 5-character comment (CommonMark
-    // §6.6) - advancing i by anything other than +5 would either re-scan
+    // §6.6) - advancing i by anything other than +5 would either re-reading
     // part of it or skip live content after it.
     // Corrected in step 2 of the runtime swap (2026-10-03): newer
     // CommonMark (0.30, section 6.6) counts "<!-->" and "<!--->" as whole
@@ -268,12 +261,12 @@ describe("the masked twin: short-form HTML comments", () => {
     // rule, where neither is a comment: both stay literal text, and the
     // code span after them still masks.
     it("\"<!-->\" is literal text, and the code span after it masks", () => {
-        const masked = maskedLineAt(["a<!-->`b`"], 0);
+        const masked = readNote(["a<!-->`b`"]).maskedLine(0);
         expect(masked).toBe("a<!-->" + NUL(3));
     });
 
     it("\"<!--->\" is literal text too", () => {
-        const masked = maskedLineAt(["a<!--->`b`"], 0);
+        const masked = readNote(["a<!--->`b`"]).maskedLine(0);
         expect(masked).toBe("a<!--->" + NUL(3));
     });
 
@@ -285,7 +278,7 @@ describe("the masked twin: dollars and math", () => {
     // code around it) is exercised implicitly by every math test below;
     // pin the base case where a dollar opens ordinary inline math.
     it("a simple inline math span is masked end to end", () => {
-        const masked = maskedLineAt(["$x+y$ done"], 0);
+        const masked = readNote(["$x+y$ done"]).maskedLine(0);
         expect(masked).toBe(NUL("$x+y$".length) + " done");
     });
 
@@ -296,7 +289,7 @@ describe("the masked twin: dollars and math", () => {
     // take this branch even when the guard is true.
     it("a dollar inside a footnote reference never opens math, even with a real $ later", () => {
         const line = "[^a$b] and $real$";
-        const masked = maskedLineAt([line], 0);
+        const masked = readNote([line]).maskedLine(0);
         // the reference's internal "$" stays literal; only the later
         // standalone "$real$" is math
         expect(masked).toBe("[^a$b] and " + NUL("$real$".length));
@@ -304,7 +297,7 @@ describe("the masked twin: dollars and math", () => {
 
     // line 284: the inline-math closing-dollar search loop bound.
     it("an unmatched single dollar with no closing partner stays literal", () => {
-        expect(maskedLineAt(["cost $5 no close"], 0)).toBe(
+        expect(readNote(["cost $5 no close"]).maskedLine(0)).toBe(
             "cost $5 no close",
         );
     });
@@ -315,7 +308,7 @@ describe("the masked twin: dollars and math", () => {
     it("an escaped dollar inside candidate math content is not the closer", () => {
         // "\$" is not a valid close; the real closer is the LAST "$"
         const line = "$a\\$b$";
-        const masked = maskedLineAt([line], 0);
+        const masked = readNote([line]).maskedLine(0);
         expect(masked).toBe(NUL(line.length));
     });
 
@@ -326,7 +319,7 @@ describe("the masked twin: dollars and math", () => {
     // mutants) or dropping any single clause changes which of these four
     // shapes gets (wrongly) treated as math.
     it("no closing dollar at all leaves both dollars as literal prose", () => {
-        expect(maskedLineAt(["a $b c"], 0)).toBe("a $b c");
+        expect(readNote(["a $b c"]).maskedLine(0)).toBe("a $b c");
     });
     // NOTE: "close === i + 1" (empty inline-math content) is unreachable in
     // practice - two adjacent unescaped dollars are always caught by the
@@ -336,15 +329,15 @@ describe("the masked twin: dollars and math", () => {
     // no input reaches this comparison with a value that makes it matter.
     it("content starting with a space is not math (Obsidian's rule)", () => {
         const line = "$ x$ prose";
-        expect(maskedLineAt([line], 0)).toBe(line);
+        expect(readNote([line]).maskedLine(0)).toBe(line);
     });
     it("content ending with a space is not math (Obsidian's rule)", () => {
         const line = "$x $ prose";
-        expect(maskedLineAt([line], 0)).toBe(line);
+        expect(readNote([line]).maskedLine(0)).toBe(line);
     });
     it("content with no leading or trailing space IS math", () => {
         const line = "$x y$ prose";
-        expect(maskedLineAt([line], 0)).toBe(NUL("$x y$".length) + " prose");
+        expect(readNote([line]).maskedLine(0)).toBe(NUL("$x y$".length) + " prose");
     });
 
     // line 304: on a successful inline-math match, `i` resumes exactly
@@ -352,18 +345,18 @@ describe("the masked twin: dollars and math", () => {
     // dollar or skips the character right after it.
     it("resumes scanning exactly after the closing dollar of inline math", () => {
         const line = "$a$`b`";
-        const masked = maskedLineAt([line], 0);
+        const masked = readNote([line]).maskedLine(0);
         expect(masked).toBe(NUL("$a$".length) + NUL("`b`".length));
     });
 });
 
 describe("scanDocument: YAML frontmatter", () => {
-    // line 354: the closing-scan loop bound `j < src.length` - an off-by-
+    // line 354: the closing-reading loop bound `j < src.length` - an off-by-
     // one would either miss the last line as a possible closer or read
     // past the array.
     it("a closing \"---\" on the very last line still closes frontmatter", () => {
         const doc = "---\nkey: 1\n---";
-        expect(protectedLines(doc.split("\n"))).toEqual([true, true, true]);
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([true, true, true]);
     });
 
     // line 355: the closer regex accepts "---" or "..." with only
@@ -374,11 +367,11 @@ describe("scanDocument: YAML frontmatter", () => {
         // Properties panel shows nothing and the three lines render as
         // text, so the block never closes and nothing is protected
         const doc = "---\nkey: 1\n...\nafter[^1]";
-        expect(protectedLines(doc.split("\n"))).toEqual([false, false, false, false]);
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([false, false, false, false]);
     });
     it("trailing whitespace after the closing delimiter is still a valid closer", () => {
         const doc = "---\nkey: 1\n---   \nafter";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -391,7 +384,7 @@ describe("scanDocument: YAML frontmatter", () => {
     // included.
     it("protects every line through the closing delimiter, inclusive", () => {
         const doc = "---\na: 1\nb: 2\n---";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -410,15 +403,15 @@ describe("scanDocument: comment/math region container depth", () => {
         // a comment opened at the start of a line is an HTML block, so its
         // opener and closer lines are dead in full (2026-09-15)
         const doc = "<!--\nhidden\n-->\n    code";
-        const scan = scanDocument(doc.split("\n"));
-        expect(scan.isProtected).toEqual([true, true, true, true]);
+        const reading = readNote(doc.split("\n"));
+        expect(reading.protectedLines).toEqual([true, true, true, true]);
     });
     it("a comment closer with live trailing text does NOT end the block (no code opens after)", () => {
         const doc = "x <!--\nhidden\n--> tail\n    cont";
-        const scan = scanDocument(doc.split("\n"));
+        const reading = readNote(doc.split("\n"));
         // "tail" is live prose, so the next indented line is a lazy/
         // paragraph continuation, not code
-        expect(scan.isProtected).toEqual([false, true, false, false]);
+        expect(reading.protectedLines).toEqual([false, true, false, false]);
     });
 
     // line 430: a reopened region must record ITS OWN (closer line's)
@@ -429,11 +422,11 @@ describe("scanDocument: comment/math region container depth", () => {
     // only happens if regionDepth was updated to 2, not left at 1.
     it("a comment-to-math reopen at a deeper depth updates regionDepth to the new depth", () => {
         const doc = "> x <!--\n> > --> $$\n> after\nplain";
-        const scan = scanDocument(doc.split("\n"));
+        const reading = readNote(doc.split("\n"));
         // "> after" (depth 1) is shallower than the reopened region's
         // depth (2), so the math region has already ended by the time we
         // reach it - it is ordinary live quoted text, not math interior
-        expect(scan.isProtected).toEqual([false, false, false, false]);
+        expect(reading.protectedLines).toEqual([false, false, false, false]);
     });
 
 });
@@ -450,12 +443,12 @@ describe("scanDocument: fence container depth and closer indent", () => {
             "[^1]: def",
             "    cont",
         ].join("\n");
-        const scan = scanDocument(doc.split("\n"));
+        const reading = readNote(doc.split("\n"));
         // the fence dies at the blank line (a label directly under the
         // fence's content would be swallowed, GLM hunt cycle 11, probed
         // 2026-09-16); "[^1]: def" is a live definition and "    cont" is
         // its live continuation, not orphaned indented code
-        expect(scan.isProtected).toEqual([true, true, false, false, false]);
+        expect(reading.protectedLines).toEqual([true, true, false, false, false]);
     });
 
     // line 488/490: the closer's indent is measured against the fence's
@@ -464,7 +457,7 @@ describe("scanDocument: fence container depth and closer indent", () => {
     // (contentIndent 0): 3 spaces closes, 4 does not.
     it("a document-level fence closes with exactly 3 leading spaces", () => {
         const doc = "```\ncode\n   ```\nafter";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -473,7 +466,7 @@ describe("scanDocument: fence container depth and closer indent", () => {
     });
     it("a document-level fence does NOT close with 4 leading spaces", () => {
         const doc = "```\ncode\n    ```\nswallowed";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -487,7 +480,7 @@ describe("scanDocument: fence container depth and closer indent", () => {
     // after the delimiter disqualifies it as a closer.
     it("a two-character run does not close a three-character fence", () => {
         const doc = "```\ncode\n``\nstill code\n```\nafter";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -498,7 +491,7 @@ describe("scanDocument: fence container depth and closer indent", () => {
     });
     it("trailing text after the closer's backticks disqualifies it as a closer", () => {
         const doc = "```\ncode\n``` not a closer\nstill code\n```\nafter";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -514,7 +507,7 @@ describe("scanDocument: fence container depth and closer indent", () => {
     // of the SAME character never closes a longer opener.
     it("a tilde run never closes a backtick fence", () => {
         const doc = "```\ncode\n~~~~\nstill code\n```\nafter";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -525,7 +518,7 @@ describe("scanDocument: fence container depth and closer indent", () => {
     });
     it("a shorter run of the same character never closes a longer opener", () => {
         const doc = "````\ncode\n```\nstill code\n````\nafter";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -543,7 +536,7 @@ describe("scanDocument: indented code vs. definition/list continuation", () => {
     // (only the second line's branch is exercised by a 2-line block).
     it("a third consecutive indented-code line is still protected", () => {
         const doc = "para\n\n    one\n    two\n    three";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             false,
             false,
             true,
@@ -560,7 +553,7 @@ describe("scanDocument: indented code vs. definition/list continuation", () => {
         // so an 8-space block below (content indent 2 + 4 = 6) is code,
         // not document-level code (would need 4)
         const doc = "- item\n\n  cont[^1]\n\n        code";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             false,
             false,
             false,
@@ -573,7 +566,7 @@ describe("scanDocument: indented code vs. definition/list continuation", () => {
         // "para" at column 0 is shallower than the item's content column
         // (2), so it pops the list; the later 4-space block is ordinary
         // document-level code again
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             false,
             false,
             false,
@@ -588,7 +581,7 @@ describe("scanDocument: indented code vs. definition/list continuation", () => {
         // "- item": content indent 1+1=2; a 5-space continuation (< 2+4)
         // stays live, matching the ordinary single-space-gap case
         const doc = "- item\n\n     cont[^1]";
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             false,
             false,
             false,
@@ -603,14 +596,14 @@ describe("scanDocument: fence opener detection on list-item lines", () => {
     // characters must still be accepted (not narrowed to "~" alone).
     it("a fence opens after a list marker is stripped, for both fence characters", () => {
         const doc1 = "- ```\n  code\n  ```\nafter";
-        expect(protectedLines(doc1.split("\n"))).toEqual([
+        expect(readNote(doc1.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
             false,
         ]);
         const doc2 = "- ~~~\n  code\n  ~~~\nafter";
-        expect(protectedLines(doc2.split("\n"))).toEqual([
+        expect(readNote(doc2.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -625,7 +618,7 @@ describe("scanDocument: fence opener detection on list-item lines", () => {
     it("a list-item fence's contentIndent accepts a closer up to its content column + 3", () => {
         const doc = "- ```\n  code\n     ```\nafter";
         // "- " content column is 2; closer indented 5 (2+3) still closes
-        expect(protectedLines(doc.split("\n"))).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -639,12 +632,12 @@ describe("scanDocument: region opener trigger and endsProtected", () => {
     // line 633: endsProtected is true for a document-level unclosed
     // fence too, not only comment/math - pin the fence half of that OR.
     it("an unclosed document-level fence makes an EOF append protected", () => {
-        const scan = scanDocument("```\ncode".split("\n"));
-        expect(scan.endsProtected).toBe(true);
+        const reading = readNote("```\ncode".split("\n"));
+        expect(reading.openRegionFrom !== -1).toBe(true);
     });
     it("a CLOSED fence does not make an EOF append protected", () => {
-        const scan = scanDocument("```\ncode\n```".split("\n"));
-        expect(scan.endsProtected).toBe(false);
+        const reading = readNote("```\ncode\n```".split("\n"));
+        expect(reading.openRegionFrom !== -1).toBe(false);
     });
 });
 
@@ -653,7 +646,7 @@ describe("maskedLineAt: out-of-range guard", () => {
     // it - a ConditionalExpression "false" mutant would fall through to
     // read lines[i] (undefined) instead of returning "".
     it("returns empty string for an index exactly at lines.length", () => {
-        expect(maskedLineAt(["only"], 1)).toBe("");
+        expect(readNote(["only"]).maskedLine(1)).toBe("");
     });
 });
 
@@ -726,22 +719,20 @@ describe("findDefinitionBlocks", () => {
     it("stops the block at a protected fence line, not a comment/math region", () => {
         const doc = "x[^1]\n\n[^1]: a\n    cont\n```\nfence\n```";
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        expect(findDefinitionBlocks(lines, scan)).toEqual([
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
             { name: "1", start: 2, end: 3 },
         ]);
     });
 
-    // line 763: absorption requires the scan object AND one of its two
-    // flags - pin that with NO scan argument at all, a protected
+    // line 763: absorption requires the reading object AND one of its two
+    // flags - pin that with NO reading argument at all, a protected
     // continuation still correctly breaks the block (the caller-optional
     // path), proving the function doesn't crash or wrongly absorb without
-    // scan data.
-    it("without a scan argument, a protected line always ends the block", () => {
+    // reading data.
+    it("without a reading argument, a protected line always ends the block", () => {
         const doc = "x[^1]\n\n[^1]: a\n    cont\n```\nfence\n```";
         const lines = doc.split("\n");
-        const isProtected = scanDocument(lines).isProtected;
-        expect(findDefinitionBlocks(lines, { ...scanDocument(lines), isProtected })).toEqual([
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
             { name: "1", start: 2, end: 3 },
         ]);
     });
@@ -753,16 +744,14 @@ describe("findDefinitionBlocks", () => {
     it("a blank run followed by indented content continues the block", () => {
         const doc = "[^1]: a\n\n    more";
         const lines = doc.split("\n");
-        const isProtected = scanDocument(lines).isProtected;
-        expect(findDefinitionBlocks(lines, { ...scanDocument(lines), isProtected })).toEqual([
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
             { name: "1", start: 0, end: 2 },
         ]);
     });
     it("a blank run followed by a column-0 line ends the block at the blank", () => {
         const doc = "[^1]: a\n\nnot indented";
         const lines = doc.split("\n");
-        const isProtected = scanDocument(lines).isProtected;
-        expect(findDefinitionBlocks(lines, { ...scanDocument(lines), isProtected })).toEqual([
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
             { name: "1", start: 0, end: 0 },
         ]);
     });
@@ -774,23 +763,21 @@ describe("findDefinitionBlocks", () => {
     it("indented content after a blank run does not continue the block when it is protected code", () => {
         const doc = "[^1]: a\n\n```\n    fenced\n```";
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        expect(findDefinitionBlocks(lines, scan)).toEqual([
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
             { name: "1", start: 0, end: 0 },
         ]);
     });
     it("a multi-line blank run is walked past correctly to find the next content", () => {
         const doc = "[^1]: a\n\n\n\n    more";
         const lines = doc.split("\n");
-        const isProtected = scanDocument(lines).isProtected;
-        expect(findDefinitionBlocks(lines, { ...scanDocument(lines), isProtected })).toEqual([
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
             { name: "1", start: 0, end: 4 },
         ]);
     });
 });
 
 // Round 2: hardening against the 66 mutants that survived round 1's suite
-// (survivors-scan-round2.json), verified by hand-applying each mutation to a
+// (survivors-reading-round2.json), verified by hand-applying each mutation to a
 // scratch copy of the source and confirming the exact output divergence
 // before writing the assertion below. Organized in file order, matching
 // round 1's convention. Equivalence proofs for the mutants that cannot be
@@ -810,7 +797,7 @@ describe("round 2", () => {
         // reference alone and masking only "$y$".
         it("a dollar immediately after a reference is not treated as a math opener", () => {
             const line = "[^a$b]$y$";
-            expect(maskedLineAt([line], 0)).toBe("[^a$b]" + NUL(3));
+            expect(readNote([line]).maskedLine(0)).toBe("[^a$b]" + NUL(3));
         });
     });
 
@@ -818,12 +805,12 @@ describe("round 2", () => {
         // line 304: after a successful inline-math match, "i" must resume
         // at "close + 1" - the ArithmeticOperator mutant "close - 1" rewinds
         // INTO the just-matched span's last content character, letting it
-        // reopen as a fresh code-span/math scan and blot a different (wider,
+        // reopen as a fresh code-span/math reading and blot a different (wider,
         // in this case: also swallowing "` `" after the math) region than
         // the correct one.
         it("resumes exactly after the closing dollar, not one character early", () => {
             const line = "$a`$ `z`";
-            expect(maskedLineAt([line], 0)).toBe(NUL(4) + " " + NUL(3));
+            expect(readNote([line]).maskedLine(0)).toBe(NUL(4) + " " + NUL(3));
         });
     });
 
@@ -834,7 +821,7 @@ describe("round 2", () => {
         // before the real "---" delimiter is reached.
         it("a line that only ends with \"---\" does not close frontmatter early", () => {
             const doc = "---\nnotaclose---\nkey: 1\n---\nafter";
-            expect(protectedLines(doc.split("\n"))).toEqual([
+            expect(readNote(doc.split("\n")).protectedLines).toEqual([
                 true,
                 true,
                 true,
@@ -843,15 +830,15 @@ describe("round 2", () => {
             ]);
         });
 
-        // line 357: after closing frontmatter, the main scan must resume at
+        // line 357: after closing frontmatter, the main reading must resume at
         // "j + 1" (right after the closer) - the ArithmeticOperator mutant
-        // "j - 1" rewinds the main scan into the frontmatter body itself,
+        // "j - 1" rewinds the main reading into the frontmatter body itself,
         // re-processing a line that happens to look like a fence opener and
         // letting that bogus fence swallow the real closer and everything
         // after it.
-        it("resumes the main scan exactly after the frontmatter closer, not inside it", () => {
+        it("resumes the main reading exactly after the frontmatter closer, not inside it", () => {
             const doc = "---\n```\n---\nafter\n```\nmore";
-            expect(protectedLines(doc.split("\n"))).toEqual([
+            expect(readNote(doc.split("\n")).protectedLines).toEqual([
                 true,
                 true,
                 true,
@@ -870,8 +857,8 @@ describe("round 2", () => {
         // after it.
         it("a comment closer with live trailing text does not open code on the next line", () => {
             const doc = "x <!--\nhidden\n--> tail\n    cont";
-            const scan = scanDocument(doc.split("\n"));
-            expect(scan.isProtected).toEqual([false, true, false, false]);
+            const reading = readNote(doc.split("\n"));
+            expect(reading.protectedLines).toEqual([false, true, false, false]);
         });
 
         // line 434: the LogicalOperator mutant ("&&" -> "||" between the
@@ -892,8 +879,8 @@ describe("round 2", () => {
             // mutant this test was written for is no longer told apart by
             // it.
             const doc = "> x <!--\n> > --> $$\n    indented";
-            const scan = scanDocument(doc.split("\n"));
-            expect(scan.isProtected).toEqual([false, false, true]);
+            const reading = readNote(doc.split("\n"));
+            expect(reading.protectedLines).toEqual([false, false, true]);
         });
 
     });
@@ -907,7 +894,7 @@ describe("round 2", () => {
         // both pins the boundary AND would hang forever under this mutant.
         it("a doubly-quoted fence closes with a closer at exactly contentIndent + 3", () => {
             const doc = "> > ```\n> > code\n> >    ```\n> > after";
-            expect(protectedLines(doc.split("\n"))).toEqual([
+            expect(readNote(doc.split("\n")).protectedLines).toEqual([
                 true,
                 true,
                 true,
@@ -923,7 +910,7 @@ describe("round 2", () => {
         // a content line like "xyz```" must NOT close the fence.
         it("a content line that merely ends with backticks does not close the fence", () => {
             const doc = "```\ncode\nxyz```\nafter";
-            expect(protectedLines(doc.split("\n"))).toEqual([
+            expect(readNote(doc.split("\n")).protectedLines).toEqual([
                 true,
                 true,
                 true,
@@ -936,7 +923,7 @@ describe("round 2", () => {
         // even though CommonMark allows that.
         it("a closer with trailing whitespace after the delimiter still closes the fence", () => {
             const doc = "```\ncode\n```   \nafter";
-            expect(protectedLines(doc.split("\n"))).toEqual([
+            expect(readNote(doc.split("\n")).protectedLines).toEqual([
                 true,
                 true,
                 true,
@@ -953,7 +940,7 @@ describe("round 2", () => {
         // an empty array is a silent no-op that never breaks it.
         it("does not hang when a list marker line is scanned (565 while-true guard)", () => {
             const doc = "- a\n  b";
-            expect(protectedLines(doc.split("\n"))).toEqual([false, false]);
+            expect(readNote(doc.split("\n")).protectedLines).toEqual([false, false]);
         });
 
         // line 566: the EqualityOperator mutant "indentWidth <= top"
@@ -965,7 +952,7 @@ describe("round 2", () => {
         // parent as a missing code-indent threshold.
         it("a nested marker landing exactly on its parent's content column nests instead of replacing it", () => {
             const doc = "- a\n  - b\n\n  para\n\n     d";
-            expect(protectedLines(doc.split("\n"))).toEqual([
+            expect(readNote(doc.split("\n")).protectedLines).toEqual([
                 false,
                 false,
                 false,
@@ -979,7 +966,7 @@ describe("round 2", () => {
         // unconditional-infinite-pop hazard as 565's true-mutant.
         it("does not hang when a list marker line is scanned (566 while-true guard)", () => {
             const doc = "- a\n  b";
-            expect(protectedLines(doc.split("\n"))).toEqual([false, false]);
+            expect(readNote(doc.split("\n")).protectedLines).toEqual([false, false]);
         });
     });
 
@@ -992,7 +979,7 @@ describe("round 2", () => {
         // wrongly collapse this boundary case.
         it("a four-space gap after the marker uses its literal width, not the collapse rule", () => {
             const doc = "-    item\n\n       code";
-            expect(protectedLines(doc.split("\n"))).toEqual([
+            expect(readNote(doc.split("\n")).protectedLines).toEqual([
                 false,
                 false,
                 false,
@@ -1006,7 +993,7 @@ describe("round 2", () => {
         // as a fence opener, as long as it ENDS with 3+ backticks.
         it("prose ending in backticks after a list marker does not open a fence", () => {
             const doc = "- xyz```\ncontent\nafter";
-            expect(protectedLines(doc.split("\n"))).toEqual([
+            expect(readNote(doc.split("\n")).protectedLines).toEqual([
                 false,
                 false,
                 false,
@@ -1018,7 +1005,7 @@ describe("round 2", () => {
         // even though CommonMark requires 3+.
         it("two tildes after a list marker do not open a fence", () => {
             const doc = "- ~~text\ncontent\nafter";
-            expect(protectedLines(doc.split("\n"))).toEqual([
+            expect(readNote(doc.split("\n")).protectedLines).toEqual([
                 false,
                 false,
                 false,
@@ -1036,7 +1023,7 @@ describe("round 2", () => {
         // match the opener, which CommonMark explicitly allows.
         it("a document-level fence opener with leading spaces still accepts a closer indented to match it", () => {
             const doc = "   ```\ncode\n   ```\nafter";
-            expect(protectedLines(doc.split("\n"))).toEqual([
+            expect(readNote(doc.split("\n")).protectedLines).toEqual([
                 true,
                 true,
                 true,
@@ -1050,7 +1037,7 @@ describe("round 2", () => {
         // always true, even for a document with no fence, comment, or math
         // open at all.
         it("endsProtected is false for a document with nothing open at EOF", () => {
-            expect(scanDocument("plain\ntext".split("\n")).endsProtected).toBe(
+            expect(readNote("plain\ntext".split("\n")).openRegionFrom !== -1).toBe(
                 false,
             );
         });
@@ -1063,7 +1050,7 @@ describe("round 2", () => {
         // lines.length); this pins the lower bound, which crashes instead
         // of just returning a wrong value.
         it("returns empty string for a negative index instead of crashing", () => {
-            expect(maskedLineAt(["only"], -1)).toBe("");
+            expect(readNote(["only"]).maskedLine(-1)).toBe("");
         });
     });
 
@@ -1171,8 +1158,7 @@ describe("round 2", () => {
             // block runs to the end of the note here.
             const doc = "[^1]: a\n    <!--\nhidden\n-->";
             const lines = doc.split("\n");
-            const scan = scanDocument(lines);
-            expect(findDefinitionBlocks(lines, scan)).toEqual([
+            expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
                 { name: "1", start: 0, end: 3 },
             ]);
         });
@@ -1186,8 +1172,7 @@ describe("round 2", () => {
         // line.
         it("a whitespace-only line within a blank run is swept over like an empty line", () => {
             const doc = ["[^1]: a", "   ", "    more"];
-            const isProtected = scanDocument(doc).isProtected;
-            expect(findDefinitionBlocks(doc, { ...scanDocument(doc), isProtected })).toEqual([
+            expect(readNote(doc).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
                 { name: "1", start: 0, end: 2 },
             ]);
         });
@@ -1199,8 +1184,7 @@ describe("round 2", () => {
         // the walk cleanly stopping at the document boundary.
         it("a blank run reaching exactly end-of-document does not overrun the array", () => {
             const doc = ["[^1]: a", ""];
-            const isProtected = scanDocument(doc).isProtected;
-            expect(findDefinitionBlocks(doc, { ...scanDocument(doc), isProtected })).toEqual([
+            expect(readNote(doc).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
                 { name: "1", start: 0, end: 0 },
             ]);
         });
@@ -1216,8 +1200,7 @@ describe("round 2", () => {
         // correctly ending it.
         it("a blank run landing on a protected (indented) fence opener does not get absorbed", () => {
             const doc = ["[^1]: a", "", " ```", " code", " ```"];
-            const isProtected = scanDocument(doc).isProtected;
-            expect(findDefinitionBlocks(doc, { ...scanDocument(doc), isProtected })).toEqual([
+            expect(readNote(doc).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
                 { name: "1", start: 0, end: 0 },
             ]);
         });
@@ -1231,8 +1214,7 @@ describe("round 2", () => {
         // real indented continuation is ever reached.
         it("a whitespace-only line does not end the block via the outer non-blank check", () => {
             const doc = ["[^1]: a", "   ", "    more"];
-            const isProtected = scanDocument(doc).isProtected;
-            expect(findDefinitionBlocks(doc, { ...scanDocument(doc), isProtected })).toEqual([
+            expect(readNote(doc).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
                 { name: "1", start: 0, end: 2 },
             ]);
         });

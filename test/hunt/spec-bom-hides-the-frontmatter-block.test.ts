@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 
 import { lintFootnotes } from "../../src/linting/linter";
 import { footnotePrefix } from "../../src/parsing/footnote-prefix";
-import { scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // SPEC QUESTION, and the sharpest consequence yet of the one already filed
 // in spec-bom-before-line-zero-label.test.ts: when a note starts with a
@@ -59,7 +60,7 @@ const PLAIN = "---\nalias: see[^1] here\n---\n\nbody[^2].\n\n[^2]: d";
 
 describe("spec question: a byte order mark in front of a note's frontmatter", () => {
     it("the frontmatter block is still protected text", () => {
-        expect(scanDocument(NOTE.split("\n")).isProtected.slice(0, 3)).toEqual([
+        expect(readNote(NOTE.split("\n")).protectedLines.slice(0, 3)).toEqual([
             true, true, true,
         ]);
     });
@@ -81,7 +82,7 @@ describe("spec question: a byte order mark in front of a note's frontmatter", ()
     });
 
     it("control: without the mark the frontmatter is protected and survives the lint whole", () => {
-        expect(scanDocument(PLAIN.split("\n")).isProtected.slice(0, 3)).toEqual([
+        expect(readNote(PLAIN.split("\n")).protectedLines.slice(0, 3)).toEqual([
             true, true, true,
         ]);
         expect(

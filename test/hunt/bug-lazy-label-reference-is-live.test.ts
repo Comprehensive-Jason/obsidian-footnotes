@@ -12,13 +12,8 @@ import {
     orphanedFootnoteReferenceNames,
     removeOrphanedFootnoteReferences,
 } from "../../src/linting/rules/remove-orphaned-references";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // Second review of the prose-label rule (2026-09-09), ground-truthed in
 // Reading view the same day:
@@ -37,20 +32,18 @@ import {
 
 const blocksOf = (doc: string) => {
     const lines = doc.split("\n");
-    return findDefinitionBlocks(lines, scanDocument(lines)).map((b) => `${b.name}@${b.start}`);
+    return readNote(lines).blocks.map((b) => `${b.name}@${b.start}`);
 };
 const lazyOf = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return lazyDefinitionLabelNames(lines, scan, masked, definitionStartLines(lines, scan, (i) => masked[i]));
+    return lazyDefinitionLabelNames(lines);
 };
 
 describe("a lazy label's own reference is live", () => {
-    it("referenceOccurrences counts it when the line is not a definition start", () => {
-        expect(referenceOccurrences("[^1]: lazy body", "[^1]: lazy body", false).map((o) => o.name)).toEqual(["1"]);
-        expect(referenceOccurrences("[^1]: real body", "[^1]: real body", true)).toEqual([]);
-        expect(referenceOccurrences("[^1]: real body", "[^1]: real body")).toEqual([]);
+    it("the note reading counts it when the line is not a definition start", () => {
+        expect(readNote(["prose", "[^1]: lazy body"]).referencesOn(1).map((o) => o.name)).toEqual(["1"]);
+        expect(readNote(["prose", "", "[^1]: real body"]).referencesOn(2)).toEqual([]);
+        expect(readNote(["[^1]: real body"]).referencesOn(0)).toEqual([]);
     });
 
     it("keeps the real definition it points at out of orphan deletion", () => {
@@ -93,7 +86,7 @@ describe("two more paragraph enders the start rule knows", () => {
         // the definition inside it: a definition (it starts on line 1), but
         // not a block that moves (Jason's ruling 1, option a, 2026-10-03)
         expect(blocksOf("> [!note] Title\n[^1]: x\n\nbody[^1]")).toEqual([]);
-        expect(definitionStartLines("> [!note] Title\n[^1]: x\n\nbody[^1]".split("\n"))[1]).toBe(true);
+        expect(readNote("> [!note] Title\n[^1]: x\n\nbody[^1]".split("\n")).labelLines[1]).toBe(true);
         expect(lazyOf("> [!note] Title\n> [^1]: x\n\nbody[^1]")).toEqual([]);
     });
 });

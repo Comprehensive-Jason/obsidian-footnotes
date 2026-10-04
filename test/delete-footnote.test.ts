@@ -10,13 +10,9 @@ import {
     deleteFootnoteEverywhere,
     DeleteTargetNotice,
 } from "../src/commands/delete-footnote";
-import { definitionLabelWithName, referenceOccurrences } from "../src/parsing/footnote-grammar";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    normalizeEol,
-    scanDocument,
-} from "../src/parsing/markdown-scan";
+import { definitionLabelWithName } from "../src/parsing/label-shapes";
+import { normalizeEol } from "../src/parsing/line-edits";
+import { readNote } from "../src/parsing/note-reading";
 
 // Deleting a footnote everywhere (T4, Jason's rulings 2026-09-19 to 21):
 // the definition and EVERY reference to it go in one step, whichever end
@@ -178,13 +174,13 @@ describe("deleteFootnoteEverywhere", () => {
 /** Every live mention of a name in `markdown`, lower-cased: references on unprotected lines (a lazy label's head counts, as it renders) and the labels that start definitions. */
 function liveNames(markdown: string): string[] {
     const lines = normalizeEol(markdown).text.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+    const reading = readNote(lines);
+    const masked = [...readNote(lines).maskedLines()];
+    const starts = readNote(lines).labelLines;
     const names: string[] = [];
     for (let i = 0; i < lines.length; i++) {
-        if (scan.isProtected[i]) continue;
-        for (const { name } of referenceOccurrences(lines[i], masked[i], starts[i])) {
+        if (reading.protectedLines[i]) continue;
+        for (const { name } of readNote(lines).referencesOn(i)) {
             names.push(name.toLowerCase());
         }
         if (starts[i]) {

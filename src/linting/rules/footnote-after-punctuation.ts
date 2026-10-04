@@ -1,4 +1,5 @@
-import { ClosingMarkChars, definitionLabelIn, FootnotePlacement, punctuationAt, referenceLandingAfter } from "../../parsing/markdown-scan";
+import { definitionLabelIn } from "../../parsing/label-shapes";
+import { ClosingMarkChars, FootnotePlacement, punctuationAt, referenceLandingAfter } from "../../parsing/landing";
 import { NoteReading } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";

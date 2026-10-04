@@ -1,16 +1,7 @@
-import {
-    definitionLabelWithName,
-    quotedDefinitionLabel,
-    quotedReference,
-} from "../parsing/footnote-grammar";
-import {
-    definitionCuts,
-    lazyDefinitionLabelLines,
-    normalizeEol,
-    removeLineRanges,
-    restoreEol,
-    underlinedDefinitionLabelLines,
-} from "../parsing/markdown-scan";
+import { quotedDefinitionLabel, quotedReference } from "../parsing/footnote-grammar";
+import { definitionLabelWithName } from "../parsing/label-shapes";
+import { lazyDefinitionLabelLines, underlinedDefinitionLabelLines } from "../parsing/label-shapes";
+import { definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../parsing/line-edits";
 import { readNote } from "../parsing/note-reading";
 import { linesReadDifferently } from "../linting/rules/remove-orphaned-definitions";
 import { cutOne, readsDifferently } from "../linting/rules/remove-orphaned-references";

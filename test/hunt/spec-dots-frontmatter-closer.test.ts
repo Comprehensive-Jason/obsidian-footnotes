@@ -5,7 +5,8 @@
 import { describe, expect, it } from "vitest";
 
 import { footnotePrefix } from "../../src/parsing/footnote-prefix";
-import { scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // SPEC QUESTION: does Obsidian accept YAML's "..." end-of-document marker
 // as a frontmatter closer?
@@ -61,7 +62,7 @@ const DOTS = "---\nfootnote-prefix: 2.\n...\nbody[^1]\n\n[^1]: d";
 describe("spec question: YAML's \"...\" as a frontmatter closer", () => {
     it("Obsidian needs \"---\": the block never closes, every line is prose, and there is no prefix", () => {
         expect(footnotePrefix(DOTS)).toBe("");
-        expect(scanDocument(DOTS.split("\n")).isProtected).toEqual([
+        expect(readNote(DOTS.split("\n")).protectedLines).toEqual([
             false, false, false, false, false, false,
         ]);
     });

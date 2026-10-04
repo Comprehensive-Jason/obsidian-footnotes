@@ -2,13 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { fakeEditor } from "../helpers/fake-editor";
 import { renameTargetAtCursor } from "../../src/commands/rename-footnote";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    lazyDefinitionLabelLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { lazyDefinitionLabelLines } from "../../src/parsing/label-shapes";
+import { readNote } from "../../src/parsing/note-reading";
 
 // spec question: when a "%%" block closer and a definition label share a
 // line ("%% [^1]: freed label"), is that label a definition, or is it
@@ -42,21 +37,14 @@ const DOC = "x[^1]\n\n%%\nhidden\n%% [^1]: freed label";
 
 const blocksOf = (doc: string) => {
     const lines = doc.split("\n");
-    return findDefinitionBlocks(lines, scanDocument(lines)).map(
+    return readNote(lines).blocks.map(
         (b) => `${b.name}@${b.start}`,
     );
 };
 
 const lazyOf = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return lazyDefinitionLabelLines(
-        lines,
-        scan,
-        masked,
-        definitionStartLines(lines, scan, (i) => masked[i]),
-    );
+    return lazyDefinitionLabelLines(lines);
 };
 
 describe("a definition label after a %% closer on the same line", () => {

@@ -9,11 +9,6 @@ import {
     orphanedFootnoteReferenceNames,
 } from "../../src/linting/rules/remove-orphaned-references";
 import { inItemDefinitionLabels } from "../helpers/in-item";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
 
 // A label written inside a list item DIRECTLY UNDER a line of prose:
 //
@@ -65,12 +60,9 @@ const MARGIN_TWIN = "para\n[^ld]: lazy at the margin\n\nuse[^ld] here";
 
 const readersOf = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
     return {
         inItem: inItemDefinitionLabels(lines),
-        lazy: lazyDefinitionLabelNames(lines, scan, masked, starts),
+        lazy: lazyDefinitionLabelNames(lines),
         orphans: orphanedFootnoteReferenceNames(doc),
     };
 };

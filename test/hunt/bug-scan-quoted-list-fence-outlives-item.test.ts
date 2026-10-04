@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 
 // BUG (wrong output): a code fence inside a list item inside a blockquote
 // never ends with its item, so it hides the rest of the quote.
@@ -29,10 +29,9 @@ import { definitionStartLines, maskProtectedLines, scanDocument } from "../../sr
 describe("a fence inside a quoted list item", () => {
     it("ends at the quoted line under the item's margin after a blank quote line", () => {
         const lines = "> - item\n>\n>   ```\n>   code\n>\n> [^1]: x\n\nuse[^1]".split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-        expect(scan.isProtected[5]).toBe(false);
+        const reading = readNote(lines);
+        const starts = readNote(lines).labelLines;
+        expect(reading.protectedLines[5]).toBe(false);
         expect(starts[5]).toBe(true);
     });
 });

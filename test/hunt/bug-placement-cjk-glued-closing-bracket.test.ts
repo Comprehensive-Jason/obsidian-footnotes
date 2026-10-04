@@ -4,7 +4,7 @@ import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after-punctuation";
-import { FootnotePlacement } from "../../src/parsing/markdown-scan";
+import { FootnotePlacement } from "../../src/parsing/landing";
 
 // BUG (wrong output): a CJK closing bracket or quote glued to the next
 // character is read as an opening mark, so the reference stays inside it.

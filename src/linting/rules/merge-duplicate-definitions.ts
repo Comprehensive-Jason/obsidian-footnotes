@@ -1,4 +1,4 @@
-import { normalizeEol, removeLineRanges } from "../../parsing/markdown-scan";
+import { normalizeEol, removeLineRanges } from "../../parsing/line-edits";
 import { Definition, readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";

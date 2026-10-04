@@ -2,11 +2,8 @@
 // GLM 5.3 Flash cycle 11 hunt of 2026-09-16 (OpenCode worktree glm-cycle-7). 3 of 5 tests carry it.fails; the controls do not.
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG: the scan's blockquote state records where an indented chunk may
 // OPEN as quoted code (the `quote.boundary` flag: "quote content indented
@@ -58,13 +55,12 @@ const docLevel = "```\ncode\n```\n    chunk[^9]";
 describe("an indented quoted chunk directly under a quoted fence's closer", () => {
     it("is protected quoted code, like the document-level control", () => {
         const lines = quoted.split("\n");
-        expect(scanDocument(lines).isProtected).toEqual([true, true, true, true]);
+        expect(readNote(lines).protectedLines).toEqual([true, true, true, true]);
     });
 
     it("a reference-shaped string in it does not reserve a number", () => {
         const lines = quoted.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
+        const masked = [...readNote(lines).maskedLines()];
         // the [^9] sits inside what Reading view renders as a code block,
         // so it must be masked dead and reserve nothing (a protected line
         // is blotted end to end, quote marker included; the pin's original
@@ -77,9 +73,7 @@ describe("an indented quoted chunk directly under a quoted fence's closer", () =
         // the internal inconsistency: definitionStartLines already treats
         // the quoted fence closer as a block boundary
         const lines = "> ```\n> code\n> ```\n> [^1]: x".split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(definitionStartLines(lines, scan, (i) => masked[i])).toEqual([
+        expect(readNote(lines).labelLines).toEqual([
             false,
             false,
             false,
@@ -88,7 +82,7 @@ describe("an indented quoted chunk directly under a quoted fence's closer", () =
     });
 
     it("control: a chunk after a column-0 fence's closer is code (pinned)", () => {
-        expect(scanDocument(docLevel.split("\n")).isProtected).toEqual([
+        expect(readNote(docLevel.split("\n")).protectedLines).toEqual([
             true,
             true,
             true,
@@ -98,6 +92,6 @@ describe("an indented quoted chunk directly under a quoted fence's closer", () =
 
     it("control: a chunk after a quoted heading's boundary is code (pinned)", () => {
         const lines = "> # H\n>     chunk".split("\n");
-        expect(scanDocument(lines).isProtected).toEqual([false, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, true]);
     });
 });

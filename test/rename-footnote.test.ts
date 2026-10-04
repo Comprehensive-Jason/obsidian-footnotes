@@ -12,16 +12,9 @@ import {
     renameTargetAtCursor,
 } from "../src/commands/rename-footnote";
 import { simulateChanges } from "../src/editor/insertion-liveness";
-import { referenceOccurrences } from "../src/parsing/footnote-grammar";
 import { readNote } from "../src/parsing/note-reading";
-import {
-    definitionLabelWithName,
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskedLineAt,
-    normalizeEol,
-    scanDocument,
-} from "../src/parsing/markdown-scan";
+import { definitionLabelWithName } from "../src/parsing/label-shapes";
+import { normalizeEol } from "../src/parsing/line-edits";
 
 import { fakeEditor as sharedFakeEditor, FakeEditor } from "./helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "./helpers/fake-plugin";
@@ -228,9 +221,9 @@ describe("rename property", () => {
                         const doc = fakeEditor(lines);
                         const target = renameTargetAtCursor(doc, { line, ch });
                         if (target === null) return;
-                        const scan = scanDocument(lines);
+                        const reading = readNote(lines);
                         expect(
-                            scan.isProtected[line],
+                            reading.protectedLines[line],
                             `offered a rename inside protected text at ${line}:${ch}`,
                         ).toBe(false);
                         const folded = target.toLowerCase();
@@ -243,16 +236,10 @@ describe("rename property", () => {
                         // as a label, which only passed because every other
                         // lazy shape carries a real reference somewhere else
                         // (found by a 4000-run soak, 2026-09-12)
-                        const starts = definitionStartLines(lines, scan, (i) =>
-                            maskedLineAt(lines, i),
-                        );
+                        const starts = readNote(lines).labelLines;
                         for (let i = 0; i < lines.length; i++) {
                             if (!lines[i].includes("[^")) continue;
-                            for (const occurrence of referenceOccurrences(
-                                lines[i],
-                                maskedLineAt(lines, i),
-                                starts[i],
-                            )) {
+                            for (const occurrence of readNote(lines).referencesOn(i)) {
                                 names.add(occurrence.name.toLowerCase());
                             }
                         }
@@ -269,7 +256,7 @@ describe("rename property", () => {
                             if (!starts[i]) continue;
                             const hit = definitionLabelWithName(
                                 lines[i],
-                                maskedLineAt(lines, i),
+                                readNote(lines).maskedLine(i),
                             );
                             if (hit) names.add(hit.name.toLowerCase());
                         }
@@ -312,10 +299,7 @@ describe("rename property", () => {
                         const names: string[] = [];
                         for (let i = 0; i < lines.length; i++) {
                             if (!lines[i].includes("[^")) continue;
-                            for (const occurrence of referenceOccurrences(
-                                lines[i],
-                                maskedLineAt(lines, i),
-                            )) {
+                            for (const occurrence of readNote(lines).referencesOn(i)) {
                                 names.push(occurrence.name);
                             }
                         }
@@ -344,19 +328,15 @@ describe("rename property", () => {
                         const oldFolded = oldName.toLowerCase();
                         const newFolded = newName.toLowerCase();
                         if (oldFolded === newFolded) return;
-                        const scan = scanDocument(after);
                         for (let i = 0; i < after.length; i++) {
                             if (!after[i].includes("[^")) continue;
-                            for (const occurrence of referenceOccurrences(
-                                after[i],
-                                maskedLineAt(after, i),
-                            )) {
+                            for (const occurrence of readNote(after).referencesOn(i)) {
                                 expect(
                                     occurrence.name.toLowerCase(),
                                 ).not.toBe(oldFolded);
                             }
                         }
-                        for (const block of findDefinitionBlocks(after, scan)) {
+                        for (const block of readNote(after).blocks) {
                             expect(block.name.toLowerCase()).not.toBe(oldFolded);
                         }
                         // and renaming BACK is possible: the old name is free

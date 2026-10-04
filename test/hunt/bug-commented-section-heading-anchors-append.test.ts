@@ -6,7 +6,7 @@ import { fakePlugin } from "../helpers/fake-plugin";
 import { buildDefinitionAppend } from "../../src/commands/definition-append";
 import { docContext } from "../../src/editor/doc-context";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
-import { scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG: a section heading the user has commented out with "%%" still acts as
 // the anchor for footnote definitions, so the plugin writes inside the
@@ -48,7 +48,7 @@ describe("bug: a commented-out section heading still anchors the definition appe
         const lines = ["alpha[^1].", "", "%%", "# Footnotes", "%%", "", "tail"];
         const doc = fakeEditor(lines, { wholeDoc: true });
         const { change } = buildDefinitionAppend(docContext(doc), "1", true, headingPlugin());
-        expect(scanDocument(lines).inCommentBlock[change.from.line]).toBe(false);
+        expect(readNote(lines).commentLines[change.from.line]).toBe(false);
     });
 
     it("move-to-bottom leaves the commented-out heading in one piece", () => {

@@ -64,8 +64,8 @@ import { fakePlugin } from "../helpers/fake-plugin";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { lintFootnotes } from "../../src/linting/linter";
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // everything off except the one rule under test
 const only = (options: {
@@ -82,17 +82,17 @@ const only = (options: {
 describe("an interrupting block ends the definition, so the chunk under it is code", () => {
     it("after a one-line HTML comment", () => {
         const lines = ["[^1]: body", "<!-- c -->", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, true, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, true, true]);
     });
 
     it("after a multi-line HTML comment block", () => {
         const lines = ["[^1]: body", "<!-- c", "-->", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, true, true, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, true, true, true]);
     });
 
     it("after a type-6 HTML block (<div>) closed by a blank line", () => {
         const lines = ["[^1]: body", "<div>", "x", "", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, true, true, false, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, true, true, false, true]);
     });
 
     it("after a $$ display-math block", () => {
@@ -100,43 +100,41 @@ describe("an interrupting block ends the definition, so the chunk under it is co
         // part of its code block (the note reading, runtime swap step 2,
         // 2026-10-03)
         const lines = ["[^1]: body", "$$", "x", "$$", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, true, true, true, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, true, true, true, true]);
     });
 
     it("after a comment that interrupts the definition's lazy continuation", () => {
         const lines = ["[^1]: body", "lazy cont", "<!-- c -->", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, true, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, true, true]);
     });
 
     it("after a quoted comment inside a quoted definition", () => {
         // the same shape one container deeper: micromark renders the
         // quoted chunk as code inside the blockquote
         const lines = ["> [^1]: body", "> <!-- c -->", ">     chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, true, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, true, true]);
     });
 
     it("control: the same chunk after a comment under PROSE is already code", () => {
         const lines = ["para", "<!-- c -->", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, true, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, true, true]);
     });
 
     it("control: the chunk after the definition's blank gap IS its continuation", () => {
         const lines = ["[^1]: body", "", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, false]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, false]);
     });
 
     it("control: a region opened at the continuation indent stays definition content", () => {
         // Sol bug #3: a "    $$" on a continuation line is content the
         // definition owns, and the definition carries on after its closer
         const lines = ["[^1]: body", "    $$", "    x", "    $$", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, true, true, true, false]);
+        expect(readNote(lines).protectedLines).toEqual([false, true, true, true, false]);
     });
 
     it("the reference in the chunk counts as live (one-line comment case)", () => {
         const lines = ["[^1]: body", "<!-- c -->", "    chunk[^73]"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(referenceOccurrences(lines[2], masked[2])).toEqual([]);
+        expect(readNote(lines).referencesOn(2)).toEqual([]);
     });
 
     it("reindex renumbers the dead reference inside the code chunk", () => {

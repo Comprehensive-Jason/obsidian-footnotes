@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
-import { scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // What a user sees: a footnote named "a<!--b" renders and binds in the note
 // (micromark, the project's own oracle parser, carves the "[^...]" label
@@ -50,7 +50,7 @@ describe("an unclosed comment opener inside a footnote name", () => {
         // the phantom unclosed comment protects the rest of the note, which
         // is also what paralyses move-to-bottom (endsProtected) on it
         const doc = "see[^a<!--b] here.\n\ntail\n\n[^a<!--b]: body";
-        expect(scanDocument(doc.split("\n")).isProtected).toEqual([
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([
             false,
             false,
             false,

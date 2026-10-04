@@ -22,7 +22,7 @@ import { App, MarkdownView } from "obsidian";
 
 import { showNotice } from "../editor/notice";
 import { viewEditor } from "../editor/obsidian-internals";
-import { normalizeEol } from "../parsing/markdown-scan";
+import { normalizeEol } from "../parsing/line-edits";
 import { forgetReadings, readNote } from "../parsing/note-reading";
 
 /** How many timed runs each measurement takes, after one untimed warm-up run. */

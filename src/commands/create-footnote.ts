@@ -36,7 +36,7 @@ import {
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
 import { lintAfterFootnoteCreation } from "../linting/linter";
-import { cellReading, CellTextColumn, maskInlineRegions, maskedLineAt } from "../parsing/markdown-scan";
+import { cellReading, CellTextColumn, maskInlineRegions } from "../parsing/cell-reading";
 import { warnDefinitionCaretIfInside, warnTableEdgeCaretIfOutside, warnProtectedCaretIfInside } from "./press-guards";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
@@ -699,7 +699,7 @@ export function createFootnoteReference(
     if (
         inEmpty !== null &&
         emptyReferenceStart(
-            maskedLineAt(ctx.lines, cursorPosition.line),
+            ctx.maskedLine(cursorPosition.line),
             cursorPosition.ch,
         ) !== null
     ) {

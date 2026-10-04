@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (wrong output): an HTML comment or math block opened on a list
 // item's own line ("- <!--", "- $$") and never closed is read as plain
@@ -22,14 +22,12 @@ import { definitionStartLines, maskProtectedLines, scanDocument } from "../../sr
 // end of the note"). The same opener on the item's continuation line is
 // already read that way.
 
-// Every live reference in `doc`, as "line:name", and the scan.
+// Every live reference in `doc`, as "line:name", and the reading.
 function facts(doc: string) {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    const live = lines.flatMap((l, i) => referenceOccurrences(l, masked[i], starts[i]).map((o) => `${i}:${o.name}`));
-    return { scan, live };
+    const reading = readNote(lines);
+    const live = lines.flatMap((_, i) => readNote(lines).referencesOn(i).map((o) => `${i}:${o.name}`));
+    return { reading, live };
 }
 
 describe("an unclosed region opened on a list item's marker line", () => {
@@ -38,6 +36,6 @@ describe("an unclosed region opened on a list item's marker line", () => {
     });
 
     it.fails("'- $$' unclosed runs on: the line under it is protected and plain[^1] is hidden", () => {
-        expect(facts("- $$\n  x = 1\nplain[^1]").scan.isProtected).toEqual([false, true, true]);
+        expect(facts("- $$\n  x = 1\nplain[^1]").reading.protectedLines).toEqual([false, true, true]);
     });
 });

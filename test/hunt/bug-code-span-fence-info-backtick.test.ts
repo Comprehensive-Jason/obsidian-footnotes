@@ -1,8 +1,7 @@
 // Imported from the Kimi K3 cycle 5 hunt of 2026-09-16 (OpenCode worktree); 2 of 4 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
 
 // CommonMark 4.5: the info string of a BACKTICK fence may not itself
 // contain a backtick, so "``` `x`" is not a fence at all - it is
@@ -38,8 +37,7 @@ const doc = "para `code [^1]\n``` `x`";
 describe("a code span closing inside a fence-shaped line with a backtick in its info", () => {
     it("the masked twin blots the span across both lines", () => {
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
+        const masked = [...readNote(lines).maskedLines()];
         // line 0's tail is code, line 1 is code through the closing "`"
         expect(masked[0]).toBe("para \0\0\0\0\0\0\0\0\0\0");
         // "``` `x`": the span closes at the single backtick (index 4),
@@ -50,23 +48,19 @@ describe("a code span closing inside a fence-shaped line with a backtick in its 
 
     it("the reference inside the span is dead", () => {
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(referenceOccurrences(lines[0], masked[0])).toEqual([]);
+        expect(readNote(lines).referencesOn(0)).toEqual([]);
     });
 
     it("control: a real fence line does stop the span (the reference stays live)", () => {
         const lines = ["para `code [^1]", "```"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
+        const masked = [...readNote(lines).maskedLines()];
         expect(masked[0]).toBe("para `code [^1]");
-        expect(referenceOccurrences(lines[0], masked[0]).map((o) => o.name)).toEqual(["1"]);
+        expect(readNote(lines).referencesOn(0).map((o) => o.name)).toEqual(["1"]);
     });
 
     it("control: a tilde fence may hold a backtick in its info, so it does stop the span", () => {
         const lines = ["para `code [^1]", "~~~ `x`"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
+        const masked = [...readNote(lines).maskedLines()];
         expect(masked[0]).toBe("para `code [^1]");
     });
 });

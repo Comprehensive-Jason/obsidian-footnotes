@@ -2,8 +2,8 @@
 // REFUTED 2026-09-16 (GLM hunt cycle 6, probed in Reading view): footnote 1 renders as "body", the link reference definition works, and "more" is a paragraph of its own, so the LRD line ends the definition, as the walker reads it.
 import { describe, expect, it } from "vitest";
 
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
+import { readNote } from "../../src/parsing/note-reading";
 
 // SPEC QUESTION (GLM hunt, cycle after 9, 2026-09-16): a column-0 link
 // reference definition line ("[foo]: /url") directly under a footnote
@@ -50,8 +50,7 @@ const doc = "[^1]: body\n[foo]: /url\nmore\n\nuse[^1]";
 describe("spec: does a column-0 link reference definition line lazily continue a definition?", () => {
     it("REFUTED: the link reference definition ends the footnote, so the block is the label line alone", () => {
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        expect(findDefinitionBlocks(lines, scan)).toEqual([
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
             expect.objectContaining({ name: "1", start: 0, end: 0 }),
         ]);
     });

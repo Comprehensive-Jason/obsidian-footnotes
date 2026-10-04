@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote, insertInlineFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import { fakeEditor, FakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { resetNotices } from "../helpers/notices";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (wrong output on default settings): a press with the caret on the
 // empty line right under a definition writes the new reference onto that
@@ -52,7 +52,7 @@ function pl(doc: FakeEditor) {
 /** Every line number that sits inside some definition block, its label line included. */
 function blockLines(lines: string[]): Set<number> {
     const inside = new Set<number>();
-    for (const b of findDefinitionBlocks(lines, scanDocument(lines))) {
+    for (const b of readNote(lines).blocks) {
         for (let i = b.start; i <= b.end; i++) inside.add(i);
     }
     return inside;
@@ -60,7 +60,7 @@ function blockLines(lines: string[]): Set<number> {
 
 /** Does some definition block hold a reference or an inline footnote in its text (after its own label)? */
 function blockHoldsFootnote(lines: string[]): boolean {
-    return findDefinitionBlocks(lines, scanDocument(lines)).some((b) =>
+    return readNote(lines).blocks.some((b) =>
         lines.slice(b.start, b.end + 1).some((l, k) => {
             const text = k === 0 ? l.replace(/^\[\^[^\]]+\]:/, "") : l;
             return /\[\^[^\]]+\](?!:)|\^\[/.test(text);

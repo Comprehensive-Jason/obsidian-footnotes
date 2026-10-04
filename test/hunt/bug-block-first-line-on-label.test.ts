@@ -10,7 +10,7 @@ import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-foo
 import { TableSelectionNotice } from "../../src/commands/selection-footnote";
 import { lintFootnotes } from "../../src/linting/linter";
 import { orphanedFootnoteReferenceNames } from "../../src/linting/rules/remove-orphaned-references";
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // Jason's manual pass, sheets 04 and 05 (2026-09-09).
 //
@@ -61,7 +61,7 @@ function fakePlugin(doc: FakeEditor): FootnotePlugin {
 }
 
 const blocksOf = (lines: string[]) =>
-    findDefinitionBlocks(lines, scanDocument(lines)).map((b) => `${b.name}@${b.start}-${b.end}`);
+    readNote(lines).blocks.map((b) => `${b.name}@${b.start}-${b.end}`);
 
 describe("a selection whose first line is a block construct", () => {
     beforeEach(resetNotices);

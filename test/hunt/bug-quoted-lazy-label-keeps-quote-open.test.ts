@@ -45,42 +45,40 @@
 
 import { describe, expect, it } from "vitest";
 
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 const LAZY = ["> para", "> [^1]: lazy", ">", ">     chunk[^73]"];
 
 describe("a quoted lazy label does not keep the quote in a definition", () => {
     it("the indented quoted chunk after the blank quote line is quoted code", () => {
-        expect(scanDocument(LAZY).isProtected).toEqual([false, false, false, true]);
+        expect(readNote(LAZY).protectedLines).toEqual([false, false, false, true]);
     });
 
     it("so the reference inside the chunk is dead text", () => {
         const lines = LAZY;
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(referenceOccurrences(lines[3], masked[3]).map((o) => o.name)).toEqual([]);
+        expect(readNote(lines).referencesOn(3).map((o) => o.name)).toEqual([]);
     });
 
     it("control: the same chunk after a plain quoted paragraph is already quoted code", () => {
         const lines = ["> para", ">", ">     chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, true]);
     });
 
     it("control: directly after the lazy label line the chunk is a lazy continuation (live)", () => {
         // a blank quote line is what ends the paragraph; without it the
         // indented line is its lazy continuation, and live is correct
         const lines = ["> para", "> [^1]: lazy", ">     chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, false]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, false]);
     });
 
     it("control: a REAL quoted definition keeps the chunk live, as pinned in cycle 5", () => {
         const lines = ["> [^1]: body", ">", ">     chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, false]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, false]);
     });
 
     it("control: a real quoted definition's lazy continuation then chunk stays live", () => {
         const lines = ["> [^1]: body", "> cont", ">", ">     chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, false, false]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, false, false]);
     });
 });

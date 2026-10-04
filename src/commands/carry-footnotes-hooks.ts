@@ -11,7 +11,7 @@ import { replaceMinimal } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
 import { lintAfterFootnoteCreation, withEmptySectionHeadingRemoved } from "../linting/linter";
 import { quotedReference } from "../parsing/footnote-grammar";
-import { normalizeEol, restoreEol } from "../parsing/markdown-scan";
+import { normalizeEol, restoreEol } from "../parsing/line-edits";
 import {
     CarriedDefinition,
     CarriedDefinitions,
@@ -383,13 +383,13 @@ function asOwnParagraph(lines: string[], at: EditorPosition, text: string): { te
     const landed = (pasted: string) => contextOfLines(simulateChanges(lines, [{ from: at, text: pasted }]));
     if (!insideDefinition(before, at.line)) {
         const joined = landed(text);
-        if (insideDefinition(joined, at.line) && !joined.definitionStarts()[at.line]) text = "\n" + text;
+        if (insideDefinition(joined, at.line) && joined.reading().labelOn(at.line) === null) text = "\n" + text;
     }
     const below = at.line + 1;
     const demotes =
         below < lines.length &&
-        before.definitionStarts()[below] &&
-        !landed(text).definitionStarts()[below + text.split("\n").length - 1];
+        before.reading().labelOn(below) !== null &&
+        landed(text).reading().labelOn(below + text.split("\n").length - 1) === null;
     return { text, after: demotes ? "\n" : "" };
 }
 

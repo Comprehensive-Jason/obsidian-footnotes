@@ -1,6 +1,6 @@
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { nameForBody } from "../../parsing/footnote-grammar";
-import { definitionCuts, removeLineRanges } from "../../parsing/markdown-scan";
+import { definitionCuts, removeLineRanges } from "../../parsing/line-edits";
 import { keepsEveryFootnote, NoteReading, readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";

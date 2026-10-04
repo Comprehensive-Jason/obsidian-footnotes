@@ -1,10 +1,10 @@
 // Imported from the GLM sweep of 2026-09-13 (T3 Code worktree); 9 of 11 tests were red there and carry it.fails.
 import { describe, expect, it } from "vitest";
 
-import { maskProtectedLines, protectedLines, scanDocument } from "../../src/parsing/markdown-scan";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
+
 import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after-punctuation";
 import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove-orphaned-references";
+import { readNote } from "../../src/parsing/note-reading";
 
 // WHAT A USER SEES. A code block indented under a quoted heading or a
 // quoted thematic break ("> # Notes" then ">     code here"), or under a
@@ -38,7 +38,7 @@ import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove
 // must stay live: lazy continuation applies to paragraphs, and it does.
 
 function liveFlags(lines: string[]): boolean[] {
-    return protectedLines(lines).map((p) => !p);
+    return readNote(lines).protectedLines.map((p) => !p);
 }
 
 describe("indented code after a quoted heading or thematic break is misread as live text", () => {
@@ -77,9 +77,7 @@ describe("indented code after a quoted heading or thematic break is misread as l
 
     it("the reference-shaped text in that region is a fake, not an occurrence", () => {
         const lines = ["> # Notes", ">     see [^1] in code"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(referenceOccurrences(lines[1], masked[1])).toEqual([]);
+        expect(readNote(lines).referencesOn(1)).toEqual([]);
     });
 });
 

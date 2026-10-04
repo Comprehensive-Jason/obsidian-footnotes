@@ -2,7 +2,8 @@
 // REFUTED 2026-09-16 (Kimi hunt cycle 4, probed in Reading view): GFM's cell-count rule does not apply in Obsidian; a delimiter row with fewer or more cells than the header still makes a table, so the plugin's shape-only check is right.
 import { describe, expect, it } from "vitest";
 
-import { tableRowLinesOf, definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // spec question: is a run of pipe lines whose delimiter row has a
 // DIFFERENT number of cells than its header row a table in Obsidian?
@@ -34,16 +35,14 @@ describe("spec question: a delimiter row with fewer cells than the header", () =
     const doc = "| a | b |\n| --- |\n[^1]: x";
 
     it("the plugin reads the run as a table (the premise to verify)", () => {
-        expect(tableRowLinesOf(doc.split("\n")).slice(0, 2)).toEqual([true, true]);
+        expect(readNote(doc.split("\n")).tableRowLines.slice(0, 2)).toEqual([true, true]);
     });
 
     it("REFUTED: Obsidian renders the run as a table anyway, so the label under it is a definition", () => {
         // fewer or more delimiter cells than the header, both render as a
         // table with the footnote under it working (probed 2026-09-16)
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+        const starts = readNote(lines).labelLines;
         expect(starts[2]).toBe(true);
     });
 });

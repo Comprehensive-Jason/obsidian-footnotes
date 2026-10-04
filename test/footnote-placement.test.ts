@@ -10,12 +10,7 @@ import {
 import FootnotePlugin from "../src/main";
 import { lintFootnotes } from "../src/linting/linter";
 import { footnoteAfterPunctuation } from "../src/linting/rules/footnote-after-punctuation";
-import {
-    ClosingMarkChars,
-    FootnotePlacement,
-    referenceLandingAfter,
-    TrailingPunctuationChars,
-} from "../src/parsing/markdown-scan";
+import { ClosingMarkChars, FootnotePlacement, referenceLandingAfter, TrailingPunctuationChars } from "../src/parsing/landing";
 
 // Footnote reference placement relative to punctuation (T5 of the 2026-09
 // feature round; Jason's ruling 2026-09-20: one global three-way setting,

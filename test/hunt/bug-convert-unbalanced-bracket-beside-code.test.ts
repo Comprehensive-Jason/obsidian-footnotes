@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { convertNormalFootnotesToInline } from "../../src/commands/convert-footnotes";
-import { inlineFootnoteSpans } from "../../src/parsing/footnote-grammar";
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (wrong output): converting a footnote whose text has a lone "[" and a
 // "]" inside a code span writes something that is no longer a footnote.
@@ -29,8 +28,6 @@ describe("an unbalanced '[' outside code next to a ']' inside code", () => {
     it("the output is still an inline footnote to the plugin's own scanner", () => {
         const out = convertNormalFootnotesToInline("x[^1]\n\n[^1]: see [note and `a]`").markdown;
         // Today out is "x^[see [note and `a]`]", which the scanner reads as no inline footnote.
-        const lines = out.split("\n");
-        const masked = maskProtectedLines(lines, scanDocument(lines));
-        expect(inlineFootnoteSpans(masked[0])).toHaveLength(1);
+        expect(readNote(out.split("\n")).inlineNotesOn(0)).toHaveLength(1);
     });
 });

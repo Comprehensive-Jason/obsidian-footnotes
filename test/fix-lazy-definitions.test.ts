@@ -12,12 +12,7 @@ import { lintFootnotes, lintOptionsFromSettings, lintRulesAllDisabled } from "..
 import { fixLazyDefinitions, fixLazyDefinitionsRule } from "../src/linting/rules/fix-lazy-definitions";
 import { lazyDefinitionLabelNames } from "../src/linting/rules/remove-orphaned-references";
 import { footnoteRules } from "../src/linting/rules";
-import {
-    definitionStartLines,
-    lazyDefinitionLabelLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../src/parsing/markdown-scan";
+import { lazyDefinitionLabelLines } from "../src/parsing/label-shapes";
 
 // "Fix definitions hidden by a missing blank line" (Jason, 2026-09-09): a
 // "[^x]:" directly under a prose line is lazy paragraph text to Obsidian
@@ -29,9 +24,7 @@ import {
 
 const lazyIn = (doc: string): string[] => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return lazyDefinitionLabelNames(lines, scan, masked, definitionStartLines(lines, scan, (i) => masked[i]));
+    return lazyDefinitionLabelNames(lines);
 };
 
 describe("fixLazyDefinitions inserts the blank line a hidden definition needs", () => {
@@ -91,8 +84,8 @@ describe("fixLazyDefinitions inserts the blank line a hidden definition needs", 
         // Obsidian reads the note"
         const protectedTexts = (text: string): string => {
             const lines = text.split(/\r?\n/);
-            const scan = scanDocument(lines);
-            return lines.filter((_, i) => scan.isProtected[i]).sort().join("\u0000");
+            const reading = readNote(lines);
+            return lines.filter((_, i) => reading.protectedLines[i]).sort().join("\u0000");
         };
         fc.assert(
             fc.property(docArb, (doc) => {
@@ -105,14 +98,7 @@ describe("fixLazyDefinitions inserts the blank line a hidden definition needs", 
                 // its blank line must change the set of protected lines or
                 // leave the label undefined.
                 const fixedLines = fixed.split(/\r?\n/);
-                const fixedScan = scanDocument(fixedLines);
-                const fixedMasked = maskProtectedLines(fixedLines, fixedScan);
-                const leftover = lazyDefinitionLabelLines(
-                    fixedLines,
-                    fixedScan,
-                    fixedMasked,
-                    definitionStartLines(fixedLines, fixedScan, (i) => fixedMasked[i]),
-                );
+                const leftover = lazyDefinitionLabelLines(fixedLines);
                 for (const at of leftover) {
                     const markers = (/^((?: {0,3}>[ \t]?)*)/.exec(fixedLines[at])?.[1] ?? "").trimEnd();
                     const trialLines = [...fixedLines.slice(0, at), markers, ...fixedLines.slice(at)];

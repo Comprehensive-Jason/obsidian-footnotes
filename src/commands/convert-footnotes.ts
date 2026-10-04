@@ -1,4 +1,4 @@
-import { normalizeEol, removeLineRanges, restoreEol } from "../parsing/markdown-scan";
+import { normalizeEol, removeLineRanges, restoreEol } from "../parsing/line-edits";
 import { Definition, readNote } from "../parsing/note-reading";
 import { linesReadDifferently } from "../linting/rules/remove-orphaned-definitions";
 import { readsDifferently } from "../linting/rules/remove-orphaned-references";
@@ -233,9 +233,9 @@ const nothingToConvert: ConversionToNormal = { converted: 0, definitions: 0, mer
  * Left alone, and counted in the result: an empty inline footnote (a
  * definition with no body is a footnote still being written), and one
  * inside a definition's body, where a reference would nest footnotes
- * (ADR 1). A body that runs onto the next line never closes on its line,
- * so the scanner does not see it and it stays as it is. Protected text is
- * never read.
+ * (ADR 1). One whose body runs onto the next line is not converted: the
+ * note reading lists only the inline footnotes that start and end on one
+ * line. Protected text is never read.
  *
  * Then the lint-on-creation trigger runs when that setting is on, as it
  * does after every press that creates a footnote.

@@ -2,7 +2,8 @@
 // RESOLVED 2026-09-16 (Kimi hunt cycle 4, probed in Reading view): the run renders as a paragraph with literal pipes and the label under it is lazy, so a comment-only line is paragraph text for tables as well; tableRowLinesOf now treats only a lone "%%" (a block opener) as a boundary.
 import { describe, expect, it } from "vitest";
 
-import { tableRowLinesOf, definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // spec question: can a GFM table start directly under an Obsidian
 // comment-only line ("%% c %%")?
@@ -37,23 +38,19 @@ describe("spec question: a table header directly under a %% comment-only line", 
     const doc = "%% c %%\n| a | b |\n| --- | --- |\n[^1]: x";
 
     it("the table reader no longer allows the table (Reading view: literal pipes)", () => {
-        expect(tableRowLinesOf(doc.split("\n"))[1]).toBe(false);
+        expect(readNote(doc.split("\n")).tableRowLines[1]).toBe(false);
     });
 
     it("the definition reader agrees: the label under the run is lazy", () => {
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+        const starts = readNote(lines).labelLines;
         expect(starts[3]).toBe(false);
     });
 
     it("if the comment line is a paragraph line for tables too, the run is no table and the label is lazy", () => {
-        expect(tableRowLinesOf(doc.split("\n"))[1]).toBe(false);
+        expect(readNote(doc.split("\n")).tableRowLines[1]).toBe(false);
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+        const starts = readNote(lines).labelLines;
         expect(starts[3]).toBe(false);
     });
 });

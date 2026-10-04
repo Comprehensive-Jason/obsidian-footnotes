@@ -2,8 +2,8 @@
 // RESOLVED 2026-09-16 (GLM hunt cycle 3, probed in Reading view): "![^1](url)" and "![alt[^1]](url)" render an embed with no footnote reference and no definition entry, so an image's alt text is dead and the masker blots it.
 import { describe, expect, it } from "vitest";
 
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // SPEC QUESTION: is a "[^1]" inside an IMAGE's alt text - "![^1](url)" -
 // a live footnote reference in Reading view?
@@ -41,10 +41,8 @@ import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-sca
 
 const refsOf = (doc: string): string[] => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return lines.flatMap((line, i) =>
-        referenceOccurrences(line, masked[i]).map((o) => o.name),
+    return lines.flatMap((_, i) =>
+        readNote(lines).referencesOn(i).map((o) => o.name),
     );
 };
 

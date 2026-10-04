@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { nestedFootnoteDefinitionNames } from "../src/linting/lint-alerts";
-import { maskProtectedLines, scanDocument } from "../src/parsing/markdown-scan";
 
 // The nested-footnote lint alert (2026-08-24): nesting is prevented at
 // creation plugin-wide, and hand-typed nesting can't be auto-fixed
@@ -12,12 +11,7 @@ import { maskProtectedLines, scanDocument } from "../src/parsing/markdown-scan";
 
 function names(doc: string): string[] {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    return nestedFootnoteDefinitionNames(
-        lines,
-        scan,
-        maskProtectedLines(lines, scan),
-    );
+    return nestedFootnoteDefinitionNames(lines);
 }
 
 describe("nestedFootnoteDefinitionNames", () => {

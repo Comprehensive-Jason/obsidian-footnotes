@@ -4,12 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import { orphanedFootnoteReferenceNames } from "../../src/linting/rules/remove-orphaned-references";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // A footnote label may be indented up to three spaces past the margin of
 // the block it sits in. For a label inside a LIST ITEM that margin is the
@@ -42,9 +37,7 @@ import {
 
 function startsOf(doc: string): boolean[] {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return definitionStartLines(lines, scan, (i) => masked[i]);
+    return readNote(lines).labelLines;
 }
 
 describe("a definition label indented into a list item (relative indent 1-3)", () => {
@@ -62,10 +55,7 @@ describe("a definition label indented into a list item (relative indent 1-3)", (
 
     it.fails("the block walker finds the block, so the reference is not an orphan", () => {
         const lines = "- item\n\n    [^1]: def\n\nuse[^1]".split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-        expect(findDefinitionBlocks(lines, scan, masked, starts).map((b) => b.name)).toEqual(["1"]);
+        expect(readNote(lines).blocks.map((b) => b.name)).toEqual(["1"]);
     });
 
     it("the missing-definition alert stays silent about it", () => {
@@ -85,7 +75,7 @@ describe("a definition label indented into a list item (relative indent 1-3)", (
     it("control: dash item, relative indent 4 (absolute 6) is indented code to both parsers", () => {
         const doc = "- item\n\n      [^1]: def\n\nuse[^1]";
         const lines = doc.split("\n");
-        expect(scanDocument(lines).isProtected[2]).toBe(true);
+        expect(readNote(lines).protectedLines[2]).toBe(true);
         expect(startsOf(doc)[2]).toBe(false);
     });
 });

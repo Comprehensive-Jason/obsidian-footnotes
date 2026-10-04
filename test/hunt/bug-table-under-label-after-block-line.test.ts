@@ -3,16 +3,11 @@
 // GLM 5.3 Flash cycle 11 hunt of 2026-09-16 (OpenCode worktree glm-cycle-11). 6 of 9 tests carry it.fails; the controls do not.
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-    tableRowLinesOf,
-} from "../../src/parsing/markdown-scan";
+
 import { lintFootnotes } from "../../src/linting/linter";
 import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG: the table reader's paragraphTextAbove (tableRowLinesOf in
 // markdown-scan.ts) judges "is the line above plain paragraph text" from the
@@ -59,12 +54,12 @@ const opts = { fixPunctuation: true, fixLazyDefinitions: true, moveDefinitionsTo
 describe("a real table under a definition label that follows a block line", () => {
     it("under a label after an HTML comment block's closer line, the rows are a table", () => {
         const lines = "<!--\nc\n-->\n[^1]: body\n| a | b |\n| --- | --- |".split("\n");
-        expect(tableRowLinesOf(lines)).toEqual([false, false, false, false, true, true]);
+        expect(readNote(lines).tableRowLines).toEqual([false, false, false, false, true, true]);
     });
 
     it("under a label after a $$ math block's closer line", () => {
         const lines = "$$\nm\n$$\n[^1]: body\n| a | b |\n| --- | --- |".split("\n");
-        expect(tableRowLinesOf(lines)).toEqual([false, false, false, false, true, true]);
+        expect(readNote(lines).tableRowLines).toEqual([false, false, false, false, true, true]);
     });
 
     it("under a label after a wide-gap list item's protected code line", () => {
@@ -72,20 +67,17 @@ describe("a real table under a definition label that follows a block line", () =
         // under it is a definition, and the table under the definition starts
         const lines = "-      item\n[^1]: body\n| a | b |\n| --- | --- |".split("\n");
         // (the hunter's expectation called the code line a row; it is not)
-        expect(tableRowLinesOf(lines)).toEqual([false, false, true, true]);
+        expect(readNote(lines).tableRowLines).toEqual([false, false, true, true]);
     });
 
     it("under a label after a link reference definition line", () => {
         const lines = "[foo]: /url\n[^1]: body\n| a | b |\n| --- | --- |".split("\n");
-        expect(tableRowLinesOf(lines)).toEqual([false, false, true, true]);
+        expect(readNote(lines).tableRowLines).toEqual([false, false, true, true]);
     });
 
     it("the block walker keeps the table out of the definition block", () => {
         const lines = "<!--\nc\n-->\n[^1]: body\n| a | b |\n| --- | --- |".split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-        expect(findDefinitionBlocks(lines, scan, masked, starts).map((b) => [b.start, b.end])).toEqual([[3, 3]]);
+        expect(readNote(lines).blocks.map((b) => [b.start, b.end])).toEqual([[3, 3]]);
     });
 
     it("move-to-bottom leaves the table where it is and gathers only the definition", () => {
@@ -121,24 +113,22 @@ describe("a real table under a definition label that follows a block line", () =
         // the one case the table reader is right about: the label really is
         // lazy paragraph text there
         const lines = "prose\n[^1]: lazy label\n| a | b |\n| --- | --- |".split("\n");
-        expect(tableRowLinesOf(lines)).toEqual([false, false, false, false]);
+        expect(readNote(lines).tableRowLines).toEqual([false, false, false, false]);
     });
 
     it("control: a table under a definition with a blank line above the label is a table", () => {
         const lines = "prose\n\n[^1]: body\n| a | b |\n| --- | --- |".split("\n");
-        expect(tableRowLinesOf(lines)).toEqual([false, false, false, true, true]);
+        expect(readNote(lines).tableRowLines).toEqual([false, false, false, true, true]);
     });
 
     it("the block walker keeps the table out of the block under a wide-gap item's code line too", () => {
         const lines = "-      item\n[^1]: body\n| a | b |\n| --- | --- |".split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+        const starts = readNote(lines).labelLines;
         // the label is a lazy line of the item, so the note reading puts the
         // definition inside the item, on its one line: not a block that
         // moves (Jason's ruling 1, option a, 2026-10-03), and the table
         // stays out of it
-        expect(findDefinitionBlocks(lines, scan, masked, starts)).toEqual([]);
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([]);
         expect(starts[1]).toBe(true);
     });
 });

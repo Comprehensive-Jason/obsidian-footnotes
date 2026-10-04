@@ -2,7 +2,6 @@
 // GLM 5.3 Flash cycle 9 hunt of 2026-09-16 (this worktree); 5 red tests carry it.fails.
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { scanDocument, findDefinitionBlocks } from "../../src/parsing/markdown-scan";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import type { FootnotePluginSettings } from "../../src/settings";
 import { fixLazyDefinitions } from "../../src/linting/rules/fix-lazy-definitions";
@@ -10,6 +9,7 @@ import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-fo
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
+import { readNote } from "../../src/parsing/note-reading";
 
 // The block walker's lazyContinuation (src/parsing/markdown-scan.ts:2912)
 // decides which lines a definition block owns. The RESOLVED spec question
@@ -110,8 +110,7 @@ describe("the block walker ends a definition at paragraph lines Obsidian keeps i
     it("control: a plain lazy line IS owned (the resolved SPEC 3)", () => {
         const doc = "text[^1] here\n\n[^1]: body\nmore lazy";
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        expect(findDefinitionBlocks(lines, scan).map((b) => [b.start, b.end])).toEqual([[2, 3]]);
+        expect(readNote(lines).blocks.map((b) => [b.start, b.end])).toEqual([[2, 3]]);
         expect(moveFootnoteDefinitionsToBottom(doc, "")).toBe(doc);
     });
 });

@@ -4,7 +4,7 @@ import type FootnotePlugin from "../main";
 
 import { DocContext, docLines, insideDefinition } from "../editor/doc-context";
 import { InsertionVerdict } from "../editor/insertion-liveness";
-import { inlineNoteInCell, maskInlineRegions } from "../parsing/markdown-scan";
+import { inlineNoteInCell, maskInlineRegions } from "../parsing/cell-reading";
 import { NoteReading, readNote } from "../parsing/note-reading";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
@@ -63,9 +63,16 @@ export async function readInlineFootnoteFromClipboard(
  * works, and a lone bracket inside a code span, which Obsidian does not
  * count (a backslash there would show, since code keeps backslashes; hunt
  * 2026-10-02, pin bug-convert-code-span-bracket-escaped). Otherwise a
- * bracket would end the "^[...]" early and corrupt the note, so every bare
- * bracket is escaped instead. Brackets that were already escaped as \[
- * and \] keep the meaning they had.
+ * bracket or a backtick would end the "^[...]" early, or keep it from
+ * closing, and corrupt the note, so every bare bracket and backtick
+ * outside a code span is escaped instead: the inline footnote's reader
+ * skips over a code span whole and counts every other bracket, and a
+ * backtick with no partner opens a code span it never closes (so
+ * "see [note and `a]`" became "x^[see [note and `a]`]", no footnote at
+ * all to Obsidian; hunt 2026-10-02, pin
+ * bug-convert-unbalanced-bracket-beside-code, found again when its test
+ * asked the note reading, the runtime swap step 4, 2026-10-03). Characters
+ * that were already escaped keep the meaning they had.
  *
  * A trailing backslash left dangling would escape the wrapper's own closing
  * "]", so it is doubled into a literal backslash. Input that is empty, or
@@ -81,26 +88,11 @@ export function sanitizeInlineFootnoteContent(raw: string): string {
         text += "\\";
     }
     if (wrapReadsWhole(text)) return text;
-    let depth = 0;
-    for (let i = 0; i < text.length; i++) {
-        const c = text[i];
-        if (c === "\\") {
-            i++; // an escaped character cannot open or close anything
-        } else if (c === "[") {
-            depth++;
-        } else if (c === "]") {
-            depth--;
-            if (depth < 0) break;
-        }
-    }
-    if (depth !== 0) {
-        // leave \[ and \] exactly as the balance scan above read them, and
-        // escape only the bare brackets
-        text = text.replace(/\\[\s\S]|[[\]]/g, (m) =>
-            m.length === 2 ? m : `\\${m}`,
-        );
-    }
-    return text;
+    // the code spans of the text, as the note reading finds them
+    const code = readNote([text]).protectedSpans.filter((span) => span.kind === "inlineCode");
+    const inCode = (at: number) => code.some((span) => span.from <= at && at < span.to);
+    // an escaped character (a backslash and what follows) is left as it is
+    return text.replace(/\\[\s\S]|[[\]`]/g, (m: string, at: number) => (m.length === 2 || inCode(at) ? m : `\\${m}`));
 }
 
 /** Whether "^[text]" on a line of its own reads as one inline footnote from its "^" to its last "]", as the note reading finds it. */

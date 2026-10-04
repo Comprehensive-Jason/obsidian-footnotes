@@ -5,7 +5,7 @@ import { fakePlugin } from "../helpers/fake-plugin";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after-punctuation";
-import { referenceLandingAfter } from "../../src/parsing/markdown-scan";
+import { referenceLandingAfter } from "../../src/parsing/landing";
 
 // BUG: a link whose web address contains its own pair of round brackets,
 // like every Wikipedia disambiguation address, gets a footnote reference

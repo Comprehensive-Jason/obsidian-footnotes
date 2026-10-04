@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after-punctuation";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (wrong output): with footnote placement "after" (the default), the
 // lint moves a reference over a "!" that is directly followed by "(...)",
@@ -24,8 +23,7 @@ import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-sca
 // The names of the live references on `line` of `text`, as the plugin reads them.
 function liveNames(text: string, line = 0): string[] {
     const lines = text.split("\n");
-    const masked = maskProtectedLines(lines, scanDocument(lines));
-    return referenceOccurrences(lines[line], masked[line]).map((o) => o.name);
+    return readNote(lines).referencesOn(line).map((o) => o.name);
 }
 
 describe("after: the move never builds an image out of a '!' and a '(...)'", () => {

@@ -1,4 +1,4 @@
-import { definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../../parsing/markdown-scan";
+import { definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../../parsing/line-edits";
 import { Definition, linesReadAlike, readNote } from "../../parsing/note-reading";
 import { FootnoteRule } from "../rule";
 
@@ -149,7 +149,7 @@ export function orphanedFootnoteDefinitionNames(
  * routes to deleting orphaned definitions always agree, however long the
  * chain.
  */
-export function orphanedDefinitionBlocks(lines: string[], _scan?: object): Definition[] {
+export function orphanedDefinitionBlocks(lines: string[]): Definition[] {
     // a definition that is not removable is reported by the alert but
     // never cut, and orphanedBlocks already keeps it alive
     return orphanedBlocks(scanReferences(lines));

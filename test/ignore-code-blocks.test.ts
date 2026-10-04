@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { listExistingFootnoteDefinitions } from "../src/editor/doc-context";
 import { shouldJumpFromDefinitionToReference, shouldJumpFromReferenceToDefinition } from "../src/commands/navigation";
-import { computeNextFootnoteNumber, referenceOccurrences } from "../src/parsing/footnote-grammar";
-import { maskProtectedLines } from "../src/parsing/markdown-scan";
+import { computeNextFootnoteNumber } from "../src/parsing/footnote-grammar";
 
 import { fakeEditor } from "./helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "./helpers/fake-plugin";
+import { readNote } from "../src/parsing/note-reading";
 
 // Issue #41: [^x]-shaped text inside code - fenced blocks, inline code, or
 // frontmatter - must be invisible to every scan the insert/navigate
@@ -48,10 +48,9 @@ describe("listExistingFootnoteDefinitions ignores code", () => {
 // reference listing composed from the primitives the cascade uses (the old
 // dedicated lister died production-dead - 2026-08-11 review cleanliness)
 function referenceLocations(lines: string[]) {
-    const masked = maskProtectedLines(lines);
     const references: { footnote: string; lineNum: number; startIndex: number }[] = [];
     for (let i = 0; i < lines.length; i++) {
-        for (const occurrence of referenceOccurrences(lines[i], masked[i])) {
+        for (const occurrence of readNote(lines).referencesOn(i)) {
             references.push({
                 footnote: lines[i].slice(occurrence.start, occurrence.end),
                 lineNum: i,

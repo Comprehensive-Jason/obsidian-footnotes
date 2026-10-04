@@ -3,16 +3,11 @@
 // Imported from the GLM 5.3 Flash cycle 13 hunt of 2026-09-16 (OpenCode worktree); 4 of 5 tests carry it.fails: all marked by this hunt.
 import { describe, expect, it } from "vitest";
 
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
 import { lintFootnotes, LintOptions } from "../../src/linting/linter";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (GLM hunt cycle 13, 2026-09-16): the image-alt pre-blot in
-// maskLineRegions runs BEFORE the scan head reaches anything, and it feeds
+// maskLineRegions runs BEFORE the reading head reaches anything, and it feeds
 // the same blot() that drives ReferenceShapeIndex.lastBlotted. The index's
 // own contract ("Every blot so far lies behind i") is thereby broken: after
 // an image on the line, lastBlotted sits AHEAD of the head, so inside(i)
@@ -40,7 +35,7 @@ import {
 // Source of truth: the plugin's own recorded Reading-view probes (the
 // dollar-in-name and comment-in-name verifications cited above) + the
 // ReferenceShapeIndex invariant stated at
-// src/parsing/markdown-scan.ts ("Every blot so far lies behind i"), which
+// src/parsing/markdown-reading.ts ("Every blot so far lies behind i"), which
 // the image pre-blot violates.
 //
 // Settings involved: `Delete orphaned definitions` (the eating), Reindex
@@ -48,15 +43,15 @@ import {
 
 const ctxOf = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return { lines, scan, masked, starts };
+    const reading = readNote(lines);
+    const masked = [...readNote(lines).maskedLines()];
+    const starts = readNote(lines).labelLines;
+    return { lines, reading, masked, starts };
 };
 
 const namesOn = (doc: string, line: number): string[] => {
-    const { lines, masked, starts } = ctxOf(doc);
-    return referenceOccurrences(lines[line], masked[line], starts[line]).map(
+    const { lines } = ctxOf(doc);
+    return readNote(lines).referencesOn(line).map(
         (occurrence) => occurrence.name,
     );
 };
@@ -103,9 +98,9 @@ describe("an image on the line poisons the reference-shape index", () => {
         // NOT treated as literal text, so the phantom comment blots the
         // reference's tail and runs on to the next line
         const doc = "body [^c<!--d] ![i](u) tail\n--> end\n\n[^c<!--d]: def";
-        const { scan } = ctxOf(doc);
+        const { reading } = ctxOf(doc);
         expect(namesOn(doc, 0)).toEqual(["c<!--d"]);
         // the phantom comment must not swallow the following line either
-        expect(scan.isProtected[1]).toBe(false);
+        expect(reading.protectedLines[1]).toBe(false);
     });
 });

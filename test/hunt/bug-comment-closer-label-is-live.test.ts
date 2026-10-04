@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { lintFootnotes } from "../../src/linting/linter";
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (review A1, Jason confirmed live 2026-09-08): a definition-shaped
 // line that CLOSES an HTML comment ("[^2]: two -->") is not protected as
@@ -28,8 +29,7 @@ const DOC = [
 describe("a definition label on a comment closer line is not a definition block", () => {
     it("findDefinitionBlocks sees no block on the closer line", () => {
         const lines = DOC.split("\n");
-        const scan = scanDocument(lines);
-        expect(findDefinitionBlocks(lines, scan)).toEqual([]);
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([]);
     });
 
     it("the lint leaves the commented-out definitions where they are", () => {

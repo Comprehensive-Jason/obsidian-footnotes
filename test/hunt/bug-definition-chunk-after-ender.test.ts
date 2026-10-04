@@ -1,8 +1,8 @@
 // Imported from the Kimi K3 cycle 5 hunt of 2026-09-16 (OpenCode worktree); 6 of 8 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 import { describe, expect, it } from "vitest";
 
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // A footnote definition ends where a block of its own starts: a heading,
 // a fenced code block at column 0, a link reference definition, or a
@@ -40,29 +40,27 @@ import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
 describe("an indented chunk after a block that ended the definition is code, not a continuation", () => {
     it("after a heading", () => {
         const lines = ["[^1]: body", "# H", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, true]);
     });
 
     it("after a column-0 fence", () => {
         const lines = ["[^1]: body", "```", "code", "```", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, true, true, true, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, true, true, true, true]);
     });
 
     it("after a setext underline that pulled the lazy continuation out as a heading", () => {
         const lines = ["[^1]: body", "cont", "===", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, false, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, false, true]);
     });
 
     it("after a link reference definition", () => {
         const lines = ["[^1]: body", "[foo]: /url", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, true]);
     });
 
     it("the reference in the chunk is dead (heading case)", () => {
         const lines = ["[^1]: body", "# H", "    chunk[^73]"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(referenceOccurrences(lines[2], masked[2])).toEqual([]);
+        expect(readNote(lines).referencesOn(2)).toEqual([]);
     });
 
     it("the reference is dead in the ORIGINAL note too (the conservation counterexample)", () => {
@@ -74,18 +72,16 @@ describe("an indented chunk after a block that ended the definition is code, not
         // property flagged: one lint flipped a reference's liveness.
         const doc = "[^116]: body\ncont\n===\n\n    indented code[^73]";
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(referenceOccurrences(lines[4], masked[4])).toEqual([]);
+        expect(readNote(lines).referencesOn(4)).toEqual([]);
     });
 
     it("control: a chunk after the definition's blank gap IS its continuation", () => {
         const lines = ["[^1]: body", "", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, false]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, false]);
     });
 
     it("control: a thematic break closes the definition (thematicBreak is checked)", () => {
         const lines = ["[^1]: body", "---", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, true]);
     });
 });

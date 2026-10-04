@@ -7,10 +7,11 @@ import { footnoteNameProblem, referenceShapes } from "../parsing/footnote-gramma
 // but the parsing modules and Obsidian's own types. Split out of the
 // all-in-one commands file 2026-08-11.
 
-// Every scan judges the document's masked twin: a copy of it with protected
-// text (code, frontmatter) blotted out and every column left where it was.
-// That is how a "[^x]" inside a code sample counts as plain text rather
-// than a footnote (issue #41).
+// Everything in it comes from the note reading, which reads the note the
+// way Obsidian does: a "[^x]" inside a code sample is plain text rather than
+// a footnote (issue #41), and the masked twin, a copy of the note with
+// protected text blotted out and every column left where it was, is built
+// from it.
 export function docLines(doc: Editor): string[] {
     const lines: string[] = [];
     for (let i = 0; i < doc.lineCount(); i++) {
@@ -46,8 +47,6 @@ export interface DocContext {
     maskedLine(i: number): string;
     /** The whole masked twin, built once and remembered. */
     maskedLines(): readonly string[];
-    /** Which lines hold a definition's label, from the note reading. */
-    definitionStarts(): boolean[];
     /** The note reading (note-reading.ts): every definition wherever it
      * sits, with its extent and its container. The reading parses each
      * distinct text once and remembers it, so asking again costs nothing
@@ -79,13 +78,10 @@ export function docContext(doc: Editor): DocContext {
 export function contextOfLines(lines: string[]): DocContext {
     let reading: NoteReading | null = null;
     const readingOf = (): NoteReading => reading ?? (reading = readNote(lines));
-    let starts: boolean[] | null = null;
-    const definitionStarts = (): boolean[] => starts ?? (starts = [...readingOf().labelLines]);
     return {
         lines,
         maskedLine: (i) => readingOf().maskedLine(i),
         maskedLines: () => readingOf().maskedLines(),
-        definitionStarts,
         reading: readingOf,
     };
 }

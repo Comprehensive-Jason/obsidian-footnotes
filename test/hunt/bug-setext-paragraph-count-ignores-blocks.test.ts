@@ -3,11 +3,12 @@
 // Imported from the GLM 5.3 Flash hunt cycle 12 of 2026-09-16 (this worktree); all pins flipped green 2026-09-16.
 import { describe, expect, it } from "vitest";
 
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+
 import {
 	lazyDefinitionLabelNames,
 } from "../../src/linting/rules/remove-orphaned-references";
 import { fixLazyDefinitions } from "../../src/linting/rules/fix-lazy-definitions";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (GLM hunt cycle 12, 2026-09-16): the setext check in
 // definitionStartLines counts the paragraph above a setext underline with
@@ -56,18 +57,13 @@ describe("a footnote label under a setext underline whose paragraph above is one
 	for (const [name, doc] of fixtures) {
 		it(`starts a definition when ${name} sits above the paragraph`, () => {
 			const lines = doc.split("\n");
-			const scan = scanDocument(lines);
-			const masked = maskProtectedLines(lines, scan);
-			const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+			const starts = readNote(lines).labelLines;
 			expect(starts[starts.length - 1]).toBe(true);
 		});
 
 		it(`is not named by the lazy-definition alert when ${name} sits above the paragraph`, () => {
 			const lines = doc.split("\n");
-			const scan = scanDocument(lines);
-			const masked = maskProtectedLines(lines, scan);
-			const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-			expect(lazyDefinitionLabelNames(lines, scan, masked, starts)).toEqual([]);
+			expect(lazyDefinitionLabelNames(lines)).toEqual([]);
 			// and the fix inserts nothing
 			expect(fixLazyDefinitions(doc)).toBe(doc);
 		});

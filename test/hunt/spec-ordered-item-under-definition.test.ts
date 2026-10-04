@@ -3,7 +3,8 @@
 // GLM 5.3 Flash cycle 9 hunt of 2026-09-16 (this worktree); the red test carries it.fails.
 import { describe, expect, it } from "vitest";
 
-import { scanDocument, findDefinitionBlocks } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // SPEC QUESTION: does a NON-1 ordered item line directly under a footnote
 // definition ("2. item text" under "[^1]: body") lazily continue the
@@ -44,38 +45,38 @@ import { scanDocument, findDefinitionBlocks } from "../../src/parsing/markdown-s
 // Settings involved: `Move definitions to the bottom` (default ON).
 
 describe("spec: a non-1 ordered item line under a definition", () => {
-    it.fails("the block walker owns the item line the scan's own state calls definition content", () => {
+    it.fails("the block walker owns the item line the reading's own state calls definition content", () => {
         const doc = "text[^1] here\n\n[^1]: body\n2. item text";
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        // the scan's own definition state stays open through the item line,
+        const reading = readNote(lines);
+        // the reading's own definition state stays open through the item line,
         // so an indented chunk after the next blank is live definition
         // content, not code...
-        expect(scan.isProtected[5]).toBe(false);
+        expect(reading.protectedLines[5]).toBe(false);
         // ...and the block walker must own the line it lives in
-        expect(findDefinitionBlocks(lines, scan).map((b) => [b.start, b.end])).toEqual([[2, 3]]);
+        expect(readNote(lines).blocks.map((b) => [b.start, b.end])).toEqual([[2, 3]]);
     });
 
     it("both walks agree now: the block runs through the item line and the chunk after the blank", () => {
         const doc = "text[^1] here\n\n[^1]: body\n2. item text\n\n    chunk";
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
+        const reading = readNote(lines);
         // line 5 is the indented chunk: live definition content per the
-        // scan, while findDefinitionBlocks ended the block at line 2 - the
+        // reading, while findDefinitionBlocks ended the block at line 2 - the
         // two walks disagree, which is the inconsistency above
-        expect(scan.isProtected[5]).toBe(false);
-        expect(findDefinitionBlocks(lines, scan).map((b) => [b.start, b.end])).toEqual([[2, 5]]);
+        expect(reading.protectedLines[5]).toBe(false);
+        expect(readNote(lines).blocks.map((b) => [b.start, b.end])).toEqual([[2, 5]]);
     });
 
     it("control: a literal 1. item DOES end the block (both walks agree)", () => {
         const doc = "text[^1] here\n\n[^1]: body\n1. item text\n\n    chunk";
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        expect(findDefinitionBlocks(lines, scan).map((b) => [b.start, b.end])).toEqual([[2, 2]]);
-        // "1. item" interrupts, so the scan's own definition state closed
+        const reading = readNote(lines);
+        expect(readNote(lines).blocks.map((b) => [b.start, b.end])).toEqual([[2, 2]]);
+        // "1. item" interrupts, so the reading's own definition state closed
         // too: the chunk after the blank continues the LIST item, and no
         // footnote definition is open for it
-        expect(scan.isProtected[5]).toBe(false);
-        expect(findDefinitionBlocks(doc.split("\n"), scanDocument(doc.split("\n"))).every((b) => b.end < 3)).toBe(true);
+        expect(reading.protectedLines[5]).toBe(false);
+        expect(readNote(doc.split("\n")).blocks.every((b) => b.end < 3)).toBe(true);
     });
 });

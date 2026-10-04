@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { scanDocument } from "../../src/parsing/markdown-scan";
 
 // Bug #4 (2026-08-11 review, Opus): indented code INSIDE a blockquote was
 // never protected - indent was measured on the raw line, where the "> "
@@ -12,32 +12,32 @@ import { scanDocument } from "../../src/parsing/markdown-scan";
 
 describe("indented code inside blockquotes (bug-blockquote-indented-code)", () => {
     it("a quote whose first content line is indented 4 opens code", () => {
-        const scan = scanDocument([">     code[^9]", "", "[^9]: nine"]);
-        expect(scan.isProtected[0]).toBe(true);
+        const reading = readNote([">     code[^9]", "", "[^9]: nine"]);
+        expect(reading.protectedLines[0]).toBe(true);
     });
 
     it("indent 4 directly after a quoted paragraph line is a lazy continuation - live", () => {
-        const scan = scanDocument(["> para", ">     cont[^9]"]);
-        expect(scan.isProtected).toEqual([false, false]);
+        const reading = readNote(["> para", ">     cont[^9]"]);
+        expect(reading.protectedLines).toEqual([false, false]);
     });
 
     it("indent 4 after a blank '>' line is code", () => {
-        const scan = scanDocument(["> para", ">", ">     code[^9]"]);
-        expect(scan.isProtected).toEqual([false, false, true]);
+        const reading = readNote(["> para", ">", ">     code[^9]"]);
+        expect(reading.protectedLines).toEqual([false, false, true]);
     });
 
     it("a quoted definition's indented continuation stays live", () => {
-        const scan = scanDocument(["> [^9]: def", ">     more"]);
-        expect(scan.isProtected).toEqual([false, false]);
+        const reading = readNote(["> [^9]: def", ">     more"]);
+        expect(reading.protectedLines).toEqual([false, false]);
     });
 
     it("the chunk continues on later indented quote lines", () => {
-        const scan = scanDocument([
+        const reading = readNote([
             ">",
             ">     one[^9]",
             ">     two[^9]",
             "> back to prose",
         ]);
-        expect(scan.isProtected).toEqual([false, true, true, false]);
+        expect(reading.protectedLines).toEqual([false, true, true, false]);
     });
 });

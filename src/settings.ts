@@ -5,7 +5,7 @@
 import { App, PluginSettingTab, SettingDefinitionItem } from "obsidian";
 import type FootnotePlugin from "./main";
 import { AppWithPlugins } from "./editor/obsidian-internals";
-import type { FootnotePlacement } from "./parsing/markdown-scan";
+import type { FootnotePlacement } from "./parsing/landing";
 
 export interface FootnotePluginSettings {
     /** Records which one-time migrations this saved data has already been

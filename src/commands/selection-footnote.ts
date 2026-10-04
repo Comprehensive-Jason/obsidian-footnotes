@@ -23,7 +23,7 @@ import {
     simulateChanges,
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
-import { cellReading, CellTextColumn, maskInlineRegions } from "../parsing/markdown-scan";
+import { cellReading, CellTextColumn, maskInlineRegions } from "../parsing/cell-reading";
 import { linesReadAlike, NoteReading, readNote } from "../parsing/note-reading";
 import {
     autonumFootnoteId,
@@ -69,8 +69,8 @@ import {
 // Multi-line selections convert too (Jason's ask 2026-08-19, because
 // academic footnotes hold whole paragraphs). The numbered and named keys
 // turn the selected block into a multi-paragraph definition, its
-// continuation lines indented four spaces. That is the shape the scanner
-// and the jump commands already understand. The inline key refuses a
+// continuation lines indented four spaces. That is the shape the note
+// reading and the jump commands already understand. The inline key refuses a
 // selection that spans lines and points at those two keys instead
 // (Jason's ruling 2026-08-20: flattening it the way paste does almost
 // never looked right except on clean paragraphs, and paste already
@@ -734,28 +734,25 @@ function replacementReclassifiesDoc(
  *
  * The first line goes on the label line itself. Every line after it
  * becomes a continuation line, indented four spaces. That is the shape the
- * scanner, the jump commands, and Obsidian's own renderer all read as one
- * footnote with several paragraphs.
+ * note reading, the jump commands, and Obsidian's own renderer all read as
+ * one footnote with several paragraphs.
  *
- * A line holding only whitespace becomes exactly four spaces. The scanner
+ * A line holding only whitespace becomes exactly four spaces. The reading
  * and the renderer both treat a whitespace-only line as blank, so it still
  * separates the paragraphs, but on screen it lines up with the
  * continuation indent instead of sitting ragged (Jason's ask, 2026-08-21).
  */
 function indentDefinitionBody(text: string): string {
-    // A first line that opens a code fence cannot share the label line.
-    // Obsidian itself renders "[^1]: ```" with an indented closer as a code
-    // block, but the plugin's scanner does not read a fence opener that
-    // sits after a label, while it does read the indented closer as an
-    // opener - so to the scanner such a note has an unclosed fence from
-    // that line on, and every definition below it turns into code (Jason's
-    // report, sheet 04, 2026-09-09: the orphaned reference, the waiting
-    // notice, the caret on the wrong footnote). A fence therefore starts
-    // on the line after the label, indented like the rest, where Obsidian
-    // and the scanner read it the same way. Every other block construct -
-    // a heading, a table row, a list item, a quote, a rule, a math block -
-    // renders on the label line in Obsidian (checked 2026-09-09/10) and
-    // the scanner agrees, so it stays there.
+    // A first line that opens a code fence starts on the line after the
+    // label, indented like the rest. Obsidian itself renders "[^1]: ```"
+    // with an indented closer as a code block, but the hand-written scanner
+    // the plugin read notes with until the runtime swap (2026-10-03) did not,
+    // and every definition below it turned into code (Jason's report, sheet
+    // 04, 2026-09-09). The note reading reads both shapes as Obsidian does,
+    // so this is now only the shape the plugin writes. Every other block
+    // construct - a heading, a table row, a list item, a quote, a rule, a
+    // math block - renders on the label line in Obsidian (checked
+    // 2026-09-09/10), so it stays there.
     const body = startsWithFence(text) ? `\n${text}` : text;
     return body
         .split("\n")

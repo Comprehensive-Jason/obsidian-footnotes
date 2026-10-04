@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 
 // BUG (wrong output, low): a label at column 0 directly under an HTML
 // block inside a blockquote is read as a definition, though Reading view
@@ -25,10 +25,9 @@ import { definitionStartLines, maskProtectedLines, scanDocument } from "../../sr
 describe("a label at column 0 directly under a quoted HTML block", () => {
     it("is swallowed, not a definition", () => {
         const lines = "text[^1]\n\n> <div>\n> more html\n[^1]: def".split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+        const reading = readNote(lines);
+        const starts = readNote(lines).labelLines;
         expect(starts[4]).toBe(false);
-        expect(scan.isProtected[4]).toBe(true);
+        expect(reading.protectedLines[4]).toBe(true);
     });
 });

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
 import { lintFootnotes } from "../../src/linting/linter";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (data loss with Delete orphaned definitions on): a "$$" math block
 // directly under a definition is taken as part of the footnote, so the
@@ -24,7 +24,7 @@ import { lintFootnotes } from "../../src/linting/linter";
 describe("a '$$' math block directly under a definition is a block of its own", () => {
     it("the block walker ends the footnote above the '$$' line", () => {
         const lines = "text[^1]\n\n[^1]: body\n$$\nx = 1\n$$\n\nlast para".split("\n");
-        expect(findDefinitionBlocks(lines, scanDocument(lines))).toEqual([{ name: "1", start: 2, end: 2 }]);
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([{ name: "1", start: 2, end: 2 }]);
     });
 
     it("quoted twin: deleting a quoted orphaned definition keeps the quoted math block", () => {

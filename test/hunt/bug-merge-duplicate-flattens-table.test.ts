@@ -3,7 +3,8 @@
 import { describe, expect, it } from "vitest";
 
 import { mergeDuplicateFootnoteDefinitions } from "../../src/linting/rules/merge-duplicate-definitions";
-import { findDefinitionBlocks } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // GLM 5.3 Flash cycle 11 hunt of 2026-09-16 (OpenCode worktree glm-cycle-7). 2 of 3 tests carry it.fails; the control does not.
 // BUG: when one of two definitions of a name is a GFM table riding its
@@ -63,7 +64,7 @@ describe("merging a duplicate whose body is a table that starts on its label lin
 
     it("control: both copies are found as definition blocks spanning the table rows", () => {
         const lines = doc.split("\n");
-        const blocks = findDefinitionBlocks(lines);
+        const blocks = readNote(lines).blocks;
         expect(blocks.map((block) => block.name)).toEqual(["1", "1"]);
         // the table duplicate's block spans its label line, the delimiter
         // row, and the row after it

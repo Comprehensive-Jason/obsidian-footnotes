@@ -1,8 +1,8 @@
 // Imported from the Kimi K3 cycle 2 hunt of 2026-09-16 (OpenCode worktree); 2 of 2 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 // RESOLVED 2026-09-16: Reading view keeps a reference in the next row live (probed), so a span never crosses a table row; the search stops at rows and a run opened in a row never looks ahead.
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { scanDocument, tableRowLinesOf } from "../../src/parsing/markdown-scan";
 
 // SPEC QUESTION, not a confirmed bug: an unclosed backtick run in a table
 // row, with the closing run on a LATER row of the same table.
@@ -42,11 +42,11 @@ const doc = "| `code[^1] |\n| --- |\n| span` |";
 describe("spec question: a code span crossing a table's delimiter row", () => {
     it("needs a live check: the delimiter row is not code to Obsidian", () => {
         // today: the whole delimiter row is masked as the phantom span's interior
-        expect(scanDocument(doc.split("\n")).isProtected[1]).toBe(false);
+        expect(readNote(doc.split("\n")).protectedLines[1]).toBe(false);
     });
 
     it("needs a live check: the plugin's own table model still sees the table", () => {
         const lines = doc.split("\n");
-        expect(tableRowLinesOf(lines)).toEqual([true, true, true]);
+        expect(readNote(lines).tableRowLines).toEqual([true, true, true]);
     });
 });

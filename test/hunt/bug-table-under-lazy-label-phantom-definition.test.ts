@@ -52,24 +52,18 @@
 import { describe, expect, it } from "vitest";
 
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-    tableRowLinesOf,
-} from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 const LAZY_TABLE = "prose text\n[^1]: lazy\n| a | b |\n| --- | --- |\n[^2]: under".split("\n");
 
 describe("a table cannot start under a lazy label", () => {
     it("the pipe run under the lazy label is no table", () => {
-        expect(tableRowLinesOf(LAZY_TABLE)).toEqual([false, false, false, false, false]);
+        expect(readNote(LAZY_TABLE).tableRowLines).toEqual([false, false, false, false, false]);
     });
 
     it("so the label under the run stays lazy: no definition starts there", () => {
-        const scan = scanDocument(LAZY_TABLE);
-        const masked = maskProtectedLines(LAZY_TABLE, scan);
-        expect(definitionStartLines(LAZY_TABLE, scan, (i) => masked[i])).toEqual([
+        expect(readNote(LAZY_TABLE).labelLines).toEqual([
             false,
             false,
             false,
@@ -85,11 +79,11 @@ describe("a table cannot start under a lazy label", () => {
 
     it("control: a table under a REAL definition's label is a separate table (pinned cycle 3/4)", () => {
         const lines = "para\n\n[^1]: real\n| a | b |\n| --- | --- |".split("\n");
-        expect(tableRowLinesOf(lines)).toEqual([false, false, false, true, true]);
+        expect(readNote(lines).tableRowLines).toEqual([false, false, false, true, true]);
     });
 
     it("control: a table under a real definition's lazy continuation is a table (pinned)", () => {
         const lines = "[^1]: x\nlazy\n| a | b |\n| --- | --- |".split("\n");
-        expect(tableRowLinesOf(lines)).toEqual([false, false, true, true]);
+        expect(readNote(lines).tableRowLines).toEqual([false, false, true, true]);
     });
 });

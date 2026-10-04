@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { nestedFootnoteDefinitionNames } from "../../src/linting/lint-alerts";
-import {
-    maskProtectedLines,
-    normalizeEol,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { normalizeEol } from "../../src/parsing/line-edits";
 
 // BUG, annoyance (hunt 2026-08-25, properties lens; skeptic-confirmed):
 // nestedFootnoteDefinitionNames returns one entry per definition BLOCK
@@ -22,9 +18,7 @@ describe("nested-footnote alert vs duplicate definitions of one name", () => {
         const doc =
             "text with no reference to z anywhere.\n\n[^z]: contains ^[an inline note] here\n[^z]: second copy also nested [^w]\n\n[^w]: w body";
         const lines = normalizeEol(doc).text.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(nestedFootnoteDefinitionNames(lines, scan, masked)).toEqual([
+        expect(nestedFootnoteDefinitionNames(lines)).toEqual([
             "z",
         ]);
     });

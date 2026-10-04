@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 import { lintFootnotes } from "../../src/linting/linter";
-import { protectedLines } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // Cutting a definition at line 0 strands a "---" at DOCUMENT START, and a leading --- plus a later --- line manufactures a YAML frontmatter block that swallows live prose; reindex drop-orphans then DELETES the still-referenced definition.
 // Hunt: 2026-08-09. Lens: properties.
@@ -15,7 +15,7 @@ describe("fixed 2026-08-10: a cut stranding '---' at document start manufactures
         const out = moveFootnoteDefinitionsToBottom(doc);
         const lines = out.split("\n");
         const proseLine = lines.findIndex((l) => l.startsWith("text[^"));
-        expect(protectedLines(lines)[proseLine]).toBe(false);
+        expect(readNote(lines).protectedLines[proseLine]).toBe(false);
     });
 
     it("reindex drop-orphans keeps the definition whose reference sits after a stranded '---'", () => {
@@ -38,7 +38,7 @@ describe("fixed 2026-08-10: a cut stranding '---' at document start manufactures
         const out = lintFootnotes(doc);
         const lines = out.split("\n");
         const proseLine = lines.findIndex((l) => l.startsWith("text[^"));
-        expect(protectedLines(lines)[proseLine]).toBe(false);
+        expect(readNote(lines).protectedLines[proseLine]).toBe(false);
         expect(out).toContain("[^1]: def");
     });
 });

@@ -34,8 +34,9 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 //   ending a "<div>" block (in a quote, in a list item, at the top level)
 //   against a "<pre>" one, "Notes:" over a bare "- " or "-", a label whose
 //   name holds a code span with a bracket, names holding a no-break or an
-//   ideographic space, and a link definition's label running over blank
-//   lines (which swallows a footnote's label below it).
+//   ideographic space, a link definition's label running over blank
+//   lines (which swallows a footnote's label below it), and a reference
+//   written as a link's text ("[^1](url)" is a link, no footnote).
 //
 // The comparison is the live oracle's own (scripts/oracle/compare.mts), so a
 // note agrees here exactly when `npm run oracle -- check --reader` would find

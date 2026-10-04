@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { invalidFootnoteNames, nestedFootnoteDefinitionNames } from "../../src/linting/lint-alerts";
-import { scanDocument, maskProtectedLines, definitionStartLines } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // A user with a definition inside a blockquote or callout gets no warning
 // from two of the lint alerts that exist to protect them:
@@ -25,32 +25,32 @@ import { scanDocument, maskProtectedLines, definitionStartLines } from "../../sr
 
 const ctx = (markdown: string) => {
     const lines = markdown.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return { lines, scan, masked, starts };
+    const reading = readNote(lines);
+    const masked = [...readNote(lines).maskedLines()];
+    const starts = readNote(lines).labelLines;
+    return { lines, reading, masked, starts };
 };
 
 describe("the invalid-name alert covers quoted definitions", () => {
     it("a quoted definition with an invalid name is reported", () => {
-        const { lines, scan, masked, starts } = ctx("> [^my note]: x");
-        expect(invalidFootnoteNames(lines, scan, masked, starts)).toContain("my note");
+        const { lines } = ctx("> [^my note]: x");
+        expect(invalidFootnoteNames(lines)).toContain("my note");
     });
 
     it("control: a column-0 definition with an invalid name is reported", () => {
-        const { lines, scan, masked, starts } = ctx("[^my note]: x");
-        expect(invalidFootnoteNames(lines, scan, masked, starts)).toContain("my note");
+        const { lines } = ctx("[^my note]: x");
+        expect(invalidFootnoteNames(lines)).toContain("my note");
     });
 });
 
 describe("the nested-footnote alert covers quoted definitions", () => {
     it("a footnote nested inside a quoted definition is reported", () => {
-        const { lines, scan, masked } = ctx("> [^1]: see [^2]\n\nuse[^1] use2[^2]");
-        expect(nestedFootnoteDefinitionNames(lines, scan, masked)).toContain("1");
+        const { lines } = ctx("> [^1]: see [^2]\n\nuse[^1] use2[^2]");
+        expect(nestedFootnoteDefinitionNames(lines)).toContain("1");
     });
 
     it("control: a footnote nested inside a column-0 definition is reported", () => {
-        const { lines, scan, masked } = ctx("[^1]: see [^2]\n\nuse[^1] use2[^2]");
-        expect(nestedFootnoteDefinitionNames(lines, scan, masked)).toContain("1");
+        const { lines } = ctx("[^1]: see [^2]\n\nuse[^1] use2[^2]");
+        expect(nestedFootnoteDefinitionNames(lines)).toContain("1");
     });
 });

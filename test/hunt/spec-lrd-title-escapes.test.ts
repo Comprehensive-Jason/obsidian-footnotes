@@ -2,17 +2,12 @@
 // PROBED 2026-09-16 (GLM hunt cycle 7): an escaped quote in the title line breaks the whole link reference definition in Obsidian (one paragraph, label lazy), so that claim is refuted; a quoted title line under a column-0 definition is the quote's own paragraph and the label under it is lazy, so that claim holds and definitionStartLines now requires the title at the definition's depth.
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 const startsOf = (doc: string): boolean[] => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return definitionStartLines(lines, scan, (i) => masked[i]);
+    return readNote(lines).labelLines;
 };
 
 // SPEC QUESTION (GLM 5.3 Flash cycle 11 hunt, 2026-09-16): which LRD

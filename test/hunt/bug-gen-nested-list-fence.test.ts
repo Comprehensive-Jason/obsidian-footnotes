@@ -2,8 +2,8 @@
 import { describe, expect, it } from "vitest";
 
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
-import { protectedLines } from "../../src/parsing/markdown-scan";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
+import { readNote } from "../../src/parsing/note-reading";
 
 // What a user sees: a fenced code block inside a NESTED list item
 // ("- - ```" or "1. 1. ```") is not detected. The code inside counts as
@@ -31,7 +31,7 @@ describe("a fence inside a nested list item is protected", () => {
     });
 
     it("the fence lines are protected and the tail is live", () => {
-        expect(protectedLines(DOC.split("\n"))).toEqual([true, true, true, false]);
+        expect(readNote(DOC.split("\n")).protectedLines).toEqual([true, true, true, false]);
     });
 
     it("move-to-bottom works below the nested fence", () => {

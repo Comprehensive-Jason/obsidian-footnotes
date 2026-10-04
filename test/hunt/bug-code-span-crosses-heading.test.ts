@@ -2,13 +2,7 @@
 // RESOLVED 2026-09-16: Reading view keeps the heading's reference live (probed); a run opened in a heading never looks ahead.
 import { describe, expect, it } from "vitest";
 
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
 import { readNote } from "../../src/parsing/note-reading";
 
 // A code span lives inside ONE paragraph: CommonMark lets it wrap across
@@ -46,12 +40,9 @@ const doc = "# `code[^1]\nspan` tail\n\nuse[^2]\n\n[^1]: def\n[^2]: other";
 
 function liveReferenceLines(markdown: string): number[] {
     const lines = markdown.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
     const out: number[] = [];
     for (let i = 0; i < lines.length; i++) {
-        if (referenceOccurrences(lines[i], masked[i], starts[i]).length > 0) out.push(i);
+        if (readNote(lines).referencesOn(i).length > 0) out.push(i);
     }
     return out;
 }

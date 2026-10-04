@@ -2,8 +2,8 @@
 // RESOLVED 2026-09-16 (Kimi hunt cycle 3, probed in Reading view): the column-0 rows render as a table INSIDE the footnote, so the block walker owns them. A table that starts on its own line under a label ("[^1]: x" then "| a | b |") is a separate table outside the footnote, and a header row directly under plain paragraph text is no table at all (a table cannot interrupt a paragraph), both probed the same day.
 import { describe, expect, it } from "vitest";
 
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
+import { readNote } from "../../src/parsing/note-reading";
 
 // SPEC QUESTION: "[^1]: | a | b |" followed at column 0 by the table's
 // delimiter and rows - is the table part of the footnote, or does the
@@ -41,7 +41,7 @@ import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-fo
 describe("spec: a table's column-0 rows under a definition label that starts it", () => {
     it("the block walker owns the column-0 rows (micromark+GFM-table's expected reading)", () => {
         const lines = "[^1]: | a | b |\n| --- | --- |\n| c | d |\n\ntext[^1]".split("\n");
-        const blocks = findDefinitionBlocks(lines, scanDocument(lines));
+        const blocks = readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }));
         expect(blocks).toEqual([{ name: "1", start: 0, end: 2 }]);
     });
 
@@ -54,7 +54,7 @@ describe("spec: a table's column-0 rows under a definition label that starts it"
 
     it("control: the INDENTED rows are the definition's (the pinned sheet-07 shape)", () => {
         const lines = "[^1]: | a | b |\n    | --- | --- |\n    | c | d |\n\ntext[^1]".split("\n");
-        const blocks = findDefinitionBlocks(lines, scanDocument(lines));
+        const blocks = readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }));
         expect(blocks).toEqual([{ name: "1", start: 0, end: 2 }]);
     });
 });

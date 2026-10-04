@@ -4,11 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import { orphanedFootnoteReferenceNames } from "../../src/linting/rules/remove-orphaned-references";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // SPEC QUESTION: "- [^a]: def" - a footnote label written directly after
 // a list item's marker, on the marker's own line. A definition, or a list
@@ -45,9 +41,7 @@ import {
 describe("spec: a footnote label directly after a list marker", () => {
     it("micromark's reading: the label on the marker line starts a definition", () => {
         const lines = "- [^a]: def\n\nuse[^a]".split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(definitionStartLines(lines, scan, (i) => masked[i])[0]).toBe(true);
+        expect(readNote(lines).labelLines[0]).toBe(true);
     });
 
     it("micromark's reading: \"use[^a]\" is not an orphaned reference", () => {
@@ -56,8 +50,6 @@ describe("spec: a footnote label directly after a list marker", () => {
 
     it("control: a label directly UNDER a list item is lazy (sheet 14, settled)", () => {
         const lines = "- item\n[^a]: def".split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(definitionStartLines(lines, scan, (i) => masked[i])[1]).toBe(false);
+        expect(readNote(lines).labelLines[1]).toBe(false);
     });
 });

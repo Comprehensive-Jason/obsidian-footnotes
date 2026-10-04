@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // Scenario: definitionStartLines looks at the raw line when it asks whether
 // the line above was a thematic break or a setext underline, and its regexes
@@ -34,9 +31,7 @@ import {
 // return must not change the answer.
 
 const starts = (lines: string[]) => {
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return definitionStartLines(lines, scan, (i) => masked[i]);
+    return readNote(lines).labelLines;
 };
 
 describe("a trailing carriage return must not change what starts a definition", () => {

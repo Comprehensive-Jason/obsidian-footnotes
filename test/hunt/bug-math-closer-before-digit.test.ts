@@ -6,7 +6,7 @@ import { resetNotices, noticed } from "../helpers/notices";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { ProtectedCreationNotice } from "../../src/editor/insertion-liveness";
-import { maskedLineAt } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // Jason's manual pass, sheet 11 (2026-09-11): with the caret at "$5 or |$6",
 // the numbered key refused with the protected-text toast, claiming the
@@ -30,13 +30,13 @@ describe("inline math never closes on a dollar followed by a digit", () => {
         ["a 3$x$ b", true],
         ["a $x+y$ b", true],
     ])("%s", (line, isMath) => {
-        const masked = maskedLineAt([line], 0);
+        const masked = readNote([line]).maskedLine(0);
         expect(masked.includes("\0")).toBe(isMath);
     });
 
     it("a later dollar can still close what a digit-blocked one could not", () => {
         // the "$6" cannot close, but "$ b" after it can: "5 or [^1]$6 x" is the math content
-        const masked = maskedLineAt(["pay $5 or [^1]$6 x$ b"], 0);
+        const masked = readNote(["pay $5 or [^1]$6 x$ b"]).maskedLine(0);
         expect(masked).toBe("pay " + "\0".repeat("$5 or [^1]$6 x$".length) + " b");
     });
 });

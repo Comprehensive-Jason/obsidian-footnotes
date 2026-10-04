@@ -18,7 +18,9 @@ import {
     SelectionCommandNotice,
     SelectionSpanNotice,
 } from "../src/commands/selection-footnote";
-import { computeNextFootnoteNumber, definitionLabelWithName, footnoteNameProblem, referenceOccurrences } from "../src/parsing/footnote-grammar";
+import { computeNextFootnoteNumber, footnoteNameProblem } from "../src/parsing/footnote-grammar";
+
+import { definitionLabelWithName } from "../src/parsing/label-shapes";
 import { docContext } from "../src/editor/doc-context";
 import { endOfWordForSelection, startOfWordOffset } from "../src/editor/cursor-motion";
 import { planFootnoteRename } from "../src/commands/rename-footnote";
@@ -31,13 +33,7 @@ import {
 } from "../src/commands/insert-or-navigate-footnotes";
 import { orphanedFootnoteDefinitionNames } from "../src/linting/rules/remove-orphaned-definitions";
 import { orphanedFootnoteReferenceNames } from "../src/linting/rules/remove-orphaned-references";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    normalizeEol,
-    scanDocument,
-} from "../src/parsing/markdown-scan";
+import { normalizeEol } from "../src/parsing/line-edits";
 
 // Property tests for the CREATION COMMANDS (2026-08-12, Jason's ask):
 // the same document generator that fuzzes the lint transforms drives the
@@ -256,13 +252,10 @@ function definitionNamesFolded(lines: string[]): Set<string> {
 
 /** The names on label-shaped lines that are lazy prose today (or heading text under an underline): a press that fills the blank line above such a label can lawfully turn it into a definition, exactly as typing there would. */
 function promotableLabelNamesFolded(lines: string[]): Set<string> {
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
     return new Set(
         [
-            ...lazyDefinitionLabelNames(lines, scan, masked, starts),
-            ...underlinedDefinitionLabelNames(lines, scan, masked, starts),
+            ...lazyDefinitionLabelNames(lines),
+            ...underlinedDefinitionLabelNames(lines),
         ].map((name) => name.toLowerCase()),
     );
 }
@@ -303,7 +296,7 @@ describe("creation-command invariants over random documents", () => {
     soakIt("a press never throws and never loses a protected line", async () => {
         await fc.assert(
             fc.asyncProperty(pressArb, async ({ lines, cursor, command, settings }) => {
-                const protectedBefore = scanDocument(lines).isProtected;
+                const protectedBefore = readNote(lines).protectedLines;
                 const doc = await press(lines, cursor, command, settings);
                 // multiset conservation, like the lint property: protected
                 // text is never edited, only ever shifted whole
@@ -327,7 +320,7 @@ describe("creation-command invariants over random documents", () => {
     soakIt("a press with the caret on a protected line edits nothing", async () => {
         await fc.assert(
             fc.asyncProperty(pressArb, async ({ lines, cursor, command, settings }) => {
-                if (!scanDocument(lines).isProtected[cursor.line]) return;
+                if (!readNote(lines).protectedLines[cursor.line]) return;
                 const doc = await press(lines, cursor, command, settings);
                 // the CURSOR may still move: a protected math/comment
                 // interior can be a definition block's continuation, and
@@ -444,31 +437,17 @@ describe("creation-command invariants over random documents", () => {
                     // A name that completes an autolink around the
                     // placeholder ("<[^a@b]ftp:x>" holds an "@", so the
                     // angle brackets become an email autolink) is dead
-                    // text the moment it is typed, and the press rightly
-                    // creates nothing for it; the flow is not judged there.
+                    // text the moment it is typed, and so is one that
+                    // closes a math block over it ("$$[^x]" on a math
+                    // block's last line is no closer to Obsidian, so the
+                    // block runs on and takes the reference and any
+                    // definition appended after it). The press rightly
+                    // creates nothing for it, so the flow is not judged
+                    // there: the typed reference must be live to the note
+                    // reading.
                     {
                         const at = doc.getCursor().line;
-                        const typedMasked = maskProtectedLines(doc.lines, scanDocument(doc.lines))[at];
-                        if (
-                            !referenceOccurrences(doc.getLine(at), typedMasked).some(
-                                (o) => o.name.toLowerCase() === name.toLowerCase(),
-                            )
-                        ) {
-                            return;
-                        }
-                        // Nor where Obsidian reads the typed reference as
-                        // dead while the scanner reads it live: "$$[^x]" on a
-                        // math block's last line is no closer to Obsidian, so
-                        // the block runs on and takes the reference and any
-                        // definition appended after it. The press then
-                        // refuses (the new definition would be born dead).
-                        // The scanner's protection moves onto the note
-                        // reading in step 2 of the runtime swap (2026-10-03).
-                        if (
-                            !readNote(doc.lines).references.some(
-                                (r) => r.line === at && r.live && r.name.toLowerCase() === name.toLowerCase(),
-                            )
-                        ) {
+                        if (!readNote(doc.lines).referencesOn(at).some((o) => o.name.toLowerCase() === name.toLowerCase())) {
                             return;
                         }
                     }
@@ -480,13 +459,11 @@ describe("creation-command invariants over random documents", () => {
                     // inside a definition and refuses to nest: no new
                     // definition is the right outcome there.
                     const typedLine = doc.getCursor().line;
-                    const typedScan = scanDocument(doc.lines);
-                    const typedMasked = maskProtectedLines(doc.lines, typedScan);
-                    const typedStarts = definitionStartLines(doc.lines, typedScan, (i) => typedMasked[i]);
+                    const typedStarts = readNote(doc.lines).labelLines;
                     // a quoted definition's lines and any label line count
                     // too (the guard knows them since cycle 3, 2026-09-16)
                     const insideDefinition =
-                        findDefinitionBlocks(doc.lines).some(
+                        readNote(doc.lines).blocks.some(
                             (block) => typedLine >= block.start && typedLine <= block.end,
                         ) ||
                         typedStarts[typedLine] ||
@@ -772,7 +749,7 @@ describe("creation-command invariants over random documents", () => {
                 fc.constantFrom<CommandName>("autonum", "inline"),
                 async ({ lines, span, selection, settings }, command) => {
                     const trimmed = trimmedSpan(lines, span.from, span.to);
-                    const protectedBefore = scanDocument(lines).isProtected;
+                    const protectedBefore = readNote(lines).protectedLines;
                     resetNotices();
                     const doc = pressEditor(lines, span.from, selection);
                     await COMMANDS[command](fakePlugin(doc, settings));
@@ -1153,11 +1130,9 @@ describe("multi-caret press invariants over random documents", () => {
                 // a quoted definition (label line and quoted continuation
                 // lines) and any other definition label line count as well:
                 // the guard refuses there since cycle 3 (2026-09-16)
-                const typedScan = scanDocument(typedLines);
-                const typedMasked = maskProtectedLines(typedLines, typedScan);
-                const typedStarts = definitionStartLines(typedLines, typedScan, (i) => typedMasked[i]);
+                const typedStarts = readNote(typedLines).labelLines;
                 const typedInsideDefinition =
-                    findDefinitionBlocks(typedLines).some((block) =>
+                    readNote(typedLines).blocks.some((block) =>
                         newCarets.some((caret) => caret.line >= block.start && caret.line <= block.end),
                     ) ||
                     newCarets.some(
@@ -1237,9 +1212,8 @@ describe("multi-caret press invariants over random documents", () => {
     // is that a press never ADDS to the set - hand-typed nesting survives,
     // created nesting is ADR-0001's refusal.
     const nestedQuotedNames = (lines: string[]): Set<string> => {
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+        const masked = [...readNote(lines).maskedLines()];
+        const starts = readNote(lines).labelLines;
         const defined = new Set<string>();
         for (let i = 0; i < lines.length; i++) {
             if (!starts[i]) continue;
@@ -1253,7 +1227,7 @@ describe("multi-caret press invariants over random documents", () => {
             if (!hit?.label.quoted) continue;
             const end = hit.label.afterCloser ? i : (readNote(lines).labelOn(i)?.end ?? i);
             for (let j = i; j <= end; j++) {
-                for (const o of referenceOccurrences(lines[j], masked[j], starts[j])) {
+                for (const o of readNote(lines).referencesOn(j)) {
                     if (defined.has(o.name.toLowerCase())) nested.add(o.name.toLowerCase());
                 }
             }
@@ -1274,9 +1248,8 @@ describe("multi-caret press invariants over random documents", () => {
         )
         .map(([doc, innerPick, linePick, chPick, settings]) => {
             const lines = normalizeEol(doc).text.split("\n");
-            const scan = scanDocument(lines);
-            const masked = maskProtectedLines(lines, scan);
-            const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+            const masked = [...readNote(lines).maskedLines()];
+            const starts = readNote(lines).labelLines;
             const interiors: number[] = [];
             for (let i = 0; i < lines.length; i++) {
                 if (!starts[i]) continue;
@@ -1386,22 +1359,15 @@ describe("rename invariants over random documents", () => {
                 const ctx = docContext(doc);
                 // every name in the note, references and labels alike
                 const names: string[] = [];
-                const masked = ctx.maskedLines();
-                const starts = ctx.definitionStarts();
                 for (let i = 0; i < lines.length; i++) {
-                    for (const o of referenceOccurrences(lines[i], masked[i], starts[i])) {
-                        names.push(o.name);
-                    }
-                    if (starts[i]) {
-                        const hit = definitionLabelWithName(lines[i], masked[i]);
-                        if (hit) names.push(hit.name);
-                    }
+                    for (const o of ctx.reading().referencesOn(i)) names.push(o.name);
+                    for (const label of ctx.reading().labelsOn(i)) names.push(label.name);
                 }
                 if (names.length === 0) return;
                 const oldName = names[namePick % names.length];
                 const plan = planFootnoteRename(doc, oldName, newName, ctx);
                 if (plan.kind !== "renamed") return;
-                const protectedBefore = scanDocument(lines).isProtected;
+                const protectedBefore = readNote(lines).protectedLines;
                 const after = simulateChanges(lines, plan.changes);
                 // protected text is never renamed into or out of: it survives
                 // as a multiset of whole lines
@@ -1485,7 +1451,7 @@ describe("press invariants around interrupted definitions", () => {
                 // under it, so the protected lines are compared as a
                 // multiset of their text, not by index (GLM's original
                 // compared by index and tripped on that shift)
-                const protectedBefore = scanDocument(lines).isProtected;
+                const protectedBefore = readNote(lines).protectedLines;
                 const doc = await press(lines, cursor, command, settings);
                 const counts = new Map<string, number>();
                 for (const line of doc.lines) counts.set(line, (counts.get(line) ?? 0) + 1);
@@ -1513,15 +1479,14 @@ describe("press invariants around interrupted definitions", () => {
                     }
                 }
                 if (appended.length === 0) return; // the press refused or navigated
-                const scan = scanDocument(doc.lines);
-                const masked = maskProtectedLines(doc.lines, scan);
-                const starts = definitionStartLines(doc.lines, scan, (i) => masked[i]);
+                const scan = readNote(doc.lines);
+                const starts = readNote(doc.lines).labelLines;
                 for (const i of appended) {
                     expect(
                         starts[i],
                         `appended definition ${JSON.stringify(doc.lines[i])} is not a definition start`,
                     ).toBe(true);
-                    expect(scan.isProtected[i]).toBe(false);
+                    expect(scan.protectedLines[i]).toBe(false);
                 }
             }),
         );
@@ -1561,9 +1526,8 @@ const quotedPressArb = fc
     )
     .map(([doc, pick, command, settings]) => {
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+        const masked = [...readNote(lines).maskedLines()];
+        const starts = readNote(lines).labelLines;
         const inside: number[] = [];
         for (let i = 0; i < lines.length; i++) {
             if (!starts[i]) continue;
@@ -1621,13 +1585,11 @@ describe("press definition-census invariants over random documents", () => {
                 // definition append can shift the lines under the caret.
                 // Names fold case, so the label lines are collected through
                 // the label reader, not string equality.
-                const afterScan = scanDocument(doc.lines);
-                const afterMasked = maskProtectedLines(doc.lines, afterScan);
-                const afterStarts = definitionStartLines(doc.lines, afterScan, (i) => afterMasked[i]);
+                const afterMasked = [...readNote(doc.lines).maskedLines()];
+                const afterStarts = readNote(doc.lines).labelLines;
                 for (const name of before) {
                     if (after.has(name)) continue;
-                    const beforeScan = scanDocument(lines);
-                    const beforeMasked = maskProtectedLines(lines, beforeScan);
+                    const beforeMasked = [...readNote(lines).maskedLines()];
                     const originalLabels = new Set(
                         lines.filter(
                             (line, i) =>

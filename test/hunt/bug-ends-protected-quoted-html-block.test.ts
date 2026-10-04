@@ -3,8 +3,8 @@
 // GLM 5.3 Flash cycle 11 hunt of 2026-09-16 (OpenCode worktree glm-cycle-7). 2 of 4 tests carry it.fails; the controls do not.
 import { describe, expect, it } from "vitest";
 
-import { scanDocument } from "../../src/parsing/markdown-scan";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG: `endsProtectedNow` in markdown-scan.ts returns `htmlBlock !== null`
 // with no container check - the ONE region state without one. Every other
@@ -77,11 +77,11 @@ const itemDoc = "text[^1]\n\n[^1]: def\n\npara\n\n- <div>\n  more html";
 // test/obsidian-answers/swap34-probes.json).
 describe("a note that ends inside an HTML block opened inside a container", () => {
     it("a definition appended after a blank line is not swallowed by the quoted HTML block", () => {
-        expect(scanDocument(quotedDoc.split("\n")).endsProtected).toBe(false);
+        expect(readNote(quotedDoc.split("\n")).openRegionFrom !== -1).toBe(false);
     });
 
     it("nor by the list-item HTML block", () => {
-        expect(scanDocument(itemDoc.split("\n")).endsProtected).toBe(false);
+        expect(readNote(itemDoc.split("\n")).openRegionFrom !== -1).toBe(false);
     });
 
     it("move-to-bottom gathers the definition under the block, after a blank line", () => {
@@ -89,14 +89,14 @@ describe("a note that ends inside an HTML block opened inside a container", () =
     });
 
     it("control: a blank line ends a \"<div>\" block at the column-0 end of the note too", () => {
-        expect(scanDocument("text[^1]\n\n<div>\nmore html".split("\n")).endsProtected).toBe(false);
+        expect(readNote("text[^1]\n\n<div>\nmore html".split("\n")).openRegionFrom !== -1).toBe(false);
     });
 
     it("control: a \"<pre>\" block, which no blank line ends, runs on over an appended definition", () => {
-        expect(scanDocument("text[^1]\n\n<pre>\nmore html".split("\n")).endsProtected).toBe(true);
+        expect(readNote("text[^1]\n\n<pre>\nmore html".split("\n")).openRegionFrom !== -1).toBe(true);
     });
 
     it("control: an unclosed DOCUMENT-LEVEL fence still refuses (pinned behavior)", () => {
-        expect(scanDocument("text[^1]\n\n```\ncode".split("\n")).endsProtected).toBe(true);
+        expect(readNote("text[^1]\n\n```\ncode".split("\n")).openRegionFrom !== -1).toBe(true);
     });
 });

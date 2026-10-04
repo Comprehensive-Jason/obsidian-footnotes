@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
 import { lintFootnotes } from "../../src/linting/linter";
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // Found by the conservation property (2026-09-11) while an unrelated change
 // was being checked; it predates that change. A note whose "# Footnotes"
@@ -32,9 +32,9 @@ describe("move-to-bottom parks a definition below an indented code chunk, never 
         const out = lintFootnotes(doc, options);
         expect(out).toBe("# Footnotes\n\n\tcode-shaped[^89]\n\n[^1]: sees [^1]");
         const lines = out.split("\n");
-        const scan = scanDocument(lines);
-        expect(scan.isProtected[2]).toBe(true);
-        expect(findDefinitionBlocks(lines, scan)).toEqual([{ name: "1", start: 4, end: 4 }]);
+        const reading = readNote(lines);
+        expect(reading.protectedLines[2]).toBe(true);
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([{ name: "1", start: 4, end: 4 }]);
         // the reference-shaped string inside the code stays dead
         expect(computeNextFootnoteNumber(out)).toBe(2);
     });

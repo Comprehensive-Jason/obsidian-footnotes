@@ -5,7 +5,8 @@ import { fakePlugin } from "../helpers/fake-plugin";
 
 import { buildDefinitionAppend } from "../../src/commands/definition-append";
 import { docContext } from "../../src/editor/doc-context";
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG: when the note already has a definition, the append goes straight
 // after the last definition block and never checks whether the note ends
@@ -60,7 +61,7 @@ describe("bug: the append after the last definition block ignores an unclosed re
         // the note does not "end inside" the region; the old pin read it
         // the other way, as the hand-written scanner did.
         it("the region ends with the definition, so a definition appended after a blank line is not inside it", () => {
-            expect(scanDocument(noteEndingInsideAnOpener(opener)).endsProtected).toBe(false);
+            expect(readNote(noteEndingInsideAnOpener(opener)).openRegionFrom !== -1).toBe(false);
         });
 
         it("the new definition lands outside that region and is a real definition", () => {
@@ -69,9 +70,9 @@ describe("bug: the append after the last definition block ignores an unclosed re
             const { change } = buildDefinitionAppend(docContext(doc), "2", false, fakePlugin());
             doc.transaction({ changes: [change] });
             const after = doc.lines;
-            const names = findDefinitionBlocks(after, scanDocument(after)).map((b) => b.name);
+            const names = readNote(after).blocks.map((b) => b.name);
             expect({
-                landingIsInsideTheUnclosedRegion: scanDocument(lines).endsProtectedAt[change.from.line],
+                landingIsInsideTheUnclosedRegion: readNote(lines).openRegionFrom !== -1 && change.from.line >= readNote(lines).openRegionFrom,
                 theNewDefinitionIsRecognized: names.includes("2"),
             }).toEqual({
                 landingIsInsideTheUnclosedRegion: false,

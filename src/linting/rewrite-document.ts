@@ -1,4 +1,4 @@
-import { normalizeEol, restoreEol } from "../parsing/markdown-scan";
+import { normalizeEol, restoreEol } from "../parsing/line-edits";
 import { Definition, NoteReading, readNote } from "../parsing/note-reading";
 
 // The setup and teardown every rewriting rule used to repeat for itself,
@@ -30,11 +30,6 @@ export interface DocumentView {
     readonly reading: NoteReading;
     /** The masked twin (the copy with protected text blanked out), from the reading. */
     readonly maskedLines: readonly string[];
-    /**
-     * One entry per line: true where a definition's label sits, from the
-     * note reading.
-     */
-    readonly definitionStarts: boolean[];
     /** Every definition, wherever it sits, from the note reading (note-reading.ts). */
     readonly definitions: readonly Definition[];
     /** The definitions whose lines are their own to move or cut (Definition.movable): the blocks move-to-bottom gathers and reindex reorders. */
@@ -80,9 +75,6 @@ function documentView(lines: string[]): DocumentView {
         },
         get maskedLines() {
             return reading().maskedLines();
-        },
-        get definitionStarts() {
-            return reading().labelLines;
         },
         get definitions() {
             return reading().definitions;

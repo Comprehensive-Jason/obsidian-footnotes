@@ -1,16 +1,12 @@
 // Imported from the glm-cycle-11 hunt of 2026-09-16 (OpenCode worktree); confirmed and fixed 2026-09-16.
-// PROBED 2026-09-16 (GLM hunt cycle 11): "[^1]: body", "    cont", "para", "===", "    code[^9]" renders the footnote "body cont", the heading "para", and a code block, so the block walker was right and the scan's one-line walk now agrees.
+// PROBED 2026-09-16 (GLM hunt cycle 11): "[^1]: body", "    cont", "para", "===", "    code[^9]" renders the footnote "body cont", the heading "para", and a code block, so the block walker was right and the reading's one-line walk now agrees.
 // GLM 5.3 Flash cycle 11 hunt of 2026-09-16 (OpenCode worktree glm-cycle-11). 2 of 3 tests carry it.fails; the control does not.
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
 import { lintFootnotes } from "../../src/linting/linter";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // SPEC QUESTION: where does a definition end when a setext underline follows
 // a MIXED run - an indented continuation line and then a plain lazy line?
@@ -35,7 +31,7 @@ import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
 // the chunk after it is the footnote's live body - "[^9]" is live.
 //
 // The plugin implements BOTH answers in different readers, and they
-// disagree on this exact shape. definitionStartLines (the label walk) ends
+// disagree on this exact shape. readNote(the label walk).labelLines ends
 // the definition at the underline (its `open === "definition" &&
 // setextUnderline` branch judges only the directly-above line, which is
 // unindented -> open = "none"), and the block walker agrees (the block ends
@@ -59,17 +55,17 @@ import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
 // spec question per the hunt rules: where Reading view cannot be consulted,
 // the disagreement is recorded, not judged.
 //
-// Settings involved: none for the scan; `Move definitions to the bottom`
+// Settings involved: none for the reading; `Move definitions to the bottom`
 // inherits whichever answer is wrong.
 
 const doc = "[^1]: body\n    cont\npara\n===\n    code[^9]";
 
 function facts(text: string) {
     const lines = text.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return { scan, masked, starts, blocks: findDefinitionBlocks(lines, scan, masked, starts) };
+    const reading = readNote(lines);
+    const masked = [...readNote(lines).maskedLines()];
+    const starts = readNote(lines).labelLines;
+    return { reading, masked, starts, blocks: readNote(lines).blocks };
 }
 
 describe("a setext underline after a definition's indented continuation and lazy line", () => {
@@ -77,9 +73,9 @@ describe("a setext underline after a definition's indented continuation and lazy
         // the block walker and the label walk end the definition at the
         // underline (the directly-above line is a plain lazy line); the
         // protection facts must not keep the chunk after the heading live
-        const { scan, blocks } = facts(doc);
+        const { reading, blocks } = facts(doc);
         expect(blocks.map((b) => [b.start, b.end])).toEqual([[0, 1]]);
-        expect(scan.isProtected[4]).toBe(true);
+        expect(reading.protectedLines[4]).toBe(true);
     });
 
     it("the lint does not flip a reference it itself counted live", () => {
@@ -88,19 +84,19 @@ describe("a setext underline after a definition's indented continuation and lazy
         // the state machine), the lint's output protects the chunk (dead)
         const before = facts(doc);
         const chunk = 4;
-        const liveBefore = referenceOccurrences(doc.split("\n")[chunk], before.masked[chunk], before.starts[chunk]).length;
+        const liveBefore = before.reading.referencesOn(chunk).length;
         const out = lintFootnotes(doc, { fixPunctuation: false, fixLazyDefinitions: false, moveDefinitionsToBottom: true, reindex: false });
         const after = facts(out);
         const outChunk = out.split("\n").findIndex((l) => l.startsWith("    code"));
-        const liveAfter = referenceOccurrences(out.split("\n")[outChunk], after.masked[outChunk], after.starts[outChunk]).length;
+        const liveAfter = after.reading.referencesOn(outChunk).length;
         expect(liveAfter).toBe(liveBefore);
     });
 
     it("the underline heads the lazy line alone: footnote \"body cont\", heading \"para\", then code", () => {
-        // probed in Reading view 2026-09-16; the scan's one-line walk now
+        // probed in Reading view 2026-09-16; the reading's one-line walk now
         // stops counting at the definition's indented continuation
-        const { scan, blocks } = facts(doc);
+        const { reading, blocks } = facts(doc);
         expect(blocks.map((b) => [b.start, b.end])).toEqual([[0, 1]]);
-        expect(scan.isProtected).toEqual([false, false, false, false, true]);
+        expect(reading.protectedLines).toEqual([false, false, false, false, true]);
     });
 });

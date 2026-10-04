@@ -2,11 +2,8 @@
 // RESOLVED 2026-09-16: Reading view agrees with micromark (probed: the label under a link reference definition renders as a definition), so a link reference definition ends the block; the pin passes.
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // spec question: is a `[^x]:` label directly under a LINK REFERENCE
 // DEFINITION ("[foo]: /url") a footnote definition, or lazy paragraph
@@ -52,9 +49,7 @@ import {
 
 const startsOf = (doc: string): boolean[] => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return definitionStartLines(lines, scan, (i) => masked[i]);
+    return readNote(lines).labelLines;
 };
 
 describe("spec question: a definition label directly under a link reference definition", () => {

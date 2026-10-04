@@ -5,7 +5,7 @@ import { fakePlugin } from "../helpers/fake-plugin";
 
 import { adjustFootnotePosition, endOfWordOffset } from "../../src/editor/cursor-motion";
 import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after-punctuation";
-import { referenceLandingAfter } from "../../src/parsing/markdown-scan";
+import { referenceLandingAfter } from "../../src/parsing/landing";
 
 // Jason's manual pass, former sheet 01 (2026-09-09): with "insert at end of word"
 // on, a footnote placed on the last word of a quoted, bracketed, or

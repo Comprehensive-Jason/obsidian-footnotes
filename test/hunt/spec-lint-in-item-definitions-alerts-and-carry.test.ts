@@ -6,10 +6,10 @@ import { nestedFootnoteDefinitionNames, noticeLintAlerts } from "../../src/linti
 import { lintFootnotes, lintOptionsFromSettings } from "../../src/linting/linter";
 import { duplicateFootnoteDefinitionNames } from "../../src/linting/rules/merge-duplicate-definitions";
 import { orphanedFootnoteDefinitionNames } from "../../src/linting/rules/remove-orphaned-definitions";
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
+import { readNote } from "../../src/parsing/note-reading";
 
 // spec question: should the never-silent alerts and copy-and-paste know
 // footnote definitions written inside a list item?
@@ -48,20 +48,20 @@ import { messages, resetNotices } from "../helpers/notices";
 // ADR 0002 (the lint is never silent about what it cannot fix), and the
 // README's Paste paragraph.
 
-/** The scanner's readings of `doc` that the alerts take: the lines, the scan, the masked twin, and which lines start a definition. */
+/** The scanner's readings of `doc` that the alerts take: the lines, the reading, the masked twin, and which lines start a definition. */
 function readers(doc: string) {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return { lines, scan, masked, starts };
+    const reading = readNote(lines);
+    const masked = [...readNote(lines).maskedLines()];
+    const starts = readNote(lines).labelLines;
+    return { lines, reading, masked, starts };
 }
 
 describe("spec question: the never-silent alerts and in-item definitions", () => {
     it("the nested-footnote alert names an in-item definition holding a reference", () => {
-        const { lines, scan, masked, starts } = readers(["text[^1] [^2]", "", "- [^1]: see[^2]", "", "[^2]: two"].join("\n"));
+        const { lines } = readers(["text[^1] [^2]", "", "- [^1]: see[^2]", "", "[^2]: two"].join("\n"));
         // Today: [].
-        expect(nestedFootnoteDefinitionNames(lines, scan, masked, starts)).toEqual(["1"]);
+        expect(nestedFootnoteDefinitionNames(lines)).toEqual(["1"]);
     });
 
     it("the duplicate alert names a footnote defined in an item and again at column 0", () => {

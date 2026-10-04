@@ -2,7 +2,7 @@ import { EditorPosition } from "obsidian";
 
 import { positionAfterRewrite } from "../editor/document-diff";
 import { orphanedDefinitionBlocks } from "../linting/rules/remove-orphaned-definitions";
-import { definitionCuts, normalizeEol, removeLineRanges } from "../parsing/markdown-scan";
+import { definitionCuts, normalizeEol, removeLineRanges } from "../parsing/line-edits";
 import { Definition, readNote } from "../parsing/note-reading";
 
 // Carrying footnote definitions along on copy, cut, and paste (issue #59;

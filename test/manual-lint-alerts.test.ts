@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { lintFootnotes } from "../src/linting/linter";
 import { invalidFootnoteNames, noticeLintAlerts } from "../src/linting/lint-alerts";
-import { maskProtectedLines, scanDocument } from "../src/parsing/markdown-scan";
 import { fakePlugin } from "./helpers/fake-plugin";
 import { messages, resetNotices } from "./helpers/notices";
 
@@ -167,8 +166,7 @@ describe("former sheet 23: invalid names", () => {
         // names rather than one merged span
         const after = lintFootnotes(NOTE, SETTINGS);
         const lines = after.split("\n");
-        const scan = scanDocument(lines);
-        const names = invalidFootnoteNames(lines, scan, maskProtectedLines(lines, scan));
+        const names = invalidFootnoteNames(lines);
         expect(names).toContain(`aa${BT}a`);
         expect(names).toContain("bb#b");
         expect(names).toContain(`cc${BT}c`);
@@ -180,8 +178,7 @@ describe("former sheet 23: invalid names", () => {
         const after = lintFootnotes(NOTE, SETTINGS);
         expect(after).toContain("[^#jump]: a hashed definition");
         const lines = after.split("\n");
-        const scan = scanDocument(lines);
-        expect(invalidFootnoteNames(lines, scan, maskProtectedLines(lines, scan))).toContain("#jump");
+        expect(invalidFootnoteNames(lines)).toContain("#jump");
     });
 });
 

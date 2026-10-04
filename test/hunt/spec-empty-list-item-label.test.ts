@@ -3,12 +3,9 @@
 // GLM 5.3 Flash cycle 11 hunt of 2026-09-16 (OpenCode worktree glm-cycle-11). 1 of 2 tests carries it.fails; the control does not.
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
 import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphaned-references";
+import { readNote } from "../../src/parsing/note-reading";
 
 // SPEC QUESTION: does an EMPTY list item ("- ", no text) end at a column-0
 // label line, the way every other list item does when the paragraph it holds
@@ -53,9 +50,7 @@ import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphane
 
 function startsOf(doc: string): boolean[] {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return definitionStartLines(lines, scan, (i) => masked[i]);
+    return readNote(lines).labelLines;
 }
 
 describe("a column-0 label under an EMPTY list item", () => {
@@ -66,12 +61,10 @@ describe("a column-0 label under an EMPTY list item", () => {
     it("control: a label under a list item WITH text reads lazy (the recorded rule)", () => {
         const doc = "- item\n[^3]: under the item";
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
         const starts = startsOf(doc);
         expect(starts).toEqual([false, false]);
         expect(
-            lazyDefinitionLabelNames(lines, scan, masked, starts),
+            lazyDefinitionLabelNames(lines),
         ).toEqual(["3"]);
     });
 });

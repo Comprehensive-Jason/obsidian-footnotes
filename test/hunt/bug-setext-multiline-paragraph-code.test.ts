@@ -1,8 +1,8 @@
 // Imported from the Kimi K3 cycle 5 hunt of 2026-09-16 (OpenCode worktree); 4 of 6 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 import { describe, expect, it } from "vitest";
 
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // Obsidian turns a setext underline into a heading only when ONE line
 // sits above it: "para", "more", "===" renders as a paragraph with a
@@ -38,29 +38,27 @@ import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
 describe("a setext-shaped line under a two-line paragraph is literal text, so an indented chunk after it is live", () => {
     it("the indented chunk after 'para','more','===' is not protected", () => {
         const lines = ["para", "more", "===", "    chunk[^1]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, false, false]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, false, false]);
     });
 
     it("the reference in the chunk is live", () => {
         const lines = ["para", "more", "===", "    chunk[^1]"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(referenceOccurrences(lines[3], masked[3]).map((o) => o.name)).toEqual(["1"]);
+        expect(readNote(lines).referencesOn(3).map((o) => o.name)).toEqual(["1"]);
     });
 
     it("the same inside a blockquote", () => {
         const lines = ["> para", "> more", "> ===", ">     chunk[^1]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, false, false]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, false, false]);
     });
 
     it("control: under a ONE-line paragraph the chunk is code (the one-line rule)", () => {
         const lines = ["para", "===", "    chunk[^1]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, true]);
     });
 
     it("control: a three-dash run is a thematic break either way", () => {
         const lines = ["para", "more", "---", "    chunk[^1]"];
-        expect(scanDocument(lines).isProtected).toEqual([false, false, false, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, false, true]);
     });
 
     it("a code span crosses the literal '===' inside the paragraph (paragraphGoesOn has the same miss)", () => {
@@ -70,9 +68,7 @@ describe("a setext-shaped line under a two-line paragraph is literal text, so an
         // is live (after it). The walk stops at the "===", reads no span
         // at all, and both come back live.
         const lines = ["para `code", "mo[^2]re", "===", "span` [^1]"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(referenceOccurrences(lines[1], masked[1]).map((o) => o.name)).toEqual([]);
-        expect(referenceOccurrences(lines[3], masked[3]).map((o) => o.name)).toEqual(["1"]);
+        expect(readNote(lines).referencesOn(1).map((o) => o.name)).toEqual([]);
+        expect(readNote(lines).referencesOn(3).map((o) => o.name)).toEqual(["1"]);
     });
 });

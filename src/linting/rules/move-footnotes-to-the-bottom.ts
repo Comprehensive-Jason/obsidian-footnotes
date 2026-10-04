@@ -1,4 +1,4 @@
-import { findLineRunEnd, removeLineRanges } from "../../parsing/markdown-scan";
+import { findLineRunEnd, removeLineRanges } from "../../parsing/line-edits";
 import { readNote } from "../../parsing/note-reading";
 import { linesReadDifferently } from "./remove-orphaned-definitions";
 import { DocumentView, rewriteDocument } from "../rewrite-document";
@@ -88,7 +88,7 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
     // Remember how many blank lines the note ended with; they go back on
     // at the end. The trim goes through the view's own method, which
     // refuses to run once anything has been worked out from the lines,
-    // so the scan can never end up describing the untrimmed note.
+    // so the reading can never end up describing the untrimmed note.
     const trailingNewlines = view.trimTrailingBlankLines();
 
     const { reading, blocks } = view;

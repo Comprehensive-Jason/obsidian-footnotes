@@ -2,8 +2,8 @@
 import { describe, expect, it } from "vitest";
 
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
-import { protectedLines } from "../../src/parsing/markdown-scan";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
+import { readNote } from "../../src/parsing/note-reading";
 
 // What a user sees: in a note with a fenced code block inside a blockquote
 // inside a list item ("- > ```"), the fence is not detected: code inside it
@@ -27,7 +27,7 @@ describe("a fence inside a blockquote inside a list item is protected", () => {
     });
 
     it("the fence interior and closer are protected lines", () => {
-        expect(protectedLines(doc.split("\n"))).toEqual([true, true, true, false]);
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([true, true, true, false]);
     });
 
     it("orphan deletion does not cut code text out of the nested fence", () => {

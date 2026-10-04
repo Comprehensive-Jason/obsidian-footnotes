@@ -6,11 +6,6 @@ import { messages, resetNotices } from "./helpers/notices";
 import { noticeSegments } from "../src/editor/notice";
 import { noticeLintAlerts } from "../src/linting/lint-alerts";
 import { lazyDefinitionLabelNames } from "../src/linting/rules/remove-orphaned-references";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../src/parsing/markdown-scan";
 
 // The lazy-definition alert (Jason, 2026-09-09, right after the prose-label
 // rule shipped): a "[^x]:" directly under a prose line is lazy paragraph
@@ -41,10 +36,7 @@ const SHEET = [
 
 function names(doc: string): string[] {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return lazyDefinitionLabelNames(lines, scan, masked, starts);
+    return lazyDefinitionLabelNames(lines);
 }
 
 describe("lazyDefinitionLabelNames", () => {

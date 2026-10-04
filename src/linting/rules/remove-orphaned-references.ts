@@ -1,11 +1,7 @@
-import { definitionLabelWithName } from "../../parsing/footnote-grammar";
+import { definitionLabelWithName } from "../../parsing/label-shapes";
 import { LineEdit, linesReadAlike, readNote } from "../../parsing/note-reading";
-import {
-    lazyDefinitionLabelLines,
-    underlinedDefinitionLabelLines,
-    normalizeEol,
-    restoreEol,
-} from "../../parsing/markdown-scan";
+import { lazyDefinitionLabelLines, underlinedDefinitionLabelLines } from "../../parsing/label-shapes";
+import { normalizeEol, restoreEol } from "../../parsing/line-edits";
 import { FootnoteRule } from "../rule";
 
 // Orphaned REFERENCES: the other side of reindex's orphaned definitions
@@ -43,7 +39,7 @@ function definitionNamesFolded(lines: string[]): Set<string> {
 /**
  * The names on lines that look like labels but are NOT definitions. A
  * "[^x]:" line directly under a line of prose is more paragraph text to
- * Obsidian, as definitionStartLines decides; it is one blank line short of
+ * Obsidian, as the note reading decides; it is one blank line short of
  * the definition the user meant. The project calls it a lazy label.
  *
  * The names come back in the order they first appear, spelled as first
@@ -62,7 +58,7 @@ function definitionNamesFolded(lines: string[]): Set<string> {
  * delete: the user wrote the definition (Kimi hunt cycle 3, probed in
  * Reading view 2026-09-16).
  */
-export function underlinedDefinitionLabelNames(lines: string[], ..._unused: unknown[]): string[] {
+export function underlinedDefinitionLabelNames(lines: string[]): string[] {
     const reading = readNote(lines);
     const names: string[] = [];
     const seen = new Set<string>();
@@ -77,7 +73,7 @@ export function underlinedDefinitionLabelNames(lines: string[], ..._unused: unkn
     return names;
 }
 
-export function lazyDefinitionLabelNames(lines: string[], ..._unused: unknown[]): string[] {
+export function lazyDefinitionLabelNames(lines: string[]): string[] {
     const reading = readNote(lines);
     const names: string[] = [];
     const seen = new Set<string>();

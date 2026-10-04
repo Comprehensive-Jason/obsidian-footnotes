@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // spec question: should a "[^1]" inside a link reference definition's
 // title or address, or inside a reference-style image's alt text, count
@@ -36,10 +36,7 @@ import { definitionStartLines, maskProtectedLines, scanDocument } from "../../sr
 // Every live reference in `doc`, as "line:name".
 function liveReferences(doc: string): string[] {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return lines.flatMap((l, i) => referenceOccurrences(l, masked[i], starts[i]).map((o) => `${i}:${o.name}`));
+    return lines.flatMap((_, i) => readNote(lines).referencesOn(i).map((o) => `${i}:${o.name}`));
 }
 
 describe("spec question: link reference definitions and reference-style images", () => {

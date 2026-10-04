@@ -2,12 +2,8 @@
 import { describe, expect, it } from "vitest";
 
 import { fixLazyDefinitions } from "../../src/linting/rules/fix-lazy-definitions";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
-import { tableRowLinesOf } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // A GFM table row need not start with a pipe: "a | b" is a valid row
 // (GFM: "A leading and trailing pipe is also recommended for clarity of
@@ -40,9 +36,7 @@ const doc = "a | b\n--- | ---\n[^1]: x\n\nuse[^1]";
 describe("a definition label directly under a table row without a leading pipe", () => {
     it("is a definition (the A2 ruling), not a lazy label", () => {
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+        const starts = readNote(lines).labelLines;
         expect(starts[2]).toBe(true);
     });
 
@@ -52,14 +46,12 @@ describe("a definition label directly under a table row without a leading pipe",
 
     it("control: the plugin's own table model accepts the pipe-less table", () => {
         const lines = doc.split("\n");
-        expect(tableRowLinesOf(lines)).toEqual([true, true, false, false, false]);
+        expect(readNote(lines).tableRowLines).toEqual([true, true, false, false, false]);
     });
 
     it("control: the pipe-delimited form is already a definition (the A2 pin)", () => {
         const lines = "| a | b |\n| --- | --- |\n[^1]: x".split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+        const starts = readNote(lines).labelLines;
         expect(starts[2]).toBe(true);
     });
 });

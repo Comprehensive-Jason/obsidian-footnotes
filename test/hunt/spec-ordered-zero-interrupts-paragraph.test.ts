@@ -1,8 +1,8 @@
 // Imported from the Kimi K3 cycle 4 hunt of 2026-09-16 (OpenCode worktree); 1 of 3 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 // REFUTED 2026-09-16 (Kimi hunt cycle 4, probed in Reading view): "para" over "01. item" is one paragraph, no list, so only a literal "1." or "1)" interrupts; the plugin's reading stands.
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 
 // spec question: does an ordered list item numbered "01" (or "001")
 // interrupt a paragraph in Obsidian's Reading view?
@@ -32,7 +32,7 @@ import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-sca
 
 describe("spec question: a zero-padded ordered item interrupting a paragraph", () => {
     it("the plugin lets a code span cross a '01.' line (the premise to verify)", () => {
-        const masked = maskProtectedLines("a `code\n01. [^1] x\nspan`".split("\n"), scanDocument("a `code\n01. [^1] x\nspan`".split("\n")));
+        const masked = [...readNote("a `code\n01. [^1] x\nspan`".split("\n")).maskedLines()];
         expect(masked[1]).not.toContain("[^1]");
     });
 
@@ -40,13 +40,13 @@ describe("spec question: a zero-padded ordered item interrupting a paragraph", (
         // "para" over "01. item" renders as one paragraph (probed
         // 2026-09-16), so the plugin's literal "1[.)]" test is right
         const lines = "a `code\n01. [^1] x\nspan`".split("\n");
-        const masked = maskProtectedLines(lines, scanDocument(lines));
+        const masked = [...readNote(lines).maskedLines()];
         expect(masked[1]).not.toContain("[^1]");
     });
 
     it("control: a literal '1.' item stops the span today", () => {
         const lines = "a `code\n1. [^1] x\nspan`".split("\n");
-        const masked = maskProtectedLines(lines, scanDocument(lines));
+        const masked = [...readNote(lines).maskedLines()];
         expect(masked[1]).toContain("[^1]");
     });
 });

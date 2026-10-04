@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { protectedLines } from "../../src/parsing/markdown-scan";
+
 import { footnotePrefix } from "../../src/parsing/footnote-prefix";
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG: CRLF line endings defeat frontmatter protection AND the footnote-prefix
 // feature. `protectedLines` and `footnotePrefix` both gate on the exact string
@@ -17,7 +18,7 @@ import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
 
 describe("bug: CRLF defeats frontmatter protection and footnote-prefix", () => {
     it("protectedLines marks CRLF frontmatter lines as protected", () => {
-        const flags = protectedLines(["---\r", "a: b\r", "---\r", "x[^1]\r"]);
+        const flags = readNote(["---\r", "a: b\r", "---\r", "x[^1]\r"]).protectedLines;
         expect(flags).toEqual([true, true, true, false]);
     });
 

@@ -2,8 +2,8 @@
 // RESOLVED 2026-09-16 (Kimi hunt cycle 3, probed in Reading view): micromark's reading holds under an INDENTED continuation ("x y ===" is one footnote; "---" is a rule). Directly under the label line, or under a LAZY continuation line, a setext underline makes a heading instead (the label's own line dies as heading text; a lazy line is pulled out of the footnote as a heading), pinned in bug-setext-underline-makes-heading.test.ts.
 import { describe, expect, it } from "vitest";
 
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
+import { readNote } from "../../src/parsing/note-reading";
 
 // SPEC QUESTION: a setext-shaped line ("===", "--") directly under a
 // footnote definition's continuation line - part of the footnote's body,
@@ -45,19 +45,19 @@ import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-fo
 describe("spec: a setext-shaped line under a definition's continuation", () => {
     it("micromark's reading: \"===\" under \"    y\" is the footnote's lazy body text", () => {
         const lines = "[^1]: x\n    y\n===\n\nuse[^1]".split("\n");
-        const blocks = findDefinitionBlocks(lines, scanDocument(lines));
+        const blocks = readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }));
         expect(blocks).toEqual([{ name: "1", start: 0, end: 2 }]);
     });
 
     it("micromark's reading: \"--\" under \"    y\" is the footnote's lazy body text", () => {
         const lines = "[^1]: x\n    y\n--\n\nuse[^1]".split("\n");
-        const blocks = findDefinitionBlocks(lines, scanDocument(lines));
+        const blocks = readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }));
         expect(blocks).toEqual([{ name: "1", start: 0, end: 2 }]);
     });
 
     it("control: \"---\" (three dashes) is a thematic break to both parsers - NOT body text", () => {
         const lines = "[^1]: x\n    y\n---\n\nuse[^1]".split("\n");
-        const blocks = findDefinitionBlocks(lines, scanDocument(lines));
+        const blocks = readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }));
         expect(blocks).toEqual([{ name: "1", start: 0, end: 1 }]);
     });
 

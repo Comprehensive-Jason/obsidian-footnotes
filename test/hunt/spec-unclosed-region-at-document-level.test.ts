@@ -1,10 +1,8 @@
 // Imported from the Kimi K3 cycle 3 hunt of 2026-09-16 (OpenCode worktree); 4 of 6 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 // RESOLVED 2026-09-16 (Kimi hunt cycle 3, probed in Reading view): micromark's reading holds. An opener with no closer on its line runs on only when a later line of the SAME paragraph closes it (a blank line, a heading, a list, a quote, a fence, a rule, a setext underline, an HTML block, or a "%%" block ends the search); otherwise it is literal text and the rest of the note is live. Block math ("$$" at the start of a line's content) and a "<!--" at the start of a continuation line's content keep running as blocks.
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { protectedLines, scanDocument } from "../../src/parsing/markdown-scan";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import { maskProtectedLines } from "../../src/parsing/markdown-scan";
 
 // SPEC QUESTION: an HTML comment (or "$$" math block) opened mid-line at
 // the DOCUMENT level and never closed - does the rest of the note go
@@ -40,16 +38,14 @@ import { maskProtectedLines } from "../../src/parsing/markdown-scan";
 // <!--\n# Heading [^1]" and "x <!--\n> > [^a]: def".
 //
 // Source of truth if Reading view agrees with micromark: an unterminated
-// "<!--" or "$$" is literal text ending with its paragraph; the scan must
+// "<!--" or "$$" is literal text ending with its paragraph; the reading must
 // not protect anything past the paragraph's end, and endsProtected must
-// be false. Settings involved: every rule inherits the scan; `Move
+// be false. Settings involved: every rule inherits the reading; `Move
 // definitions to the bottom` refuses outright under the current reading.
 
 const refsAt = (doc: string, line: number): string[] => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return referenceOccurrences(lines[line], masked[line]).map((o) => o.name);
+    return readNote(lines).referencesOn(line).map((o) => o.name);
 };
 
 describe("spec: a document-level unclosed comment or math block", () => {
@@ -59,39 +55,39 @@ describe("spec: a document-level unclosed comment or math block", () => {
 
     it("micromark's reading: a definition in a quote after \"x <!--\" is live", () => {
         const doc = "x <!--\n> > [^a]: def\n\nuse[^a]";
-        expect(protectedLines(doc.split("\n"))).toEqual([false, false, false, false]);
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([false, false, false, false]);
     });
 
     it("micromark's reading: the note does not end protected", () => {
-        expect(scanDocument("x <!--\n\nafter".split("\n")).endsProtected).toBe(false);
+        expect(readNote("x <!--\n\nafter".split("\n")).openRegionFrom !== -1).toBe(false);
     });
 
     it("micromark's reading: same for an unclosed \"x $$\"", () => {
-        expect(scanDocument("x $$\n\nafter".split("\n")).endsProtected).toBe(false);
+        expect(readNote("x $$\n\nafter".split("\n")).openRegionFrom !== -1).toBe(false);
     });
 
     it("the opener is literal text: nothing is protected and the note ends live (Reading view, 2026-09-16)", () => {
         const doc = "x <!--\n\nafter";
-        const scan = scanDocument(doc.split("\n"));
-        expect(scan.isProtected).toEqual([false, false, false]);
-        expect(scan.endsProtected).toBe(false);
+        const reading = readNote(doc.split("\n"));
+        expect(reading.protectedLines).toEqual([false, false, false]);
+        expect(reading.openRegionFrom !== -1).toBe(false);
     });
 
     it("a closer on a later line of the SAME paragraph makes it a real comment", () => {
         const doc = "x <!--\nhidden\n--> live[^1]";
-        const scan = scanDocument(doc.split("\n"));
-        expect(scan.isProtected).toEqual([false, true, false]);
+        const reading = readNote(doc.split("\n"));
+        expect(reading.protectedLines).toEqual([false, true, false]);
         expect(refsAt(doc, 2)).toEqual(["1"]);
     });
 
     it("a closer after a blank line pairs with nothing: all literal", () => {
         const doc = "x <!--\n\nhidden[^1]\n\n--> after";
-        expect(scanDocument(doc.split("\n")).isProtected).toEqual([false, false, false, false, false]);
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([false, false, false, false, false]);
         expect(refsAt(doc, 2)).toEqual(["1"]);
     });
 
     it("the quoted twin's pinned ground truth stands: the region dies with its quote", () => {
         const doc = "> <!--\n> draft\n\nafter[^1]";
-        expect(protectedLines(doc.split("\n"))).toEqual([true, true, false, false]);
+        expect(readNote(doc.split("\n")).protectedLines).toEqual([true, true, false, false]);
     });
 });

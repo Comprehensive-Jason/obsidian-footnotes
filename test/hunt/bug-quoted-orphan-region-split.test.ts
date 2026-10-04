@@ -2,12 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // A definition block OWNS a region one of its lines opens: the column-0
 // walk (findDefinitionBlocks) absorbs the interior and closer lines of a
@@ -42,12 +37,9 @@ const mathDoc = "> [^1]: def\n> tail $$\n> math [^9]\n> $$\n\nafter";
 
 function liveReferenceNames(markdown: string): string[] {
     const lines = markdown.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
     const names: string[] = [];
     for (let i = 0; i < lines.length; i++) {
-        for (const occurrence of referenceOccurrences(lines[i], masked[i], starts[i])) {
+        for (const occurrence of readNote(lines).referencesOn(i)) {
             names.push(occurrence.name);
         }
     }

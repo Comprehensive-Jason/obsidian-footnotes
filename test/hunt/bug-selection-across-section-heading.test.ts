@@ -5,7 +5,7 @@ import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (command-press property, the day the generator learned to emit a
 // "# Footnotes" line, 2026-09-09): with the section-heading setting ON, a
@@ -54,8 +54,7 @@ describe("a selection that swallows the section heading", () => {
         expect(tail).toBeGreaterThan(-1);
         expect(label).toBeGreaterThan(tail);
         // the definition is a real block, with the swallowed heading text as its body
-        const scan = scanDocument(doc.lines);
-        const block = findDefinitionBlocks(doc.lines, scan).find((b) => b.name === "1");
+        const block = readNote(doc.lines).blocks.find((b) => b.name === "1");
         expect(block?.start).toBe(label);
         expect(doc.lines[label]).toBe("[^1]: Footnotes");
         // and a fresh heading was slotted above it, since the old one is gone

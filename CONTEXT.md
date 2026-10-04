@@ -126,8 +126,10 @@ math, comments, frontmatter.
 
 **Masked twin**:
 The document copy with protected spans blotted out
-(indices preserved) that every scan judges against; names are then
-re-sliced from the raw line.
+(indices preserved), built from the note reading, for the few questions
+the reading does not answer itself: an empty "[^]" placeholder, a label's
+shape, the punctuation after a word. Names are re-sliced from the raw
+line.
 _Avoid_: sanitized copy, cleaned text
 
 **Raw line**:

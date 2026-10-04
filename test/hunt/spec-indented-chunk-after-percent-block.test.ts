@@ -52,17 +52,13 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 describe("spec: a closed %% block comment under a definition ends it", () => {
     it("REFUTED: the indented chunk after the closed block is the footnote's body, not code", () => {
         const lines = ["[^1]: body", "%%", "hidden", "%%", "    chunk[^73]"];
-        expect(scanDocument(lines).isProtected).toEqual([
+        expect(readNote(lines).protectedLines).toEqual([
             false,
             false,
             false,
@@ -73,9 +69,7 @@ describe("spec: a closed %% block comment under a definition ends it", () => {
 
     it("REFUTED: so the reference inside it is live", () => {
         const lines = ["[^1]: body", "%%", "hidden", "%%", "    chunk[^73]"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(referenceOccurrences(lines[4], masked[4]).map((o) => o.name)).toEqual(["73"]);
+        expect(readNote(lines).referencesOn(4).map((o) => o.name)).toEqual(["73"]);
     });
 
     it("control: the label-after-closer fact the scan already holds", () => {
@@ -85,9 +79,6 @@ describe("spec: a closed %% block comment under a definition ends it", () => {
         // the reading this spec question asks Reading view to confirm for
         // the indented chunk.
         const lines = ["%% c", "%% [^3]: def", "    body of the definition"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const maskedAt = (i: number) => masked[i];
-        expect(definitionStartLines(lines, scan, maskedAt)[1]).toBe(true);
+        expect(readNote(lines).labelLines[1]).toBe(true);
     });
 });

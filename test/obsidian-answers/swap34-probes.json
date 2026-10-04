@@ -17,5 +17,8 @@
 {"id":"swap34:lrd-label-blank-text","text":"[a\n\nb]: /url\n\nx[^1]\n\n[^1]: d","defs":[["1",6,0,6]],"refs":[["1",4,1]],"code":[]},
 {"id":"swap34:lrd-label-parts-repro","text":"[\n  - nested item\n\n\n$$\nText\n$$1.       [^1]: def\n\nx[^1]","defs":[],"refs":[["1",8,1]],"code":[]},
 {"id":"swap34:lrd-label-x-blank","text":"[x\n\n[^1]: d\n\nuse[^1]","defs":[],"refs":[["1",4,3]],"code":[]},
-{"id":"swap34:lrd-label-after-para","text":"see\n\n[\nmore\n\n[^1]: d\n\nuse[^1]","defs":[],"refs":[["1",7,3]],"code":[]}
+{"id":"swap34:lrd-label-after-para","text":"see\n\n[\nmore\n\n[^1]: d\n\nuse[^1]","defs":[],"refs":[["1",7,3]],"code":[]},
+{"id":"swap34:ref-as-link-text","text":"see [^1](https://e.com/)\n\n[^1]: d","defs":[["1",2,0,2]],"refs":[],"code":[]},
+{"id":"swap34:ref-before-ref-link","text":"see [^1][ref]\n\n[ref]: http://u\n[^1]: d","defs":[["1",3,0,3]],"refs":[["1",0,4]],"code":[]},
+{"id":"swap34:ref-as-link-text-space","text":"see [^1] (https://e.com/)\n\n[^1]: d","defs":[["1",2,0,2]],"refs":[["1",0,4]],"code":[]}
 ]

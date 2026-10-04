@@ -1,4 +1,4 @@
-import { findLineRunEnd, normalizeEol, restoreEol } from "../../parsing/markdown-scan";
+import { findLineRunEnd, normalizeEol, restoreEol } from "../../parsing/line-edits";
 import { readNote } from "../../parsing/note-reading";
 
 // Jason's ask, 2026-09-25: when a plugin action leaves nothing under the

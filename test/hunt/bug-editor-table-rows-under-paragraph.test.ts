@@ -4,8 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import { docContext } from "../../src/editor/doc-context";
 import { warnTableEdgeCaretIfOutside } from "../../src/commands/press-guards";
-import { scanDocument, tableRowLinesOf } from "../../src/parsing/markdown-scan";
+
 import { fakeEditor } from "../helpers/fake-editor";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG: the repo has TWO table readers, and after Kimi hunt cycle 3 they
 // disagree. tableRowLinesOf (the scanner's, used by definitionStartLines
@@ -53,11 +54,11 @@ const DOC = ["prose", "| a | b |", "| --- |", "| c | d |", "", "tail"];
 
 describe("the editor table reader under plain paragraph text", () => {
     it("a pipe run under prose is no table", () => {
-        expect(tableRowLinesOf(DOC)).toEqual(DOC.map(() => false));
+        expect(readNote(DOC).tableRowLines).toEqual(DOC.map(() => false));
         // the same under a list item line, the second half of the pinned
         // Reading-view rule
         const itemLines = ["- item", "| a | b |", "| --- |"];
-        expect(tableRowLinesOf(itemLines)).toEqual([false, false, false]);
+        expect(readNote(itemLines).tableRowLines).toEqual([false, false, false]);
     });
 
     it("the caret on the dashes line is NOT refused as a table delimiter", () => {
@@ -72,7 +73,7 @@ describe("the editor table reader under plain paragraph text", () => {
 
     it("control: the same run after a blank line is a table to both readers", () => {
         const lines = ["prose", "", "| a | b |", "| --- |", "| c | d |"];
-        expect(tableRowLinesOf(lines)).toEqual([false, false, true, true, true]);
-        expect(scanDocument(lines).isProtected).toEqual([false, false, false, false, false]);
+        expect(readNote(lines).tableRowLines).toEqual([false, false, true, true, true]);
+        expect(readNote(lines).protectedLines).toEqual([false, false, false, false, false]);
     });
 });

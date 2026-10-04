@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+
+
 import { lintFootnotes } from "../../src/linting/linter";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (wrong output on default settings, silent): any "]" followed by
 // "(...)" is treated as a link, even when it is none, so a live reference
@@ -32,10 +33,7 @@ import { lintFootnotes } from "../../src/linting/linter";
 // Every live reference in `doc`, as "line:name".
 function liveReferences(doc: string): string[] {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return lines.flatMap((l, i) => referenceOccurrences(l, masked[i], starts[i]).map((o) => `${i}:${o.name}`));
+    return lines.flatMap((_, i) => readNote(lines).referencesOn(i).map((o) => `${i}:${o.name}`));
 }
 
 describe("a parenthesised run that is not a link destination", () => {

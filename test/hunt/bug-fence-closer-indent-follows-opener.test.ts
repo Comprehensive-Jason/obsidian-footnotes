@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
-import { protectedLines } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // Scenario: a code fence opened with one space of indent is closed by a line
 // indented four spaces, which is too deep to be a closer. Everything after
@@ -34,7 +34,7 @@ import { protectedLines } from "../../src/parsing/markdown-scan";
 describe("a closer indented four spaces never closes a document-level fence", () => {
     it("an opener indented one space is not closed by a four-space line", () => {
         const lines = [" ```", "aaa[^1]", "    ```", "bbb[^2]"];
-        expect(protectedLines(lines)).toEqual([true, true, true, true]);
+        expect(readNote(lines).protectedLines).toEqual([true, true, true, true]);
     });
 
     it("so the text after it is still code, and reserves no number", () => {
@@ -42,7 +42,7 @@ describe("a closer indented four spaces never closes a document-level fence", ()
     });
 
     it("control: an opener with no indent already refuses that closer", () => {
-        expect(protectedLines(["```", "aaa[^1]", "    ```", "bbb[^2]"])).toEqual([
+        expect(readNote(["```", "aaa[^1]", "    ```", "bbb[^2]"]).protectedLines).toEqual([
             true,
             true,
             true,

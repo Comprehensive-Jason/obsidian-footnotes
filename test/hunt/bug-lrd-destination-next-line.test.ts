@@ -1,9 +1,9 @@
 // Imported from the GLM 5.3 Flash cycle 6 hunt of 2026-09-16 (OpenCode worktree); 4 of 4 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 import { describe, expect, it } from "vitest";
 
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphaned-references";
 import { fixLazyDefinitions } from "../../src/linting/rules/fix-lazy-definitions";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (GLM hunt, cycle after 9, 2026-09-16): CommonMark 4.7 lets a link
 // reference definition's DESTINATION sit on the line after the label:
@@ -41,10 +41,8 @@ const doc = "[foo]:\n/url\n[^1]: x";
 describe("a footnote label under a link reference definition whose destination follows on the next line", () => {
     it("starts a definition, as under the one-line and title-on-next-line forms", () => {
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
         // today: all false - the label reads lazy
-        expect(definitionStartLines(lines, scan, (i) => masked[i])).toEqual([
+        expect(readNote(lines).labelLines).toEqual([
             false,
             false,
             true,
@@ -53,10 +51,7 @@ describe("a footnote label under a link reference definition whose destination f
 
     it("is not named by the lazy-definition alert", () => {
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-        expect(lazyDefinitionLabelNames(lines, scan, masked, starts)).toEqual([]);
+        expect(lazyDefinitionLabelNames(lines)).toEqual([]);
     });
 
     it("fix-lazy leaves the note alone", () => {
@@ -65,10 +60,8 @@ describe("a footnote label under a link reference definition whose destination f
 
     it("the same for the three-line form (destination, then title on the next line)", () => {
         const lines = "[foo]:\n/url\n   \"t\"\n[^1]: x".split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
         // today: the label reads lazy under the destination line
-        expect(definitionStartLines(lines, scan, (i) => masked[i])).toEqual([
+        expect(readNote(lines).labelLines).toEqual([
             false,
             false,
             false,

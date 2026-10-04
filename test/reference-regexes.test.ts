@@ -1,60 +1,54 @@
 import { describe, expect, it } from "vitest";
 
-import { AllReferences, ExtractNameFromFootnote, footnoteReferenceMatches } from "../src/parsing/footnote-grammar";
+import { referenceShapes } from "../src/parsing/footnote-grammar";
+import { readNote } from "../src/parsing/note-reading";
 
-// AllReferences is a /g regex: matchAll (used everywhere in src) is stateless,
-// but .test()/.exec() would advance lastIndex between calls - these tests
-// stick to matchAll on purpose.
-function referenceNames(text: string): string[] {
-    return [...text.matchAll(AllReferences)].map((m) => m[1]);
-}
+// What counts as a reference. Since the runtime swap (step 3, 2026-10-03)
+// the note reading says so, as Obsidian's parser reads it
+// (NoteReading.referencesOn); these were the tests of the regular
+// expressions that used to stand in for it, kept on the reading. The one
+// shape reader left, referenceShapes, finds text shaped like a reference
+// whatever Obsidian makes of it, only so the plugin can say why a name
+// cannot work.
 
-describe("AllReferences", () => {
-    it("matches numbered and named references", () => {
-        expect(referenceNames("alpha[^1] bravo[^note]")).toEqual(["1", "note"]);
+/** The names of the live references on the one-line note `line`. */
+const names = (line: string): string[] => readNote([line]).referencesOn(0).map((reference) => reference.name);
+
+describe("references on a line, as the note reading finds them", () => {
+    it("finds numbered and named references", () => {
+        expect(names("alpha[^1] bravo[^note]")).toEqual(["1", "note"]);
     });
 
-    it("matches the reference shape even before a colon (definitions are excluded positionally, not by the colon)", () => {
-        // grammar change 2026-07-17: the old (?!:) lookahead also dropped a
-        // genuine mid-line reference sitting before a literal colon
-        // ("noted[^3]: prose"). AllReferences now matches the raw reference shape;
-        // a definition's column-0 "[^id]:" label is excluded by
-        // footnoteReferenceMatches (see below), not by the regex.
-        expect(referenceNames("[^1]: the definition")).toEqual(["1"]);
+    it("finds a reference at the very start and end of a line", () => {
+        expect(names("[^a] middle [^b]")).toEqual(["a", "b"]);
     });
 
-    it("does not match an empty reference", () => {
+    it("gives the name as written: numbers, and names", () => {
+        expect(names("[^note]")).toEqual(["note"]);
+        expect(names("[^12]")).toEqual(["12"]);
+    });
+
+    it("finds no empty reference", () => {
         // [^] is the just-inserted named-footnote shell awaiting a name
-        expect(referenceNames("alpha[^] bravo")).toEqual([]);
+        expect(names("alpha[^] bravo")).toEqual([]);
     });
 
-    it("does not match names containing brackets", () => {
-        expect(referenceNames("alpha[^a[b] bravo")).toEqual([]);
+    it("reads a name up to the first ']', a '[' inside included", () => {
+        // remark-footnotes' reference reader stops only at a "]" or
+        // whitespace, and Obsidian reads it so (rule E5 in
+        // docs/obsidian-reading-rules.md; saved answer
+        // probe:e3-caret-ref-name, "a[^^[x]]" holds a live reference named
+        // "^[x"). The old regular expression refused such a name.
+        expect(names("alpha[^a[b] bravo")).toEqual(["a[b"]);
     });
 
-    it("still matches an invalid spaced name so the plugin can warn about it", () => {
-        // spaced names don't render as footnotes; the regex stays permissive
-        // so the invalid-name warning can find them (see invalid-footnote-name
-        // tests), rather than silently treating them as plain text
-        expect(referenceNames("alpha[^my note!] bravo")).toEqual(["my note!"]);
-    });
-
-    it("matches a reference at the very start and end of a line", () => {
-        expect(referenceNames("[^a] middle [^b]")).toEqual(["a", "b"]);
-    });
-});
-
-describe("footnoteReferenceMatches", () => {
-    const names = (line: string) =>
-        footnoteReferenceMatches(line).map((m) => m[1]);
-
-    it("excludes a definition's own column-0 label", () => {
+    it("excludes a definition's own label", () => {
         expect(names("[^1]: the definition")).toEqual([]);
     });
 
     it("keeps a mid-line reference that happens to precede a colon", () => {
         // "noted[^3]: prose" renders as a live reference plus a literal
-        // colon; only a column-0 "[^id]:" is a definition
+        // colon; only a label that starts a definition is one
         expect(names("as noted[^3]: more prose")).toEqual(["3"]);
     });
 
@@ -63,18 +57,18 @@ describe("footnoteReferenceMatches", () => {
     });
 });
 
-describe("ExtractNameFromFootnote", () => {
-    it("extracts the name from a reference", () => {
-        const match = "[^note]".match(ExtractNameFromFootnote);
-        expect(match?.[2]).toBe("note");
+describe("referenceShapes: text shaped like a reference, for explaining a name that cannot work", () => {
+    it("finds a spaced name, which Obsidian reads as plain text, so the plugin can warn about it", () => {
+        // spaced names don't render as footnotes, so the reading holds no
+        // reference there; the shape reader stays permissive so the
+        // invalid-name warning can find them (see invalid-footnote-name
+        // tests), rather than silently treating them as plain text
+        const line = "alpha[^my note!] bravo";
+        expect(names(line)).toEqual([]);
+        expect(referenceShapes(line, line).map((shape) => shape.name)).toEqual(["my note!"]);
     });
 
-    it("extracts a numeric name", () => {
-        const match = "[^12]".match(ExtractNameFromFootnote);
-        expect(match?.[2]).toBe("12");
-    });
-
-    it("does not match an empty reference", () => {
-        expect("[^]".match(ExtractNameFromFootnote)).toBeNull();
+    it("finds no shape in an escaped reference or an inline footnote's caret", () => {
+        expect(referenceShapes("\\[^x] and ^[^y]", "\\[^x] and ^[^y]")).toEqual([]);
     });
 });

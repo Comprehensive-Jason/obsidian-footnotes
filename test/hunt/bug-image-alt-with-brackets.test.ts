@@ -38,16 +38,14 @@
 
 import { describe, expect, it } from "vitest";
 
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
+import { readNote } from "../../src/parsing/note-reading";
 
 const refsOf = (doc: string): string[] => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return lines.flatMap((line, i) =>
-        referenceOccurrences(line, masked[i]).map((o) => o.name),
+    return lines.flatMap((_, i) =>
+        readNote(lines).referencesOn(i).map((o) => o.name),
     );
 };
 

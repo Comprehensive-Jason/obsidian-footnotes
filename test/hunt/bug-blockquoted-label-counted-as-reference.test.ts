@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { lintFootnotes } from "../../src/linting/linter";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (review A3, Jason confirmed live 2026-09-08): footnoteReferenceMatches
 // excluded a definition's own label only at COLUMN 0, so a blockquoted
@@ -16,11 +17,11 @@ import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
 const DOC = ["> [^9]: quoted orphan", "", "text[^5]", "", "[^5]: five"].join("\n");
 
 describe("a blockquoted definition label is not a reference", () => {
-    it("referenceOccurrences skips the label", () => {
-        expect(referenceOccurrences("> [^9]: quoted orphan", "> [^9]: quoted orphan")).toEqual([]);
+    it("the note reading counts no label as a reference", () => {
+        expect(readNote(["> [^9]: quoted orphan"]).referencesOn(0)).toEqual([]);
         // a reference INSIDE a blockquoted definition body still counts
         expect(
-            referenceOccurrences("> [^9]: see[^5] too", "> [^9]: see[^5] too").map((o) => o.name),
+            readNote(["> [^9]: see[^5] too"]).referencesOn(0).map((o) => o.name),
         ).toEqual(["5"]);
     });
 

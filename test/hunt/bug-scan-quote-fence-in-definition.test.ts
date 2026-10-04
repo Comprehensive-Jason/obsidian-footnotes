@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
-import { scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // A fenced code block inside a blockquote inside a footnote definition's
 // indented continuation ("    > ```") renders as code, but the scanner
@@ -19,8 +19,8 @@ describe("a fence inside a blockquote inside a definition continuation", () => {
     ];
 
     it("protects the quoted fence lines", () => {
-        const scan = scanDocument(lines);
-        expect(scan.isProtected).toEqual([
+        const reading = readNote(lines);
+        expect(reading.protectedLines).toEqual([
             false,
             true,
             true,

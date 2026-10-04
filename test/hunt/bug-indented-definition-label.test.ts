@@ -3,11 +3,8 @@ import { describe, expect, it } from "vitest";
 import { lintFootnotes } from "../../src/linting/linter";
 import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after-punctuation";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
-import {
-    definitionLabelIn,
-    findDefinitionBlocks,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { definitionLabelIn } from "../../src/parsing/label-shapes";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (review A2, Jason confirmed live 2026-09-08): DefinitionStart was
 // anchored at column 0, so a definition label indented 1 to 3 spaces
@@ -40,8 +37,7 @@ describe("a definition label indented 1 to 3 spaces is a definition", () => {
 
     it("an indented label directly under a definition starts a new block", () => {
         const lines = ["[^1]: one", "  [^2]: two", "    more"];
-        const scan = scanDocument(lines);
-        expect(findDefinitionBlocks(lines, scan)).toEqual([
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
             { name: "1", start: 0, end: 0 },
             { name: "2", start: 1, end: 2 },
         ]);

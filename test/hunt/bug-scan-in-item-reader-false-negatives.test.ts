@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { inItemDefinitionLabels } from "../helpers/in-item";
-import { findDefinitionBlocks } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (wrong output): the reader for list-item definitions misses two
 // definitions that sit inside a list item, so the lint moves them out of
@@ -39,7 +39,7 @@ import { findDefinitionBlocks } from "../../src/parsing/markdown-scan";
 // What the plugin reads in `doc`: the list-item definitions and the top-level blocks that move.
 function facts(doc: string) {
     const lines = doc.split("\n");
-    return { inItem: inItemDefinitionLabels(lines), blocks: findDefinitionBlocks(lines) };
+    return { inItem: inItemDefinitionLabels(lines), blocks: readNote(lines).blocks };
 }
 
 describe("in-item labels the reader misses", () => {

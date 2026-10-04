@@ -9,7 +9,7 @@ import {
     removeOrphanedFootnoteReferences,
 } from "../../src/linting/rules/remove-orphaned-references";
 import { orphanedFootnoteDefinitionNames } from "../../src/linting/rules/remove-orphaned-definitions";
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // Obsidian, like CommonMark for link reference definitions, does not let a
 // footnote definition interrupt a paragraph: a "[^x]:" line directly under
@@ -26,8 +26,7 @@ import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-s
 
 const blocksOf = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    return findDefinitionBlocks(lines, scan).map((b) => `${b.name}@${b.start}`);
+    return readNote(lines).blocks.map((b) => `${b.name}@${b.start}`);
 };
 
 describe("a label directly under a prose line is prose, not a definition", () => {

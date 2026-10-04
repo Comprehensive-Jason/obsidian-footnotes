@@ -124,8 +124,8 @@ describe("a selection holding a lazy label", () => {
     // while the real definition further down is.
     it("the premise: the lazy label line is not a definition start", () => {
         const doc = fakeEditor(LINES, { line: 0, ch: 0 }, { line: 0, ch: 1 });
-        expect(docContext(doc).definitionStarts()[1]).toBe(false);
-        expect(docContext(doc).definitionStarts()[5]).toBe(true);
+        expect(docContext(doc).reading().labelLines[1]).toBe(false);
+        expect(docContext(doc).reading().labelLines[5]).toBe(true);
     });
 
     it("selecting the lazy label line refuses instead of nesting its reference", async () => {

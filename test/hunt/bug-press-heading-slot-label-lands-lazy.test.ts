@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { handlePaste, resetCarryRegister } from "../../src/commands/carry-footnotes-hooks";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { definitionStartLines, findDefinitionBlocks, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 import { DEFAULT_SETTINGS, type FootnotePluginSettings } from "../../src/settings";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (wrong output): in a note that has its section heading but no
 // definitions yet, a footnote made on the blank line under that heading
@@ -67,16 +67,14 @@ function settings(s: Partial<FootnotePluginSettings> = {}): Partial<FootnotePlug
 
 /** Is every left-margin label in `lines` a live definition (not a lazy line of the paragraph above)? */
 function everyLabelLive(lines: string[]): boolean {
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+    const starts = readNote(lines).labelLines;
     const labels = lines.map((l, i) => (/^\[\^[^\]]+\]:/.test(l) ? i : -1)).filter((i) => i >= 0);
     return labels.length > 0 && labels.every((i) => starts[i]);
 }
 
 /** Does some definition block hold a reference in its text (after its own label)? */
 function blockHoldsReference(lines: string[]): boolean {
-    return findDefinitionBlocks(lines, scanDocument(lines)).some((b) =>
+    return readNote(lines).blocks.some((b) =>
         lines.slice(b.start, b.end + 1).some((l, k) => {
             const text = k === 0 ? l.replace(/^\[\^[^\]]+\]:/, "") : l;
             return /\[\^[^\]]+\](?!:)/.test(text);

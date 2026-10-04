@@ -3,11 +3,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote, insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+
 import type { FootnotePluginSettings } from "../../src/settings";
 import { fakeEditor, FakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
+import { readNote } from "../../src/parsing/note-reading";
 
 // A footnote definition block can end on a line that Obsidian reads as the
 // last line of a PARAGRAPH: a plain lazy continuation directly under the
@@ -68,9 +69,7 @@ function pressHarness(lines: string[], cursor: { line: number; ch: number }): {
 }
 
 const startsOf = (lines: string[]): boolean[] => {
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return definitionStartLines(lines, scan, (i) => masked[i]);
+    return readNote(lines).labelLines;
 };
 
 describe("a definition appended after a block that ends on a paragraph line", () => {

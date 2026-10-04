@@ -2,7 +2,8 @@
 import { describe, expect, it } from "vitest";
 
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // Scenario: a footnote definition whose LABEL line the block scanner does
 // not recognise as opening a definition - a label directly under a LINK
@@ -49,7 +50,7 @@ import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-s
 
 const opts = { renumberNamedFootnotes: false, keepOrphanedDefinitions: true };
 
-const protectedFlags = (doc: string): boolean[] => scanDocument(doc.split("\n")).isProtected;
+const protectedFlags = (doc: string): readonly boolean[] => readNote(doc.split("\n")).protectedLines;
 
 describe("a definition continuation under a label the block walker misreads stays masked", () => {
     it("reindex renames the nested reference inside the chunk when the label sits under a link reference definition", () => {
@@ -58,7 +59,7 @@ describe("a definition continuation under a label the block walker misreads stay
         // absorbs it (the pin as written asserted the buggy protected
         // state as its premise; rewritten to the fix 2026-09-16)
         expect(protectedFlags(doc)[5]).toBe(false);
-        expect(findDefinitionBlocks(doc.split("\n")).map((b) => [b.start, b.end])).toContainEqual([3, 5]);
+        expect(readNote(doc.split("\n")).blocks.map((b) => [b.start, b.end])).toContainEqual([3, 5]);
         const out = reindexFootnotes(doc, opts);
         // Obsidian reads the chunk as the definition's continuation, so the
         // citation inside it renames with the footnote it cites
@@ -70,7 +71,7 @@ describe("a definition continuation under a label the block walker misreads stay
         // paragraph in Obsidian, and the label under it would be lazy
         const doc = "b[^2] a[^1].\n\n| a | b |\n| --- | --- |\n[^1]: body cites [^2]\n\n    code [^2]\n\n[^2]: two\n[^1]: one";
         expect(protectedFlags(doc)[6]).toBe(false);
-        expect(findDefinitionBlocks(doc.split("\n")).map((b) => [b.start, b.end])).toContainEqual([4, 6]);
+        expect(readNote(doc.split("\n")).blocks.map((b) => [b.start, b.end])).toContainEqual([4, 6]);
         const out = reindexFootnotes(doc, opts);
         expect(out).toContain("code [^1]");
     });

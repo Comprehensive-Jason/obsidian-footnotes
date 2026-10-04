@@ -1,6 +1,7 @@
 import type FootnotePlugin from "../main";
 import { footnotePrefix, footnotePrefixProblem } from "../parsing/footnote-prefix";
-import { definitionLabelWithName, normalizeEol } from "../parsing/markdown-scan";
+import { definitionLabelWithName } from "../parsing/label-shapes";
+import { normalizeEol } from "../parsing/line-edits";
 import { readNote } from "../parsing/note-reading";
 import {
     escapedAt,
@@ -318,11 +319,9 @@ function noticeDuplicateDefinitions(
  * Fakes inside protected text do not count. A name holding a space is no
  * reference to Obsidian at all ("[^my note]" is plain text), so it is
  * found by its shape (referenceShapes); every other name comes from the
- * note reading's live references and definitions. Any arguments after
- * `lines` are accepted for the tests written when this took the scanner's
- * facts; they are not read.
+ * note reading's live references and definitions.
  */
-export function invalidFootnoteNames(lines: string[], ..._unused: unknown[]): string[] {
+export function invalidFootnoteNames(lines: string[]): string[] {
     const reading = readNote(lines);
     const names: string[] = [];
     const seen = new Set<string>();
@@ -370,11 +369,9 @@ function noticeInvalidNames(lines: string[]) {
  * without throwing text away, so the lint reports it instead. That is the
  * same never-silent policy orphans and duplicates follow.
  *
- * Fakes inside protected text do not count. Any arguments after `lines`
- * are accepted for the tests written when this took the scanner's facts;
- * they are not read.
+ * Fakes inside protected text do not count.
  */
-export function nestedFootnoteDefinitionNames(lines: string[], ..._unused: unknown[]): string[] {
+export function nestedFootnoteDefinitionNames(lines: string[]): string[] {
     const reading = readNote(lines);
     const names: string[] = [];
     // One entry per NAME, ignoring case, the same way the duplicate and
@@ -463,8 +460,8 @@ function noticeCommentedDefinitions(markdown: string) {
 }
 
 // A line shaped like a table row for the alert's "row below the label"
-// question: it holds a pipe and is not itself a label. The scanner's own
-// table reader answers the "row above" question, so a pipe-less GFM table
+// question: it holds a pipe and is not itself a label. The note reading's
+// table rows answer the "row above" question, so a pipe-less GFM table
 // ("a | b" over "--- | ---") counts like a piped one (Kimi hunt cycle 3,
 // 2026-09-16: Reading view breaks both the same way, folding the rows
 // after the label into the footnote's text).

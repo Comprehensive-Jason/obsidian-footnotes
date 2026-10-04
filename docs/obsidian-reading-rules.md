@@ -19,6 +19,8 @@ Notation: a note is written as one string, `\n` is a line break, `\t` a tab, and
 | Broad run, seed 20261005, 20,000 notes (a fresh check after the fixes) | 19,837 | 8,251 |
 | Container-heavy run, seed 20261006, 20,000 notes (the fuzz generator) | 20,000 | 11,535 |
 
+The scanner column is history: the plugin has read notes through the reader since the runtime swap (2026-10-03), and the hand-written scanner is gone.
+
 "Agrees" means the oracle's comparison finds nothing: the same definitions with the same last lines, the same live references at the same places, and every line of an Obsidian code block protected. The broad generator (`generateBroadNotes` in `scripts/oracle/generate.mjs`) writes notes the way people write them as well as the container-heavy shapes; its notes hold frontmatter, wikilinks, tables, nested callouts, long definitions, and text in other scripts. Every note the reader still disagrees on (156 and 163) is one of the column quirks under P below, where Obsidian reports the wrong column. In about 290 notes of each run the oracle could not ask whether some reference is live (frontmatter notes, where it cannot put its probe definitions at the top, and notes that end inside an unclosed block); the comparison leaves those references out. At the start of that night, before the fixes and with the older harness, the reader agreed on 17,355 of the first run's notes and the scanner on 8,427.
 
 ## A. Callouts

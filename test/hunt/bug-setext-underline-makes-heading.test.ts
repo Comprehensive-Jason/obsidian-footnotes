@@ -6,14 +6,8 @@ import {
     orphanedFootnoteReferenceNames,
     underlinedDefinitionLabelNames,
 } from "../../src/linting/rules/remove-orphaned-references";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    lazyDefinitionLabelLines,
-    maskProtectedLines,
-    scanDocument,
-    tableRowLinesOf,
-} from "../../src/parsing/markdown-scan";
+import { lazyDefinitionLabelLines } from "../../src/parsing/label-shapes";
+import { readNote } from "../../src/parsing/note-reading";
 
 // Obsidian's setext rule, as Reading view renders it (probed 2026-09-16):
 //
@@ -32,10 +26,10 @@ import {
 
 const scanOf = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return { lines, scan, masked, starts };
+    const reading = readNote(lines);
+    const masked = [...readNote(lines).maskedLines()];
+    const starts = readNote(lines).labelLines;
+    return { lines, reading, masked, starts };
 };
 
 describe("a setext underline directly under a definition label", () => {
@@ -46,9 +40,9 @@ describe("a setext underline directly under a definition label", () => {
     });
 
     it("is not a lazy label (no blank line above can help) but an underlined one", () => {
-        const { lines, scan, masked, starts } = scanOf("[^1]: x\n===\n\nuse[^1]");
-        expect(lazyDefinitionLabelLines(lines, scan, masked, starts)).toEqual([]);
-        expect(underlinedDefinitionLabelNames(lines, scan, masked, starts)).toEqual(["1"]);
+        const { lines } = scanOf("[^1]: x\n===\n\nuse[^1]");
+        expect(lazyDefinitionLabelLines(lines)).toEqual([]);
+        expect(underlinedDefinitionLabelNames(lines)).toEqual(["1"]);
     });
 
     it("fix-lazy leaves it alone instead of piling blank lines above it", () => {
@@ -75,14 +69,14 @@ describe("a setext underline directly under a definition label", () => {
 describe("a setext underline under a definition's lazy continuation line", () => {
     it("pulls that line out as a heading: the block ends at the label", () => {
         for (const underline of ["===", "--", "---"]) {
-            const { lines, scan, masked, starts } = scanOf(`[^1]: x\nlazy\n${underline}\n\nuse[^1]`);
-            expect(findDefinitionBlocks(lines, scan, masked, starts)).toEqual([{ name: "1", start: 0, end: 0 }]);
+            const { lines } = scanOf(`[^1]: x\nlazy\n${underline}\n\nuse[^1]`);
+            expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([{ name: "1", start: 0, end: 0 }]);
         }
     });
 
     it("control: under an INDENTED continuation the underline is body text (Kimi's spec question)", () => {
-        const { lines, scan, masked, starts } = scanOf("[^1]: x\n    y\n===\n\nuse[^1]");
-        expect(findDefinitionBlocks(lines, scan, masked, starts)).toEqual([{ name: "1", start: 0, end: 2 }]);
+        const { lines } = scanOf("[^1]: x\n    y\n===\n\nuse[^1]");
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([{ name: "1", start: 0, end: 2 }]);
     });
 });
 
@@ -99,13 +93,13 @@ describe("a setext underline under a longer paragraph is literal text", () => {
 
 describe("a table cannot interrupt a paragraph (probed the same day)", () => {
     it("a header row directly under plain text is no table", () => {
-        expect(tableRowLinesOf("text\n| a | b |\n| --- | --- |\n| c | d |".split("\n"))).toEqual([false, false, false, false]);
-        expect(tableRowLinesOf("- item\n| a | b |\n| --- | --- |".split("\n"))).toEqual([false, false, false]);
+        expect(readNote("text\n| a | b |\n| --- | --- |\n| c | d |".split("\n")).tableRowLines).toEqual([false, false, false, false]);
+        expect(readNote("- item\n| a | b |\n| --- | --- |".split("\n")).tableRowLines).toEqual([false, false, false]);
     });
 
     it("a blank line, a label line, or a definition's lazy line above lets the table start", () => {
-        expect(tableRowLinesOf("text\n\n| a | b |\n| --- | --- |".split("\n"))).toEqual([false, false, true, true]);
-        expect(tableRowLinesOf("[^1]: x\n| a | b |\n| --- | --- |".split("\n"))).toEqual([false, true, true]);
-        expect(tableRowLinesOf("[^1]: x\nlazy\n| a | b |\n| --- | --- |".split("\n"))).toEqual([false, false, true, true]);
+        expect(readNote("text\n\n| a | b |\n| --- | --- |".split("\n")).tableRowLines).toEqual([false, false, true, true]);
+        expect(readNote("[^1]: x\n| a | b |\n| --- | --- |".split("\n")).tableRowLines).toEqual([false, true, true]);
+        expect(readNote("[^1]: x\nlazy\n| a | b |\n| --- | --- |".split("\n")).tableRowLines).toEqual([false, false, true, true]);
     });
 });

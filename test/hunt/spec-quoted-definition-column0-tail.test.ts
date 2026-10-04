@@ -1,16 +1,11 @@
 // Imported from the glm-cycle-9 hunt of 2026-09-16 (OpenCode worktree); rewritten to the probed reading 2026-09-16.
-// REFUTED 2026-09-16 (GLM hunt cycle 9, probed in Reading view): a plain column-0 line directly under a quoted definition is the quoted footnote's lazy body ("quoted def plain column-0 line"), further plain lines carry it on, a label under them starts a new definition, a heading ends the run, and an indented chunk after the tail is code. definitionStartLines was right; quotedDefinitionEnd now owns the tail, the scan protects the chunk, and the press guard reaches the tail.
+// REFUTED 2026-09-16 (GLM hunt cycle 9, probed in Reading view): a plain column-0 line directly under a quoted definition is the quoted footnote's lazy body ("quoted def plain column-0 line"), further plain lines carry it on, a label under them starts a new definition, a heading ends the run, and an indented chunk after the tail is code. definitionStartLines was right; quotedDefinitionEnd now owns the tail, the reading protects the chunk, and the press guard reaches the tail.
 // Imported from the GLM 5.3 Flash cycle 13 hunt of 2026-09-16 (OpenCode worktree); 1 of 3 tests carries it.fails: marked by this hunt.
 import { readNote } from "../../src/parsing/note-reading";
 import { describe, expect, it } from "vitest";
 
-import { definitionLabelWithName, referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { definitionLabelWithName } from "../../src/parsing/label-shapes";
+
 import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphaned-references";
 import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 
@@ -68,10 +63,10 @@ const doc = [
 
 const ctxOf = (markdown: string) => {
     const lines = markdown.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return { lines, scan, masked, starts };
+    const reading = readNote(lines);
+    const masked = [...readNote(lines).maskedLines()];
+    const starts = readNote(lines).labelLines;
+    return { lines, reading, masked, starts };
 };
 
 describe("a label under a column-0 line that follows a quoted definition", () => {
@@ -79,13 +74,13 @@ describe("a label under a column-0 line that follows a quoted definition", () =>
         // Reading view (probed 2026-09-16): one footnote "quoted def plain
         // column-0 line", then footnote "second"; the lazy-definition
         // alert has nothing to name
-        const { lines, scan, masked, starts } = ctxOf(doc);
+        const { lines, starts } = ctxOf(doc);
         expect(starts[2]).toBe(true);
-        expect(lazyDefinitionLabelNames(lines, scan, masked, starts)).toEqual([]);
+        expect(lazyDefinitionLabelNames(lines)).toEqual([]);
         // the label follows lazy lines of the quote, so the note reading
         // puts footnote 2 inside the quote too: a definition, but not a
         // block that moves (Jason's ruling 1, option a, 2026-10-03)
-        expect(findDefinitionBlocks(lines, scan, masked, starts).map((b) => b.start)).toEqual([]);
+        expect(readNote(lines).blocks.map((b) => b.start)).toEqual([]);
     });
 
     it("the orphan rules' reader owns the column-0 tail, so the whole footnote is cut together", () => {
@@ -95,7 +90,7 @@ describe("a label under a column-0 line that follows a quoted definition", () =>
         const hit = definitionLabelWithName(lines[0], masked[0]);
         expect(hit?.name).toBe("1");
         // the quoted label's own "[^1]" is not a reference
-        expect(referenceOccurrences(lines[0], masked[0], starts[0])).toEqual([]);
+        expect(readNote(lines).referencesOn(0)).toEqual([]);
         // an orphaned quoted definition takes its column-0 tail with it
         // instead of stranding the footnote's body as prose
         expect(removeOrphanedFootnoteDefinitions("> [^1]: quoted def\nplain column-0 line\n\ntail")).toBe("tail");
@@ -110,10 +105,10 @@ describe("a label under a column-0 line that follows a quoted definition", () =>
         // lets no indented line continue a quote's paragraph), with or
         // without a blank line before it
         const chunk = ctxOf("> [^1]: quoted def\nplain column-0 line\n    chunk[^9]\n\ntail[^1]");
-        expect(chunk.scan.isProtected).toEqual([false, false, true, false, false]);
+        expect(chunk.reading.protectedLines).toEqual([false, false, true, false, false]);
         expect((readNote(chunk.lines).labelOn(0)?.end ?? 0)).toBe(1);
         const gap = ctxOf("> [^1]: quoted def\nplain column-0 line\n\n    chunk[^9]\n\ntail[^1]");
-        expect(gap.scan.isProtected).toEqual([false, false, false, true, false, false]);
+        expect(gap.reading.protectedLines).toEqual([false, false, false, true, false, false]);
         // and a quoted lazy line before the column-0 one is part of the run
         const mixed = ctxOf("> [^1]: quoted def\n> quoted lazy\nplain column-0 line\n[^2]: second\n\ntail[^1] and[^2]");
         expect((readNote(mixed.lines).labelOn(0)?.end ?? 0)).toBe(2);

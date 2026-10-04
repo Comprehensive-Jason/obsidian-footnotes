@@ -3,13 +3,6 @@
 import { readNote } from "../../src/parsing/note-reading";
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-    tableRowLinesOf,
-} from "../../src/parsing/markdown-scan";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphaned-references";
@@ -39,10 +32,10 @@ import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphane
 
 const ctx = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return { lines, scan, masked, starts };
+    const reading = readNote(lines);
+    const masked = [...readNote(lines).maskedLines()];
+    const starts = readNote(lines).labelLines;
+    return { lines, reading, masked, starts };
 };
 
 describe("pipe runs under a definition label: the rows of a table agree on the leading pipe", () => {
@@ -50,17 +43,17 @@ describe("pipe runs under a definition label: the rows of a table agree on the l
     const consistent = ["text[^1]", "", "[^1]: body", "a | b", "--- | ---", "c | d"].join("\n");
 
     it("a pipe-less header over a piped delimiter is no table: every line is the footnote's body", () => {
-        const { lines, scan, masked, starts } = ctx(mixed);
-        expect(tableRowLinesOf(lines)).toEqual([false, false, false, false, false, false]);
-        expect(findDefinitionBlocks(lines, scan, masked, starts)).toEqual([{ name: "1", start: 2, end: 5 }]);
+        const { lines } = ctx(mixed);
+        expect(readNote(lines).tableRowLines).toEqual([false, false, false, false, false, false]);
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([{ name: "1", start: 2, end: 5 }]);
         expect(moveFootnoteDefinitionsToBottom(mixed)).toBe(mixed);
         expect(removeOrphanedFootnoteDefinitions("[^1]: body\na | b\n| --- | --- |\nc | d")).toBe("");
     });
 
     it("a pipe-less header over a pipe-less delimiter is a table of its own under the label", () => {
-        const { lines, scan, masked, starts } = ctx(consistent);
-        expect(tableRowLinesOf(lines)).toEqual([false, false, false, true, true, true]);
-        expect(findDefinitionBlocks(lines, scan, masked, starts)).toEqual([{ name: "1", start: 2, end: 2 }]);
+        const { lines } = ctx(consistent);
+        expect(readNote(lines).tableRowLines).toEqual([false, false, false, true, true, true]);
+        expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([{ name: "1", start: 2, end: 2 }]);
         expect(moveFootnoteDefinitionsToBottom(consistent)).toBe(
             ["text[^1]", "", "a | b", "--- | ---", "c | d", "", "[^1]: body"].join("\n"),
         );
@@ -70,21 +63,21 @@ describe("pipe runs under a definition label: the rows of a table agree on the l
     });
 
     it("a piped header over a pipe-less delimiter is no table either", () => {
-        expect(tableRowLinesOf(["| a | b |", "--- | ---", "| 1 | 2 |"])).toEqual([false, false, false]);
+        expect(readNote(["| a | b |", "--- | ---", "| 1 | 2 |"]).tableRowLines).toEqual([false, false, false]);
     });
 
     it("a body row written the other way ends the table, and the label under it is lazy", () => {
         // "| a | b |", "| --- | --- |", "c | d", "[^2]: two": the table has
         // one row, "c | d" is prose after it, and "2: two" renders as text
-        expect(tableRowLinesOf(["| a | b |", "| --- | --- |", "c | d"])).toEqual([true, true, false]);
-        expect(tableRowLinesOf(["a | b", "--- | ---", "| 1 | 2 |"])).toEqual([true, true, false]);
-        const { lines, scan, masked, starts } = ctx("| a | b |\n| --- | --- |\nc | d\n[^2]: two\n\nsee[^2]");
+        expect(readNote(["| a | b |", "| --- | --- |", "c | d"]).tableRowLines).toEqual([true, true, false]);
+        expect(readNote(["a | b", "--- | ---", "| 1 | 2 |"]).tableRowLines).toEqual([true, true, false]);
+        const { lines, starts } = ctx("| a | b |\n| --- | --- |\nc | d\n[^2]: two\n\nsee[^2]");
         expect(starts[3]).toBe(false);
-        expect(lazyDefinitionLabelNames(lines, scan, masked, starts)).toEqual(["2"]);
+        expect(lazyDefinitionLabelNames(lines)).toEqual(["2"]);
     });
 
     it("a consistent pipe-less table cannot interrupt a paragraph, like any table", () => {
-        expect(tableRowLinesOf(["prose", "a | b", "--- | ---", "c | d"])).toEqual([false, false, false, false]);
+        expect(readNote(["prose", "a | b", "--- | ---", "c | d"]).tableRowLines).toEqual([false, false, false, false]);
     });
 
     it("inside a quote the same rule ends or carries on the quoted definition", () => {

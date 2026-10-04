@@ -13,12 +13,6 @@ import {
     lazyDefinitionLabelNames,
     orphanedFootnoteReferenceNames,
 } from "../../src/linting/rules/remove-orphaned-references";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
 import { readNote } from "../../src/parsing/note-reading";
 
 /** Where each "%%" block comment of `doc` ends, as [line, column just past its closing "%%"], from the note reading. */
@@ -57,25 +51,23 @@ function commentEnds(doc: string): [number, number][] {
 // %% comments therefore hide nothing from the reference side: the scanner
 // flags block-comment lines for the DEFINITION readers only.
 
-const scanOf = (doc: string) => scanDocument(doc.split("\n"));
+const scanOf = (doc: string) => readNote(doc.split("\n"));
 const blocksOf = (doc: string) => {
     const lines = doc.split("\n");
-    return findDefinitionBlocks(lines, scanDocument(lines)).map((b) => `${b.name}@${b.start}`);
+    return readNote(lines).blocks.map((b) => `${b.name}@${b.start}`);
 };
 const lazyOf = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return lazyDefinitionLabelNames(lines, scan, masked, definitionStartLines(lines, scan, (i) => masked[i]));
+    return lazyDefinitionLabelNames(lines);
 };
 
 describe("a %% block comment kills the definitions inside it, not the references", () => {
     it("flags the opener, interior, and closer lines, and protects none of them", () => {
         const scan = scanOf("x[^1]\n\n%%\n[^1]: def\n%%\nafter");
-        expect(scan.inCommentBlock).toEqual([false, false, true, true, true, false]);
+        expect(scan.commentLines).toEqual([false, false, true, true, true, false]);
         // the comment ends just past the "%%" that closes it, at column 2 of line 4
         expect(commentEnds("x[^1]\n\n%%\n[^1]: def\n%%\nafter")).toEqual([[4, 2]]);
-        expect(scan.isProtected).toEqual([false, false, false, false, false, false]);
+        expect(scan.protectedLines).toEqual([false, false, false, false, false, false]);
     });
 
     it("a commented definition is dead: its visible reference is an orphan", () => {
@@ -152,13 +144,13 @@ describe("where a block comment ends", () => {
     it("with its blockquote: the quote's end closes an unclosed quoted block", () => {
         const doc = "x[^1]\n\n> %%\n> [^1]: dead\n\n[^1]: live";
         expect(blocksOf(doc)).toEqual(["1@5"]);
-        expect(scanOf(doc).inCommentBlock).toEqual([false, false, true, true, false, false]);
+        expect(scanOf(doc).commentLines).toEqual([false, false, true, true, false, false]);
     });
 
     it("an unclosed block runs to the end of the note and hides every label after it", () => {
         const doc = "x[^1]\n\n%%\n[^1]: dead\n\nmore\n\n[^1]: also dead";
         expect(blocksOf(doc)).toEqual([]);
-        expect(scanOf(doc).endsProtected).toBe(true);
+        expect(scanOf(doc).openRegionFrom !== -1).toBe(true);
     });
 
     it("inside a definition continuation, an indented opener hides the rest of the body", () => {
@@ -200,7 +192,7 @@ describe("the prose-label rule and comment lines", () => {
     it("an indented closer inside a definition still continues that definition", () => {
         const doc = "x[^1] y[^2]\n\n[^1]: def\n    <!-- a\n    b -->\n    more\n[^2]: two";
         const lines = doc.split("\n");
-        const blocks = findDefinitionBlocks(lines, scanDocument(lines)).map((b) => `${b.name}@${b.start}-${b.end}`);
+        const blocks = readNote(lines).blocks.map((b) => `${b.name}@${b.start}-${b.end}`);
         expect(blocks).toEqual(["1@2-5", "2@6-6"]);
     });
 });

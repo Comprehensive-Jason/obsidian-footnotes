@@ -4,7 +4,7 @@ import type FootnotePlugin from "../main";
 import { contextOfLines, DocContext, definitionNames } from "../editor/doc-context";
 import { composeChanges, mapPosition, simulateChanges, simulatedAnchors } from "../editor/insertion-liveness";
 import { definitionLabel } from "../parsing/footnote-grammar";
-import { findLineRunEnd } from "../parsing/markdown-scan";
+import { findLineRunEnd } from "../parsing/line-edits";
 import { readNote } from "../parsing/note-reading";
 
 // Where a new footnote definition goes. This module holds the
@@ -197,7 +197,7 @@ export function buildDefinitionAppend(
         // definitions are inside blockquotes. Without help the label would
         // land directly beneath a line of prose, and Obsidian reads such a
         // line as more of that paragraph rather than as a definition. The
-        // project calls that a lazy label; definitionStartLines is what
+        // project calls that a lazy label; the note reading is what
         // decides it (ground truth in the live Reading view, 2026-09-09).
         // So give it the blank line that the first footnote would have
         // received from its heading.

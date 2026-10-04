@@ -1,14 +1,10 @@
 // Imported from the GLM 5.3 Flash cycle 3 hunt of 2026-09-16 (OpenCode worktree); 3 of 4 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
 import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
+import { readNote } from "../../src/parsing/note-reading";
 
 // A table that starts ON a definition's label line ("[^1]: | a | b |")
 // belongs to the footnote, its column-0 rows included (pinned in Reading
@@ -46,10 +42,7 @@ import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-fo
 
 const blocksOf = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return findDefinitionBlocks(lines, scan, masked, starts);
+    return readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }));
 };
 
 describe("a quoted row under a table that starts on a label line", () => {

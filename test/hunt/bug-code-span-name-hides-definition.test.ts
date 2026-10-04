@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { definitionLabelWithName } from "../../src/parsing/footnote-grammar";
-import { maskedLineAt } from "../../src/parsing/markdown-scan";
+import { definitionLabelWithName } from "../../src/parsing/label-shapes";
 import { fakeEditor } from "../helpers/fake-editor";
 import { listExistingFootnoteDefinitions } from "../../src/editor/doc-context";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (hunt 2026-08-25, grammar lens): a definition whose NAME contains a
 // backtick that pairs with a backtick in the BODY ("[^a`b]: c`d") is
@@ -25,7 +25,7 @@ import { listExistingFootnoteDefinitions } from "../../src/editor/doc-context";
 describe("code-span-shaped names inside definition labels", () => {
     it("definitionLabelWithName finds the definition GFM sees", () => {
         const line = "[^a`b]: c`d";
-        const masked = maskedLineAt([line], 0);
+        const masked = readNote([line]).maskedLine(0);
         const hit = definitionLabelWithName(line, masked);
         expect(hit).not.toBeNull();
         expect(hit?.name).toBe("a`b");

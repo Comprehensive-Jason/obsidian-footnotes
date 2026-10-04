@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // spec question: when an HTML comment closes with text after the closer, as
 // in "-->  tail text", is a label on the NEXT line a definition, or is it
@@ -40,9 +37,7 @@ import {
 // micromark's parse of the same three lines; manual sheets 11 and 14.
 
 const starts = (lines: string[]) => {
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return definitionStartLines(lines, scan, (i) => masked[i]);
+    return readNote(lines).labelLines;
 };
 
 const lines = ["<!-- open", "-->  tail text", "[^1]: under prose"];

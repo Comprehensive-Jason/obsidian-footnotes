@@ -3,11 +3,8 @@
 // GLM 5.3 Flash cycle 9 hunt of 2026-09-16 (this worktree); the red test carries it.fails.
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // SPEC QUESTION: does Reading view read "[foo]:" alone on a line (a link
 // reference definition with NO destination) as a link reference definition
@@ -43,9 +40,7 @@ import {
 
 function startsOf(doc: string): number[] {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return definitionStartLines(lines, scan, (i) => masked[i])
+    return readNote(lines).labelLines
         .map((s, i) => (s ? i : -1))
         .filter((i) => i >= 0);
 }

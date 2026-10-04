@@ -4,7 +4,7 @@ import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { adjustFootnotePosition } from "../../src/editor/cursor-motion";
 import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after-punctuation";
-import type { FootnotePlacement } from "../../src/parsing/markdown-scan";
+import type { FootnotePlacement } from "../../src/parsing/landing";
 
 // spec question: when the caret sits BETWEEN the characters of a closing
 // emphasis run ("**bold*|* next"), should the press carry the reference

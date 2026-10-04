@@ -2,8 +2,7 @@
 // RESOLVED 2026-09-16 (probed in Reading view): the one-letter scheme is dead text there too (refuted), a bare <span> line does open a raw HTML block (fixed: type 7), and a plain line under a definition is its lazy continuation (fixed: the block walker and the scan own it).
 import { describe, expect, it } from "vitest";
 
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 
 // SPEC QUESTION 1: does Reading view render "<a://b[^1]>" (a single-letter
@@ -37,10 +36,7 @@ import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-fo
 // Settings involved: none (the scan feeds every rule).
 
 const refs = (line: string): string[] => {
-    const lines = [line];
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return referenceOccurrences(line, masked[0]).map((o) => o.name);
+    return readNote([line]).referencesOn(0).map((o) => o.name);
 };
 
 describe("spec: a single-letter URI scheme is not an autolink, so the [^1] inside is live", () => {
@@ -82,18 +78,14 @@ describe("spec: a bare <span> line opens a type-7 HTML block", () => {
     it("the scan counts [^1] inside the span block as live", () => {
         const doc = "<span>\nbody [^1] here\n</span>\n\n[^1]: def";
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const occurrences = referenceOccurrences(lines[1], masked[1]);
+        const occurrences = readNote(lines).referencesOn(1);
         // CommonMark: raw HTML inside the span, the reference is dead
         expect(occurrences).toEqual([]);
     });
 
     it("control: <span> mid-paragraph is inline HTML and the reference stays live", () => {
         const lines = ["para <span> x[^1] y</span>"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(referenceOccurrences(lines[0], masked[0]).map((o) => o.name)).toEqual(["1"]);
+        expect(readNote(lines).referencesOn(0).map((o) => o.name)).toEqual(["1"]);
     });
 });
 
@@ -128,8 +120,7 @@ describe("spec: a non-indented line under a definition (its lazy body line)", ()
     it("micromark's reading: the lazy body line belongs to the definition block", () => {
         const doc = "para[^1].\n\n[^1]: body\nmore lazy";
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const blocks = findDefinitionBlocksPublic(lines, scan);
+        const blocks = readNote(lines).blocks;
         // micromark (and, if Obsidian agrees, Reading view) parses "more
         // lazy" as part of footnote 1's body, so the block runs to line 3
         expect(blocks.map((b) => [b.start, b.end])).toContainEqual([2, 3]);
@@ -144,4 +135,3 @@ describe("spec: a non-indented line under a definition (its lazy body line)", ()
     });
 });
 
-import { findDefinitionBlocks as findDefinitionBlocksPublic } from "../../src/parsing/markdown-scan";

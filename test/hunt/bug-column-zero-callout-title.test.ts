@@ -6,11 +6,7 @@ import {
     removeOrphanedFootnoteDefinitions,
 } from "../../src/linting/rules/remove-orphaned-definitions";
 import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphaned-references";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG: an ordinary paragraph line that happens to begin with "[!" is mistaken
 // for a callout title, so a label on the next line is called a real
@@ -41,16 +37,12 @@ import {
 
 const startsOf = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return definitionStartLines(lines, scan, (i) => masked[i]);
+    return readNote(lines).labelLines;
 };
 const lastLineStarts = (doc: string) => startsOf(doc).at(-1);
 const lazyNames = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return lazyDefinitionLabelNames(lines, scan, masked, definitionStartLines(lines, scan, (i) => masked[i]));
+    return lazyDefinitionLabelNames(lines);
 };
 
 describe("a callout title only exists inside a blockquote", () => {

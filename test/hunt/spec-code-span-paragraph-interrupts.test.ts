@@ -1,9 +1,8 @@
 // Imported from the Kimi K3 cycle 1 hunt of 2026-09-16 (OpenCode worktree); 1 of 9 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 // RESOLVED 2026-09-16: Reading view agrees with micromark on every shape below (probed), so the scan's search for a code span's closer now stops at each of these block starts; the pins pass.
 import { describe, expect, it } from "vitest";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import { maskProtectedLines } from "../../src/parsing/markdown-scan";
 
 // spec question: when a code span's opening backtick run sits on one line
 // and a block-level construct that ENDS the paragraph stands between it
@@ -50,8 +49,7 @@ import { maskProtectedLines } from "../../src/parsing/markdown-scan";
 
 const firstLineReferences = (doc: string): string[] => {
     const lines = doc.split("\n");
-    const masked = maskProtectedLines(lines);
-    return referenceOccurrences(lines[0], masked[0]).map((o) => o.name);
+    return readNote(lines).referencesOn(0).map((o) => o.name);
 };
 
 const CASES: [string, string][] = [

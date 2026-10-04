@@ -10,7 +10,10 @@
     "timeoutMS": 15000,
     "timeoutFactor": 1.25,
     "mutate": [
-        "src/parsing/markdown-scan.ts",
+        "src/parsing/landing.ts",
+        "src/parsing/line-edits.ts",
+        "src/parsing/label-shapes.ts",
+        "src/parsing/cell-reading.ts",
         "src/parsing/footnote-grammar.ts",
         "src/parsing/footnote-prefix.ts",
         "src/editor/doc-context.ts",

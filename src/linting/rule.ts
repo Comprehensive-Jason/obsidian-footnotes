@@ -32,8 +32,9 @@ interface RuleExample<O = void> {
  * void for a rule that takes none.
  *
  * Every rule leaves protected text (code, math, comments, frontmatter)
- * alone by working from the masked twin that the shared markdown-scan
- * code builds. obsidian-linter declares that per rule in an ignoreTypes
+ * alone by working from the note reading (note-reading.ts), which says
+ * which references and definitions are live and builds the masked twin.
+ * obsidian-linter declares that per rule in an ignoreTypes
  * list; this plugin used to carry the same field for documentation only,
  * and dropped it on 2026-09-09 because nothing read it.
  */

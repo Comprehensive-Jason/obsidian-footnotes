@@ -1,17 +1,13 @@
 // Imported from the GLM 5.3 Flash cycle 3 hunt of 2026-09-16 (OpenCode worktree); 3 of 5 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-    tableRowLinesOf,
-} from "../../src/parsing/markdown-scan";
+
 import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphaned-references";
+import { readNote } from "../../src/parsing/note-reading";
 
 // The visible tail after an Obsidian "%%" BLOCK comment's closer is live
 // paragraph text (sheet 11: "%% [^3]: def" renders as a definition, and
-// the scan's own definitionStartLines reads a closer line with a tail as
+// the reading's own definitionStartLines reads a closer line with a tail as
 // `open = "paragraph"`). A GFM table cannot start directly under a line
 // of paragraph text (pinned in Reading view, cycle 3: "a table header
 // directly under plain paragraph text ... is no table at all"), so the
@@ -39,7 +35,7 @@ import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphane
 //
 // Source of truth: sheet 11 (the tail after a closer is live) + the
 // cycle-3 Reading-view probe (no table under a paragraph line) + the
-// scan's own paragraph reading of the tail line.
+// reading's own paragraph reading of the tail line.
 //
 // Settings involved: `Move definitions to the bottom` off (with it on,
 // the gather accidentally heals the label); `Fix definitions hidden by a
@@ -47,15 +43,15 @@ import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphane
 
 const scanOf = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return { lines, scan, masked, starts: definitionStartLines(lines, scan, (i) => masked[i]) };
+    const reading = readNote(lines);
+    const masked = [...readNote(lines).maskedLines()];
+    return { lines, reading, masked, starts: readNote(lines).labelLines };
 };
 
 describe("a table run under a %% block closer's tail line", () => {
     it("is no table: the tail is paragraph text and a table cannot interrupt it", () => {
         const lines = "%%\nhidden\n%% tail\n| a | b |\n| --- | --- |\n| c | d |".split("\n");
-        expect(tableRowLinesOf(lines)).toEqual([false, false, false, false, false, false]);
+        expect(readNote(lines).tableRowLines).toEqual([false, false, false, false, false, false]);
     });
 
     it("a label under the run is lazy paragraph text, not a definition start", () => {
@@ -64,17 +60,17 @@ describe("a table run under a %% block closer's tail line", () => {
     });
 
     it("the lazy-definition alert names the label the run hides", () => {
-        const { lines, scan, masked, starts } = scanOf("%%\nhidden\n%% tail\n| a | b |\n| --- | --- |\n[^1]: def\n\nuse[^1]");
-        expect(lazyDefinitionLabelNames(lines, scan, masked, starts)).toEqual(["1"]);
+        const { lines } = scanOf("%%\nhidden\n%% tail\n| a | b |\n| --- | --- |\n[^1]: def\n\nuse[^1]");
+        expect(lazyDefinitionLabelNames(lines)).toEqual(["1"]);
     });
 
     it("control: under the bare closer (a block boundary) the table does start", () => {
         const lines = "%%\nhidden\n%%\n| a | b |\n| --- | --- |".split("\n");
-        expect(tableRowLinesOf(lines)).toEqual([false, false, false, true, true]);
+        expect(readNote(lines).tableRowLines).toEqual([false, false, false, true, true]);
     });
 
     it("control: under the inline pair (a comment-only paragraph line) there is no table", () => {
         const lines = "%% c %%\n| a | b |\n| --- | --- |".split("\n");
-        expect(tableRowLinesOf(lines)).toEqual([false, false, false]);
+        expect(readNote(lines).tableRowLines).toEqual([false, false, false]);
     });
 });

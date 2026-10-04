@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
 import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove-orphaned-references";
-import { scanDocument } from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // A GFM table is a leaf block: it cannot be continued, lazily or
 // otherwise, so the line after its last row starts a NEW block. An
@@ -29,7 +30,7 @@ import { scanDocument } from "../../src/parsing/markdown-scan";
 // Source of truth: GFM's table extension (a table is a leaf block that
 // breaks at the start of another block-level structure; an indented
 // chunk after it is indented code) + the plugin's own table-row handling
-// in definitionStartLines (the A2 ruling: the row ends the block).
+// in readNote(the A2 ruling: the row ends the block).labelLines.
 // Residual uncertainty about Reading view's exact table+cache behavior
 // is noted; the internal inconsistency (label rule vs indent rule
 // disagreeing) is visible either way.
@@ -41,7 +42,7 @@ const doc = "| a |\n| --- |\n    code[^1]\n\nafter";
 
 describe("an indented chunk directly after a table", () => {
     it("is indented code: the table is a leaf block, so the chunk opens at a block boundary", () => {
-        expect(scanDocument(doc.split("\n")).isProtected[2]).toBe(true);
+        expect(readNote(doc.split("\n")).protectedLines[2]).toBe(true);
     });
 
     it("reserves no footnote number", () => {
@@ -54,11 +55,11 @@ describe("an indented chunk directly after a table", () => {
     });
 
     it("control: the same chunk after a PARAGRAPH line is a live lazy continuation", () => {
-        expect(scanDocument("para\n    code[^1]\n\nafter".split("\n")).isProtected[1]).toBe(false);
+        expect(readNote("para\n    code[^1]\n\nafter".split("\n")).protectedLines[1]).toBe(false);
     });
 
     it("control: the same chunk after a blank line is code today", () => {
-        expect(scanDocument("para\n\n    code[^1]\n\nafter".split("\n")).isProtected[2]).toBe(true);
+        expect(readNote("para\n\n    code[^1]\n\nafter".split("\n")).protectedLines[2]).toBe(true);
     });
 
     it.fails("a definition under a table keeps its OWN continuation lines: the block walker and the reference scan agree", () => {
@@ -73,7 +74,7 @@ describe("an indented chunk directly after a table", () => {
             "[^21]: first\n    continuation\n\n    second para[^22]\n\n" +
             "| a | b |\n| --- | --- |\n| c[^12] | d |\n[^12]: def\n    continuation\n\n    second para[^22]";
         const lines = doc.split("\n");
-        expect(scanDocument(lines).isProtected[13]).toBe(false);
+        expect(readNote(lines).protectedLines[13]).toBe(false);
         expect(removeOrphanedFootnoteReferences(doc)).toBe(
             "[^21]: first\n    continuation\n\n    second para\n\n" +
             "| a | b |\n| --- | --- |\n| c[^12] | d |\n[^12]: def\n    continuation\n\n    second para",

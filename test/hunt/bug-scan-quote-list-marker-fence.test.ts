@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
-import { scanDocument } from "../../src/parsing/markdown-scan";
 import { lintFootnotes } from "../../src/linting/linter";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (wrong output on default settings): a code fence opened behind a
 // quote and then a list marker, "> - ```", is not seen as a fence, and its
@@ -33,7 +33,7 @@ describe("a fence behind a quote then a list marker ('> - ```')", () => {
 
     it("the fence interior is protected", () => {
         const lines = "> - ```\n>   [^9]: fake\n>   ```\n\nreal[^1]\n\n[^1]: real".split("\n");
-        expect(scanDocument(lines).isProtected.slice(0, 3)).toEqual([true, true, true]);
+        expect(readNote(lines).protectedLines.slice(0, 3)).toEqual([true, true, true]);
     });
 
     it("code inside it reserves no number", () => {
@@ -42,6 +42,6 @@ describe("a fence behind a quote then a list marker ('> - ```')", () => {
 
     it("the quoted line after its closer is not protected", () => {
         const lines = "> - ```\n>   code\n>   ```\n> after[^1]\n\n[^1]: d".split("\n");
-        expect(scanDocument(lines).isProtected[3]).toBe(false);
+        expect(readNote(lines).protectedLines[3]).toBe(false);
     });
 });

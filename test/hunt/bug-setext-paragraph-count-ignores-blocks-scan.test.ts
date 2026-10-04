@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 import { fromMarkdown } from "mdast-util-from-markdown";
 import { gfmFootnoteFromMarkdown } from "mdast-util-gfm-footnote";
 import { gfmFootnote } from "micromark-extension-gfm-footnote";
+import { readNote } from "../../src/parsing/note-reading";
 
-import { protectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 
 // BUG (GLM hunt cycle 12, 2026-09-16), the scan half of the bug pinned in
 // bug-setext-paragraph-count-ignores-blocks.test.ts: oneLineParagraphAbove
@@ -47,7 +47,7 @@ import { protectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 // Settings involved: none (pure scanner); every rule that reads protection
 // inherits it.
 
-const scanProtected = (doc: string) => protectedLines(doc.split("\n"));
+const scanProtected = (doc: string) => readNote(doc.split("\n")).protectedLines;
 
 describe("an indented chunk under a setext heading whose paragraph is one line", () => {
 	it("is indented code after a link reference definition, as after any heading", () => {
@@ -82,7 +82,7 @@ describe("an indented chunk under a setext heading whose paragraph is one line",
 		expect(scanProtected(doc)).toEqual([false, false, false, true]);
 		// and the scan agrees without the indented line, so the divergence is
 		// the line counting above the underline, not the chunk rule
-		expect(scanDocument("[ref]: /url\npara\n===".split("\n")).isProtected).toEqual([
+		expect(readNote("[ref]: /url\npara\n===".split("\n")).protectedLines).toEqual([
 			false,
 			false,
 			false,

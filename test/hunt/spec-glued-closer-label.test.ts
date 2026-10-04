@@ -4,11 +4,8 @@
 import { describe, expect, it } from "vitest";
 
 import { commentedDefinitionNames } from "../../src/linting/lint-alerts";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // SPEC QUESTION: is a definition label GLUED to a %% block comment's
 // closer ("%%[^1]: def", no space) a definition in Reading view, or is it
@@ -46,9 +43,7 @@ import {
 
 function startsOf(doc: string): number[] {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return definitionStartLines(lines, scan, (i) => masked[i])
+    return readNote(lines).labelLines
         .map((s, i) => (s ? i : -1))
         .filter((i) => i >= 0);
 }

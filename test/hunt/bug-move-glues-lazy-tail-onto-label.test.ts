@@ -4,12 +4,8 @@ import { describe, expect, it } from "vitest";
 
 import { lintFootnotes } from "../../src/linting/linter";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 // A definition block ends with its lazy continuation line when a plain
 // line sits directly under the label ("[^1]: one" then "lazy tail" -
@@ -43,10 +39,7 @@ import {
 
 const defs = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return findDefinitionBlocks(lines, scan, masked, starts).map((b) => b.name);
+    return readNote(lines).blocks.map((b) => b.name);
 };
 
 const DOC = "para[^1][^2]\n\n[^1]: one\nlazy tail\n\n[^2]: two\n\nmore prose";
@@ -63,9 +56,7 @@ describe("move-to-bottom glues a lazy-tailed block onto the next label", () => {
     it("the linted note's second label is not lazy", () => {
         const out = lintFootnotes(DOC, {});
         const lines = out.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
+        const starts = readNote(lines).labelLines;
         expect(lines.filter((_line, i) => lines[i] === "[^2]: two" && starts[i])).toHaveLength(1);
     });
 

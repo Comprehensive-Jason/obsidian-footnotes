@@ -10,7 +10,7 @@
 // run-oracle.mjs bundles this file with esbuild for Node, the way
 // scripts/generate-corpora.ts is run.
 
-import { normalizeEol } from "../../src/parsing/markdown-scan";
+import { normalizeEol } from "../../src/parsing/line-edits";
 import { readNote } from "../../src/parsing/note-reading";
 
 /** One definition as the plugin reads it, by what holds it: the note itself, a quote, or a list item. `end` is null where the plugin does not model the extent (no longer the case since the runtime swap of 2026-10-03). */

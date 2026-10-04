@@ -3,8 +3,7 @@ import { describe, expect, it } from "vitest";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // spec question: in "It was free!(sic)", should a press with the caret in
 // "free" create a footnote, rather than refuse?
@@ -28,8 +27,7 @@ import { maskProtectedLines, scanDocument } from "../../src/parsing/markdown-sca
 // The names of the live references on `line` of `text`, as the plugin reads them.
 function liveNames(text: string, line = 0): string[] {
     const lines = text.split("\n");
-    const masked = maskProtectedLines(lines, scanDocument(lines));
-    return referenceOccurrences(lines[line], masked[line]).map((o) => o.name);
+    return readNote(lines).referencesOn(line).map((o) => o.name);
 }
 
 describe("spec question: a press next to '!(...)'", () => {

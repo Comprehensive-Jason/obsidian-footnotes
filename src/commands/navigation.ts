@@ -8,10 +8,8 @@ import {
     listExistingFootnoteDefinitions,
     referenceOccurrenceAtCursor,
 } from "../editor/doc-context";
-import {
-    definitionLabelWithName,
-    idListIncludes,
-} from "../parsing/footnote-grammar";
+import { idListIncludes } from "../parsing/footnote-grammar";
+import { definitionLabelWithName } from "../parsing/label-shapes";
 import { openFootnotePopup, popupEditingAvailable } from "./footnote-popup";
 
 import { addReferenceOrDeleteDefinition, showNotice } from "../editor/notice";

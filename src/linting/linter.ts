@@ -12,7 +12,7 @@ import { replaceMinimal } from "../editor/write-back";
 import { rewriteDocument } from "./rewrite-document";
 import { definitionLabel, quotedReference } from "../parsing/footnote-grammar";
 import { footnotePrefix, footnotePrefixProblem } from "../parsing/footnote-prefix";
-import { FootnotePlacement } from "../parsing/markdown-scan";
+import { FootnotePlacement } from "../parsing/landing";
 import { readNote } from "../parsing/note-reading";
 import { AppWithCommands, AppWithPlugins, readingViewActive, viewEditor, WindowWithVim } from "../editor/obsidian-internals";
 import { activeTableCellEditor, nestedSubEditorOwnsFocus, runOutsideTableCell } from "../editor/table-cursor";

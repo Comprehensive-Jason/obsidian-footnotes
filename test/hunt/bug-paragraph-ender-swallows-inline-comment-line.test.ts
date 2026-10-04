@@ -2,10 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { lintFootnotes } from "../../src/linting/linter";
-import {
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // The scanner's paragraphGoesOn ends a paragraph's line-run at any line
 // matching /^ {0,3}%%/ - meant for a "%%" BLOCK opener (a lone "%%"). But
@@ -45,7 +42,7 @@ import {
 
 const masked = (doc: string): string[] => {
     const lines = doc.split("\n");
-    return maskProtectedLines(lines, scanDocument(lines));
+    return [...readNote(lines).maskedLines()];
 };
 
 describe("a code span / comment / math region crossing an inline %% pair line", () => {

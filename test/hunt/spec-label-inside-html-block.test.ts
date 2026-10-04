@@ -2,12 +2,8 @@
 // RESOLVED 2026-09-16: Reading view agrees with micromark (probed: the label inside <div>, <script>, <?php, and <![CDATA[ defines nothing; the one under <!DOCTYPE html> does), so the scan reads HTML blocks of types 1, 3, 4, 5, and 6; the pins pass.
 import { describe, expect, it } from "vitest";
 
-import {
-    definitionStartLines,
-    lazyDefinitionLabelLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { lazyDefinitionLabelLines } from "../../src/parsing/label-shapes";
+import { readNote } from "../../src/parsing/note-reading";
 
 // spec question: what is a `[^x]:` label that sits inside one of
 // CommonMark's seven HTML block types - raw HTML text (micromark's
@@ -53,10 +49,8 @@ import {
 
 const verdict = (doc: string): { starts: boolean[]; lazy: number[] } => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    return { starts, lazy: lazyDefinitionLabelLines(lines, scan, masked, starts) };
+    const starts = readNote(lines).labelLines;
+    return { starts, lazy: lazyDefinitionLabelLines(lines) };
 };
 
 describe("spec question: definition labels inside CommonMark HTML blocks", () => {

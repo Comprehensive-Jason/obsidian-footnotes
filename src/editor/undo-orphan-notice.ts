@@ -26,7 +26,7 @@ import { showNotice } from "./notice";
  * and still referenced afterwards. Reported in the casing the definition
  * itself used.
  *
- * Both sides are judged on the masked twin, so a footnote-shaped decoy
+ * Both sides are judged by the note reading, so a footnote-shaped decoy
  * inside a code span neither sets the notice off nor holds it back (the A20
  * decoy lesson), and names are compared case-insensitively as everywhere
  * else. Pure function; exported so unit tests can call it.
@@ -51,7 +51,7 @@ export function orphanedByUndo(before: string, after: string): string[] {
  * This is how the notice on screen knows to dismiss itself (Jason's ask
  * 2026-08-29). Once a later undo removes the reference, or a redo brings
  * the definition back, the guidance no longer applies and the toast hides.
- * Judged on the masked twin and case-insensitively, like the detector
+ * Judged by the note reading and case-insensitively, like the detector
  * above. Pure function; exported so unit tests can call it.
  */
 export function stillOrphanedNames(text: string, names: string[]): string[] {
@@ -64,10 +64,9 @@ export function stillOrphanedNames(text: string, names: string[]): string[] {
 }
 
 /**
- * Every definition name and every reference name in `lines`, from the one
- * note reading and its masked twin. The two functions above used to mask
- * the document separately (review B4, 2026-09-09). Both sides are judged on
- * the masked twin.
+ * Every definition name and every live reference name in `lines`, from
+ * the one note reading. The two functions above used to mask the document
+ * separately (review B4, 2026-09-09).
  *
  * Definition names come back as a map from the lowercased name to the
  * casing actually typed, and when a name is defined more than once the LAST

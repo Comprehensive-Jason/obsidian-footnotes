@@ -2,13 +2,9 @@
 // RESOLVED 2026-09-16: Reading view renders the two quoted lines as one code span (probed); the search now follows the paragraph's own quote depth.
 import { describe, expect, it } from "vitest";
 
-import { computeNextFootnoteNumber, referenceOccurrences } from "../../src/parsing/footnote-grammar";
+import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
 import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove-orphaned-references";
-import {
-    definitionStartLines,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // The scanner's cross-line code-span search stops at every line that
 // STARTS a construct, because a construct ends the paragraph the span
@@ -44,12 +40,9 @@ const doc = "> `code[^1]\n> span` tail\n\nuse[^2]\n\n[^2]: def";
 
 function liveReferenceNames(markdown: string): string[] {
     const lines = markdown.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
     const names: string[] = [];
     for (let i = 0; i < lines.length; i++) {
-        for (const occurrence of referenceOccurrences(lines[i], masked[i], starts[i])) {
+        for (const occurrence of readNote(lines).referencesOn(i)) {
             names.push(occurrence.name);
         }
     }

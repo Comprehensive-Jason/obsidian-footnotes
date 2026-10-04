@@ -33,7 +33,7 @@
 // content, its region-absorb branch only swallows comment lines when the
 // block is ALREADY inside the definition, and "%%" is excluded from
 // lazyContinuation. So the block is [{ name: "1", start: 0, end: 0 }]
-// while the scan's own definition state runs through line 5: the two
+// while the reading's own definition state runs through line 5: the two
 // readers disagree about where footnote 1 ends.
 //
 // What the user sees from the plugin: with "Move definitions to the
@@ -48,7 +48,7 @@
 // Source of truth: the cycle-2 probe recorded in
 // spec-indented-chunk-after-percent-block.test.ts (probed in Reading
 // view) and the cycle-6 fix note in the hunt brief; the walker must own
-// what the scan says the definition owns, the same way it owns a region
+// what the reading says the definition owns, the same way it owns a region
 // a continuation line opened (Sol bug #3) and a code span interior
 // (cycle 4).
 //
@@ -58,12 +58,8 @@
 import { describe, expect, it } from "vitest";
 
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
+import { readNote } from "../../src/parsing/note-reading";
 
 const LINES = [
     "[^1]: body",
@@ -78,16 +74,13 @@ const LINES = [
 
 describe("the block walker owns the chunk after a %% block inside a definition", () => {
     it("the block runs from the label through the indented chunk", () => {
-        const scan = scanDocument(LINES);
-        const masked = maskProtectedLines(LINES, scan);
-        const starts = definitionStartLines(LINES, scan, (i) => masked[i]);
-        expect(findDefinitionBlocks(LINES, scan, masked, starts)).toEqual([
+        expect(readNote(LINES).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
             { name: "1", start: 0, end: 5 },
         ]);
     });
 
-    it("the scan agrees the chunk is live in the note as written (the settled probe)", () => {
-        expect(scanDocument(LINES).isProtected).toEqual([
+    it("the reading agrees the chunk is live in the note as written (the settled probe)", () => {
+        expect(readNote(LINES).protectedLines).toEqual([
             false,
             false,
             false,
@@ -104,9 +97,9 @@ describe("the block walker owns the chunk after a %% block inside a definition",
         const lines = moved.split("\n");
         const at = lines.indexOf("    chunk[^73]");
         expect(at).toBeGreaterThan(-1);
-        const scan = scanDocument(lines);
-        expect(scan.isProtected[at]).toBe(false);
-        const masked = maskProtectedLines(lines, scan);
+        const reading = readNote(lines);
+        expect(reading.protectedLines[at]).toBe(false);
+        const masked = [...readNote(lines).maskedLines()];
         // the masked twin keeps live text, so a live reference is still
         // there to read (the pin's original assertion had this inverted)
         expect(
@@ -124,16 +117,14 @@ describe("the block walker owns the chunk after a %% block inside a definition",
             "",
             "text [^1]",
         ];
-        const scan = scanDocument(twin);
-        expect(scan.isProtected).toEqual([false, true, false, true, false, false]);
-        const masked = maskProtectedLines(twin, scan);
-        const starts = definitionStartLines(twin, scan, (i) => masked[i]);
-        expect(findDefinitionBlocks(twin, scan, masked, starts)).toEqual([
+        const reading = readNote(twin);
+        expect(reading.protectedLines).toEqual([false, true, false, true, false, false]);
+        expect(readNote(twin).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([
             { name: "1", start: 0, end: 0 },
         ]);
         const moved = moveFootnoteDefinitionsToBottom(twin.join("\n"));
         const lines = moved.split("\n");
         const at = lines.indexOf("    chunk[^73]");
-        expect(scanDocument(lines).isProtected[at]).toBe(true);
+        expect(readNote(lines).protectedLines[at]).toBe(true);
     });
 });

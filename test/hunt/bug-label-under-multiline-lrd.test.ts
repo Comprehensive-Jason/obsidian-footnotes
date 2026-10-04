@@ -1,8 +1,8 @@
 // Imported from the Kimi K3 cycle 5 hunt of 2026-09-16 (OpenCode worktree); 2 of 3 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 import { describe, expect, it } from "vitest";
 
-import { definitionStartLines, maskProtectedLines, scanDocument } from "../../src/parsing/markdown-scan";
 import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphaned-references";
+import { readNote } from "../../src/parsing/note-reading";
 
 // A link reference definition is a block of its own, so a footnote label
 // directly under it starts a definition (Kimi hunt cycle 1, verified in
@@ -36,23 +36,16 @@ const doc = "[foo]: /url\n  \"title\"\n[^1]: x";
 describe("a footnote label under a two-line link reference definition", () => {
     it("starts a definition, as under the one-line form", () => {
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(definitionStartLines(lines, scan, (i) => masked[i])).toEqual([false, false, true]);
+        expect(readNote(lines).labelLines).toEqual([false, false, true]);
     });
 
     it("is not named by the lazy-definition alert", () => {
         const lines = doc.split("\n");
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-        expect(lazyDefinitionLabelNames(lines, scan, masked, starts)).toEqual([]);
+        expect(lazyDefinitionLabelNames(lines)).toEqual([]);
     });
 
     it("control: under a one-line LRD it starts a definition", () => {
         const lines = ["[foo]: /url", "[^1]: x"];
-        const scan = scanDocument(lines);
-        const masked = maskProtectedLines(lines, scan);
-        expect(definitionStartLines(lines, scan, (i) => masked[i])).toEqual([false, true]);
+        expect(readNote(lines).labelLines).toEqual([false, true]);
     });
 });

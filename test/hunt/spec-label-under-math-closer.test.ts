@@ -6,12 +6,7 @@ import { fakePlugin } from "../helpers/fake-plugin";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { lintFootnotes } from "../../src/linting/linter";
 import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphaned-references";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // spec question: is the closing "$$" line of a display-math block a paragraph
 // ender, so that a label written directly under it is a real definition?
@@ -43,19 +38,15 @@ import {
 
 const blocksOf = (doc: string) => {
     const lines = doc.split("\n");
-    return findDefinitionBlocks(lines, scanDocument(lines)).map((b) => `${b.name}@${b.start}`);
+    return readNote(lines).blocks.map((b) => `${b.name}@${b.start}`);
 };
 const lastLineStarts = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return definitionStartLines(lines, scan, (i) => masked[i]).at(-1);
+    return readNote(lines).labelLines.at(-1);
 };
 const lazyNames = (doc: string) => {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    return lazyDefinitionLabelNames(lines, scan, masked, definitionStartLines(lines, scan, (i) => masked[i]));
+    return lazyDefinitionLabelNames(lines);
 };
 
 describe("a label directly under a closed $$ math block", () => {

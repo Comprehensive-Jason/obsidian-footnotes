@@ -1,13 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { referenceOccurrences } from "../../src/parsing/footnote-grammar";
-import {
-    definitionStartLines,
-    findDefinitionBlocks,
-    maskProtectedLines,
-    scanDocument,
-} from "../../src/parsing/markdown-scan";
+
 import { lintFootnotes } from "../../src/linting/linter";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (wrong output on default settings): a tag line such as "<span>"
 // directly under a label line is read two ways at once, and the default
@@ -32,27 +27,25 @@ import { lintFootnotes } from "../../src/linting/linter";
 // Source of truth: CommonMark 4.6 (an HTML block of type 7 cannot
 // interrupt a paragraph, and a label line's text is a paragraph).
 
-// What the plugin reads in `doc`: the scan, the definition blocks, and every live reference as "line:name".
+// What the plugin reads in `doc`: the reading, the definition blocks, and every live reference as "line:name".
 function facts(doc: string) {
     const lines = doc.split("\n");
-    const scan = scanDocument(lines);
-    const masked = maskProtectedLines(lines, scan);
-    const starts = definitionStartLines(lines, scan, (i) => masked[i]);
-    const blocks = findDefinitionBlocks(lines, scan, masked, starts);
-    const live = lines.flatMap((l, i) => referenceOccurrences(l, masked[i], starts[i]).map((o) => `${i}:${o.name}`));
-    return { scan, blocks, live };
+    const reading = readNote(lines);
+    const blocks = readNote(lines).blocks;
+    const live = lines.flatMap((_, i) => readNote(lines).referencesOn(i).map((o) => `${i}:${o.name}`));
+    return { reading, blocks, live };
 }
 
 describe("a type-7 tag line under a definition's own paragraph", () => {
     it("'<span>' directly under a lazy label is paragraph text, not an HTML block", () => {
         const f = facts("para\n[^1]: x\n<span>\nsee [^2]\n\n[^2]: two");
-        expect(f.scan.isProtected.slice(0, 4)).toEqual([false, false, false, false]);
+        expect(f.reading.protectedLines.slice(0, 4)).toEqual([false, false, false, false]);
         expect(f.live).toContain("3:2");
     });
 
     it("'<span>' directly under a label line is the footnote's lazy body, not an HTML block", () => {
         const f = facts("[^1]: body\n<span>\nmore [^2]\n\nx[^1]\n\n[^2]: two");
-        expect(f.scan.isProtected.slice(0, 3)).toEqual([false, false, false]);
+        expect(f.reading.protectedLines.slice(0, 3)).toEqual([false, false, false]);
         expect(f.blocks[0]).toMatchObject({ name: "1", start: 0, end: 2 });
     });
 

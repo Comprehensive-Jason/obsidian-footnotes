@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 import { fixLazyDefinitions } from "../../src/linting/rules/fix-lazy-definitions";
-import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-scan";
+import { readNote } from "../../src/parsing/note-reading";
 
 // A footnote definition's continuation paragraph after a BLANK line needs
 // four spaces of indent (CommonMark's footnote rules, and micromark's
@@ -35,7 +35,7 @@ import { findDefinitionBlocks, scanDocument } from "../../src/parsing/markdown-s
 describe("a 1-3 space indented line after a definition's blank gap is NOT its continuation", () => {
     it("the block walker ends the block at the blank line", () => {
         const lines = "[^9]: stray\n\n   important prose\n\ntext".split("\n");
-        const blocks = findDefinitionBlocks(lines, scanDocument(lines));
+        const blocks = readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }));
         expect(blocks).toEqual([{ name: "9", start: 0, end: 0 }]);
     });
 
@@ -62,13 +62,13 @@ describe("a 1-3 space indented line after a definition's blank gap is NOT its co
 
     it("control: four spaces after the gap IS a continuation (micromark agrees)", () => {
         const lines = "[^9]: stray\n\n    real continuation\n\ntext".split("\n");
-        const blocks = findDefinitionBlocks(lines, scanDocument(lines));
+        const blocks = readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }));
         expect(blocks).toEqual([{ name: "9", start: 0, end: 2 }]);
     });
 
     it("control: a non-blank lazy continuation line stays (micromark: paragraph reads \"x\\ny\")", () => {
         const lines = "[^9]: stray\n lazy continuation\n\ntext".split("\n");
-        const blocks = findDefinitionBlocks(lines, scanDocument(lines));
+        const blocks = readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }));
         expect(blocks).toEqual([{ name: "9", start: 0, end: 1 }]);
     });
 });

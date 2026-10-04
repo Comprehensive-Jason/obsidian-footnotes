@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { computeNextFootnoteNumber, referenceOccurrences } from "../../src/parsing/footnote-grammar";
+import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
+
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
+import { readNote } from "../../src/parsing/note-reading";
 
 // Scenario: a backslash-escaped reference "\[^9]" is literal text per CommonMark
 // §2.4, yet it gets renumbered by reindex, listed as a reference occurrence,
@@ -18,7 +20,7 @@ describe("fixed 2026-08-10: backslash-escaped references are treated as real foo
 
     it("does not list a backslash-escaped reference as a footnote", () => {
         const line = "literal \\[^fake] real[^ok]";
-        expect(referenceOccurrences(line, line)).toEqual([
+        expect(readNote([line]).referencesOn(0)).toEqual([
             { name: "ok", start: 21, end: 26 },
         ]);
     });
