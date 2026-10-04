@@ -260,9 +260,10 @@ export default class FootnotePlugin extends Plugin {
     });
 
     // DEV ONLY, to be removed before the 0.3.0 stable release unless Jason
-    // says otherwise: times the scanner against the remark-parse 8 reader on
-    // the open note, for the phone test (benchmark-parsers.ts; Jason,
-    // 2026-10-03). Registered only in a beta build, whose version has a "-".
+    // says otherwise: times the note reading on the open note, read cold and
+    // after a one-character edit, for the phone test (benchmark-parsers.ts;
+    // Jason, 2026-10-03). Registered only in a beta build, whose version has
+    // a "-".
     if (this.manifest.version.includes("-")) {
       this.addCommand({
         id: "benchmark-footnote-parsers",
