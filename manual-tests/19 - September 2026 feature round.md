@@ -1,6 +1,6 @@
 # 19: the September 2026 feature round in one sitting (2026-09-22)
 
-Claude: one pass over everything built 2026-09-21 and 22, for Jason to run before the beta. It gathers the human checks of sheets 15 (delete), 16 (placement), 17 (conversions) and 18 (copy and paste), adds the inline-footnote lint change and the icons, and orders them so settings change as few times as possible. Run `npm test` first; 3239 tests pass with 145 expected failures as of 2026-10-04 (updated that day for the changes of 2026-10-03 and 04: section 4's conversion counts, the skipped footnotes, and the cut of a shared footnote). Every fixture is in this note or in the companion note **19b - Paste target**. Undo (Ctrl+Z) between checks unless a check says otherwise.
+Claude: one pass over everything built 2026-09-21 and 22, for Jason to run before the beta. It gathers the human checks of sheets 15 (delete), 16 (placement), 17 (conversions) and 18 (copy and paste), adds the inline-footnote lint change and the icons, and orders them so settings change as few times as possible. Run `npm test` first; 3239 tests pass with 145 expected failures as of 2026-10-04 (updated that day for the changes of 2026-10-03 and 04: section 4's conversion counts, the skipped footnotes, and the cut of a shared footnote). Every fixture is in this note or in the companion note **19b - Paste target**. Undo (Ctrl+Z) between checks unless a check says otherwise. Its phone checks are on sheet P (moved 2026-10-04).
 
 Settings to start: defaults. **Placement relative to punctuation** = After punctuation, **Carry footnote definitions on copy, cut, and paste** on, **Preferred footnote naming style** = Keep as written, **Lint on footnote creation** off.
 
@@ -23,7 +23,7 @@ Fixtures: a footnote used twice[^twice] and again[^twice], a right-click one[^me
 
 Fixtures: This is "some bravo". 这是一个句子，引用来源。 他说「引用来源。」
 
-- [ ] Settings page: **Placement relative to punctuation**, in the Footnote reference placement section, is a dropdown (After punctuation, Before punctuation, Don't move), shows After punctuation, and its description reads well and does not cut off at phone width; settings search for "placement" finds it
+- [ ] Settings page: **Placement relative to punctuation**, in the Footnote reference placement section, is a dropdown (After punctuation, Before punctuation, Don't move), shows After punctuation, and its description reads well; settings search for "placement" finds it
 - [ ] After punctuation (default): caret inside `bravo`, numbered hotkey: the reference lands after the closing quote AND the full stop. Undo
 - [ ] Set **Before punctuation**. Same press: after the closing quote, in front of the full stop. Undo
 - [ ] Before, Chinese: caret in 来源 of the first Chinese sentence: the reference lands in front of the 。 and Reading view shows the superscript before the full stop. Undo
@@ -75,15 +75,7 @@ Open **19b - Paste target** in a second pane. Fixture paragraph: a paragraph wit
 ## 6. Icons and the palette
 
 - [ ] Command palette: **Delete footnote everywhere**, **Convert inline footnotes to normal footnotes** and **Convert normal footnotes to inline footnotes** are listed, each with its icon (the two convert icons are placeholders until yours land; the delete icon is yours). On a beta build the palette also lists **Benchmark footnote parsers on this note**, with no icon: it is beta-only, for the phone speed test on sheet P, and is to go before the 0.3.0 stable release
-- [ ] Phone or mobile emulation: the three commands can be added to the toolbar and their icons read at toolbar size
-- [ ] Settings page: command and setting names in the descriptions are bold and footnote syntax is in code style (the naming dropdown and the prefix toggle show both); **Preferred footnote naming style**, **Placement relative to punctuation**, **Per-note footnote prefix**, and the carry toggle break their descriptions into bullet lists (one value or case per bullet, no full stop at the end of a bullet, a closing line after the list where there is one) with a modest indent that still reads at phone width; settings search for "meaningful" still finds the naming dropdown, which proves the search reads formatted descriptions
-
-## 7. The phone (needs the beta on the phone)
-
-- [ ] Long-press `[^menu]` to select it, tap the delete toolbar icon: the deletion happens and the toast fits the screen
-- [ ] Select text with a footnote, Copy from the long-press menu, paste into another note: the definition follows
-- [ ] Copy text with a footnote, copy something else, then paste the footnote text from the keyboard's clipboard history (Gboard or Samsung Keyboard): it lands through the same pipeline, definition appended and the paste toast shown, not as plain text with the definition after it (your finding of 2026-09-25)
-- [ ] Cut a phrase whose footnote only it uses: the definition leaves with it in one undo
+- [ ] Settings page: command and setting names in the descriptions are bold and footnote syntax is in code style (the naming dropdown and the prefix toggle show both); **Preferred footnote naming style**, **Placement relative to punctuation**, **Per-note footnote prefix**, and the carry toggle break their descriptions into bullet lists (one value or case per bullet, no full stop at the end of a bullet, a closing line after the list where there is one); settings search for "meaningful" still finds the naming dropdown, which proves the search reads formatted descriptions
 
 [^twice]: cited twice, one line
 [^pair]: for the pair check in section 3
