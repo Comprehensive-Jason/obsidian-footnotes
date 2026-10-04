@@ -15,7 +15,8 @@ Settings: defaults (**Carry footnote definitions on copy, cut, and paste** on). 
 ## Cut
 
 - [ ] Select `one with its own footnote[^own]` (just that phrase) and Ctrl+X: the phrase leaves, the `[^own]` definition leaves with it in the SAME undo step, and the toast says one definition was cut. Ctrl+V somewhere else in this note brings both back
-- [ ] Select one of the two `[^shared]` uses and Ctrl+X: the definition stays (the other use still needs it), Obsidian's own cut runs, and pasting elsewhere reuses the existing definition
+- [ ] Select one of the two `[^shared]` uses and Ctrl+X: the definition stays (the other use still needs it) and no toast shows; the clipboard text carries a copy of the definition (the plugin takes over any cut whose selection needs a definition, so the copy travels; corrected 2026-10-04, the sheet used to say Obsidian's own cut runs), and pasting elsewhere in this note reuses the existing definition (toast: "1 reused")
+- [ ] A cut outside the note's text is left alone (2026-10-03): select `one with its own footnote[^own]` in the note, then press Ctrl+F, type a word into the search box, select it there, and Ctrl+X; do the same in the note's inline title. Each time only the field's own text is cut: the note's text and the `[^own]` definition stay, and no toast shows (the plugin used to cut the note's old selection instead; what the units cannot see is where Obsidian really draws these fields)
 
 ## The clipboard text and other apps
 

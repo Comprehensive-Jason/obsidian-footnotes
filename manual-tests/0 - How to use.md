@@ -27,13 +27,13 @@ The smoke suite drives the real plugin inside the running sandbox vault (Obsidia
 | 10 | A note whose footnote-prefix property is invalid | 1 |
 | 11 | Protected text and read-only views: creation guards, Reading view, lint, Obsidian `%%` comments | 2 |
 | 12 | Lint triggers (on save, on creation) and the settings page | 5 |
-| 13 | Phone and mobile emulation (needs a beta on the phone) | 9 |
+| 13 | Phone and mobile emulation (needs a beta on the phone), with the beta-only speed test on the "Footnote Speed Test" notes (added 2026-10-04) | 10 |
 | 14 | Definition labels directly after a prose line are prose (Obsidian's rule, matched 2026-09-09) | 2 |
 | 15 | Delete footnote everywhere: the command, the right-click menu, undo, the phone (added 2026-09-21) | 9 |
 | 16 | Footnote reference placement: the dropdown, inserting under each placement, the lint rule under Before (added 2026-09-21) | 8 |
 | 17 | Converting between footnote styles: both commands, undo, the transclusion round trip (added 2026-09-21) | 7 |
-| 18 | Copying, cutting, and pasting footnotes: the real clipboard, a second note, other apps, the phone (added 2026-09-22) | 12 |
-| 19 | The September 2026 feature round in one sitting: sheets 15 to 18 gathered, plus the inline-footnote lint change and the icons; 19b is its paste-target companion (added 2026-09-22) | 36 |
+| 18 | Copying, cutting, and pasting footnotes: the real clipboard, a second note, other apps, the phone (added 2026-09-22), and a cut in a search box or the title left alone (2026-10-04) | 12 |
+| 19 | The September 2026 feature round in one sitting: sheets 15 to 18 gathered, plus the inline-footnote lint change and the icons; 19b is its paste-target companion (added 2026-09-22) | 42 |
 
 Inter-plugin compatibility sheets live separately in the repo's `compat-tests/` folder (vault mirror: "Footnote Compat Tests"); they need other plugins installed and follow different pass/fail rules.
 
