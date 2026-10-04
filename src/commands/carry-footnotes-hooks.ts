@@ -99,14 +99,36 @@ export function resetCarryRegister(): void {
  * The Properties box needs no check of its own: Obsidian draws it outside
  * the content element, so the first test already turns it away.
  *
+ * An event fired somewhere else still counts when the page's own selection
+ * sits in the note's text, because a copy or a cut always takes the page's
+ * selection, unless it was fired at a typing field (an input, a text
+ * area, or editable text such as the inline title), which has a selection
+ * of its own. This is the phone's case: a copy or cut from Android's
+ * selection toolbar is fired at the page's body, since the selection does
+ * not count as shown while the toolbar takes the tap, so without this the
+ * phone carried nothing at all (Jason's report, 2026-10-04, 0.3.0-beta.3;
+ * test/carry-phone-selection-toolbar.test.ts).
+ *
  * The unit tests' stand-in editor has no CodeMirror view, and then there
  * is nothing to ask, so the event counts.
  */
 function eventInEditorText(doc: Editor, event: Event): boolean {
     const content = codeMirrorViewOf(doc)?.contentDOM;
     if (!content) return true;
-    const target = event.target ?? content.ownerDocument.activeElement;
-    return !!target && content.contains(target as Node) && !nestedSubEditorOwnsFocus(doc);
+    if (nestedSubEditorOwnsFocus(doc)) return false;
+    const page = content.ownerDocument;
+    const target = event.target ?? page.activeElement;
+    if (target && content.contains(target as Node)) return true;
+    if (target && isTypingField(target)) return false;
+    // the tests' stand-in pages have no selection to ask
+    const anchor = (page as Partial<Document>).getSelection?.()?.anchorNode;
+    return !!anchor && content.contains(anchor);
+}
+
+/** Whether `target` is an element that holds typed text and its own selection: an input, a text area, or editable text. */
+function isTypingField(target: EventTarget): boolean {
+    const element = target as Partial<HTMLElement>;
+    return element.isContentEditable === true || element.tagName === "INPUT" || element.tagName === "TEXTAREA";
 }
 
 /** The single, non-empty selection of the note being edited, or null when the feature is off, no editor is active, the view is Reading view, the event happened outside the note's own text (eventInEditorText), or the selection is empty or multiple. */
