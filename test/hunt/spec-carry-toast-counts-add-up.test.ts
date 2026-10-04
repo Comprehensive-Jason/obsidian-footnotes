@@ -8,7 +8,7 @@ import { messages, resetNotices } from "../helpers/notices";
 // spec question (UI text): should the paste toast's counts add up to its
 // total?
 //
-// What it does now: sheet 19's rename check pastes four footnotes, one of
+// What it does now: sheet 18's rename check pastes four footnotes, one of
 // which is renamed to fit the note, and the toast reads "Pasted with 4
 // footnote definitions: 4 added, 1 renamed." That reads as five things
 // for four: a renamed definition is counted in "added" and again in
@@ -23,7 +23,7 @@ import { messages, resetNotices } from "../helpers/notices";
 // Hunt 2026-10-02, round 4, lens promise. Cluster PR7.
 //
 // Source of truth: the README's Paste paragraph ("The toast says how many
-// were added, reused, and renamed") and manual sheet 19's rename check.
+// were added, reused, and renamed") and manual sheet 18's rename check.
 
 /** A stand-in for the browser's clipboard event, holding `text` to paste and recording what the hook writes. */
 function clipboardEvent(text = "") {
@@ -58,7 +58,7 @@ beforeEach(() => {
 });
 
 describe("spec question: the paste toast's counts", () => {
-    it.fails("sheet 19 rename check: the counts add up to the total", () => {
+    it.fails("sheet 18 rename check: the counts add up to the total", () => {
         const sentence = "shared[^shared] and[^shared] own[^own] chain[^chain]";
         const source = editor(
             [sentence, "", "[^shared]: s", "[^own]: used once", "[^chain]: cites[^inner]", "[^inner]: in"],

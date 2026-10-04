@@ -28,3 +28,10 @@ start messy[^20] references[^10] here
 
 - [ ] Turn OFF all four rules AND Reindex AND the three Orphans-and-duplicates toggles, run **Lint footnotes**: "All lint rules are turned off in the plugin settings, so there is nothing to lint." (not the misleading "No linting needed."); Ctrl+S with lint-on-save says the same (2026-08-10)
 - [ ] Turn every rule and toggle back to its default afterwards.
+
+## The command palette and the settings text
+
+Moved here from the feature-round sheet on 2026-10-04.
+
+- [ ] Command palette: **Delete footnote everywhere**, **Convert inline footnotes to normal footnotes**, and **Convert normal footnotes to inline footnotes** are listed, each with its icon (the two convert icons are placeholders until yours land; the delete icon is yours)
+- [ ] Settings page: command and setting names in the descriptions are bold and footnote syntax is in code style (the naming dropdown and the prefix toggle show both); **Preferred footnote naming style**, **Placement relative to punctuation**, **Per-note footnote prefix**, and the carry toggle break their descriptions into bullet lists (one value or case per bullet, no full stop at the end of a bullet, a closing line after the list where there is one); settings search for "meaningful" still finds the naming dropdown, which proves the search reads formatted descriptions

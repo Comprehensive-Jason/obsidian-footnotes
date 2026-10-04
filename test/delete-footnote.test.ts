@@ -128,7 +128,7 @@ describe("deleteFootnoteEverywhere", () => {
     // Jason, 2026-09-22: Obsidian's own delete removes a definition inside a
     // list item, so this command does too where it can tell the extent: a
     // single line, on the item's marker line or indented under the item.
-    // Jason, 2026-09-24 (sheet 19): Obsidian's delete leaves the bullet in
+    // Jason, 2026-09-24 (the feature-round sheet): Obsidian's delete leaves the bullet in
     // front of the definition standing, so this one does too; only the
     // definition text goes, and the item is left empty.
     it("deletes a single-line definition inside a list item, on the marker line or indented under the item", () => {

@@ -132,7 +132,7 @@ export function removeLineRanges(
  * ranges of whole lines to remove (removeLineRanges). A definition's lines
  * go whole, except on a list marker's line, where only the definition goes
  * and the bullet stays, an empty item, because that is what Obsidian's own
- * delete leaves (Jason, 2026-09-24, sheet 19; since Jason's ruling 1,
+ * delete leaves (Jason, 2026-09-24, on the feature-round sheet; since Jason's ruling 1,
  * option a, 2026-10-03, for every rule that cuts a definition). Pass only
  * definitions that are `removable`. `lines` comes back as the same array
  * when nothing was trimmed.

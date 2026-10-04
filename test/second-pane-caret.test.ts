@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { lineDiffChanges, lineMapper } from "../src/editor/document-diff";
 
-// Jason's report (sheet 19, 2026-09-24): the same note in two panes, lint
+// Jason's report (the feature-round sheet, 2026-09-24): the same note in two panes, lint
 // from one, and the other pane's caret dropped to the top. The live half
 // (Obsidian's delayed copy into the other pane, the restore after it) is
 // the smoke test "lint leaves a second pane on the same note where it

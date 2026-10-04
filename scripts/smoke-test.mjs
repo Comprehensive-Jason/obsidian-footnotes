@@ -1700,7 +1700,7 @@ async function main() {
     });
 
     await test("lint leaves a second pane on the same note where it was (caret and scroll)", async () => {
-        // Jason's report (sheet 19, 2026-09-24): with the note split into two
+        // Jason's report from the feature-round sheet (2026-09-24): with the note split into two
         // panes, linting from one made the other jump. Obsidian copies the
         // rewrite into the other pane a moment later as one whole
         // replacement, which drops that pane's caret to the top of the note;

@@ -107,7 +107,7 @@ function otherPanesOn(mdView: MarkdownView): PanePlace[] {
  * Put every other pane back where it was. Obsidian copies a rewrite into
  * the other panes on the same note a moment later, as one whole
  * replacement, which drops each pane's caret to the top of the note and
- * can shift its scroll (Jason's report, sheet 19, 2026-09-24: the pane he
+ * can shift its scroll (Jason's report from the feature-round sheet, 2026-09-24: the pane he
  * was not typing in jumped, and a split view is on purpose). The copy
  * lands within about 200 ms (probed live, 2026-09-24), so this waits for
  * each pane's text to become the new text, then puts its selection back,

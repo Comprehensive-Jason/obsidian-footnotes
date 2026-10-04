@@ -9,7 +9,7 @@ Settings: defaults (**Carry footnote definitions on copy, cut, and paste** on). 
 - [ ] Select the whole first fixture paragraph above (both `[^shared]`, `[^own]`, `[^chain]`), Ctrl+C, switch to 18b, Ctrl+V at the end of its line: the text lands, four definitions are appended after `[^1]: an existing one` (`shared`, `own`, `chain`, and `inner`, which only `chain`'s body cites), the toast reads "Pasted with 4 footnote definitions: 4 added." and Reading view renders every footnote
 - [ ] One undo in 18b removes the text and the four definitions together
 - [ ] Paste the same clipboard a second time: the four definitions are reused, not added again (toast: 4 reused), and the references point at them
-- [ ] In 18b, add a definition `[^own]: a different body`, then paste again: `[^own]` comes in renamed (`[^own-2]`) with its own definition, and the toast says 1 renamed
+- [ ] In 18b, add a definition `[^own]: a different body`, then paste again: `[^own]` comes in renamed (`[^own-2]`) with its own definition, and the toast says 1 renamed. Paste once more: the toast says "3 reused, 1 matched an existing footnote (same definition, different name)", since `[^own-2]` already holds that body (moved here from the feature-round sheet on 2026-10-04)
 - [ ] Copy `Existing[^1]` from 18b and paste it into this note, where `[^1]` does not exist: it lands as `[^1]` with its definition. Then paste it again after adding a different `[^1]` here: it comes in as the next free number
 
 ## Cut
@@ -22,6 +22,7 @@ Settings: defaults (**Carry footnote definitions on copy, cut, and paste** on). 
 ## The clipboard text and other apps
 
 - [ ] Paste the copied paragraph into another app (Notepad, a browser field): the text, a blank line, then the definition lines, which travel in the clipboard text on purpose. Paste it into 18b as well: the definitions land at the bottom, not in the middle of the text
+- [ ] Cut `one with its own footnote[^own]` and paste it into Notepad or a browser field: the definition line is there after the text. Copy all of that from Notepad and paste it back into this note: it lands as a footnote again, not as a stray definition line. Undo (moved here from the feature-round sheet on 2026-10-04)
 - [ ] Copy with Footnotes compatibility (optional, if that plugin is installed in a scratch vault): text it copied pastes here with its definitions landed and merged
 
 [^shared]: used twice above
