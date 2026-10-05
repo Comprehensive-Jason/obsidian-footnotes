@@ -74,14 +74,14 @@ beforeEach(() => {
 describe("a definition nested in another carried definition's body travels once", () => {
     const source = ["x[^a] y[^b]", "", "[^a]: outer", "", "    [^b]: inner"];
 
-    it.fails("carriedDefinitions does not carry [^b] a second time", () => {
+    it("carriedDefinitions does not carry [^b] a second time", () => {
         const { carried } = carriedDefinitions(source.join("\n"), { line: 0, ch: 0 }, { line: 0, ch: 11 });
         // Today: a: ["[^a]: outer", "", "    [^b]: inner"], and b: ["    [^b]: inner"].
         const lines = carried.flatMap((c) => c.lines);
         expect(lines.filter((l) => l.includes("[^b]:")).length).toBe(1);
     });
 
-    it.fails("the paste lands one [^b] definition, not two", () => {
+    it("the paste lands one [^b] definition, not two", () => {
         const dest = copyAndPaste(source, { line: 0, ch: 0 }, { line: 0, ch: 11 });
         // Today: [..., "[^a]: outer", "", "    [^b]: inner", "    [^b]: inner"].
         expect(dest.filter((l) => l.includes("[^b]:")).length).toBe(1);

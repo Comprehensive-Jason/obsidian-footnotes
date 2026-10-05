@@ -207,7 +207,12 @@ function carriedBlocks(lines: string[], from: EditorPosition, to: EditorPosition
         for (let line = block.start; line <= block.end; line++) inner.push(...reading.referencesOn(line).map((occurrence) => occurrence.name));
         queue.unshift(...inner);
     }
-    return { blocks: carried, missing };
+    // A block whose lines lie inside another carried block (a footnote
+    // defined in another footnote's body) already travels with that block,
+    // so it is not carried a second time, whichever of the two the copy met
+    // first (hunt 2026-10-05, pin bug-nested-definition-carried-twice)
+    const outermost = carried.filter((block) => !carried.some((other) => other !== block && other.start <= block.start && block.end <= other.end));
+    return { blocks: outermost, missing };
 }
 
 /** How carried definitions land in a destination note: the pasted body and the blocks to append, both with the collision renames made, and the counts for the toast. */
