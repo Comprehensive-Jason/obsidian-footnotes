@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { convertNormalFootnotesToInline } from "../../src/commands/convert-footnotes";
 import { lineDiffChanges, mapFoldLines } from "../../src/editor/document-diff";
+import { lintFootnotes } from "../../src/linting/linter";
 
 // BUG (annoyance): Convert normal footnotes to inline footnotes unfolds a
 // folded heading that sits right under the definitions it removes.
@@ -54,5 +55,17 @@ describe("folds through the normal-to-inline conversion", () => {
         const folds = [{ from: 4, to: 7 }];
         // Today: [] (the fold is dropped).
         expect(mapFoldLines(folds, lineDiffChanges(before, result.markdown), before)).toEqual([{ from: 3, to: 5 }]);
+    });
+});
+
+// The default lint's punctuation rule triggers the same root: it rewrites a heading in place
+// right under a definition the lint moves away (hunt 2026-10-05, round 1, cluster PR4).
+describe("folds through the default lint", () => {
+    it.fails("a heading holding an inline footnote before its period keeps its fold under the default lint", () => {
+        const before = ["# H2", "", "[^1]: alpha", "", "# H0^[note].", "", "# H1", "", "alpha", "", "Lorem ipsum[^1]."].join("\n");
+        const after = lintFootnotes(before, {});
+        expect(after.split("\n").slice(0, 4)).toEqual(["# H2", "", "# H0.^[note]", ""]);
+        // "# H0^[note]." was folded over lines 4 and 5. Today: [] (the fold is dropped).
+        expect(mapFoldLines([{ from: 4, to: 5 }], lineDiffChanges(before, after), before)).toEqual([{ from: 2, to: 3 }]);
     });
 });
