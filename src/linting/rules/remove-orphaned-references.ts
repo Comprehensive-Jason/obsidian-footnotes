@@ -1,6 +1,5 @@
-import { definitionLabelWithName } from "../../parsing/label-shapes";
 import { LineEdit, linesReadAlike, readNote } from "../../parsing/note-reading";
-import { lazyDefinitionLabelLines, underlinedDefinitionLabelLines } from "../../parsing/label-shapes";
+import { labelShapedLines, lazyDefinitionLabelLines } from "../../parsing/label-shapes";
 import { normalizeEol, restoreEol } from "../../parsing/line-edits";
 import { FootnoteRule } from "../rule";
 
@@ -59,31 +58,33 @@ function definitionNamesFolded(lines: string[]): Set<string> {
  * Reading view 2026-09-16).
  */
 export function underlinedDefinitionLabelNames(lines: string[]): string[] {
-    const reading = readNote(lines);
-    const names: string[] = [];
-    const seen = new Set<string>();
-    for (const i of underlinedDefinitionLabelLines(lines)) {
-        const hit = definitionLabelWithName(lines[i], reading.maskedLine(i));
-        if (!hit) continue;
-        const folded = hit.name.toLowerCase();
-        if (seen.has(folded)) continue;
-        seen.add(folded);
-        names.push(hit.name);
-    }
-    return names;
+    return labelNames(lines, true);
 }
 
 export function lazyDefinitionLabelNames(lines: string[]): string[] {
-    const reading = readNote(lines);
+    return labelNames(lines, false);
+}
+
+/**
+ * The names of the lazy labels (`underlined` false) or the underlined ones
+ * (true), each once, in order. The names come from labelShapedLines, which
+ * reads each label from where its line's list and quote markers end. They
+ * used to be read again from the line's margin, which found no label at
+ * the content column of a nested or wide list item ("    [^b]: lazy"), so
+ * the alert asked for a definition the user had written and Delete
+ * orphaned references cut both "[^b]" (hunt 2026-10-05, pins
+ * bug-lazy-label-wide-item-content-column and
+ * spec-lazy-label-wide-item-alert).
+ */
+function labelNames(lines: string[], underlined: boolean): string[] {
     const names: string[] = [];
     const seen = new Set<string>();
-    for (const i of lazyDefinitionLabelLines(lines)) {
-        const hit = definitionLabelWithName(lines[i], reading.maskedLine(i));
-        if (!hit) continue;
-        const folded = hit.name.toLowerCase();
+    for (const label of labelShapedLines(lines)) {
+        if (label.underlined !== underlined) continue;
+        const folded = label.name.toLowerCase();
         if (seen.has(folded)) continue;
         seen.add(folded);
-        names.push(hit.name);
+        names.push(label.name);
     }
     return names;
 }

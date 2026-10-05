@@ -28,17 +28,17 @@ import { lazyDefinitionLabelNames, orphanedFootnoteReferenceNames } from "../../
 // label.
 //
 // Decided (Jason, 2026-10-05, Q6): the lazy-definition alert names it, as
-// it does in an item whose text starts at column 2. Expected to fail until
+// it does in an item whose text starts at column 2. Done (2026-10-05):
 // lazyDefinitionLabelNames (remove-orphaned-references.ts) takes each
-// label's name from labelShapedLines, which finds it since 2026-10-05,
-// instead of re-reading the label from the margin.
+// label's name from labelShapedLines instead of re-reading the label from
+// the margin.
 
 const NESTED = ["Use[^b] here.", "", "- parent", "  - child", "    [^b]: lazy in child"];
 const WIDE = ["Use[^b] here.", "", "10. item", "    [^b]: lazy in a wide ordered item"];
 
 describe("the alert for a lazy label at an item's content column of 4", () => {
     for (const [name, lines] of [["nested item", NESTED], ["wide ordered item", WIDE]] as const) {
-        it.fails(`${name}: the lazy-definition alert names it, not the missing-definition alert`, () => {
+        it(`${name}: the lazy-definition alert names it, not the missing-definition alert`, () => {
             // Before the fix: [], the lazy-definition alert did not name it.
             expect(lazyDefinitionLabelNames(lines)).toEqual(["b"]);
             expect(orphanedFootnoteReferenceNames(lines.join("\n"))).toEqual([]);

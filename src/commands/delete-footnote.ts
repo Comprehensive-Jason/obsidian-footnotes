@@ -1,6 +1,5 @@
 import { quotedDefinitionLabel, quotedReference } from "../parsing/footnote-grammar";
-import { definitionLabelWithName } from "../parsing/label-shapes";
-import { lazyDefinitionLabelLines, underlinedDefinitionLabelLines } from "../parsing/label-shapes";
+import { labelShapedLines } from "../parsing/label-shapes";
 import { definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../parsing/line-edits";
 import { readNote } from "../parsing/note-reading";
 import { definitionsHeldBy, linesReadDifferently } from "../linting/rules/remove-orphaned-definitions";
@@ -100,20 +99,14 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     // a setext underline under it, which makes it a heading) are the
     // definitions the user MEANT to write, so they go too: the lazy line
     // alone, the underlined line together with its underline, which has
-    // no business staying behind under the line above.
-    const labelOf = (i: number): boolean =>
-        definitionLabelWithName(lines[i], reading.maskedLine(i))?.name.toLowerCase() === folded;
-    for (const i of lazyDefinitionLabelLines(lines)) {
-        if (labelOf(i)) {
-            blocks.push({ start: i, end: i });
-            definitions++;
-        }
-    }
-    for (const i of underlinedDefinitionLabelLines(lines)) {
-        if (labelOf(i)) {
-            blocks.push({ start: i, end: i + 1 });
-            definitions++;
-        }
+    // no business staying behind under the line above. Each label's name
+    // is the one labelShapedLines read from where the line's list and
+    // quote markers end, so a label at a nested item's content column
+    // counts too (hunt 2026-10-05, cluster CN3).
+    for (const label of labelShapedLines(lines)) {
+        if (label.name.toLowerCase() !== folded) continue;
+        blocks.push({ start: label.line, end: label.underlined ? label.line + 1 : label.line });
+        definitions++;
     }
     blocks.sort((a, b) => a.start - b.start);
     // the lines a block cut takes with it: a reference on one of them

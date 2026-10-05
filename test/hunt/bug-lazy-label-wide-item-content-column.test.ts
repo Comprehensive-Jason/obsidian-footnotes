@@ -44,6 +44,9 @@ import { readNote } from "../../src/parsing/note-reading";
 // remove-orphaned-references.ts, where lazyDefinitionLabelNames lives),
 // which finds no label four spaces in; once they take the name
 // labelShapedLines gives, the two orphan tests below pass.
+//
+// Fixed (2026-10-05): lazyDefinitionLabelNames and
+// underlinedDefinitionLabelNames take each name from labelShapedLines.
 
 const NESTED = ["Use[^b] here.", "", "- parent", "  - child", "    [^b]: lazy in child"];
 const WIDE = ["Use[^b] here.", "", "10. item", "    [^b]: lazy in a wide ordered item"];
@@ -62,7 +65,7 @@ describe("a lazy label at an item's content column of 4", () => {
     });
 
     for (const [name, lines] of [["nested item", NESTED], ["wide ordered item", WIDE]] as const) {
-        it.fails(`${name}: Delete orphaned references leaves the label and its reference alone`, () => {
+        it(`${name}: Delete orphaned references leaves the label and its reference alone`, () => {
             // Today: "Use here." and ": lazy ...", both "[^b]" gone.
             expect(removeOrphanedFootnoteReferences(lines.join("\n"))).toBe(lines.join("\n"));
         });
