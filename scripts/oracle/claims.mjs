@@ -38,10 +38,7 @@ export function visibleWords(noteLines) {
         while (rest.length > 0) {
             if (open) {
                 const close = rest.indexOf(open);
-                if (close === -1) {
-                    rest = "";
-                    break;
-                }
+                if (close === -1) break;
                 rest = rest.slice(close + open.length);
                 open = null;
                 continue;
