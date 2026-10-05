@@ -56,7 +56,7 @@ interface InlineNoteSpan {
 }
 
 /** An inline footnote "^[...]" anywhere in the note: the line and column of its "^", and the line and column of its closing "]". */
-type InlineNote = FootnoteFacts["inlineNotes"][number];
+export type InlineNote = FootnoteFacts["inlineNotes"][number];
 
 /** One note, read once. */
 export interface NoteReading {

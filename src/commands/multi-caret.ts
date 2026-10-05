@@ -13,6 +13,7 @@ import { planDefinitionAppend } from "./definition-append";
 import { contextOfLines, DocContext, docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
 import {
     bareInsertionVerdict,
+    inlineNoteBody,
     readInlineFootnoteFromClipboard,
 } from "./inline-footnotes";
 import {
@@ -72,17 +73,15 @@ function caretArtifact(
     ctx: DocContext,
     pos: EditorPosition,
 ): CaretArtifact {
-    const masked = ctx.maskedLine(pos.line);
     // the reading matches an inline footnote's brackets the way Obsidian
-    // does, a bracket in a code span not counted (hunt 2026-10-02, G1)
-    const span = ctx.reading().inlineNoteAt(pos.line, pos.ch);
-    if (span !== null) {
-        return {
-            kind: "inline",
-            empty: masked.slice(span.open + 2, span.close).trim() === "",
-        };
-    }
-    if (emptyReferenceStart(masked, pos.ch) !== null) return { kind: "empty" };
+    // does, a bracket in a code span not counted (hunt 2026-10-02, G1). It
+    // finds one that runs over a line break of its paragraph too, as the
+    // single-caret hop does (hunt 2026-10-05, pin
+    // bug-multi-caret-multi-line-inline-note: the one-line lookup missed
+    // it, so a caret there counted as one on plain text)
+    const span = ctx.reading().inlineNoteHolding(pos.line, pos.ch);
+    if (span !== null) return { kind: "inline", empty: inlineNoteBody(ctx.reading(), span).trim() === "" };
+    if (emptyReferenceStart(ctx.maskedLine(pos.line), pos.ch) !== null) return { kind: "empty" };
     // a lazy label's own "[^x]" is a live reference to the reading, so a
     // caret inside it is inside a reference, not on plain text (Kimi sweep
     // 2026-09-13)

@@ -5,7 +5,7 @@ import type FootnotePlugin from "../main";
 import { DocContext, docLines, insideDefinition } from "../editor/doc-context";
 import { deadInsertionVerdict, InsertionVerdict } from "../editor/insertion-liveness";
 import { inlineNoteInCell, maskInlineRegions } from "../parsing/cell-reading";
-import { NoteReading, readNote } from "../parsing/note-reading";
+import { InlineNote, NoteReading, readNote } from "../parsing/note-reading";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
 import { showNotice } from "../editor/notice";
@@ -234,13 +234,22 @@ function maskedInlineFootnoteSpan(
     const reading = readNote(docLines(doc));
     const span = reading.inlineNoteHolding(pos.line, pos.ch);
     if (span === null) return null;
-    // the text between the brackets, line by line when it runs over several
+    return { body: inlineNoteBody(reading, span), closeLine: span.closeLine, close: span.close };
+}
+
+/**
+ * The text between an inline footnote's brackets, with protected text
+ * masked, line by line when it runs over several lines of its paragraph.
+ * The single-caret guards and the multi-caret press both ask it whether an
+ * inline footnote is still empty.
+ */
+export function inlineNoteBody(reading: NoteReading, note: InlineNote): string {
     const body: string[] = [];
-    for (let line = span.line; line <= span.closeLine; line++) {
+    for (let line = note.line; line <= note.closeLine; line++) {
         const masked = reading.maskedLine(line);
-        body.push(masked.slice(line === span.line ? span.open + 2 : 0, line === span.closeLine ? span.close : masked.length));
+        body.push(masked.slice(line === note.line ? note.open + 2 : 0, line === note.closeLine ? note.close : masked.length));
     }
-    return { body: body.join("\n"), closeLine: span.closeLine, close: span.close };
+    return body.join("\n");
 }
 
 /**
