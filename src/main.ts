@@ -23,7 +23,7 @@ import { footnotePrefixFromEditor } from "./parsing/footnote-prefix";
 import { registerRenameFootnoteMenu, renameFootnote } from "./commands/rename-footnote";
 import { deleteFootnote, registerDeleteFootnoteMenu } from "./commands/delete-footnote";
 import { convertInlineToNormalCommand, convertNormalToInlineCommand } from "./commands/convert-footnotes";
-import { installCarryFootnoteHooks, resetCarryRegister } from "./commands/carry-footnotes-hooks";
+import { installCarryFootnoteHooks, resetCarryRegister, wrapClipboardCommands } from "./commands/carry-footnotes-hooks";
 import { SetFootnotePrefixModal } from "./commands/set-footnote-prefix";
 import { benchmarkParsers } from "./commands/benchmark-parsers";
 import {
@@ -296,6 +296,10 @@ export default class FootnotePlugin extends Plugin {
     this.registerEditorExtension(undoOrphanNoticeExtension());
     this.app.workspace.onLayoutReady(() => {
       installVimWriteHook(this);
+      // Obsidian's own Cut, Copy, and Paste commands on a phone carry
+      // footnote definitions too, once the app has registered them
+      // (wrapClipboardCommands, 2026-10-04)
+      wrapClipboardCommands(this);
       // with the prefix feature on, pin the plugin's own footnote-prefix
       // property to TEXT. Otherwise a value that looks numeric ("2.")
       // teaches Obsidian's type guessing to file it as a number, and the

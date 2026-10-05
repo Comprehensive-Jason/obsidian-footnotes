@@ -138,13 +138,19 @@ function carryableSelection(plugin: FootnotePlugin, event: Event): { doc: Editor
     const doc = mdView && viewEditor(mdView);
     if (!mdView || !doc || readingViewActive(mdView)) return null;
     if (!eventInEditorText(doc, event)) return null;
+    const range = singleSelection(doc);
+    return range && { doc, ...range };
+}
+
+/** The one selection of `doc`, start first, or null when it is empty or there are several. */
+function singleSelection(doc: Editor): { from: EditorPosition; to: EditorPosition } | null {
     const selections = doc.listSelections();
     if (selections.length !== 1) return null;
     const [a, b] = [selections[0].anchor, selections[0].head];
     const before = a.line < b.line || (a.line === b.line && a.ch <= b.ch);
     const [from, to] = before ? [a, b] : [b, a];
     if (from.line === to.line && from.ch === to.ch) return null;
-    return { doc, from, to };
+    return { from, to };
 }
 
 /** The text between two positions, read line by line (the fake editor has no getRange). */
@@ -171,11 +177,16 @@ function remember(doc: Editor, from: EditorPosition, to: EditorPosition, { carri
 export function handleCopy(plugin: FootnotePlugin, event: ClipboardEvent): void {
     const selection = carryableSelection(plugin, event);
     if (!selection) return;
-    const { doc, from, to } = selection;
-    const entry = remember(doc, from, to, carriedDefinitions(doc.getValue(), from, to));
-    if (entry.carried.length === 0 || !event.clipboardData) return;
-    event.clipboardData.setData("text/plain", entry.text);
+    const text = carriedCopyText(selection.doc, selection.from, selection.to);
+    if (text === null || !event.clipboardData) return;
+    event.clipboardData.setData("text/plain", text);
     event.preventDefault();
+}
+
+/** What a copy of the text between `from` and `to` puts in the clipboard, remembered for the paste that follows; null when the text needs no definition, and the editor's own copy is right. */
+function carriedCopyText(doc: Editor, from: EditorPosition, to: EditorPosition): string | null {
+    const entry = remember(doc, from, to, carriedDefinitions(doc.getValue(), from, to));
+    return entry.carried.length === 0 ? null : entry.text;
 }
 
 /**
@@ -189,25 +200,40 @@ export function handleCopy(plugin: FootnotePlugin, event: ClipboardEvent): void 
 export function handleCut(plugin: FootnotePlugin, event: ClipboardEvent): void {
     const selection = carryableSelection(plugin, event);
     if (!selection) return;
-    const { doc, from, to } = selection;
+    const cut = plannedCut(plugin, selection.doc, selection.from, selection.to);
+    if (!cut || !event.clipboardData) return;
+    event.clipboardData.setData("text/plain", cut.text);
+    event.preventDefault();
+    event.stopPropagation();
+    cut.make();
+}
+
+/**
+ * A cut of the text between `from` and `to`, planned and remembered for
+ * the paste that follows: what goes into the clipboard, and `make`, which
+ * takes the text and the definitions nothing else uses out of the note.
+ * Null when the text needs no definition, and the editor's own cut is
+ * right.
+ */
+function plannedCut(plugin: FootnotePlugin, doc: Editor, from: EditorPosition, to: EditorPosition): { text: string; make: () => void } | null {
     const before = doc.getValue();
     // a cut that takes the last definition with it empties the section,
     // so the section heading goes too when the setting says so (Jason,
     // 2026-09-25)
     const plan = planCut(before, from, to, (text) => withEmptySectionHeadingRemoved(plugin, text));
     const entry = remember(doc, from, to, plan);
-    if (entry.carried.length === 0 || !event.clipboardData) return;
-    event.clipboardData.setData("text/plain", entry.text);
-    event.preventDefault();
-    event.stopPropagation();
-    // the note as the plan reads it, written back as the smallest set of
-    // edits in one transaction, and the caret where the selection was
-    replaceMinimal(doc, before, restoreEol(plan.text, normalizeEol(before).eol), plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined);
-    doc.setCursor(plan.caret);
-    if (plan.removed > 0) {
-        const count = plan.removed;
-        showNotice(`Cut with ${count} footnote definition${count === 1 ? "" : "s"} that nothing else used; paste to carry ${count === 1 ? "it" : "them"} along.`);
-    }
+    if (entry.carried.length === 0) return null;
+    const make = () => {
+        // the note as the plan reads it, written back as the smallest set of
+        // edits in one transaction, and the caret where the selection was
+        replaceMinimal(doc, before, restoreEol(plan.text, normalizeEol(before).eol), plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined);
+        doc.setCursor(plan.caret);
+        if (plan.removed > 0) {
+            const count = plan.removed;
+            showNotice(`Cut with ${count} footnote definition${count === 1 ? "" : "s"} that nothing else used; paste to carry ${count === 1 ? "it" : "them"} along.`);
+        }
+    };
+    return { text: entry.text, make };
 }
 
 /**
@@ -220,7 +246,20 @@ export function handleCut(plugin: FootnotePlugin, event: ClipboardEvent): void {
 export function handlePaste(plugin: FootnotePlugin, event: ClipboardEvent, doc: Editor): boolean {
     if (event.defaultPrevented || !plugin.settings.carryFootnotesOnCopy || !event.clipboardData) return false;
     if (!eventInEditorText(doc, event)) return false;
-    const text = event.clipboardData.getData("text/plain");
+    if (!landPastedText(plugin, doc, event.clipboardData.getData("text/plain"))) return false;
+    event.preventDefault();
+    return true;
+}
+
+/**
+ * Lands pasted `text` with the definitions it carries in place of `doc`'s
+ * selection, when it carries any: the plugin's own copy (matched against
+ * the register) or text from anywhere that ends in definition lines.
+ * Returns false, having changed nothing, when there is nothing to carry or
+ * the editor holds more than one selection; the paste is then the
+ * editor's own.
+ */
+function landPastedText(plugin: FootnotePlugin, doc: Editor, text: string): boolean {
     if (!text) return false;
     let body: string;
     let carried: CarriedDefinition[];
@@ -246,7 +285,6 @@ export function handlePaste(plugin: FootnotePlugin, event: ClipboardEvent, doc: 
     if (selections.length !== 1) return false;
     const [a, b] = [selections[0].anchor, selections[0].head];
     const [from, to] = a.line < b.line || (a.line === b.line && a.ch <= b.ch) ? [a, b] : [b, a];
-    event.preventDefault();
     landCarriedText(plugin, doc, from, to, body, carried, missing);
     return true;
 }
@@ -421,6 +459,76 @@ function blockBody(block: CarriedDefinition): string {
     const label = first.indexOf("]:");
     const head = label === -1 ? first : first.slice(label + 2).replace(/^ /, "");
     return [head, ...block.lines.slice(1)].join("\n");
+}
+
+/** An Obsidian command as its registry holds it, for the one field this file replaces. */
+interface EditorCommand {
+    editorCallback?: (editor: Editor, context: unknown) => unknown;
+}
+
+/**
+ * Obsidian's own Cut, Copy, and Paste commands on a phone ("editor:cut",
+ * "editor:copy", "editor:paste", the mobile toolbar's buttons) talk to the
+ * clipboard directly, through navigator.clipboard, so no clipboard event
+ * fires and the hooks above never hear them: footnote definitions did not
+ * travel (found 2026-10-04, read off Obsidian 1.14's app.js; Jason chose to
+ * carry them, option 2). So each command's action is wrapped: when the
+ * selection needs a definition (a copy or a cut) or the clipboard carries
+ * some (a paste), the plugin does the carrying, the same way as the hooks;
+ * otherwise, and whenever the carry setting is off, a table cell's editor
+ * holds the focus, or anything goes wrong, Obsidian's own action runs as
+ * it would have. Unloading the plugin puts the original actions back.
+ *
+ * The command registry is not part of Obsidian's documented API, so every
+ * step checks what it finds: a command that is missing (a desktop
+ * registers none of the three) or has no action of the expected shape is
+ * left alone.
+ */
+export function wrapClipboardCommands(plugin: FootnotePlugin): void {
+    const registry = (plugin.app as unknown as { commands?: { commands?: Record<string, EditorCommand | undefined> } }).commands?.commands;
+    const carries = (doc: Editor) => plugin.settings.carryFootnotesOnCopy && !nestedSubEditorOwnsFocus(doc);
+    wrapCommand(plugin, registry?.["editor:copy"], async (doc) => {
+        const range = carries(doc) ? singleSelection(doc) : null;
+        const text = range && carriedCopyText(doc, range.from, range.to);
+        if (!text) return false;
+        await navigator.clipboard.writeText(text);
+        return true;
+    });
+    wrapCommand(plugin, registry?.["editor:cut"], async (doc) => {
+        const range = carries(doc) ? singleSelection(doc) : null;
+        const before = doc.getValue();
+        const cut = range && plannedCut(plugin, doc, range.from, range.to);
+        if (!cut) return false;
+        await navigator.clipboard.writeText(cut.text);
+        // the note changed while the clipboard was written: cutting by the
+        // old plan could take the wrong text, so the clipboard holds the
+        // copy and the note is left as it is
+        if (doc.getValue() === before) cut.make();
+        return true;
+    });
+    wrapCommand(plugin, registry?.["editor:paste"], async (doc) => {
+        if (!carries(doc)) return false;
+        return landPastedText(plugin, doc, await navigator.clipboard.readText());
+    });
+}
+
+/** Replace `command`'s action with one that tries `carry` first and falls back to the original; the original comes back on unload. */
+function wrapCommand(plugin: FootnotePlugin, command: EditorCommand | undefined, carry: (doc: Editor) => Promise<boolean>): void {
+    const original = command?.editorCallback;
+    if (!command || typeof original !== "function") return;
+    const wrapped = async (editor: Editor, context: unknown): Promise<unknown> => {
+        let carried = false;
+        try {
+            carried = await carry(editor);
+        } catch (error) {
+            console.error("Footnote Shortcut: carrying footnotes failed, so the plain command runs", error);
+        }
+        return carried ? undefined : original.call(command, editor, context);
+    };
+    command.editorCallback = wrapped;
+    plugin.register(() => {
+        if (command.editorCallback === wrapped) command.editorCallback = original;
+    });
 }
 
 /** Install the three hooks. Copy bubbles (after the editor's own), cut captures (before it), paste is Obsidian's event. */

@@ -131,7 +131,7 @@ Put your cursor on any reference or definition and run **Delete footnote everywh
 
 ### Copying, cutting, and pasting footnotes
 
-Copy or cut text that holds footnote references and the definitions come along. Nothing to run: it hooks the keys you already press, within one Obsidian window. On a phone, text pasted from the keyboard's clipboard history lands the same way.
+Copy or cut text that holds footnote references and the definitions come along. Nothing to run: it hooks the keys you already press, within one Obsidian window. On a phone, the selection menu's Cut, Copy, and Paste, Obsidian's own Cut, Copy, and Paste buttons on the mobile toolbar, and text pasted from the keyboard's clipboard history all carry them the same way.
 
 - **Copy** puts the selection and the definitions its footnotes need into the clipboard text, the definitions after a blank line, including a definition that another carried definition cites. So the footnotes survive a paste into another vault, another window, or another app, where they simply appear as the lines they are.
 - **Paste** inside Obsidian strips those lines back off and lands the text and the definitions in one undo, where a new footnote would go. A definition the destination already has (same text, whatever its name) is reused, and the toast says when the references were pointed at a name the note already had; a name the destination already uses for something else is renamed, a number to the next free number, a name to `name-2`, so the pasted footnotes come out unique with no setup. The toast says how many were added, reused, and renamed, and names any reference that travelled without a definition.
