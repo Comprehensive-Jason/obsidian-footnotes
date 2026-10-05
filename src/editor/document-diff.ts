@@ -215,11 +215,7 @@ export function mapFoldLines(folds: FoldRange[], changes: OffsetChange[], before
  * heading.
  */
 function sectionEnds(lines: string[]): (line: number) => number {
-    const blocks = readNote(lines).lineBlocks;
-    const levelOf = (line: number): number => {
-        const heading = /^\^heading(\d)$/.exec(blocks[line] ?? "");
-        return heading ? Number(heading[1]) : 0;
-    };
+    const levelOf = headingLevels(lines);
     return (line) => {
         const level = levelOf(line);
         if (level === 0) return lines.length - 1;
@@ -228,6 +224,20 @@ function sectionEnds(lines: string[]): (line: number) => number {
             if (nextLevel !== 0 && nextLevel <= level) return next - 1;
         }
         return lines.length - 1;
+    };
+}
+
+/**
+ * For a line of `lines`, its heading level (1 to 6), or 0 when it is no
+ * heading. Only headings outside quotes, lists, and footnotes count, read
+ * the way Obsidian reads the note, so a "# " line inside a code block is
+ * no heading.
+ */
+function headingLevels(lines: string[]): (line: number) => number {
+    const blocks = readNote(lines).lineBlocks;
+    return (line) => {
+        const heading = /^\^heading(\d)$/.exec(blocks[line] ?? "");
+        return heading ? Number(heading[1]) : 0;
     };
 }
 
@@ -292,6 +302,76 @@ export function positionAfterRewrite(before: string, after: string, pos: { line:
  * may START on (-1 when the line is gone), `to` the line a fold may END
  * on.
  *
+ * Headings are lined up first, and the lines between two paired headings
+ * are then lined up with each other only (alignRun). The lint never turns
+ * a heading into anything else or a line into a heading: it only moves
+ * footnotes on one, so a heading is matched by its level and its words,
+ * with every reference, inline footnote, and punctuation mark left out.
+ * Lined up with the rest, a heading could lose out to look-alike lines: in
+ * a note whose definitions all read "Ibid.", the blank lines and the
+ * ": Ibid." lines left after the names are stripped matched better than
+ * the headings did, so a fold came back on another section's paragraph
+ * (hunt 2026-10-05, pin bug-fold-mapping-look-alike-lines). A heading the
+ * lint rewrote in place right under a removed definition was paired by
+ * position with the removed line, and its fold was dropped (hunt
+ * 2026-10-02, cluster U1, and 2026-10-05, cluster PR4; pin
+ * bug-convert-fold-dropped-under-converted-definitions). Obsidian refolds
+ * a heading over its own section from the line a fold starts on, so
+ * finding the heading again is what keeps the fold.
+ */
+function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
+    const anchorsA = headingKeys(a);
+    const anchorsB = headingKeys(b);
+    const pairs: [number, number][] = [];
+    let ai = 0;
+    let bi = 0;
+    // a note with thousands of headings on both sides is lined up without
+    // them, as a very large middle is compared as one edit
+    const runs =
+        anchorsA.keys.length * anchorsB.keys.length <= MaxComparedPairs
+            ? unmatchedRuns(anchorsA.keys, anchorsB.keys)
+            : [{ aStart: 0, aEnd: anchorsA.keys.length, bStart: 0, bEnd: anchorsB.keys.length }];
+    for (const run of [...runs, { aStart: anchorsA.keys.length, bStart: anchorsB.keys.length, aEnd: 0, bEnd: 0 }]) {
+        // the headings between one unmatched run and the next match
+        while (ai < run.aStart && bi < run.bStart) pairs.push([anchorsA.lines[ai++], anchorsB.lines[bi++]]);
+        ai = run.aEnd;
+        bi = run.bEnd;
+    }
+    const map: { from: number; to: number }[] = [];
+    let aFrom = 0;
+    let bFrom = 0;
+    for (const [aLine, bLine] of [...pairs, [a.length, b.length] as [number, number]]) {
+        for (const { from, to } of alignRun(a.slice(aFrom, aLine), b.slice(bFrom, bLine))) {
+            map.push({ from: from === -1 ? -1 : from + bFrom, to: to + bFrom });
+        }
+        if (aLine < a.length) map.push({ from: bLine, to: bLine });
+        aFrom = aLine + 1;
+        bFrom = bLine + 1;
+    }
+    return map;
+}
+
+/** The heading lines of `lines`, in order, and for each a key of its level and words, without references, inline footnotes, or punctuation. */
+function headingKeys(lines: string[]): { lines: number[]; keys: string[] } {
+    const levelOf = headingLevels(lines);
+    const out: { lines: number[]; keys: string[] } = { lines: [], keys: [] };
+    for (let i = 0; i < lines.length; i++) {
+        const level = levelOf(i);
+        if (level === 0) continue;
+        const words = lines[i]
+            .replace(/\^?\[\^?[^\]]*\]/g, " ")
+            .replace(/[^\p{L}\p{N}]+/gu, " ")
+            .trim();
+        out.lines.push(i);
+        out.keys.push(`${String(level)} ${words}`);
+    }
+    return out;
+}
+
+/**
+ * alignLines for a stretch of lines with no heading paired in it: the
+ * same answer, for `a` and `b` on their own.
+ *
  * Lines are matched with their footnote references stripped out, because
  * that is what a lint changes: a renumbered line is the same line, and
  * matching on the raw text paired up look-alike lines across each other
@@ -301,18 +381,23 @@ export function positionAfterRewrite(before: string, after: string, pos: { line:
  * new line, so it grows or shrinks with the run; and a fold ending on a
  * line that was deleted outright ends on the line before the deletion.
  */
-function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
+function alignRun(a: string[], b: string[]): { from: number; to: number }[] {
     const strip = (line: string) => line.replace(/\[\^[^\]]*\]/g, "");
     const na = a.map(strip);
     const nb = b.map(strip);
-    let head = 0;
-    while (head < na.length && head < nb.length && na[head] === nb[head]) head++;
+    // The lines that match at the end are taken first, then those at the
+    // start. The lint adds lines at the bottom of the note, so a stretch
+    // that only grew grew at its end: its last line, often the note's
+    // blank last line, is still its last line, and a fold that ran to it
+    // still runs to the end (test/fold-heading-level.test.ts).
     let aTail = na.length;
     let bTail = nb.length;
-    while (aTail > head && bTail > head && na[aTail - 1] === nb[bTail - 1]) {
+    while (aTail > 0 && bTail > 0 && na[aTail - 1] === nb[bTail - 1]) {
         aTail--;
         bTail--;
     }
+    let head = 0;
+    while (head < aTail && head < bTail && na[head] === nb[head]) head++;
     const middleA = na.slice(head, aTail);
     const middleB = nb.slice(head, bTail);
     const hunks =

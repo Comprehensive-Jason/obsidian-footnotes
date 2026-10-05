@@ -60,7 +60,7 @@ const IBID_NOTE = [
 ].join("\n");
 
 describe("a folded section in a note whose definitions read alike once their names are stripped", () => {
-    it.fails("the default lint gives the fold back to its own heading, over its own section", () => {
+    it("the default lint gives the fold back to its own heading, over its own section", () => {
         const after = lintFootnotes(IBID_NOTE, {});
         const lines = after.split("\n");
         expect(lines.slice(0, 11)).toEqual([
@@ -83,7 +83,7 @@ describe("a folded section in a note whose definitions read alike once their nam
         expect(mapFoldLines([{ from: 10, to: 17 }], lineDiffChanges(IBID_NOTE, after), IBID_NOTE)).toEqual([{ from: 4, to: 7 }]);
     });
 
-    it.fails("another pane's caret on the folded heading follows the heading", () => {
+    it("another pane's caret on the folded heading follows the heading", () => {
         const after = lintFootnotes(IBID_NOTE, {});
         // Today: 10, S2's paragraph.
         expect(lineMapper(lineDiffChanges(IBID_NOTE, after), IBID_NOTE)(10)).toBe(4);

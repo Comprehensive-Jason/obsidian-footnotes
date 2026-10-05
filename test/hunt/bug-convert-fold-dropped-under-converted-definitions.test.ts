@@ -30,7 +30,7 @@ import { lintFootnotes } from "../../src/linting/linter";
 // drops its fold.
 
 describe("folds through the normal-to-inline conversion", () => {
-    it.fails("a folded heading right under the converted definitions stays folded", () => {
+    it("a folded heading right under the converted definitions stays folded", () => {
         const before = [
             "# Part one",
             "Text[^1].",
@@ -61,7 +61,7 @@ describe("folds through the normal-to-inline conversion", () => {
 // The default lint's punctuation rule triggers the same root: it rewrites a heading in place
 // right under a definition the lint moves away (hunt 2026-10-05, round 1, cluster PR4).
 describe("folds through the default lint", () => {
-    it.fails("a heading holding an inline footnote before its period keeps its fold under the default lint", () => {
+    it("a heading holding an inline footnote before its period keeps its fold under the default lint", () => {
         const before = ["# H2", "", "[^1]: alpha", "", "# H0^[note].", "", "# H1", "", "alpha", "", "Lorem ipsum[^1]."].join("\n");
         const after = lintFootnotes(before, {});
         expect(after.split("\n").slice(0, 4)).toEqual(["# H2", "", "# H0.^[note]", ""]);
