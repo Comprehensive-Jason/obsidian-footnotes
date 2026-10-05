@@ -9,7 +9,7 @@ import {
     referenceOccurrenceAtCursor,
 } from "../editor/doc-context";
 import { idListIncludes } from "../parsing/footnote-grammar";
-import { definitionLabelWithName } from "../parsing/label-shapes";
+import { labelShapedLines } from "../parsing/label-shapes";
 import { openFootnotePopup, popupEditingAvailable } from "./footnote-popup";
 
 import { addReferenceOrDeleteDefinition, showNotice } from "../editor/notice";
@@ -61,9 +61,18 @@ export function shouldJumpFromDefinitionToReference(
         // footnote's reference in the text, and never inserts (Jason's
         // ruling, 2026-09-15). Its own "[^x]" is a live reference to
         // Obsidian, so the search below skips this line.
-        const hit = definitionLabelWithName(lineText, ctx.maskedLine(line));
-        if (hit && !ctx.reading().protectedLines[line] && !ctx.reading().commentLines[line]) {
-            definitionName = hit.name;
+        //
+        // The lazy labels come from labelShapedLines, the one list the lint
+        // and Delete footnote use too. It reads a label from where the
+        // line's list and quote markers end, so a label at the text column
+        // of a nested or wide item ("10. item", "    [^b]: lazy") counts as
+        // it does in a plain item, and it leaves out labels in code,
+        // comments, and other dead text (hunt 2026-10-05, pin
+        // bug-nav-lazy-label-wide-item: read from the margin, such a label
+        // was no label, and the press wrote a new footnote).
+        const lazy = lineText.includes("[^") ? labelShapedLines(lines).find((label) => label.line === line) : undefined;
+        if (lazy !== undefined) {
+            definitionName = lazy.name;
             ownLabelLine = line;
         }
     }
