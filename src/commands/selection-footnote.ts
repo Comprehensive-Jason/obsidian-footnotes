@@ -242,10 +242,10 @@ export function selectionPressHandled(
         const text = cellText.slice(from, to);
         // The new reference sits snug against the text in front of the
         // selection, with no space between (see absorbLeadingSpace). A
-        // cell's own text never contains a pipe, so the only things that
-        // can come before the selection are prose or the start of the
-        // cell.
-        const replaceFrom = absorbLeadingSpace(cellText, from);
+        // cell's own text holds no block syntax and never contains a pipe,
+        // so the only things that can come before the selection are prose
+        // or the start of the cell.
+        const replaceFrom = absorbLeadingSpace(cellText, from, 0);
         const lead = cellText.slice(replaceFrom, from);
         if (command === "inline") {
             const wrapped = `^[${sanitizeInlineFootnoteContent(text)}]`;
@@ -395,7 +395,10 @@ export function selectionPressHandled(
     const replaceFrom =
         table === "whole"
             ? { line: trimmed.from.line, ch: 0 }
-            : { line: trimmed.from.line, ch: absorbLeadingSpace(firstLine, trimmed.from.ch) };
+            : {
+                  line: trimmed.from.line,
+                  ch: absorbLeadingSpace(firstLine, trimmed.from.ch, ctx.reading().blockSyntaxEnd(trimmed.from.line)),
+              };
     const replaceTo = table === "whole" ? { line: trimmed.to.line, ch: lastLine.length } : trimmed.to;
     const selection: ConvertedSelection = {
         from: replaceFrom,
@@ -448,19 +451,25 @@ export interface CellSelection {
  *
  * So the run of spaces or tabs immediately before `ch` is swallowed, but
  * only when real prose comes before it on the same line. It is left alone
- * when what comes before is a list marker, a task marker, a heading
- * marker, a blockquote marker, a table pipe, or nothing at all. Stripping
- * the space in those cases would either break the structure (you would
- * get "-[^1]") or achieve nothing.
+ * when what comes before is the line's block syntax, a table pipe, or
+ * nothing at all. `syntaxEnd` is the column where the line's block syntax
+ * ends (NoteReading.blockSyntaxEnd: quote and list markers, a task box of
+ * any kind, a callout's marker, a heading's "#" marks), and a run that
+ * starts before it belongs to that syntax. Stripping the space in those
+ * cases would either break the structure (you would get "-[^1]", or
+ * "> [!note]-[^1]", which is no callout) or achieve nothing. The reading
+ * says where the syntax ends, so every kind of marker is covered without a
+ * pattern of its own here (hunt 2026-10-05, pin
+ * bug-selection-eats-marker-space: the pattern this replaced knew no
+ * callout marker and no task box but "[ ]", "[x]", and "[X]").
  */
-export function absorbLeadingSpace(line: string, ch: number): number {
+export function absorbLeadingSpace(line: string, ch: number, syntaxEnd: number): number {
     const before = line.slice(0, ch);
     const run = before.match(/[ \t]+$/);
     if (!run) return ch;
     const prose = before.slice(0, before.length - run[0].length);
-    if (prose === "") return ch;
-    if (/[|>]$/.test(prose)) return ch;
-    if (/^(?:>\s*)*(?:[-*+]|\d+[.)]|#{1,6}|(?:[-*+]|\d+[.)]) \[[ xX]\])$/.test(prose.trim())) return ch;
+    if (prose === "" || prose.length < syntaxEnd) return ch;
+    if (prose.endsWith("|")) return ch;
     return ch - run[0].length;
 }
 

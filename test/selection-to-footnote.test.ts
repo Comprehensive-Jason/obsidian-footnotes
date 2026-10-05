@@ -33,6 +33,7 @@ import {
 import { commandHotkeys } from "../src/editor/obsidian-internals";
 import { NestedFootnoteNotice } from "../src/editor/notice";
 import { TableCellEditor } from "../src/editor/table-cursor";
+import { readNote } from "../src/parsing/note-reading";
 
 // Turning a selection into a footnote (issue #35, Jason's calls 2026-08-12:
 // overload the existing hotkeys, always on; single-line selections only;
@@ -1715,22 +1716,27 @@ describe("the reference attaches to the preceding text (2026-09-08)", () => {
         expect(doc.lines[2]).toBe("[^1]: move this");
     });
 
+    /** absorbLeadingSpace with the block syntax of `line` read as a note of one line. */
+    const absorb = (line: string, ch: number) => absorbLeadingSpace(line, ch, readNote([line]).blockSyntaxEnd(0));
+
     it("structure in front stays put: list, task, quote, heading markers and a table pipe", () => {
-        expect(absorbLeadingSpace("- item text", 2)).toBe(2);
-        expect(absorbLeadingSpace("1. item text", 3)).toBe(3);
-        expect(absorbLeadingSpace("- [ ] task text", 6)).toBe(6);
-        expect(absorbLeadingSpace("> quoted text", 2)).toBe(2);
-        expect(absorbLeadingSpace("## Heading text", 3)).toBe(3);
-        expect(absorbLeadingSpace("| a | b |", 6)).toBe(6);
-        expect(absorbLeadingSpace("    indented", 4)).toBe(4);
-        expect(absorbLeadingSpace("word here", 0)).toBe(0);
+        expect(absorb("- item text", 2)).toBe(2);
+        expect(absorb("1. item text", 3)).toBe(3);
+        expect(absorb("- [ ] task text", 6)).toBe(6);
+        expect(absorb("> quoted text", 2)).toBe(2);
+        expect(absorb("## Heading text", 3)).toBe(3);
+        expect(absorb("> [!note]- Title", 11)).toBe(11);
+        expect(absorb("- [/] task", 6)).toBe(6);
+        expect(absorb("| a | b |", 6)).toBe(6);
+        expect(absorb("    indented", 4)).toBe(4);
+        expect(absorb("word here", 0)).toBe(0);
     });
 
     it("prose in front is absorbed, tabs included, inside a quote or list item too", () => {
-        expect(absorbLeadingSpace("range. The buoy", 7)).toBe(6);
-        expect(absorbLeadingSpace("range.\t\tThe buoy", 8)).toBe(6);
-        expect(absorbLeadingSpace("> quoted prose here", 15)).toBe(14);
-        expect(absorbLeadingSpace("- item prose here", 13)).toBe(12);
+        expect(absorb("range. The buoy", 7)).toBe(6);
+        expect(absorb("range.\t\tThe buoy", 8)).toBe(6);
+        expect(absorb("> quoted prose here", 15)).toBe(14);
+        expect(absorb("- item prose here", 13)).toBe(12);
     });
 
     it("a multi-line selection starting mid-line attaches its first line the same way", async () => {

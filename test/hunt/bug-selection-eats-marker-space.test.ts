@@ -61,18 +61,18 @@ describe("converting the text after a callout marker or a custom task box keeps 
         ["> [!note]- Title", "> [!note]- [^1]"],
         ["- [/] task", "- [/] [^1]"],
     ] as [string, string][]) {
-        it.fails(`numbered key on the last word of ${JSON.stringify(line)}`, async () => {
+        it(`numbered key on the last word of ${JSON.stringify(line)}`, async () => {
             const from = line.lastIndexOf(" ") + 1;
             const doc = await convert(line.startsWith(">") ? [line, "> body"] : [line], from, line.length);
-            // Today: the link notice, or "> [!note]-[^1]".
+            // Before the fix: the link notice, or "> [!note]-[^1]".
             expect(messages()).toEqual([]);
             expect(doc.lines[0]).toBe(expected);
         });
     }
 
-    it.fails("inline key on a callout title keeps the space", async () => {
+    it("inline key on a callout title keeps the space", async () => {
         const doc = await convert(["> [!note]- Title", "> body"], 11, 16, insertInlineFootnote);
-        // Today: "> [!note]-^[Title]".
+        // Before the fix: "> [!note]-^[Title]".
         expect(doc.lines[0]).toBe("> [!note]- ^[Title]");
     });
 });
