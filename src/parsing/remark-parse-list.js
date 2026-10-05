@@ -1,17 +1,26 @@
 // Vendored from remark-parse 8.0.3 (lib/tokenize/list.js and
 // lib/util/remove-indentation.js), MIT licensed, license below.
 //
-// This is remark-parse 8's list tokenizer with ONE change, so that it reads
+// This is remark-parse 8's list tokenizer with TWO changes, so that it reads
 // list items the way Obsidian does (docs/obsidian-reading-rules.md, rule B3; Jason,
 // 2026-10-03: implement Obsidian's rules through remark-parse 8's own
 // extension points, vendoring a tokenizer only where one must change).
+// Each changed line is marked "Obsidian:".
 //
-// The change: remark-parse strips an item's continuation lines by the
+// The first change: remark-parse strips an item's continuation lines by the
 // smallest indentation among them, and a line with no indentation at all
 // (a lazy line) made that smallest indentation zero, so nothing was stripped
 // and every 4-space line after it turned into indented code. Obsidian leaves
-// unindented lines out of that minimum and strips the rest as usual. The
-// changed line is marked "Obsidian:" in removeIndentation below.
+// unindented lines out of that minimum and strips the rest as usual (in
+// removeIndentation below).
+//
+// The second change: a task box may hold any one character, not only a
+// space or an "x". Themes and task plugins use boxes such as "[/]" (in
+// progress), "[-]" (cancelled), and "[>]" (deferred), and Obsidian's own
+// list reader takes every one of them as a task box, its regular expression
+// being /^\[(.)][ \t]/ in its app.js and worker.js (hunt 2026-10-05, pin
+// bug-custom-task-box). The box is then block syntax like the stock ones: a
+// definition behind it, "- [/] [^a]: text", is a definition in a task item.
 //
 // Everything else is upstream's code, unchanged, except the module plumbing:
 // require became import, module.exports became export default, and three
@@ -78,7 +87,8 @@ var lowercaseX = 'x'
 
 var tabSize = 4
 var looseListItemExpression = /\n\n(?!\s*$)/
-var taskItemExpression = /^\[([ X\tx])][ \t]/
+// Obsidian: any one character in the box (see the top of this file)
+var taskItemExpression = /^\[(.)][ \t]/
 var bulletExpression = /^([ \t]*)([*+-]|\d+[.)])( {1,4}(?! )| |\t|$|(?=\n))([^\n]*)/
 var pedanticBulletExpression = /^([ \t]*)([*+-]|\d+[.)])([ \t]+)/
 var initialIndentExpression = /^( {1,4}|\t)?/gm

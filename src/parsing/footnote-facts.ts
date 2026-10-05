@@ -162,10 +162,11 @@ const BlockContainers = new Set(["root", "blockquote", "list", "listItem", "foot
  * What may come before a label on its line for the line to be cut out with
  * the definition: indentation, quote markers ">", and list markers ("-",
  * "*", "+", "1.", "1)", each followed by a space or a tab) with a task box
- * "[ ]" or "[x]" after one. So "---" (a frontmatter closer) and "%%" do not
- * qualify.
+ * after one: "[ ]", "[x]", or any other one character in the brackets, as
+ * the list reader takes them (remark-parse-list.js). So "---" (a
+ * frontmatter closer) and "%%" do not qualify.
  */
-const ContainerMarkersOnly = /^(?:[ \t]*(?:>|(?:[-+*]|\d{1,9}[.)])(?:[ \t]+\[[ xX]\])?(?=[ \t])))*[ \t]*$/;
+const ContainerMarkersOnly = /^(?:[ \t]*(?:>|(?:[-+*]|\d{1,9}[.)])(?:[ \t]+\[.\])?(?=[ \t])))*[ \t]*$/;
 
 /** The 0-based last line a node covers: an end at the very start of a later line stops on the line before. */
 function lastLineOf(node: MarkdownNode): number {

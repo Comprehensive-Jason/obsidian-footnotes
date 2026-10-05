@@ -65,7 +65,7 @@ describe("a caret inside a custom task box refuses like one inside [ ] or [x]", 
         ["1. [/] task", 4],
     ] as [string, number][]) {
         for (const [name, fn] of [["numbered", insertAutonumFootnote], ["named", insertNamedFootnote], ["inline", insertInlineFootnote]] as [string, Press][]) {
-            it.fails(`${name} key at ch ${ch} of ${JSON.stringify(line)}`, async () => {
+            it(`${name} key at ch ${ch} of ${JSON.stringify(line)}`, async () => {
                 const doc = await press(fn, [line], 0, ch);
                 // Today, for example: "- [[^1]/] task".
                 expect(doc.lines).toEqual([line]);
@@ -74,7 +74,7 @@ describe("a caret inside a custom task box refuses like one inside [ ] or [x]", 
         }
     }
 
-    it.fails("the numbered key right after a custom box's ']' gets the block-syntax notice, not the link one", async () => {
+    it("the numbered key right after a custom box's ']' gets the block-syntax notice, not the link one", async () => {
         const doc = await press(insertAutonumFootnote, ["- [/] task"], 0, 5);
         expect(doc.lines).toEqual(["- [/] task"]);
         // Today: the link notice.
@@ -83,14 +83,14 @@ describe("a caret inside a custom task box refuses like one inside [ ] or [x]", 
 });
 
 describe("a definition behind a custom task box", () => {
-    it.fails("reads as a definition, as it does behind '- [ ] '", () => {
+    it("reads as a definition, as it does behind '- [ ] '", () => {
         expect(readNote(["- [ ] [^a]: text"]).definitions.map((d) => d.name)).toEqual(["a"]);
         // Today: no definition, and "[^a]" reads as a reference.
         expect(readNote(["- [/] [^a]: text"]).definitions.map((d) => d.name)).toEqual(["a"]);
         expect(readNote(["- [/] [^a]: text"]).referencesOn(0)).toEqual([]);
     });
 
-    it.fails("a press with the caret on its label appends no second definition", async () => {
+    it("a press with the caret on its label appends no second definition", async () => {
         const lines = ["- [/] [^a]: text"];
         const doc = await press(insertAutonumFootnote, lines, 0, 8);
         // Today: ["- [/] [^a]: text", "", "[^a]: "].
