@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { verifyLiveFootnoteInsertion } from "../src/editor/insertion-liveness";
+import { readNote } from "../src/parsing/note-reading";
 
 // Direct pins for the shared born-dead verdict (extracted 2026-08-25).
 // The call sites' behavior is pinned elsewhere (command-properties,
@@ -18,11 +19,14 @@ import { verifyLiveFootnoteInsertion } from "../src/editor/insertion-liveness";
 // label on line 4. The cases are the ones the change-list version had.
 
 const FINAL = ["alpha[^1] bravo", "", "tail", "", "[^1]: "];
+/** The note before the press, for the verdict's look at the lines around the reference. */
+const BEFORE = readNote(["alpha bravo", "", "tail"]);
 
 describe("verifyLiveFootnoteInsertion", () => {
     it("a live reference with its live definition verifies", () => {
         expect(
             verifyLiveFootnoteInsertion({
+                before: BEFORE,
                 lines: FINAL,
                 anchors: [{ line: 0, ch: 5 }],
                 footnoteId: "1",
@@ -34,6 +38,7 @@ describe("verifyLiveFootnoteInsertion", () => {
     it("refuses when no definition block starts at the given label line", () => {
         expect(
             verifyLiveFootnoteInsertion({
+                before: BEFORE,
                 lines: FINAL,
                 anchors: [{ line: 0, ch: 5 }],
                 footnoteId: "1",
@@ -47,6 +52,7 @@ describe("verifyLiveFootnoteInsertion", () => {
     it("a seeded continuation line claimed by the block verifies", () => {
         expect(
             verifyLiveFootnoteInsertion({
+                before: BEFORE,
                 lines: ["alpha[^1] bravo", "", "tail", "", "[^1]: one", "    two"],
                 anchors: [{ line: 0, ch: 5 }],
                 footnoteId: "1",
@@ -59,6 +65,7 @@ describe("verifyLiveFootnoteInsertion", () => {
     it("refuses when a seeded body line falls OUT of the block", () => {
         expect(
             verifyLiveFootnoteInsertion({
+                before: BEFORE,
                 // the second body line is a heading, which no definition
                 // block can claim - the block ends on the label line
                 lines: ["alpha[^1] bravo", "", "tail", "", "[^1]: one", "# two"],
@@ -73,6 +80,7 @@ describe("verifyLiveFootnoteInsertion", () => {
     it("refuses a reference landing inside inline code", () => {
         expect(
             verifyLiveFootnoteInsertion({
+                before: BEFORE,
                 lines: ["alpha `c[^1]ode` bravo", "", "tail", "", "[^1]: "],
                 anchors: [{ line: 0, ch: 8 }],
                 footnoteId: "1",
@@ -84,6 +92,7 @@ describe("verifyLiveFootnoteInsertion", () => {
     it("one dead landing refuses the lot - EVERY reference must be live", () => {
         expect(
             verifyLiveFootnoteInsertion({
+                before: BEFORE,
                 lines: ["alpha[^1] bravo", "`co[^1]de x`", "tail", "", "[^1]: "],
                 anchors: [
                     { line: 0, ch: 5 },
@@ -98,6 +107,7 @@ describe("verifyLiveFootnoteInsertion", () => {
     it("refuses when the occurrence does not sit EXACTLY at its anchor", () => {
         expect(
             verifyLiveFootnoteInsertion({
+                before: BEFORE,
                 // a leading space: the reference parses one column past the
                 // anchor, which is not the insertion promised
                 lines: ["alpha [^1] bravo", "", "tail", "", "[^1]: "],
@@ -111,6 +121,7 @@ describe("verifyLiveFootnoteInsertion", () => {
     it("refuses when the parsed name is not the promised id", () => {
         expect(
             verifyLiveFootnoteInsertion({
+                before: BEFORE,
                 lines: ["alpha[^2] bravo", "", "tail", "", "[^1]: "],
                 anchors: [{ line: 0, ch: 5 }],
                 footnoteId: "1",
@@ -125,6 +136,7 @@ describe("verifyLiveFootnoteInsertion", () => {
         // 2026-10-02, pin bug-press-blank-line-under-definition-nests)
         expect(
             verifyLiveFootnoteInsertion({
+                before: BEFORE,
                 lines: ["Text[^1] here.", "", "[^1]: one", "[^2]", "More prose.", "", "[^2]: "],
                 anchors: [{ line: 3, ch: 0 }],
                 footnoteId: "2",

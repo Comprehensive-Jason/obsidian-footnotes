@@ -50,7 +50,7 @@ const Settings = {
 beforeEach(resetNotices);
 
 describe("a press at column 0 in front of a line-initial colon", () => {
-    it.fails("the named key's placeholder, once named, reads as a reference (it is refused like the numbered key otherwise)", async () => {
+    it("the named key's placeholder, once named, reads as a reference (it is refused like the numbered key otherwise)", async () => {
         const lines = [":smile: done"];
         const doc = fakeEditor([...lines], { cursor: { line: 0, ch: 0 }, edits: true, wholeDoc: true, words: true });
         await insertNamedFootnote(fakePlugin(Settings, doc));
@@ -58,19 +58,19 @@ describe("a press at column 0 in front of a line-initial colon", () => {
         // The user types a name into the placeholder.
         const named = [doc.lines[0].replace("[^]", "[^x]"), ...doc.lines.slice(1)];
         const reading = readNote(named);
-        // Today: ["x"], the line is a definition.
+        // Before the fix: ["x"], the line is a definition.
         expect(reading.definitions.map((d) => d.name)).toEqual([]);
         expect(reading.referencesOn(0).map((r) => r.name)).toEqual(["x"]);
     });
 
-    it.fails("under a paragraph the reference survives the default lint's Fix lazy definitions", async () => {
+    it("under a paragraph the reference survives the default lint's Fix lazy definitions", async () => {
         const lines = ["para", ":smile: done"];
         const doc = fakeEditor([...lines], { cursor: { line: 1, ch: 0 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(Settings, doc));
         if (doc.lines[1] === lines[1]) return; // refused: fine
         const linted = fixLazyDefinitions(doc.lines.join("\n")).split("\n");
         const reading = readNote(linted);
-        // Today: [], no live reference is left.
+        // Before the fix: [], no live reference is left.
         expect(reading.references.filter((r) => r.live).map((r) => r.name)).toEqual(["1"]);
         expect(reading.definitions.map((d) => d.name)).toEqual(["1"]);
     });

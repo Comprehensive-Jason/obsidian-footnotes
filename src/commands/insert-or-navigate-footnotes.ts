@@ -12,7 +12,7 @@ import {
 } from "./create-footnote";
 import { DocContext, docContext, referenceOccurrenceAtCursor } from "../editor/doc-context";
 import { bareInsertionVerdict, readInlineFootnoteFromClipboard } from "./inline-footnotes";
-import { ProtectedCreationNotice, simulatedContext } from "../editor/insertion-liveness";
+import { pressLineVerdict, ProtectedCreationNotice, simulatedContext } from "../editor/insertion-liveness";
 import { shouldJumpFromDefinitionToReference, shouldJumpFromReferenceToDefinition } from "./navigation";
 import { propertiesWidgetOwnsFocus, readingViewActive, viewEditor } from "../editor/obsidian-internals";
 import { warnTableEdgeCaretIfOutside, caretGuardsHandled, warnDefinitionCaretIfInside, warnProtectedCaretIfInside } from "./press-guards";
@@ -263,7 +263,8 @@ function insertInlineText(
         // result, because text it carries (pasted inline code, say) can mask
         // INSIDE the brackets. And it must not land inside a definition,
         // which an empty line right under one does once it is filled.
-        const verdict = bareInsertionVerdict(simulatedContext(doc, at, text), [at], text);
+        const after = simulatedContext(doc, at, text);
+        const verdict = pressLineVerdict(ctx.reading(), after, [at], text) ?? bareInsertionVerdict(after, [at], text);
         if (refusedCreation(verdict, ProtectedCreationNotice)) return;
         const newCursorPos = { line: at.line, ch: at.ch + caretOffsetInText };
         moveCursorAndSetJumpPoint(doc, cursorPosition, newCursorPos, plugin, [

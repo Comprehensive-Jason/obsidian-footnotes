@@ -1190,7 +1190,7 @@ describe("multi-caret press invariants over random documents", () => {
                     fakeMultiEditor(typedLines),
                 );
                 const plan = planDefinitionAppend({ lines: typedLines, edits: [], footnoteId: name, plugin: plugin2 });
-                if (verifyLiveFootnoteInsertion({ lines: plan.final, anchors: [], footnoteId: name, definitionLabelLine: plan.labelLine }) !== "live") {
+                if (verifyLiveFootnoteInsertion({ before: readNote(typedLines), lines: plan.final, anchors: [], footnoteId: name, definitionLabelLine: plan.labelLine }) !== "live") {
                     expect(doc2.lines).toEqual(typedLines);
                     return;
                 }

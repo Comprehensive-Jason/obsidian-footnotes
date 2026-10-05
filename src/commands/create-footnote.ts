@@ -34,6 +34,7 @@ import {
     ProtectedCreationNotice,
     safeInsertionCh,
     simulatedContext,
+    pressLineVerdict,
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
 import { lintAfterFootnoteCreation } from "../linting/linter";
@@ -41,20 +42,22 @@ import { cellReading, CellTextColumn, maskInlineRegions } from "../parsing/cell-
 import { warnDefinitionCaretIfInside, warnTableEdgeCaretIfOutside, warnProtectedCaretIfInside } from "./press-guards";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
-import { InsideLinkNotice, NestedFootnoteNotice, showNotice } from "../editor/notice";
+import { BlockSyntaxNotice, InsideLinkNotice, NestedFootnoteNotice, showNotice } from "../editor/notice";
 
 /**
  * The refusal for a creation whose result is not "live" (see
  * verifyLiveFootnoteInsertion): a reference that would land inside a
  * definition gets the nesting notice, the same one a caret inside a
- * definition gets; one that Obsidian would read as part of a link gets the
- * link notice (Jason's ruling, 2026-10-04); and anything else that would be
- * born dead gets `deadNotice`. Shared by every press that writes a
+ * definition gets; one that Obsidian would read as part of a link, or that
+ * would undo a link reference definition, gets the link notice (Jason's
+ * ruling, 2026-10-04); one that would be read as a definition's label gets
+ * the block-syntax notice (Jason, 2026-10-05); and anything else that would
+ * be born dead gets `deadNotice`. Shared by every press that writes a
  * reference. True means the press was refused.
  */
 export function refusedCreation(verdict: InsertionVerdict, deadNotice: string): boolean {
     if (verdict === "live") return false;
-    const notices = { nested: NestedFootnoteNotice, link: InsideLinkNotice, dead: deadNotice };
+    const notices = { nested: NestedFootnoteNotice, link: InsideLinkNotice, label: BlockSyntaxNotice, dead: deadNotice };
     showNotice(notices[verdict], 8000);
     return true;
 }
@@ -517,6 +520,7 @@ export function createAutonumFootnote(
     // transaction leaves it, and anything that came out wrong refuses the
     // press with the notice that says why.
     const verdict = verifyLiveFootnoteInsertion({
+        before: ctx.reading(),
         lines: plan.final,
         anchors: [plan.edits[0].start],
         footnoteId,
@@ -600,6 +604,7 @@ export function createMatchingFootnoteDefinition(
         // (the runtime swap, 2026-10-03; found by the multi-caret named-flow
         // property).
         const verdict = verifyLiveFootnoteInsertion({
+            before: ctx.reading(),
             lines: plan.final,
             anchors: [],
             footnoteId,
@@ -730,7 +735,10 @@ export function createFootnoteReference(
     // you would be left typing a name into something that can never
     // become one, with nothing to tell you so. Nor may it land inside a
     // definition, where the footnote you name would be nested.
-    const verdict = bareInsertionVerdict(simulatedContext(doc, cursorPosition, emptyReference), [cursorPosition], emptyReference);
+    const after = simulatedContext(doc, cursorPosition, emptyReference);
+    const verdict =
+        pressLineVerdict(ctx.reading(), after, [cursorPosition], emptyReference) ??
+        bareInsertionVerdict(after, [cursorPosition], emptyReference);
     if (refusedCreation(verdict, ProtectedCreationNotice)) return true;
     const newCursorPos = {
         line: cursorPosition.line,

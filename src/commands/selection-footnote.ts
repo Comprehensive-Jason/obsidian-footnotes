@@ -21,6 +21,7 @@ import { bareInsertionVerdict, sanitizeInlineFootnoteContent } from "./inline-fo
 import {
     caretInsideMaskedSpan,
     simulateChanges,
+    pressLineVerdict,
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
 import { cellReading, CellTextColumn, maskInlineRegions } from "../parsing/cell-reading";
@@ -904,7 +905,8 @@ function convertMainSelectionToInline(
 ): void {
     const text = `^[${sanitizeInlineFootnoteContent(selection.text)}]`;
     const simulated = contextOfLines(simulateChanges(ctx.lines, [{ from: selection.from, to: selection.to, text }]));
-    if (refusedCreation(bareInsertionVerdict(simulated, [selection.from], text), ProtectedSelectionNotice)) return;
+    const verdict = pressLineVerdict(ctx.reading(), simulated, [selection.from], text) ?? bareInsertionVerdict(simulated, [selection.from], text);
+    if (refusedCreation(verdict, ProtectedSelectionNotice)) return;
     const after = { line: selection.from.line, ch: selection.from.ch + text.length };
     moveCursorAndSetJumpPoint(doc, selection.from, after, plugin, [
         { from: selection.from, to: selection.to, text },
@@ -957,6 +959,7 @@ function convertMainSelection(
     // body that was filled in ahead of time and may span lines: the new
     // definition block has to claim every one of those continuation lines.
     const verdict = verifyLiveFootnoteInsertion({
+        before: ctx.reading(),
         lines: plan.final,
         anchors: [plan.edits[0].start],
         footnoteId,

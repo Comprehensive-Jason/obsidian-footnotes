@@ -162,6 +162,7 @@ describe("the born-dead verdict names a link as its own cause", () => {
     it("a reference read as a reference link's label is 'link'", () => {
         expect(
             verifyLiveFootnoteInsertion({
+                before: readNote(["see [sic] now"]),
                 lines: ["see [sic][^1] now", "", "[^1]: "],
                 anchors: [{ line: 0, ch: 9 }],
                 footnoteId: "1",
@@ -173,6 +174,7 @@ describe("the born-dead verdict names a link as its own cause", () => {
     it("a reference read as code is 'dead'", () => {
         expect(
             verifyLiveFootnoteInsertion({
+                before: readNote(["see `sic` now"]),
                 lines: ["see `sic[^1]` now", "", "[^1]: "],
                 anchors: [{ line: 0, ch: 8 }],
                 footnoteId: "1",

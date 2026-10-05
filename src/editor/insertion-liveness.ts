@@ -347,15 +347,17 @@ export function caretInsideMaskedSpan(
 /**
  * What a creation's result means once it lands: "live" when it reads as
  * the footnote it promised; "link" when a reference died because Obsidian
- * reads it as part of a link (the caller shows InsideLinkNotice and
- * refuses); "dead" when something else died, in code, math, or other
- * protected text (the caller shows ProtectedCreationNotice and refuses);
- * "nested" when a reference landed inside a definition (the caller shows
- * NestedFootnoteNotice and refuses). The cause is decided here, once, so
- * every press shows the right notice without a check of its own (Jason's
- * ruling, 2026-10-04).
+ * reads it as part of a link, or the press undid a link reference
+ * definition (the caller shows InsideLinkNotice and refuses); "dead" when
+ * something else died, in code, math, or other protected text (the caller
+ * shows ProtectedCreationNotice and refuses); "nested" when a reference
+ * landed inside a definition (the caller shows NestedFootnoteNotice and
+ * refuses); "label" when a reference would be read as a definition's label
+ * (the caller shows BlockSyntaxNotice and refuses). The cause is decided
+ * here, once, so every press shows the right notice without a check of its
+ * own (Jason's ruling, 2026-10-04).
  */
-export type InsertionVerdict = "live" | "dead" | "link" | "nested";
+export type InsertionVerdict = "live" | "dead" | "link" | "nested" | "label";
 
 /**
  * The verdict for an insertion at `at` that did not land as itself: "link"
@@ -366,6 +368,58 @@ export type InsertionVerdict = "live" | "dead" | "link" | "nested";
  */
 export function deadInsertionVerdict(after: NoteReading, at: EditorPosition): "dead" | "link" {
     return after.insideLink(at.line, at.ch) ? "link" : "dead";
+}
+
+/**
+ * What a press does to the note around the text it writes, judged before
+ * whether the text itself landed: "label" or "link" when the press must be
+ * refused for that, null when it leaves the note as it was. `before` is the
+ * note as it reads before the press, `after` the note as the press leaves
+ * it, `anchors` where each copy of `text` begins in `after`.
+ *
+ * "label": a reference that starts its line's text, with a ":" right after
+ * it, is a definition's label: "[^1]: smile: done" written at the start of
+ * ":smile: done" defines a footnote and points at none. Under a line of
+ * prose Obsidian still reads it as a reference, but the lint's Fix lazy
+ * definitions makes it a definition all the same, and the named key's
+ * "[^]" becomes one as soon as a name is typed in. So the press refuses
+ * (hunt 2026-10-05, pins bug-colon-line-start-label and
+ * spec-colon-line-start-notice; the notice is Jason's pick, 2026-10-05).
+ *
+ * "link": the press leaves fewer link reference definitions ("[ref]:
+ * http://u", which give "[x][ref]" links their address) than there were.
+ * A reference written in one's label or after its address turns the line
+ * into a paragraph, and every link that used it stops being one (hunt
+ * 2026-10-05, Jason's pick of the triage's Q5, pin
+ * spec-press-on-link-reference-definition).
+ */
+export function pressLineVerdict(
+    before: NoteReading,
+    after: DocContext,
+    anchors: EditorPosition[],
+    text: string,
+): "label" | "link" | null {
+    if (text.startsWith("[^") && anchors.some((anchor) => startsLabel(after, anchor, text.length))) return "label";
+    return linkDefinitionCount(after.reading()) < linkDefinitionCount(before) ? "link" : null;
+}
+
+/**
+ * Whether the `length` characters written at `anchor` start the text of
+ * their line and have a ":" right after them. The text starts where the
+ * line's block syntax ends (quote and list markers, a task box), past any
+ * spaces. A line the reference has made a definition counts its label as
+ * block syntax too, which takes in the anchor all the same.
+ */
+function startsLabel(after: DocContext, anchor: EditorPosition, length: number): boolean {
+    const line = after.lines[anchor.line] ?? "";
+    if (line[anchor.ch + length] !== ":") return false;
+    const textStart = after.reading().blockSyntaxEnd(anchor.line);
+    return anchor.ch <= textStart || /^[ \t]*$/.test(line.slice(textStart, anchor.ch));
+}
+
+/** How many link reference definitions the note holds: the lines where the reading starts a "definition" block (a footnote's is a "footnoteDefinition"). */
+function linkDefinitionCount(reading: NoteReading): number {
+    return reading.lineBlocks.filter((blocks) => /(?:^| )\^definition(?: |$)/.test(blocks)).length;
 }
 
 /**
@@ -383,12 +437,16 @@ export function deadInsertionVerdict(after: NoteReading, at: EditorPosition): "d
  * continuation, and the plugin never creates a nested footnote (ADR 0001;
  * hunt 2026-10-02, pin bug-press-blank-line-under-definition-nests).
  *
- * One dead or nested landing refuses the whole press. Every "dead" failure
+ * Before all that, the press must leave the note around its references
+ * as it was (pressLineVerdict). One dead or nested landing refuses the
+ * whole press. Every "dead" failure
  * mode was found by the command-press property suite (2026-08-12). A
  * reference that dies inside a link gets "link" instead, so the press can
  * say so (deadInsertionVerdict; Jason's ruling, 2026-10-04).
  */
 export function verifyLiveFootnoteInsertion(opts: {
+    /** the note as it reads before the press */
+    before: NoteReading;
     /** the note as the transaction leaves it */
     lines: string[];
     /** where each reference the press writes begins, in `lines` */
@@ -401,6 +459,10 @@ export function verifyLiveFootnoteInsertion(opts: {
     definitionBodyExtraLines?: number;
 }): InsertionVerdict {
     const ctx = contextOfLines(opts.lines);
+    // what the press does to the lines around its references comes first:
+    // a reference read as a label is not there to be found as a reference
+    const aroundIt = pressLineVerdict(opts.before, ctx, opts.anchors, `[^${opts.footnoteId}]`);
+    if (aroundIt !== null) return aroundIt;
     const bodyExtraLines = opts.definitionBodyExtraLines ?? 0;
     // the new definition must read as one at the top level of the note,
     // where the plugin writes it, running at least over its seeded body

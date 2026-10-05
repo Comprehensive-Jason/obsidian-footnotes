@@ -19,6 +19,7 @@ import {
     ProtectedCreationNotice,
     simulateChanges,
     simulatedAnchors,
+    pressLineVerdict,
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
 import {
@@ -376,6 +377,7 @@ function insertReferenceAtEveryCaret(
         plugin,
     });
     const verdict = verifyLiveFootnoteInsertion({
+        before: ctx.reading(),
         lines: plan.final,
         anchors: plan.edits.map((edit) => edit.start),
         footnoteId,
@@ -426,7 +428,8 @@ function insertSkeletonAtEveryCaret(
     // one-position-at-a-time version re-resolved and rescanned the whole
     // note once per caret (second review 2026-09-09).
     const anchors = simulatedAnchors(ctx.lines, changes, targets.map((_, index) => index), simulated);
-    const verdict = bareInsertionVerdict(contextOfLines(simulated), anchors, text);
+    const after = contextOfLines(simulated);
+    const verdict = pressLineVerdict(ctx.reading(), after, anchors, text) ?? bareInsertionVerdict(after, anchors, text);
     if (refusedCreation(verdict, ProtectedCreationNotice)) return;
     // The targets arrive in the order they appear in the note, so
     // anchors[0] is the first footnote.

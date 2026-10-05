@@ -4,7 +4,7 @@ import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { ProtectedCreationNotice } from "../../src/editor/insertion-liveness";
+import { BlockSyntaxNotice } from "../../src/editor/notice";
 
 // spec question (UI text): when a press at the start of a line that
 // begins with ":" is refused, what should the toast say?
@@ -26,6 +26,11 @@ import { ProtectedCreationNotice } from "../../src/editor/insertion-liveness";
 // (ProtectedCreationNotice), which names code, math, and comments. The
 // write that the other faces of this cluster make is pinned in
 // bug-colon-line-start-label.
+//
+// Decided (Jason, 2026-10-05): the refusal shows the block-syntax notice
+// for now, "a footnote here would break the line's formatting" (the
+// verdict "label" in insertion-liveness.ts, mapped in refusedCreation).
+// His own draft, a notice that names the definition, may still replace it.
 
 const Settings = {
     insertAtEndOfWord: true,
@@ -40,13 +45,12 @@ const Settings = {
 beforeEach(resetNotices);
 
 describe("a press at column 0 in front of a line-initial colon", () => {
-    it.fails("the numbered key's refusal does not blame protected text", async () => {
+    it("the numbered key's refusal shows the block-syntax notice", async () => {
         const lines = [":smile: done"];
         const doc = fakeEditor([...lines], { cursor: { line: 0, ch: 0 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(Settings, doc));
         expect(doc.lines).toEqual(lines);
-        expect(messages()).toHaveLength(1);
-        // Today: the protected-text toast.
-        expect(messages()).not.toEqual([ProtectedCreationNotice]);
+        // Before the fix: the protected-text toast.
+        expect(messages()).toEqual([BlockSyntaxNotice]);
     });
 });
