@@ -105,11 +105,32 @@ export function applyFootnotePrefix(markdown: string, prefix: string): string {
             return `${prefix}${id}`;
         };
 
-        const rewritten = lines.map((line, i) => rewriteFootnoteNames(reading, i, line, renameFor));
-        // a rename that would turn a footnote into plain text (a "$" prefix
-        // pairing with an earlier dollar) leaves the note as it was
-        if (!keepsEveryFootnote(lines, rewritten)) return text;
-        return rewritten.join("\n");
+        const renameOnly = (allowed: ReadonlySet<string>) => (id: string): string | null =>
+            allowed.has(id.toLowerCase()) ? renameFor(id) : null;
+        const rewriteWith = (allowed: ReadonlySet<string>) =>
+            lines.map((line, i) => rewriteFootnoteNames(reading, i, line, renameOnly(allowed)));
+
+        // Every footnote this rule would rename, lower-cased, in the order
+        // the note first names them.
+        const candidates = [...existingIds].filter((id) => renameFor(id) !== null);
+        const all = new Set(candidates);
+        const rewritten = rewriteWith(all);
+        if (keepsEveryFootnote(lines, rewritten)) return rewritten.join("\n");
+
+        // A rename can turn a footnote into plain text: a "$" in the prefix
+        // pairs with a dollar amount nearby, and "$6 [^a$note]" reads as
+        // math. Only the renames that do that are refused; the rest still
+        // happen, taken one at a time in the order the note names them, each
+        // kept when the note still holds every footnote with it. Refusing
+        // them all used to leave a plain "[^1]" for the next lint to prefix,
+        // so one lint did not settle the note (found by the idempotence
+        // property in CI, 2026-10-04; test/lint-dollar-prefix-settles.test.ts).
+        const kept = new Set<string>();
+        for (const id of candidates) {
+            kept.add(id);
+            if (!keepsEveryFootnote(lines, rewriteWith(kept))) kept.delete(id);
+        }
+        return rewriteWith(kept).join("\n");
     });
 }
 
