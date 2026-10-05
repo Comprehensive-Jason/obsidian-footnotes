@@ -33,9 +33,13 @@ import { lintFootnotes } from "../../src/linting/linter";
 // definitions, while the quoted or in-item copy stays where it is.
 // Neither checks whether a moved copy passes a copy of the same name
 // that stays.
+//
+// Fixed (2026-10-05): both rules take the definitions they may move from
+// movedDefinitions in rewrite-document.ts, which leaves out every copy of a
+// name that also has a copy staying put.
 
 describe("a top-level definition and a quoted or in-item copy of the same name", () => {
-    it.fails("the default lint keeps the quoted copy (the last) as the one Obsidian renders", () => {
+    it("the default lint keeps the quoted copy (the last) as the one Obsidian renders", () => {
         const before = "Text[^d].\n\n[^d]: column zero first\n\n> [^d]: quoted last\n\nMore text.";
         const after = lintFootnotes(before, {});
         // Today: "Text.[^d]\n\n> [^d]: quoted last\n\nMore text.\n\n[^d]: column zero first".
@@ -43,20 +47,20 @@ describe("a top-level definition and a quoted or in-item copy of the same name",
         expect(after.indexOf("[^d]: column zero first")).toBeLessThan(after.indexOf("> [^d]: quoted last"));
     });
 
-    it.fails("the same with merge on (the merge refuses the name, the move still flips it)", () => {
+    it("the same with merge on (the merge refuses the name, the move still flips it)", () => {
         const before = "Text[^d].\n\n[^d]: column zero first\n\n> [^d]: quoted last\n\nMore text.";
         const after = lintFootnotes(before, { mergeDuplicateDefinitions: true });
         expect(after.indexOf("[^d]: column zero first")).toBeLessThan(after.indexOf("> [^d]: quoted last"));
     });
 
-    it.fails("an in-item copy: the default lint keeps it the last one", () => {
+    it("an in-item copy: the default lint keeps it the last one", () => {
         const before = "Text[^d].\n\n[^d]: column zero first\n\n- [^d]: item last\n\nMore text.";
         const after = lintFootnotes(before, {});
         // Today: the top-level copy lands below the list item.
         expect(after.indexOf("[^d]: column zero first")).toBeLessThan(after.indexOf("- [^d]: item last"));
     });
 
-    it.fails("reindex alone (move-to-bottom off) swaps the top-level copy past the quoted one (the property's shrunk counterexample)", () => {
+    it("reindex alone (move-to-bottom off) swaps the top-level copy past the quoted one (the property's shrunk counterexample)", () => {
         const before = "[^42]: alpha\n\nalpha[^1].\n\n> quoted[^42]\n> [^42]: a quoted definition\n\n[^1]: sees [^1]";
         const after = lintFootnotes(before, {
             fixPunctuation: false,

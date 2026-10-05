@@ -32,7 +32,7 @@ export interface DocumentView {
     readonly maskedLines: readonly string[];
     /** Every definition, wherever it sits, from the note reading (note-reading.ts). */
     readonly definitions: readonly Definition[];
-    /** The definitions whose lines are their own to move or cut (Definition.movable): the blocks move-to-bottom gathers and reindex reorders. */
+    /** The definitions the rules may move (movedDefinitions): the blocks move-to-bottom gathers and reindex reorders. */
     readonly blocks: readonly Definition[];
     /**
      * Drop the blank lines at the end of the note, and say how many there
@@ -49,6 +49,37 @@ export interface DocumentView {
      */
     trimTrailingBlankLines(): number;
 }
+
+/**
+ * The definitions a rule may move or reorder, out of every definition
+ * `definitions` holds (the note reading's list, in label order): the ones
+ * whose lines are their own (Definition.movable), except a copy of a name
+ * that also has a copy staying put, in a quote, a list item, another
+ * footnote, or on a comment closer's line.
+ *
+ * Obsidian renders the LAST definition of a name. Moving a copy past one
+ * that stays put would change which copy that is, and so the text the
+ * footnote shows. So such a name's movable copies stay where they are
+ * too, and only the duplicate alert speaks about them. Move-to-bottom and
+ * reindex both take their blocks from here, so neither can do it (hunt
+ * 2026-10-05, pin bug-lint-reorders-mixed-container-duplicates).
+ */
+export function movedDefinitions(definitions: readonly Definition[]): readonly Definition[] {
+    let moved = movedOf.get(definitions);
+    if (moved === undefined) {
+        const staying = new Set(definitions.filter((definition) => !definition.movable).map((definition) => definition.name.toLowerCase()));
+        // frozen, as the reading's own lists are, so a rule cannot change
+        // the list another rule is handed (spec-document-view-memo-mutation)
+        moved = Object.freeze(definitions.filter((definition) => definition.movable && !staying.has(definition.name.toLowerCase())));
+        movedOf.set(definitions, moved);
+    }
+    return moved;
+}
+
+// The answer above, remembered per list: the note reading hands out one
+// list per text, so rules handed the same text share one answer, as they
+// share the reading (test/rewrite-document-memo.test.ts).
+const movedOf = new WeakMap<readonly Definition[], readonly Definition[]>();
 
 function documentView(lines: string[]): DocumentView {
     // whether anything has been read through this view yet (the trim guard)
@@ -80,7 +111,7 @@ function documentView(lines: string[]): DocumentView {
             return reading().definitions;
         },
         get blocks() {
-            return reading().blocks;
+            return movedDefinitions(reading().definitions);
         },
     };
 }

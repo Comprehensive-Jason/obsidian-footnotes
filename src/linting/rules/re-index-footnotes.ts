@@ -2,7 +2,7 @@ import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { nameForBody } from "../../parsing/footnote-grammar";
 import { definitionCuts, removeLineRanges } from "../../parsing/line-edits";
 import { keepsEveryFootnote, NoteReading, readNote } from "../../parsing/note-reading";
-import { rewriteDocument } from "../rewrite-document";
+import { movedDefinitions, rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
 import { FootnoteRule } from "../rule";
 import { orphanedDefinitionBlocks } from "./remove-orphaned-definitions";
@@ -288,7 +288,8 @@ function reindexOnce(
         // sit, so that they read in appearance order. Only the definitions
         // whose lines are their own move: one in a quote, a list item, or
         // another footnote stays in its container (Jason's ruling 1, option
-        // a, 2026-10-03). The sort is stable, which keeps two definitions
+        // a, 2026-10-03), and so does every copy of its name, so the copy
+        // Obsidian renders stays the same one (movedDefinitions). The sort is stable, which keeps two definitions
         // of one name next to each other in the order they were written.
         //
         // Every block's name is in `order`: referenced names went in first,
@@ -298,7 +299,7 @@ function reindexOnce(
         // which is what the old `?? 0` made it do (review C9).
         const orderIndex = new Map(order.map((name, i) => [name, i]));
         const rank = (name: string) => orderIndex.get(name.toLowerCase()) ?? order.length;
-        const blocks = definitions.filter((definition) => definition.movable);
+        const blocks = movedDefinitions(definitions);
         const sorted = blocks
             .map((block, i) => ({ block, i }))
             .sort((a, b) => rank(a.block.name) - rank(b.block.name) || a.i - b.i)
