@@ -55,6 +55,9 @@ interface InlineNoteSpan {
     close: number;
 }
 
+/** An inline footnote "^[...]" anywhere in the note: the line and column of its "^", and the line and column of its closing "]". */
+type InlineNote = FootnoteFacts["inlineNotes"][number];
+
 /** One note, read once. */
 export interface NoteReading {
     /** Every definition in the note, wherever it sits, in the order of their labels. */
@@ -167,17 +170,24 @@ export interface NoteReading {
     referenceAt(line: number, ch: number): ReferenceOccurrence | null;
     /** The "[^name]" part of every definition label on `line`, in order: where a rename rewrites the label's name. */
     labelsOn(line: number): readonly ReferenceOccurrence[];
-    /** The inline footnotes on `line` that no other inline footnote holds, in order, each wholly on the line. */
+    /** The inline footnotes wholly on `line` that no other such inline footnote holds, in order. */
     inlineNotesOn(line: number): readonly InlineNoteSpan[];
     /**
-     * The inline footnote "^[...]" on `line` whose brackets hold column
-     * `ch` (from just after its "^" through its closing "]"), the innermost
-     * when one sits in another, or null. Obsidian matches an inline
-     * footnote's brackets before it reads the text inside them, and a
-     * bracket inside a code span does not count, so the reading, not a
+     * The inline footnote "^[...]" wholly on `line` whose brackets hold
+     * column `ch` (from just after its "^" through its closing "]"), the
+     * innermost when one sits in another, or null. Obsidian matches an
+     * inline footnote's brackets before it reads the text inside them, and
+     * a bracket inside a code span does not count, so the reading, not a
      * bracket count on the line, says where one is.
      */
-    inlineNoteAt(line: number, ch: number): { open: number; close: number } | null;
+    inlineNoteAt(line: number, ch: number): InlineNoteSpan | null;
+    /**
+     * The same, for an inline footnote that may run over the line breaks
+     * of its paragraph: the innermost one whose brackets hold column `ch`
+     * of `line`, with the line and column of its "^" and of its "]", or
+     * null. A press inside one hops out past its "]" (inline-footnotes.ts).
+     */
+    inlineNoteHolding(line: number, ch: number): InlineNote | null;
     /**
      * Whether column `ch` of `line` falls inside a link-like construct: an
      * inline link, a reference link, an image, or a wikilink, from its first
@@ -402,7 +412,7 @@ function addPart(into: FootnoteFacts, part: FootnoteFacts, lines: number, offset
     for (const syntax of part.blockSyntax) into.blockSyntax.push({ ...syntax, line: syntax.line + lines });
     for (const row of part.tableRows) into.tableRows.push(row + lines);
     for (const blocks of part.lineBlocks) into.lineBlocks.push(blocks);
-    for (const note of part.inlineNotes) into.inlineNotes.push({ ...note, line: note.line + lines });
+    for (const note of part.inlineNotes) into.inlineNotes.push({ ...note, line: note.line + lines, closeLine: note.closeLine + lines });
     for (const link of part.links) into.links.push({ ...link, startLine: link.startLine + lines, endLine: link.endLine + lines });
 }
 
@@ -691,7 +701,7 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
         inlineNotesOn(line) {
             if (inlineNotesByLine === null) {
                 inlineNotesByLine = Array.from({ length: lineCount }, () => [] as InlineNoteSpan[]);
-                const sorted = [...facts.inlineNotes].sort((a, b) => a.line - b.line || a.open - b.open);
+                const sorted = facts.inlineNotes.filter((note) => note.closeLine === note.line).sort((a, b) => a.line - b.line || a.open - b.open);
                 for (const { line: at, open, close } of sorted) {
                     const list = inlineNotesByLine[at] as InlineNoteSpan[] | undefined;
                     if (list === undefined) continue;
@@ -704,12 +714,12 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
             return inlineNotesByLine[line] ?? [];
         },
         inlineNoteAt(line, ch) {
-            let found: { open: number; close: number } | null = null;
-            for (const note of facts.inlineNotes) {
-                if (note.line !== line || ch <= note.open || ch > note.close) continue;
-                if (found === null || note.open > found.open) found = { open: note.open, close: note.close };
-            }
-            return found;
+            const note = innermostInlineNote(facts.inlineNotes, line, ch, true);
+            return note === null ? null : { open: note.open, close: note.close };
+        },
+        inlineNoteHolding(line, ch) {
+            const note = innermostInlineNote(facts.inlineNotes, line, ch, false);
+            return note === null ? null : { ...note };
         },
         insideLink: (line, ch) =>
             facts.links.some(
@@ -754,6 +764,24 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
             return openRegion;
         },
     };
+}
+
+/**
+ * Of `notes`, the innermost inline footnote whose brackets hold column `ch`
+ * of `line`, from just after its "^" through its "]", or null; with
+ * `oneLine`, only those wholly on one line count.
+ */
+function innermostInlineNote(notes: readonly InlineNote[], line: number, ch: number, oneLine: boolean): InlineNote | null {
+    let found: InlineNote | null = null;
+    for (const note of notes) {
+        if (oneLine && note.closeLine !== note.line) continue;
+        const afterOpen = line > note.line || (line === note.line && ch > note.open);
+        const beforeClose = line < note.closeLine || (line === note.closeLine && ch <= note.close);
+        if (!afterOpen || !beforeClose) continue;
+        // the one that opens last is the innermost
+        if (found === null || note.line > found.line || (note.line === found.line && note.open > found.open)) found = note;
+    }
+    return found;
 }
 
 /** The note reading of `lines`, built once per distinct text and then remembered. */

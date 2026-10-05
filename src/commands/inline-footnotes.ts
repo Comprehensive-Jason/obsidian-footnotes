@@ -13,7 +13,8 @@ import { readingViewActive } from "../editor/obsidian-internals";
 // Inline footnotes, the self-contained "^[...]" form. This file holds
 // sanitizing pasted content so it is safe as a body and the two caret
 // guards every command shares; where an inline footnote starts and ends is
-// the note reading's to say (NoteReading.inlineNoteAt). Split out of the
+// the note reading's to say (NoteReading.inlineNoteAt and
+// inlineNoteHolding). Split out of the
 // all-in-one commands file 2026-08-11.
 
 /**
@@ -191,7 +192,7 @@ export function warnEmptyInlineFootnoteIfInside(
 ): boolean {
     const span = maskedInlineFootnoteSpan(doc, cell, cursorPosition);
     if (span === null) return false;
-    if (span.text.slice(span.open + 2, span.close).trim() !== "") return false;
+    if (span.body.trim() !== "") return false;
     showNotice(
         "This inline footnote is empty. Type its text between the brackets.",
         8000,
@@ -200,8 +201,9 @@ export function warnEmptyInlineFootnoteIfInside(
 }
 
 /**
- * The inline footnote at the caret, as the note reading finds it, with the
- * masked line it sits on.
+ * The inline footnote at the caret, as the note reading finds it: its text
+ * between the brackets on the masked twin (a line break between lines when
+ * it runs over several), and where its closing "]" is.
  *
  * A "^[…]"-shaped fragment inside a code fence, inline code, or a comment
  * is plain text, not an inline footnote. Treating it as one made every
@@ -219,19 +221,42 @@ function maskedInlineFootnoteSpan(
     doc: Editor,
     cell: TableCellEditor | null,
     cursorPosition?: EditorPosition,
-): { text: string; open: number; close: number } | null {
+): { body: string; closeLine: number; close: number } | null {
     if (cell) {
         const raw = cell.state.doc.toString();
         if (!raw.includes("^[")) return null;
         // a cell's text is read as the one cell of a one-row table
         const span = inlineNoteInCell(raw, cellCaret(cell));
-        return span === null ? null : { text: maskInlineRegions(raw), ...span };
+        return span === null ? null : { body: maskInlineRegions(raw).slice(span.open + 2, span.close), closeLine: 0, close: span.close };
     }
     const pos = cursorPosition ?? doc.getCursor();
-    if (!doc.getLine(pos.line).includes("^[")) return null;
+    if (!opensInlineNoteAbove(doc, pos.line)) return null;
     const reading = readNote(docLines(doc));
-    const span = reading.inlineNoteAt(pos.line, pos.ch);
-    return span === null ? null : { text: reading.maskedLine(pos.line), ...span };
+    const span = reading.inlineNoteHolding(pos.line, pos.ch);
+    if (span === null) return null;
+    // the text between the brackets, line by line when it runs over several
+    const body: string[] = [];
+    for (let line = span.line; line <= span.closeLine; line++) {
+        const masked = reading.maskedLine(line);
+        body.push(masked.slice(line === span.line ? span.open + 2 : 0, line === span.closeLine ? span.close : masked.length));
+    }
+    return { body: body.join("\n"), closeLine: span.closeLine, close: span.close };
+}
+
+/**
+ * Whether a "^[" sits on `line` or on a line above it in the same stretch
+ * of non-blank lines: the only places an inline footnote holding the
+ * caret can open, since one may run over the line breaks of its paragraph
+ * but never over a blank line. Most presses have none, and are settled
+ * here without asking the reading.
+ */
+function opensInlineNoteAbove(doc: Editor, line: number): boolean {
+    for (let at = line; at >= 0; at--) {
+        const text = doc.getLine(at);
+        if (text.includes("^[")) return true;
+        if (text.trim() === "") return false;
+    }
+    return false;
 }
 
 /**
@@ -239,7 +264,10 @@ function maskedInlineFootnoteSpan(
  * past the closing bracket and report true. Every insert command shares
  * this. For the numbered and named commands it stops a "[^x]" reference
  * being nested inside the inline footnote's brackets, which would end the
- * inline footnote early and corrupt it ("^[in [^named]line]").
+ * inline footnote early and corrupt it ("^[in [^named]line]"). An inline
+ * footnote that runs over a line break hops the caret the same way, to the
+ * line its "]" is on (Jason, 2026-10-05, triage decision Q4; pin
+ * spec-multi-line-inline-note-press).
  */
 export function exitInlineFootnoteIfInside(
     doc: Editor,
@@ -253,7 +281,6 @@ export function exitInlineFootnoteIfInside(
         cell.dispatch({ selection: { anchor: exit } });
         return true;
     }
-    const pos = cursorPosition ?? doc.getCursor();
-    doc.setCursor({ line: pos.line, ch: exit });
+    doc.setCursor({ line: span.closeLine, ch: exit });
     return true;
 }

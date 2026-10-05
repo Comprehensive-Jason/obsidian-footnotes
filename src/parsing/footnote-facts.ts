@@ -157,8 +157,12 @@ export interface FootnoteFacts {
      * reads a line (see linesReadAlike in note-reading.ts).
      */
     lineBlocks: string[];
-    /** Every inline footnote "^[...]" that starts and ends on one line: its line, the column of its "^", and the column of its closing "]". */
-    inlineNotes: { line: number; open: number; close: number }[];
+    /**
+     * Every inline footnote "^[...]": the line and column of its "^", and
+     * the line and column of its closing "]". One may run over the line
+     * breaks of its paragraph, so the two lines may differ.
+     */
+    inlineNotes: { line: number; open: number; closeLine: number; close: number }[];
     /** Every link-like construct, in the order the note reads them. */
     links: LinkFact[];
 }
@@ -236,7 +240,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
         protectedSpans.push({ kind, block, from, to, startLine: lineAt(from), endLine: lineAt(to) });
     };
     const lineBlocks: string[][] = lineStarts.map(() => []);
-    const inlineNotes: { line: number; open: number; close: number }[] = [];
+    const inlineNotes: FootnoteFacts["inlineNotes"] = [];
     const links: LinkFact[] = [];
 
     const walk = (node: MarkdownNode, parentType: string, inInlineNote: boolean, container: DefinitionContainer): void => {
@@ -282,12 +286,18 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
                 });
                 break;
             }
-            case "footnote":
-                // an inline footnote "^[...]"; one running over several lines is left out
-                if (node.position.start.line === node.position.end.line) {
-                    inlineNotes.push({ line: node.position.start.line - 1, open: node.position.start.column - 1, close: node.position.end.column - 2 });
-                }
+            case "footnote": {
+                // An inline footnote "^[...]", on one line or running over
+                // several: Obsidian reads one over a line break as one too
+                // (its answers broad:20261004-726, -3168, -3366, and -5280),
+                // and a press inside one hops out past its "]" wherever
+                // that is (Jason, 2026-10-05, triage decision Q4; it used
+                // to be left out, and the press was refused as if in
+                // protected text).
+                const { start, end } = node.position;
+                inlineNotes.push({ line: start.line - 1, open: start.column - 1, closeLine: end.line - 1, close: end.column - 2 });
                 break;
+            }
             case "footnoteReference":
                 references.push({ name: node.label ?? "", line: node.position.start.line - 1, start: node.position.start.column - 1, end: node.position.end.column - 1, live: !inInlineNote });
                 break;

@@ -27,17 +27,32 @@ import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-foo
 // and -5280 ("^[starts here\nholds [^x]]" is one inline footnote, and the
 // [^x] inside it is no reference); the one-line hop, which the control
 // below describes.
+//
+// Decided (Jason, 2026-10-05, Q4): the press hops the caret out past the
+// "]", on whichever line it is, as on one line.
 
 describe("an inline footnote over two lines", () => {
     beforeEach(resetNotices);
 
-    it.fails("a press inside it hops past it as on a one-line inline footnote, without a protected-text refusal", async () => {
+    it("a press inside it hops past it as on a one-line inline footnote, without a protected-text refusal", async () => {
         // A control: ["text ^[an inline note here] after"] at ch 21 hops the
         // caret past "]" with no toast.
         const lines = ["text ^[an inline", "note here] after"];
         const doc = fakeEditor(lines, { wholeDoc: true, edits: true, words: true, cursor: { line: 1, ch: 4 } });
         await insertAutonumFootnote(fakePlugin({}, doc));
-        // Today: the protected-text toast.
+        // Before the fix: the protected-text toast.
         expect(messages()).toEqual([]);
+        expect(doc.lines).toEqual(lines);
+        // just past the "]" of "note here]"
+        expect(doc.getCursor()).toEqual({ line: 1, ch: 10 });
+    });
+
+    it("a press on the first line of it hops to the line its ']' is on", async () => {
+        const lines = ["text ^[an inline", "note here] after"];
+        const doc = fakeEditor(lines, { wholeDoc: true, edits: true, words: true, cursor: { line: 0, ch: 10 } });
+        await insertAutonumFootnote(fakePlugin({}, doc));
+        expect(messages()).toEqual([]);
+        expect(doc.lines).toEqual(lines);
+        expect(doc.getCursor()).toEqual({ line: 1, ch: 10 });
     });
 });
