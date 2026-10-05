@@ -6,7 +6,7 @@ import { contextOfLines, docLines, insideDefinition } from "../editor/doc-contex
 import { simulateChanges } from "../editor/insertion-liveness";
 import { showNotice } from "../editor/notice";
 import { codeMirrorViewOf, readingViewActive, viewEditor } from "../editor/obsidian-internals";
-import { nestedSubEditorOwnsFocus } from "../editor/table-cursor";
+import { mainEditorTextHolds, nestedSubEditorOwnsFocus } from "../editor/table-cursor";
 import { replaceMinimal } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
 import { lintAfterFootnoteCreation, withEmptySectionHeadingRemoved } from "../linting/linter";
@@ -108,7 +108,10 @@ export function resetCarryRegister(): void {
  * selection toolbar is fired at the page's body, since the selection does
  * not count as shown while the toolbar takes the tap, so without this the
  * phone carried nothing at all (Jason's report, 2026-10-04, 0.3.0-beta.3;
- * test/carry-phone-selection-toolbar.test.ts).
+ * test/carry-phone-selection-toolbar.test.ts). The selection must sit in
+ * the main editor's own text, not in a table cell's editor drawn inside
+ * it, whose selection the main editor cannot see (mainEditorTextHolds;
+ * hunt 2026-10-05, pin bug-toolbar-cut-in-table-cell).
  *
  * The unit tests' stand-in editor has no CodeMirror view, and then there
  * is nothing to ask, so the event counts.
@@ -123,7 +126,7 @@ function eventInEditorText(doc: Editor, event: Event): boolean {
     if (target && isTypingField(target)) return false;
     // the tests' stand-in pages have no selection to ask
     const anchor = (page as Partial<Document>).getSelection?.()?.anchorNode;
-    return !!anchor && content.contains(anchor);
+    return !!anchor && mainEditorTextHolds(doc, anchor);
 }
 
 /** Whether `target` is an element that holds typed text and its own selection: an input, a text area, or editable text. */

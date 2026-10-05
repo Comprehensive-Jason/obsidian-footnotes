@@ -40,7 +40,7 @@ beforeEach(() => {
 });
 
 describe("the page-selection rule and a table cell's editor (phone toolbar model)", () => {
-    it.fails("a cut from the toolbar whose selection is in a table cell does not cut the main editor's old selection", () => {
+    it("a cut from the toolbar whose selection is in a table cell does not cut the main editor's old selection", () => {
         const NOTE = ["a[^1] b", "", "| c |", "| - |", "| cell text |", "", "[^1]: one"];
         const doc = fakeEditor(NOTE, { wholeDoc: true, edits: true, cursor: { line: 0, ch: 7 }, selection: { anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 7 } } });
         const body = { tagName: "BODY", isContentEditable: false };

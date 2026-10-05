@@ -56,6 +56,30 @@ export function nestedSubEditorOwnsFocus(editor: Editor): boolean {
     );
 }
 
+/**
+ * Whether `node` is part of the main editor's own text, and not of a
+ * smaller editor or a widget drawn inside it: the nearest element at or
+ * above it that says whether it can be edited (its "contenteditable"
+ * attribute) is the main editor's text area itself.
+ *
+ * The twin of nestedSubEditorOwnsFocus, for a place in the page instead
+ * of the focus: a table cell's editor has a text area of its own, inside
+ * the main one, so "the main text area contains it" is true of a
+ * selection in a cell too. On a phone, a cut from the selection toolbar
+ * leaves the focus on the page's body, so the focus check cannot see a
+ * cell's selection, and the main editor's old selection was cut instead
+ * (hunt 2026-10-05, pin bug-toolbar-cut-in-table-cell). A node with no
+ * element above it to ask is not known to be in the main text, so it is
+ * not.
+ */
+export function mainEditorTextHolds(editor: Editor, node: Node): boolean {
+    const content = (editor as EditorWithCm).cm?.contentDOM;
+    if (!content) return false;
+    if (node === content) return true;
+    const element = typeof (node as Partial<Element>).closest === "function" ? (node as Element) : node.parentElement;
+    return typeof element?.closest === "function" && element.closest("[contenteditable]") === content;
+}
+
 // The fallback for a rare case: focus is inside a nested editor, but that
 // editor cannot be reached (activeTableCellEditor returned null).
 //
