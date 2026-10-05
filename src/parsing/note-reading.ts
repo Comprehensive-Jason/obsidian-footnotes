@@ -79,7 +79,10 @@ export interface NoteReading {
      * indentation of a list item's lines, a callout's marker, a footnote's
      * label, and a heading's "#" marks; 0 when the line starts with its
      * text. Infinity for a line that is block syntax to its end: a thematic
-     * break, a setext underline, a heading with no text.
+     * break, a setext underline, a heading with no text, and a list item or
+     * a callout whose marker has nothing after it, not even a space ("-",
+     * "1.", "> [!note]-"), where text written at the end would undo the
+     * marker.
      */
     blockSyntaxEnd(line: number): number;
     /**

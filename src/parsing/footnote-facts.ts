@@ -106,7 +106,8 @@ interface ProtectedSpan {
  * indentation that keeps it inside a list item, a footnote's label, a
  * callout's marker, and a heading's "#" marks. `end` is Infinity for a
  * line that is block syntax through to its end: a thematic break, a setext
- * underline, an ATX heading with no text.
+ * underline, an ATX heading with no text, and a list item or a callout
+ * whose marker has nothing at all after it on its line.
  */
 interface BlockSyntaxFact {
     line: number;
@@ -314,6 +315,25 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
                 const line = node.position.start.line - 1;
                 blockSyntax.push({ line, end: first ? first.position.start.column - 1 : Infinity });
                 if (lastLineOf(node) > line) blockSyntax.push({ line: lastLineOf(node), end: Infinity });
+                break;
+            }
+            case "listItem":
+            case "calloutTitle": {
+                // A list item's marker (with its task box) and a callout's
+                // marker need a space or the end of the line after them.
+                // When nothing at all follows the marker on its line, not
+                // even a space, text written at the line's end glues onto
+                // the marker and undoes it: "-[^1]" is no list item, and
+                // "> [!note]-[^1]" is no callout. So the line is block
+                // syntax to its end, as an empty heading "#" is, and a
+                // press there is refused like one in any other block syntax
+                // (Jason, 2026-10-05, triage decisions Q2 and Q3; pins
+                // bug-bare-list-marker-press and
+                // bug-title-less-callout-marker-press).
+                const line = node.position.start.line - 1;
+                const text = doc.slice(lineStarts[line], line + 1 < lineStarts.length ? lineStarts[line + 1] - 1 : doc.length);
+                const textOnLine = (node.children ?? []).some((child) => child.position.start.line === node.position.start.line);
+                if (!textOnLine && !/[ \t]$/.test(text)) blockSyntax.push({ line, end: Infinity });
                 break;
             }
             case "table":

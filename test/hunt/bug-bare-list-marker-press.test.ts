@@ -16,10 +16,11 @@ import { BlockSyntaxNotice } from "../../src/editor/notice";
 // "- item", the new "-[^1]" even joins the first item's text ("item
 // -[^1]").
 //
-// The remedy is Jason's pick: refuse the press with the block-syntax
-// notice, as an empty heading "#" already does in the same spot, or write
-// a space first so the item stays an item ("- [^1]"). The tests accept
-// either.
+// The remedy was Jason's pick between refusing the press with the
+// block-syntax notice, as an empty heading "#" already does in the same
+// spot, and writing a space first so the item stays an item ("- [^1]").
+// Decided 2026-10-05 (triage decision Q2): refuse. The tests accepted
+// either until then.
 //
 // Hunt 2026-10-05, round 1, lens refusals. Cluster RF4.
 //
@@ -58,18 +59,12 @@ describe("a press at the end of an empty list item with no space after its marke
         [["1. a", "2."], 1],
     ] as [string[], number][]) {
         for (const [name, fn] of [["numbered", insertAutonumFootnote], ["named", insertNamedFootnote], ["inline", insertInlineFootnote]] as [string, Press][]) {
-            it.fails(`${name} key on ${JSON.stringify(lines)} line ${line}`, async () => {
+            it(`${name} key on ${JSON.stringify(lines)} line ${line}`, async () => {
                 const doc = fakeEditor([...lines], { cursor: { line, ch: lines[line].length }, edits: true, wholeDoc: true, words: true });
                 await fn(fakePlugin(Settings, doc));
-                if (doc.lines[line] === lines[line]) {
-                    // The first remedy: the press is refused.
-                    expect(doc.lines).toEqual(lines);
-                    expect(messages()).toEqual([BlockSyntaxNotice]);
-                } else {
-                    // The second remedy: a space after the marker keeps the
-                    // item an item. Today, for example: "-[^1]".
-                    expect(doc.lines[line].startsWith(`${lines[line]} `)).toBe(true);
-                }
+                // Before the fix, for example: "-[^1]".
+                expect(doc.lines).toEqual(lines);
+                expect(messages()).toEqual([BlockSyntaxNotice]);
             });
         }
     }

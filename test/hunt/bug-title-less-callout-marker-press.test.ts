@@ -53,7 +53,7 @@ beforeEach(resetNotices);
 describe("a press at the end of a title-less callout marker", () => {
     for (const first of ["> [!note]", "> [!note]-", "> [!tip]+", "> > [!note]"]) {
         for (const [name, fn] of [["numbered", insertAutonumFootnote], ["named", insertNamedFootnote], ["inline", insertInlineFootnote]] as [string, Press][]) {
-            it.fails(`${name} key at the end of ${JSON.stringify(first)}`, async () => {
+            it(`${name} key at the end of ${JSON.stringify(first)}`, async () => {
                 const lines = [first, first.startsWith("> >") ? "> > body" : "> body"];
                 const doc = fakeEditor([...lines], { cursor: { line: 0, ch: first.length }, edits: true, wholeDoc: true, words: true });
                 await fn(fakePlugin(Settings, doc));
