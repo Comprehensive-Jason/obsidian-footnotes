@@ -200,6 +200,20 @@ describe("the note reading in parts reads every note as one parse of the whole n
         expect(notes.map((note) => difference(note.split("\n")))).toEqual(notes.map(() => null));
     });
 
+    // The same for a definition's title and for an address in angle
+    // brackets: a title may start after blank lines and run over lines, and
+    // "<...>" may hold blank lines, so a part may start inside either (hunt
+    // 2026-10-05, pin bug-parts-link-definition-title). Each of the 60
+    // title openers below is one more line some part may start at, and the
+    // address runs over 60 paragraphs.
+    it("reads a link definition whose title or address a part may start inside as the whole note does", () => {
+        const notes = [
+            ...Array.from({ length: 60 }, (_, i) => ["[foo]: /url", "", `${["'", '"', "("][i % 3]}title ${i} [^1] w`, `le${["'", '"', ")"][i % 3]}`, "", "use[^1]", "", "[^1]: d"].join("\n")),
+            ["[foo]: <a", "", ...Array.from({ length: 60 }, (_, i) => [`Paragraph ${i} of the address`, ""]).flat(), "c>", "", "use[^1]", "", "[^1]: d"].join("\n"),
+        ];
+        expect(notes.map((note) => difference(note.split("\n")))).toEqual(notes.map(() => null));
+    });
+
     it("tries a longer part when a part does not end cleanly, which the notes above do often", () => {
         const before = partParseCounts();
         // a fence open over a blank line, then a lazy label under prose

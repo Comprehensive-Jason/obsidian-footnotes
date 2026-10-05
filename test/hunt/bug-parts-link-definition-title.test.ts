@@ -56,7 +56,7 @@ function summary(facts: { references: { name: string; line: number; live: boolea
 }
 
 describe("a part cut inside a link definition's title", () => {
-    it.fails("reads in parts as the whole note does when a part starts at the title's first line", () => {
+    it("reads in parts as the whole note does when a part starts at the title's first line", () => {
         const title = partStartLine("'tit [^1]");
         const lines = ["[foo]: /url", "", title, "le'", "", "use[^1]", "", "[^1]: d"];
         const whole = summary(footnoteFacts(lines.join("\n")));
@@ -64,7 +64,7 @@ describe("a part cut inside a link definition's title", () => {
         expect(summary(readNote(lines) as never)).toEqual(whole);
     });
 
-    it.fails("the same with a destination in angle brackets running over a blank line", () => {
+    it("the same with a destination in angle brackets running over a blank line", () => {
         // remark-parse 8 lets "<...>" hold line breaks, and in commonmark mode
         // an unclosed one rejects the definition. A "[" inside "<...>" rejects
         // the definition too, so no reference can sit in it; the difference

@@ -488,27 +488,43 @@ function mathWithoutRescans(tables: ParserTables): void {
 }
 
 /**
- * A link definition, "[label]: destination", is the one block reader that
- * looks past the line after it. Its label runs to the first "]" wherever
- * that is, over blank lines too, and after the ":" it skips any number of
- * line breaks, blank lines included, to find the destination (remark-parse
- * 8, tokenize/definition.js). So "[" alone on a line, a paragraph, and
- * then "[^1]: def" read as one link definition, and Obsidian reads it so
- * too: Reading view shows no footnote (live answers
- * swap34:lrd-label-blank-para and swap34:lrd-label-parts-repro,
- * 2026-10-03).
+ * Text that, written after the end of the note, finishes a link definition
+ * the reader ran out of text in the middle of: a label's closing "]" with
+ * its ":" and an address (after a line break, so that a label ending in a
+ * backslash does not escape the "]"), an address after the ":", the ">"
+ * that closes an address in angle brackets, and the quote or parenthesis
+ * that closes a title. Each is one way the definition reader of
+ * remark-parse 8 (tokenize/definition.js) can stop short at the end of its
+ * text and decline, where more text would have made it take a definition.
+ */
+const DefinitionEndings = ["\n]: x", "x", ">", '"', "'", ")"];
+
+/**
+ * A link definition, "[label]: destination 'title'", is the one block
+ * reader that looks past the line after it. Its label runs to the first
+ * "]" wherever that is, over blank lines too; after the ":" it skips any
+ * number of line breaks, blank lines included, to find the destination; a
+ * destination in angle brackets may hold line breaks; and the title may
+ * start after blank lines and run over several lines (remark-parse 8,
+ * tokenize/definition.js). So "[" alone on a line, a paragraph, and then
+ * "[^1]: def" read as one link definition, and Obsidian reads it so too:
+ * Reading view shows no footnote (live answers swap34:lrd-label-blank-para
+ * and swap34:lrd-label-parts-repro, 2026-10-03).
  *
  * The note reading parses a note in parts (note-reading.ts), and a part
  * ends where a later part may read on its own. Read alone, a part cut off
- * inside such a label finds no "]" and reads a paragraph instead, a
- * different reading of lines the part owns. So this reader, at the top
- * level, notes when it took nothing but WOULD have taken a definition had
- * the text gone on: a "]: x" or an "x" written after the end completes
- * one. The part is then not ended there (partFacts in footnote-facts.ts),
- * and is tried again with more of the note, as a part whose fence is still
- * open is (found by test/note-reading-parts.test.ts at FC_NUM_RUNS=3000,
- * the runtime swap, step 2, 2026-10-03). Nothing about the reading
- * changes.
+ * inside such a definition reads a paragraph instead, a different reading
+ * of lines the part owns. So this reader, at the top level, notes when it
+ * took nothing but WOULD have taken a definition had the text gone on: one
+ * of DefinitionEndings written after the end completes one. The part is
+ * then not ended there (partFacts in footnote-facts.ts), and is tried
+ * again with more of the note, as a part whose fence is still open is
+ * (found by test/note-reading-parts.test.ts at FC_NUM_RUNS=3000, the
+ * runtime swap, step 2, 2026-10-03, for an open label; and for a title or
+ * an address cut off by a part's end by the hunt of 2026-10-05, pin
+ * bug-parts-link-definition-title). Saying so when nothing would change
+ * costs only a longer part, never a wrong reading. Nothing about the
+ * reading changes.
  */
 function linkDefinitionsAtTheEnd(tables: ParserTables): void {
     // remark-footnotes' own reader, which leaves "[^" to the footnote readers
@@ -518,7 +534,7 @@ function linkDefinitionsAtTheEnd(tables: ParserTables): void {
         if (result === undefined || result === false) {
             const text = this.file.toString();
             // only a reader that was handed the rest of the note is cut off by its end
-            if (eat.now().offset + value.length === text.length && ["]: x", "x"].some((more) => stockDefinition.call(this, eat, value + more, true) === true)) {
+            if (eat.now().offset + value.length === text.length && DefinitionEndings.some((more) => stockDefinition.call(this, eat, value + more, true) === true)) {
                 this.file.readsPastEnd = true;
             }
         }
