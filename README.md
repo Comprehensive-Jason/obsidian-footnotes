@@ -53,7 +53,7 @@ Everything also works on mobile from the toolbar, each with their own unique too
 
 Put your cursor where the footnote belongs and press the hotkey. The plugin finds the next free number, inserts the reference (say `[^1]`), creates the matching `[^1]: ` definition at the bottom of the note, and lets you type the definition text immediately.
 
-Footnotes are never created inside code, math, comments, frontmatter, or another footnote's definition, where they would be invalid. The plugin refuses in those locations and alerts you.
+Footnotes are never created inside code, math, comments, frontmatter, or another footnote's definition, where they would be invalid. Nor are they written into a line's formatting (in front of a list or quote marker, among a heading's `#` marks, inside a task box, on a callout's marker), where they would break the line, or where Obsidian would read them as part of a link, as in `[sic][^1]`. The plugin refuses in those spots and tells you why.
 
 ![Numbered footnote: the hotkey inserts the reference, the popup opens at the cursor, the definition is typed, the same hotkey closes it](README/numbered.gif)
 
@@ -88,7 +88,7 @@ Sometimes you write something mid-sentence and realize it should be a footnote. 
 - The **numbered** hotkey replaces the selection with the next numbered footnote reference and moves the selected text into that footnote's definition. Multi-paragraph selections work too: the whole block becomes one multi-paragraph footnote, including whole code blocks, callouts, etc.
 - The **named** hotkey asks you for a name first, then does the same under `[^yourname]`. Confirm with Enter, the Create button, or just press any footnote hotkey again.
 - The **inline** hotkey wraps the selection as `^[...]` right where it is. It accepts single-line selections only, as only those format correctly. For a multi-line selection, it points you to the previous 2.
-- A selection that starts or ends mid-word grows to whole words first, plus one trailing punctuation mark, so a sloppy drag still produces a clean footnote. Turn **Expand selections to whole words** off in the settings if you want the exact selection.
+- A selection that starts or ends mid-word grows to whole words first (and, under **After punctuation**, takes the punctuation mark that ends it), so a sloppy drag still produces a clean footnote. Turn **Expand selections to whole words** off in the settings if you want the exact selection.
 - A selection that contains/cuts-through an existing footnote refuses to convert, as footnotes can't be nested inside other footnotes. Nesting is prevented throughout the plugin, and linting alerts you if a note already has hand-typed nesting.
 - Tables: text inside one cell converts, as well as a whole table selected edge to edge (with or without the text around it). A selection that cuts through a table's pipes refuses, to avoid breaking the table.
 
@@ -127,7 +127,7 @@ Put your cursor on any reference or definition and run **Rename footnote**. It w
 
 ### Deleting a footnote
 
-Put your cursor on any reference or definition and run **Delete footnote everywhere**. The definition and every reference to it go in one step and one undo (the name was "Delete footnote definition and all references" until the right-click menu proved too narrow for it), and the toast tells you how many of each went. It's also in the right-click menu on a footnote, next to Obsidian's own **Delete footnote and reference**, which removes only the one reference you clicked: if the same footnote is cited in two places, Obsidian's item leaves the other reference behind pointing at nothing. Copies inside code, math, or comments are plain text and stay. A single-line definition inside a list item goes too, and its bullet stays as an empty item, exactly as Obsidian's own delete leaves it. A deletion that would change how Obsidian reads the surrounding text (a definition inside a list item that runs over more than one line, a definition sharing its line with the end of a `%%` comment) is refused with a reason instead of half done.
+Put your cursor on any reference or definition and run **Delete footnote everywhere**. The definition and every reference to it go in one step and one undo (the name was "Delete footnote definition and all references" until the right-click menu proved too narrow for it), and the toast tells you how many of each went. It's also in the right-click menu on a footnote, next to Obsidian's own **Delete footnote and reference**, which removes only the one reference you clicked: if the same footnote is cited in two places, Obsidian's item leaves the other reference behind pointing at nothing. Copies inside code, math, or an HTML comment are plain text and stay; a reference inside a `%%` comment is a real reference to Obsidian, so it goes too. A definition inside a list item goes too, however many lines it runs, and its bullet stays as an empty item, exactly as Obsidian's own delete leaves it. A deletion that would change how Obsidian reads the surrounding text is refused with a reason instead of half done: a definition sharing its line with other text (a callout's title, the end of a `%%` comment), or one that holds another footnote's definition inside it.
 
 ### Copying, cutting, and pasting footnotes
 
@@ -136,6 +136,7 @@ Copy or cut text that holds footnote references and the definitions come along. 
 - **Copy** puts the selection and the definitions its footnotes need into the clipboard text, the definitions after a blank line, including a definition that another carried definition cites. So the footnotes survive a paste into another vault, another window, or another app, where they simply appear as the lines they are.
 - **Paste** inside Obsidian strips those lines back off and lands the text and the definitions in one undo, where a new footnote would go. A definition the destination already has (same text, whatever its name) is reused, and the toast says when the references were pointed at a name the note already had; a name the destination already uses for something else is renamed, a number to the next free number, a name to `name-2`, so the pasted footnotes come out unique with no setup. The toast says how many were added, reused, and renamed, and names any reference that travelled without a definition.
 - **Cut** takes the definitions that nothing else in the note uses along with the text, in the same undo step. A definition still used elsewhere stays in the note and travels as a copy.
+- A definition copied from a list item or a quote arrives as an ordinary definition, without its bullet or `>`, so it reads as a definition wherever it lands.
 - A clipboard that ends in definition lines, from anywhere (a copy you made by hand, or the Copy with Footnotes plugin), pastes the same way.
 
 Turn the whole thing off with **Carry footnote definitions on copy, cut, and paste** in the settings.
@@ -158,7 +159,7 @@ Creating or visiting a footnote opens its definition text in a small editor righ
 Writing and revising can leave footnotes messy. The **Lint footnotes** command cleans up the whole note in one pass:
 
 - **Fix footnote reference placement**: Moves references that sit inside closing quotation marks, brackets, or emphasis out past them, and to the side of the punctuation your **Placement relative to punctuation** setting says: after it by default (`word[^1].` becomes `word.[^1]`, and `"quote[^1]".` becomes `"quote".[^1]`), or before it (`句子。[^1]` becomes `句子[^1]。`). Inline footnotes move the same way, whole (`word^[note].` becomes `word.^[note]`). Under **Don't move** the rule does nothing.
-- **Gather definitions**: Moves every footnote definition under your specified footnote section heading, or to the bottom of the note.
+- **Gather definitions**: Moves every footnote definition under your specified footnote section heading, or to the bottom of the note. A definition inside a list item or a quote stays in its place, and a move that would change how Obsidian reads the note (two lists joining into one, a different copy of a duplicated footnote showing) is left undone.
 - **Fix definitions hidden by a missing blank line**: a `[^1]:` line typed directly under a paragraph is plain text to Obsidian, and its footnote never shows. The linter inserts the blank line it needs (or, with the rule off, alerts you about it).
 - **Alert/delete orphans**: Orphans are footnote references without a definition or definitions without a reference. You choose whether the plugin alerts you or deletes orphans.
 - **Merge duplicate definitions**: if you accidentally have multiple definitions for the same footnote name, the plugin can alert you or merge them into one.
@@ -175,7 +176,10 @@ The linter also watches for problems it can't fix by itself and tells you about 
 
 - an empty `[^]` reference you never named, references with no definition or definitions nothing uses (while **delete orphaned references/definitions** are off)
 - a definition typed directly under a paragraph with no blank line above it as Obsidian shows it as plain text (while **Fix definitions hidden by a missing blank line** is off)
+- a definition with a line of `=` or `-` right under it, which Obsidian reads as a heading
+- a definition inside a `%%` comment (Obsidian hides it, so its footnote shows nothing) and a definition inside a table
 - duplicate definitions (while **Merge duplicate definitions** is off)
+- anything the rules left in place because changing it would alter how Obsidian reads the lines around it
 - names a footnote can't have (spaces, backticks, brackets, `#`)
 - footnotes nested inside another footnote's definition.
 
