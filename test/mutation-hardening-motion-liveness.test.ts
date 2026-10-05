@@ -13,6 +13,7 @@ import {
     simulateChanges,
     simulatedContext,
 } from "../src/editor/insertion-liveness";
+import { readNote } from "../src/parsing/note-reading";
 
 // Kills Stryker survivors from the 2026-08-12 re-baseline on the two editor
 // leaves the architecture refactor left thinly covered: cursor-motion.ts
@@ -360,28 +361,9 @@ describe("endOfWordOffset: mid-pair snapping before the walk", () => {
 });
 
 describe("adjustFootnotePosition", () => {
-    // wordAt as Obsidian implements it: the word-character run around the
-    // caret (or just left of it), else null. Copied from the press
-    // generator's fake editor (command-properties.test.ts).
-    function wordEditor(lineText: string): Editor {
-        return {
-            wordAt(pos: EditorPosition) {
-                const isWord = (c: string | undefined) =>
-                    !!c && /[\p{L}\p{N}_]/u.test(c);
-                let start = pos.ch;
-                if (!isWord(lineText[start]) && isWord(lineText[start - 1]))
-                    start--;
-                if (!isWord(lineText[start])) return null;
-                let end = start;
-                while (isWord(lineText[start - 1])) start--;
-                while (isWord(lineText[end])) end++;
-                return {
-                    from: { line: pos.line, ch: start },
-                    to: { line: pos.line, ch: end },
-                };
-            },
-        } as unknown as Editor;
-    }
+    // The caret sits on line 3 of a note whose line 3 is `lineText`, read
+    // the way the press reads it.
+    const readingOf = (lineText: string) => readNote(["", "", "", lineText]);
 
     function wordPlugin(insertAtEndOfWord: boolean): FootnotePlugin {
         return { settings: { insertAtEndOfWord } } as unknown as FootnotePlugin;
@@ -390,7 +372,7 @@ describe("adjustFootnotePosition", () => {
     const adjust = (lineText: string, ch: number, endOfWord: boolean) =>
         adjustFootnotePosition(
             { line: 3, ch },
-            wordEditor(lineText),
+            readingOf(lineText),
             lineText,
             wordPlugin(endOfWord),
         );
@@ -452,7 +434,7 @@ describe("adjustFootnotePosition", () => {
         expect(
             adjustFootnotePosition(
                 cursor,
-                wordEditor("abc"),
+                readingOf("abc"),
                 "abc",
                 wordPlugin(false),
             ),

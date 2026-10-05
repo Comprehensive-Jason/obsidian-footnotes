@@ -9,6 +9,7 @@ import {
 } from "../src/editor/cursor-motion";
 import FootnotePlugin from "../src/main";
 import { lintFootnotes } from "../src/linting/linter";
+import { readNote } from "../src/parsing/note-reading";
 import { footnoteAfterPunctuation } from "../src/linting/rules/footnote-after-punctuation";
 import { ClosingMarkChars, FootnotePlacement, referenceLandingAfter, TrailingPunctuationChars } from "../src/parsing/landing";
 
@@ -156,7 +157,7 @@ describe("the caret adjustment reads the setting", () => {
     function adjusted(placement: FootnotePlacement, line = "word. next") {
         const doc = fakeEditor([line], { cursor: { line: 0, ch: 2 } });
         const plugin = fakePlugin({ insertAtEndOfWord: true, footnotePlacement: placement }, doc);
-        return adjustFootnotePosition({ line: 0, ch: 2 }, doc, line, plugin).ch;
+        return adjustFootnotePosition({ line: 0, ch: 2 }, readNote(doc.lines), line, plugin).ch;
     }
 
     it("lands after the punctuation under 'after' and before it under 'before' and 'none'", () => {

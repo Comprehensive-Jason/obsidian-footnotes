@@ -56,11 +56,11 @@ describe("a press inside a link-like construct lands after it", () => {
         [["see me@x.org now"], 5, "see me@x.org[^1] now"],
         [["see ![alt][img] now", "", "[img]: http://u"], 7, "see ![alt][img][^1] now"],
     ] as [string[], number, string][]) {
-        it.fails(`at ch ${ch} of ${JSON.stringify(lines[0])}`, async () => {
+        it(`at ch ${ch} of ${JSON.stringify(lines[0])}`, async () => {
             // The landing spot reads as a live footnote.
             expect(readNote([expected]).referencesOn(0).map((r) => r.name)).toEqual(["1"]);
             const doc = await press(lines, ch);
-            // Today: the protected-text toast.
+            // Before the fix: the protected-text toast.
             expect(messages()).toEqual([]);
             expect(doc.lines[0]).toBe(expected);
         });

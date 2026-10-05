@@ -19,6 +19,7 @@ import { openFootnotePopup, popupEditingAvailable } from "./footnote-popup";
 import { jumpToFootnoteDefinition } from "./navigation";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
 import { adjustFootnotePosition, endOfWordOffset, moveCursorAndSetJumpPoint } from "../editor/cursor-motion";
+import { cellLinkLikeEndAt } from "../parsing/landing";
 import { planDefinitionAppend } from "./definition-append";
 import {
     DocContext,
@@ -94,7 +95,7 @@ export function insertInTableCell(
     const at = safeInsertionCh(
         cellText,
         plugin.settings.insertAtEndOfWord
-            ? endOfWordOffset(cellText, head, plugin.settings.footnotePlacement)
+            ? endOfWordOffset(cellText, head, plugin.settings.footnotePlacement, cellLinkLikeEndAt(cellText, head))
             : head,
     );
     return dispatchCellEditIfLive(cell, text, at, at, caretOffsetInText);
@@ -490,7 +491,7 @@ export function createAutonumFootnote(
         return true;
     }
 
-    cursorPosition = adjustFootnotePosition(cursorPosition, doc, lineText, plugin);
+    cursorPosition = adjustFootnotePosition(cursorPosition, ctx.reading(), lineText, plugin);
     // The definition is planned against the note as it reads with the
     // reference already in (see planDefinitionAppend), and the two go out
     // as one transaction.
@@ -723,7 +724,7 @@ export function createFootnoteReference(
     const prefix = resolvePrefix();
     if (prefix === null) return true;
     const emptyReference = referenceText(prefix);
-    cursorPosition = adjustFootnotePosition(cursorPosition, doc, lineText, plugin);
+    cursorPosition = adjustFootnotePosition(cursorPosition, ctx.reading(), lineText, plugin);
     // The born-dead check (see bareInsertionVerdict). If the placeholder
     // landed inside protected text, it would not be a real footnote, and
     // you would be left typing a name into something that can never

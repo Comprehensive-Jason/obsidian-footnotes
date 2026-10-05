@@ -21,13 +21,17 @@ import { endOfWordOffset } from "../../src/editor/cursor-motion";
 // the pattern /\[[^\]\n]*\]\(/, whose link text cannot contain a "]". It
 // misses this link entirely, so the ordinary word walk runs and stops
 // after "Smith".
+//
+// Fixed 2026-10-05 (hunt 2026-10-05 fixes, by the way): linkLikeEndAt
+// now asks the note reading where the link around the caret ends, and the
+// reading reads this one whole.
 
 describe("landing walk: a markdown link whose text holds brackets", () => {
     const line = "see [Smith [2020] study](u) now";
 
-    it.fails("a press in the link text lands after the whole link", () => {
+    it("a press in the link text lands after the whole link", () => {
         const caret = line.indexOf("Smith") + 2;
-        // Today: 10, right after "Smith"
+        // Before the fix: 10, right after "Smith"
         expect(endOfWordOffset(line, caret)).toBe(line.indexOf(" now"));
     });
 });

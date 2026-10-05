@@ -2,7 +2,8 @@ import { Editor, EditorChange, EditorPosition } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { safeInsertionCh } from "./insertion-liveness";
-import { FootnotePlacement, linkLikeEndAt, punctuationAt, referenceLandingAfter } from "../parsing/landing";
+import { FootnotePlacement, lineLinkLikeEndAt, linkLikeEndAt, punctuationAt, referenceLandingAfter } from "../parsing/landing";
+import type { NoteReading } from "../parsing/note-reading";
 import {
     EditorWithCm,
     VaultWithConfig,
@@ -99,20 +100,26 @@ export function comparePositions(a: EditorPosition, b: EditorPosition): number {
 }
 
 /**
- * The end-of-word adjustment worked out on plain text: starting at
+ * The end-of-word adjustment worked out on one line's text: starting at
  * `offset`, the end of the word under the cursor (or just before it), plus
  * the closing marks and punctuation after it. An offset with no word
  * touching it comes back unchanged.
  *
- * This is `adjustFootnotePosition`'s job done for table cells, where the
- * main editor's `wordAt` cannot see the cell editor's text.
+ * `linkEnd` is where the link-like construct holding `offset` ends, or -1
+ * when there is none (linkLikeEndAt). The main editor passes what the note
+ * reading says and a table cell what its cell reading says; by default the
+ * text is read on its own, as a note of one line.
  */
-export function endOfWordOffset(text: string, offset: number, placement: FootnotePlacement = "after"): number {
-    // Inside a link, a wikilink, or a URL the "word" is the whole
-    // construct: a reference written inside "[text](url)" or between the
-    // segments of "example.com" breaks the link (Jason's landing rulings,
-    // 2026-09-15).
-    const linkEnd = linkLikeEndAt(text, offset);
+export function endOfWordOffset(
+    text: string,
+    offset: number,
+    placement: FootnotePlacement = "after",
+    linkEnd: number = lineLinkLikeEndAt(text, offset),
+): number {
+    // Inside a link, a wikilink, an address, or an email address the
+    // "word" is the whole construct: a reference written inside
+    // "[text](url)" or between the segments of "example.com" breaks the
+    // link (Jason's landing rulings, 2026-09-15).
     if (linkEnd !== -1) return referenceLandingAfter(text, linkEnd, placement);
     const end = wordEndOffset(text, offset);
     if (end === -1) return offset;
@@ -240,10 +247,12 @@ export function startOfWordOffset(text: string, offset: number): number {
 
 /** Move the insertion point so a footnote goes in only at the end of a
  * word, and never where an escape or an inline-footnote opener would
- * swallow it (safeInsertionCh in insertion-liveness). */
+ * swallow it (safeInsertionCh in insertion-liveness). `reading` is the
+ * note as it reads before the press, which says where a link around the
+ * caret ends. */
 export function adjustFootnotePosition(
     cursorPosition: EditorPosition,
-    doc: Editor,
+    reading: NoteReading,
     lineText: string,
     plugin: FootnotePlugin,
 ) {
@@ -256,7 +265,12 @@ export function adjustFootnotePosition(
         // editor's stops at an apostrophe or a dot inside a word and knows
         // nothing of links (Jason's landing rulings, 2026-09-15). A caret
         // on no word at all stays where it is.
-        const landing = endOfWordOffset(lineText, cursorPosition.ch, plugin.settings.footnotePlacement);
+        const landing = endOfWordOffset(
+            lineText,
+            cursorPosition.ch,
+            plugin.settings.footnotePlacement,
+            linkLikeEndAt(reading, cursorPosition.line, cursorPosition.ch),
+        );
         if (landing !== cursorPosition.ch) {
             cursorPosition = { line: cursorPosition.line, ch: landing };
         }

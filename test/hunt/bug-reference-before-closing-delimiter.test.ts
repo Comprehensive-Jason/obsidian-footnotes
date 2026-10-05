@@ -6,6 +6,7 @@ import { fakePlugin } from "../helpers/fake-plugin";
 import { adjustFootnotePosition, endOfWordOffset } from "../../src/editor/cursor-motion";
 import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after-punctuation";
 import { referenceLandingAfter } from "../../src/parsing/landing";
+import { readNote } from "../../src/parsing/note-reading";
 
 // Jason's manual pass (2026-09-09): with "insert at end of word"
 // on, a footnote placed on the last word of a quoted, bracketed, or
@@ -65,7 +66,7 @@ describe("the end-of-word insertion lands after the closing marks", () => {
         const line = 'This is "some bravo".';
         const doc = fakeEditor([line], { words: true, cursor: { line: 0, ch: 'This is "some br'.length } });
         const plugin = fakePlugin({ insertAtEndOfWord: true });
-        expect(adjustFootnotePosition({ line: 0, ch: 'This is "some br'.length }, doc, line, plugin)).toEqual({
+        expect(adjustFootnotePosition({ line: 0, ch: 'This is "some br'.length }, readNote(doc.lines), line, plugin)).toEqual({
             line: 0,
             ch: line.length,
         });
@@ -75,7 +76,7 @@ describe("the end-of-word insertion lands after the closing marks", () => {
         const line = "see [some bravo](https://x.y/z) more";
         const doc = fakeEditor([line], { words: true, cursor: { line: 0, ch: "see [some br".length } });
         const plugin = fakePlugin({ insertAtEndOfWord: true });
-        expect(adjustFootnotePosition({ line: 0, ch: "see [some br".length }, doc, line, plugin)).toEqual({
+        expect(adjustFootnotePosition({ line: 0, ch: "see [some br".length }, readNote(doc.lines), line, plugin)).toEqual({
             line: 0,
             ch: "see [some bravo](https://x.y/z)".length,
         });

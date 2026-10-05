@@ -14,7 +14,7 @@ import {
 import { DocContext, docLines, insideDefinition } from "../editor/doc-context";
 import { readNote } from "../parsing/note-reading";
 import { maskInlineRegions } from "../parsing/cell-reading";
-import { linkLikeEndAt } from "../parsing/landing";
+import { cellLinkLikeEndAt, linkLikeEndAt } from "../parsing/landing";
 import {
     cellCaret,
     isTableDelimiterRow,
@@ -99,7 +99,7 @@ export function warnProtectedCaretIfInside(
         // inside is caught by the born-dead check afterwards. The masked
         // twin blots link destinations and addresses since 2026-09-16
         // (Kimi hunt cycle 1), which is why this is spelled out here.
-        if (linkLikeEndAt(cellText, cellCaret(cell)) !== -1) return false;
+        if (cellLinkLikeEndAt(cellText, cellCaret(cell)) !== -1) return false;
         inside = caretInsideMaskedSpan(
             maskInlineRegions(cellText),
             cellCaret(cell),
@@ -115,7 +115,7 @@ export function warnProtectedCaretIfInside(
             return true;
         }
         // the same allowance for a caret inside a link on an ordinary line
-        if (!lineProtected && linkLikeEndAt(ctx.lines[line] ?? "", cursorPosition.ch) !== -1) {
+        if (!lineProtected && linkLikeEndAt(reading, line, cursorPosition.ch) !== -1) {
             return false;
         }
         // right at the start or end of a line, whether the caret is

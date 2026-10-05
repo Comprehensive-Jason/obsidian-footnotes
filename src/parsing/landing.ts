@@ -2,11 +2,14 @@
 // closing marks it steps over, and the link-like constructs it never
 // splits. The insert commands' end-of-word adjustment and the punctuation
 // lint rule both walk with these, so the two can never disagree about where
-// a reference belongs. It is a walk over the text of one line, needing no
-// note around it (it moved here from markdown-scan.ts in step 4 of the
-// runtime swap, 2026-10-03, when the rest of that file went).
+// a reference belongs. The walk goes over the text of one line; only the
+// question of where a link ends asks the note reading (it moved here from
+// markdown-scan.ts in step 4 of the runtime swap, 2026-10-03, when the rest
+// of that file went).
 
+import { cellReading, CellTextColumn } from "./cell-reading";
 import { escapedAt } from "./footnote-grammar";
+import { NoteReading, readNote } from "./note-reading";
 
 /**
  * The trailing punctuation an insert hops over on its way to the end of a
@@ -182,19 +185,45 @@ function balancedBracketEnd(text: string, open: number): number {
     return -1;
 }
 
-/** The index of the ")" that closes the "(" at `open`, counting nested round brackets, or -1. */
+/**
+ * The index of the ")" that closes a link's "(" at `open`, or -1. Round
+ * brackets inside the address are counted, so they must balance, and a
+ * backslash escapes the next character. Two parts of the tail are skipped
+ * whole, since a ")" inside them closes nothing (CommonMark's link
+ * destination and link title): an address written in angle brackets
+ * "<...>", and a title, which follows a space or a tab and is quoted with
+ * '"' or "'" or held in round brackets (hunt 2026-10-05, pin
+ * bug-landing-paren-in-link-title: '[w](u "a)b")' stopped at the ")" in
+ * the title).
+ */
 function balancedParenEnd(text: string, open: number): number {
     let depth = 0;
     for (let i = open; i < text.length; i++) {
+        const c = text[i];
         // an escaped bracket is a literal character of the destination,
         // not a closer (GLM hunt cycle 4, 2026-09-16: the landing walk
         // stopped at it and wrote the reference into the address)
-        if (text[i] === "\\") {
+        if (c === "\\") {
             i++;
             continue;
         }
-        if (text[i] === "(") depth++;
-        else if (text[i] === ")") {
+        if (depth === 1 && c === "<" && /^[ \t]*$/.test(text.slice(open + 1, i))) {
+            // an address in angle brackets ends at its ">"
+            const close = unescapedIndex(text, ">", i + 1);
+            if (close === -1) return -1;
+            i = close;
+            continue;
+        }
+        if (depth === 1 && (c === '"' || c === "'" || c === "(") && (text[i - 1] === " " || text[i - 1] === "\t")) {
+            // a title runs to its closing quote or bracket
+            const close = unescapedIndex(text, c === "(" ? ")" : c, i + 1);
+            if (close !== -1) {
+                i = close;
+                continue;
+            }
+        }
+        if (c === "(") depth++;
+        else if (c === ")") {
             depth--;
             if (depth === 0) return i;
         }
@@ -202,31 +231,48 @@ function balancedParenEnd(text: string, open: number): number {
     return -1;
 }
 
-/**
- * The end of the link-like construct that contains `offset`, or -1 when it
- * sits in none: a markdown link "[text](url)" with its address balanced, a
- * wikilink "[[note|alias]]", a bare URL, or an autolink "<scheme://...>"
- * (the closing ">" included). A reference belongs after the whole
- * construct, never inside it (Jason's landing rulings, 2026-09-15).
- */
-export function linkLikeEndAt(text: string, offset: number): number {
-    const link = /\[[^\]\n]*\]\(/g;
-    for (let m = link.exec(text); m; m = link.exec(text)) {
-        const close = balancedParenEnd(text, m.index + m[0].length - 1);
-        if (close === -1) continue;
-        if (offset >= m.index && offset < close + 1) return close + 1;
-    }
-    const wikilink = /\[\[[^\]\n]*\]\]/g;
-    for (let m = wikilink.exec(text); m; m = wikilink.exec(text)) {
-        if (offset >= m.index && offset < m.index + m[0].length) return m.index + m[0].length;
-    }
-    const url = /[A-Za-z][A-Za-z0-9+.-]*:\/\/[^\s<>]+/g;
-    for (let m = url.exec(text); m; m = url.exec(text)) {
-        let end = m.index + m[0].length;
-        if (offset < m.index || offset >= end) continue;
-        // an autolink's ">" belongs to it
-        if (text[m.index - 1] === "<" && text[end] === ">") end++;
-        return end;
+/** The index of the first `mark` at or after `from` that no backslash escapes, or -1. */
+function unescapedIndex(text: string, mark: string, from: number): number {
+    for (let i = from; i < text.length; i++) {
+        if (text[i] === "\\") i++;
+        else if (text[i] === mark) return i;
     }
     return -1;
+}
+
+/**
+ * The end of the link-like construct that holds column `ch` of `line`, as
+ * `reading` reads the note, or -1 when it sits in none: an inline link
+ * "[text](url)", a reference link "[text][ref]", an image, a wikilink, an
+ * autolink "<...>", a bare web address, or an email address, from its
+ * first character up to its last. A reference belongs after the whole
+ * construct, never inside it (Jason's landing rulings, 2026-09-15).
+ *
+ * The reading knows where each one ends because it reads the line the way
+ * Obsidian does, so a ")" inside a link's quoted title or its "<...>"
+ * address, an email address, and a reference image's alt text need no
+ * walk of their own (hunt 2026-10-05, pins
+ * bug-landing-paren-in-link-title and bug-email-and-image-alt-false-refusal;
+ * the hand-written walk this replaced knew only some of those shapes). A
+ * construct that runs on onto another line has no end on this one, so it
+ * gives -1, and the press is judged where it lands.
+ */
+export function linkLikeEndAt(reading: NoteReading, line: number, ch: number): number {
+    const link = reading.links.find(
+        (candidate) =>
+            (candidate.startLine < line || (candidate.startLine === line && candidate.start <= ch)) &&
+            (candidate.endLine > line || (candidate.endLine === line && ch < candidate.end)),
+    );
+    return link === undefined || link.endLine !== line ? -1 : link.end;
+}
+
+/** linkLikeEndAt for one line's text read on its own, as a note of one line: the end of the construct holding `offset`, or -1. */
+export function lineLinkLikeEndAt(text: string, offset: number): number {
+    return linkLikeEndAt(readNote([text]), 0, offset);
+}
+
+/** linkLikeEndAt for a table cell's own text, read as the one cell of a one-row table (cellReading): the end of the construct holding `offset`, as an offset into `text`, or -1. */
+export function cellLinkLikeEndAt(text: string, offset: number): number {
+    const end = linkLikeEndAt(cellReading(text), 0, offset + CellTextColumn);
+    return end === -1 ? -1 : end - CellTextColumn;
 }

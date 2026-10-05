@@ -5,6 +5,7 @@ import { fakePlugin } from "../helpers/fake-plugin";
 import { adjustFootnotePosition } from "../../src/editor/cursor-motion";
 import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after-punctuation";
 import type { FootnotePlacement } from "../../src/parsing/landing";
+import { readNote } from "../../src/parsing/note-reading";
 
 // spec question: when the caret sits BETWEEN the characters of a closing
 // emphasis run ("**bold*|* next"), should the press carry the reference
@@ -40,7 +41,7 @@ import type { FootnotePlacement } from "../../src/parsing/landing";
 function pressAt(line: string, ch: number, placement: FootnotePlacement): string {
     const doc = fakeEditor([line], { cursor: { line: 0, ch } });
     const plugin = fakePlugin({ insertAtEndOfWord: true, footnotePlacement: placement }, doc);
-    const at = adjustFootnotePosition({ line: 0, ch }, doc, line, plugin).ch;
+    const at = adjustFootnotePosition({ line: 0, ch }, readNote(doc.lines), line, plugin).ch;
     return line.slice(0, at) + "[^1]" + line.slice(at);
 }
 

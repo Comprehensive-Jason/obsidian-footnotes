@@ -56,13 +56,13 @@ describe("landing after a link whose title or <destination> holds a ')'", () => 
         expect(doc.lines[0]).toBe('[some word](http://u "ab")[^1] x');
     });
 
-    it.fails("a ')' inside the quoted title", async () => {
+    it("a ')' inside the quoted title", async () => {
         const doc = await press('[some word](http://u "a)b") x', 8);
         expect(messages()).toEqual([]);
         expect(doc.lines[0]).toBe('[some word](http://u "a)b")[^1] x');
     });
 
-    it.fails("a ')' inside an angle-bracketed destination", async () => {
+    it("a ')' inside an angle-bracketed destination", async () => {
         const doc = await press("[some word](<a)b>) x", 8);
         expect(messages()).toEqual([]);
         expect(doc.lines[0]).toBe("[some word](<a)b>)[^1] x");

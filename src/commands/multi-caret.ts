@@ -264,7 +264,7 @@ function multiCaretTargets(
     const adjusted = ranges.map((range) =>
         adjustFootnotePosition(
             range.head,
-            doc,
+            ctx.reading(),
             doc.getLine(range.head.line),
             plugin,
         ),

@@ -254,8 +254,9 @@ function insertInlineText(
         // a caret on a table row but outside its cells, or on the row of
         // dashes under the header, would break the table (the same guard
         // the numbered and named keys run)
-        if (lineText.includes("|") && warnTableEdgeCaretIfOutside(null, cursorPosition, docContext(doc))) return;
-        const at = adjustFootnotePosition(cursorPosition, doc, lineText, plugin);
+        const ctx = docContext(doc);
+        if (lineText.includes("|") && warnTableEdgeCaretIfOutside(null, cursorPosition, ctx)) return;
+        const at = adjustFootnotePosition(cursorPosition, ctx.reading(), lineText, plugin);
         // born-dead check (see bareInsertionVerdict). "Born-dead" means an
         // insertion that would not be a live footnote the moment it lands.
         // The "^[…]" must still read as an inline footnote on the masked
