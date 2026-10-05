@@ -134,6 +134,15 @@ interface LinkFact {
     start: number;
     endLine: number;
     end: number;
+    /**
+     * For a reference link or a reference image, the label it looks up, in
+     * the parser's normalized form (lower case, runs of spaces as one).
+     * The parser reads every "[...]" as a reference link, but only one
+     * whose label some link reference definition "[label]: url" in the
+     * note carries is drawn as a link; the rest is bracketed text
+     * (CommonMark 0.31.2, section 6.3). Left out for every other kind.
+     */
+    lookup?: string;
 }
 
 /** The node types read as a LinkFact. */
@@ -165,6 +174,8 @@ export interface FootnoteFacts {
     inlineNotes: { line: number; open: number; closeLine: number; close: number }[];
     /** Every link-like construct, in the order the note reads them. */
     links: LinkFact[];
+    /** Every link reference definition "[label]: url": the line its label starts on, and its label in the same normalized form as LinkFact.lookup. */
+    linkDefinitions: { line: number; label: string }[];
 }
 
 /** Node types that hold blocks; a child of one of these is a block itself, anything deeper is inline. */
@@ -242,6 +253,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
     const lineBlocks: string[][] = lineStarts.map(() => []);
     const inlineNotes: FootnoteFacts["inlineNotes"] = [];
     const links: LinkFact[] = [];
+    const linkDefinitions: FootnoteFacts["linkDefinitions"] = [];
 
     const walk = (node: MarkdownNode, parentType: string, inInlineNote: boolean, container: DefinitionContainer): void => {
         const block = BlockContainers.has(parentType);
@@ -269,7 +281,9 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
         // land in protected text, and say which it is (NoteReading.insideLink).
         if (LinkNodes.has(node.type)) {
             const { start, end } = node.position;
-            links.push({ startLine: start.line - 1, start: start.column - 1, endLine: end.line - 1, end: end.column - 1 });
+            const link: LinkFact = { startLine: start.line - 1, start: start.column - 1, endLine: end.line - 1, end: end.column - 1 };
+            if (node.type === "linkReference" || node.type === "imageReference") link.lookup = node.identifier ?? "";
+            links.push(link);
         }
         switch (node.type) {
             case "footnoteDefinition": {
@@ -389,6 +403,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
             case "definition":
                 // a link definition "[label]: url": the part after the label
                 protect("linkDestination", false, afterLabel(doc, from, to), to);
+                linkDefinitions.push({ line: node.position.start.line - 1, label: node.identifier ?? "" });
                 break;
         }
         // what holds this node's children: one more quote, list item, or footnote when the node is one
@@ -403,7 +418,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
         for (const child of node.children ?? []) walk(child, node.type, inInlineNote || node.type === "footnote", inner);
     };
     walk(tree, "", false, { quotes: 0, listItems: 0, footnotes: 0 });
-    return { definitions, references, protectedSpans, blockSyntax, tableRows, lineBlocks: lineBlocks.map((kinds) => kinds.join(" ")), inlineNotes, links };
+    return { definitions, references, protectedSpans, blockSyntax, tableRows, lineBlocks: lineBlocks.map((kinds) => kinds.join(" ")), inlineNotes, links, linkDefinitions };
 }
 
 /** The footnote facts of a note, as Obsidian reads it. */
@@ -451,5 +466,6 @@ export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean
         lineBlocks: facts.lineBlocks.slice(0, lastLine),
         inlineNotes: facts.inlineNotes.filter((note) => note.line < lastLine),
         links: facts.links.filter((link) => link.startLine < lastLine),
+        linkDefinitions: facts.linkDefinitions.filter((definition) => definition.line < lastLine),
     };
 }

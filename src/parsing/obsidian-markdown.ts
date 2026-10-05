@@ -55,6 +55,8 @@ export interface MarkdownNode {
     children?: MarkdownNode[];
     /** A footnote definition's or reference's name, as written. */
     label?: string;
+    /** For a reference link, a reference image, or a link reference definition: its label in lower case, with runs of spaces as one, so a link and its definition match. */
+    identifier?: string;
     /** The text of a leaf node (code, math, HTML, plain text). */
     value?: string;
     /** For a "%%" comment: true for a block comment, false for an inline pair. */

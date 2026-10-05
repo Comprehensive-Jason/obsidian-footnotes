@@ -70,6 +70,13 @@ export interface NoteReading {
     readonly protectedSpans: FootnoteFacts["protectedSpans"];
     /** Every link, reference link, image, and wikilink, in the order the note reads them (see insideLink). */
     readonly links: FootnoteFacts["links"];
+    /**
+     * The labels the note's link reference definitions "[label]: url"
+     * carry, normalized as a link's `lookup` is. A reference link or image
+     * whose label is not among them is bracketed text, not a link
+     * (CommonMark 0.31.2, section 6.3).
+     */
+    readonly linkLabels: ReadonlySet<string>;
     /** One entry per line: true where the label of some definition sits on the line. Shared by every caller of the same text, so never changed. */
     readonly labelLines: boolean[];
     /** The definition whose label sits on `line` (the first, when one line holds two), or null. */
@@ -414,6 +421,7 @@ function addPart(into: FootnoteFacts, part: FootnoteFacts, lines: number, offset
     for (const blocks of part.lineBlocks) into.lineBlocks.push(blocks);
     for (const note of part.inlineNotes) into.inlineNotes.push({ ...note, line: note.line + lines, closeLine: note.closeLine + lines });
     for (const link of part.links) into.links.push({ ...link, startLine: link.startLine + lines, endLine: link.endLine + lines });
+    for (const definition of part.linkDefinitions) into.linkDefinitions.push({ ...definition, line: definition.line + lines });
 }
 
 /**
@@ -454,7 +462,7 @@ function notePartFacts(text: string, lines: readonly string[], reading: number):
     const frontmatter = frontmatterEnd(text);
     const afterFrontmatter = frontmatter === 0 ? 0 : text.slice(0, frontmatter).split("\n").length;
     const starts = partStarts(lines, afterFrontmatter);
-    const facts: FootnoteFacts = { definitions: [], references: [], protectedSpans: [], blockSyntax: [], tableRows: [], lineBlocks: [], inlineNotes: [], links: [] };
+    const facts: FootnoteFacts = { definitions: [], references: [], protectedSpans: [], blockSyntax: [], tableRows: [], lineBlocks: [], inlineNotes: [], links: [], linkDefinitions: [] };
     let from = 0;
     // the first entry of `starts` after `from`
     let next = 0;
@@ -637,6 +645,7 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
         references: facts.references,
         protectedSpans: facts.protectedSpans,
         links: facts.links,
+        linkLabels: new Set(facts.linkDefinitions.map((definition) => definition.label)),
         labelLines: Object.freeze(labels.map((label) => label !== null)) as boolean[],
         labelOn: (line) => labels[line] ?? null,
         definitionAt(line) {

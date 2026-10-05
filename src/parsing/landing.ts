@@ -256,10 +256,20 @@ function unescapedIndex(text: string, mark: string, from: number): number {
  * the hand-written walk this replaced knew only some of those shapes). A
  * construct that runs on onto another line has no end on this one, so it
  * gives -1, and the press is judged where it lands.
+ *
+ * A reference link or image counts only when the note defines its label.
+ * The reader takes any "[...]" for a reference link, but one with no
+ * "[label]: url" line is bracketed text that Obsidian shows as it is
+ * written, and a reference may sit inside it: a caret in "some" of
+ * "[some text]" lands at the end of the word, "[some[^1] text]", under
+ * every placement (Jason, 2026-10-05; pin bug-dont-move-bracketed-text).
+ * Taking the end of such text sent the press past the "]", where
+ * "[some text][^1]" reads as a reference link and the press was refused.
  */
 export function linkLikeEndAt(reading: NoteReading, line: number, ch: number): number {
     const link = reading.links.find(
         (candidate) =>
+            (candidate.lookup === undefined || reading.linkLabels.has(candidate.lookup)) &&
             (candidate.startLine < line || (candidate.startLine === line && candidate.start <= ch)) &&
             (candidate.endLine > line || (candidate.endLine === line && ch < candidate.end)),
     );
