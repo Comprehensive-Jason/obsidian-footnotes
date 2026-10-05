@@ -258,9 +258,10 @@ export function handlePaste(plugin: FootnotePlugin, event: ClipboardEvent, doc: 
  * the register) or text from anywhere that ends in definition lines.
  * Returns false, having changed nothing, when there is nothing to carry or
  * the editor holds more than one selection; the paste is then the
- * editor's own.
+ * editor's own. `beforeWrite` runs right before the note is changed (see
+ * wrapCommand).
  */
-function landPastedText(plugin: FootnotePlugin, doc: Editor, text: string): boolean {
+function landPastedText(plugin: FootnotePlugin, doc: Editor, text: string, beforeWrite: () => void = () => undefined): boolean {
     if (!text) return false;
     let body: string;
     let carried: CarriedDefinition[];
@@ -286,7 +287,7 @@ function landPastedText(plugin: FootnotePlugin, doc: Editor, text: string): bool
     if (selections.length !== 1) return false;
     const [a, b] = [selections[0].anchor, selections[0].head];
     const [from, to] = a.line < b.line || (a.line === b.line && a.ch <= b.ch) ? [a, b] : [b, a];
-    landCarriedText(plugin, doc, from, to, body, carried, missing);
+    landCarriedText(plugin, doc, from, to, body, carried, missing, beforeWrite);
     return true;
 }
 
@@ -337,6 +338,7 @@ function editorOwning(plugin: FootnotePlugin, view: EditorView): Editor | null {
  * merged and renamed to fit the note, all in one transaction; then the
  * toast with the counts, and the lint or its alerts. `missing` names the
  * references whose definitions could not be found at copy time.
+ * `beforeWrite` runs right before the transaction that changes the note.
  */
 function landCarriedText(
     plugin: FootnotePlugin,
@@ -346,6 +348,7 @@ function landCarriedText(
     body: string,
     carried: CarriedDefinition[],
     missing: string[],
+    beforeWrite: () => void = () => undefined,
 ): void {
     const lines = docLines(doc);
     // The paste is planned against the note as it reads once the selection
@@ -387,6 +390,7 @@ function landCarriedText(
         changes = append.changes;
         end = append.edits[0].end;
     }
+    beforeWrite();
     doc.transaction({ changes, selection: { from: end } });
 
     // The counts read in a fixed order, added, reused, matched, renamed,
@@ -484,8 +488,9 @@ interface EditorCommand {
  * selection needs a definition (a copy or a cut) or the clipboard carries
  * some (a paste), the plugin does the carrying, the same way as the hooks;
  * otherwise, and whenever the carry setting is off, a table cell's editor
- * holds the focus, or anything goes wrong, Obsidian's own action runs as
- * it would have. Unloading the plugin puts the original actions back.
+ * holds the focus, or anything goes wrong before the carry has written,
+ * Obsidian's own action runs as it would have. Unloading the plugin puts
+ * the original actions back.
  *
  * The command registry is not part of Obsidian's documented API, so every
  * step checks what it finds: a command that is missing (a desktop
@@ -495,40 +500,62 @@ interface EditorCommand {
 export function wrapClipboardCommands(plugin: FootnotePlugin): void {
     const registry = (plugin.app as unknown as { commands?: { commands?: Record<string, EditorCommand | undefined> } }).commands?.commands;
     const carries = (doc: Editor) => plugin.settings.carryFootnotesOnCopy && !nestedSubEditorOwnsFocus(doc);
-    wrapCommand(plugin, registry?.["editor:copy"], async (doc) => {
+    wrapCommand(plugin, registry?.["editor:copy"], async (doc, wrote) => {
         const range = carries(doc) ? singleSelection(doc) : null;
         const text = range && carriedCopyText(doc, range.from, range.to);
         if (!text) return false;
         await navigator.clipboard.writeText(text);
+        wrote();
         return true;
     });
-    wrapCommand(plugin, registry?.["editor:cut"], async (doc) => {
+    wrapCommand(plugin, registry?.["editor:cut"], async (doc, wrote) => {
         const range = carries(doc) ? singleSelection(doc) : null;
         const before = doc.getValue();
         const cut = range && plannedCut(plugin, doc, range.from, range.to);
         if (!cut) return false;
         await navigator.clipboard.writeText(cut.text);
+        wrote();
         // the note changed while the clipboard was written: cutting by the
         // old plan could take the wrong text, so the clipboard holds the
         // copy and the note is left as it is
         if (doc.getValue() === before) cut.make();
         return true;
     });
-    wrapCommand(plugin, registry?.["editor:paste"], async (doc) => {
+    wrapCommand(plugin, registry?.["editor:paste"], async (doc, wrote) => {
         if (!carries(doc)) return false;
-        return landPastedText(plugin, doc, await navigator.clipboard.readText());
+        return landPastedText(plugin, doc, await navigator.clipboard.readText(), wrote);
     });
 }
 
-/** Replace `command`'s action with one that tries `carry` first and falls back to the original; the original comes back on unload. */
-function wrapCommand(plugin: FootnotePlugin, command: EditorCommand | undefined, carry: (doc: Editor) => Promise<boolean>): void {
+/**
+ * Replace `command`'s action with one that tries `carry` first and falls
+ * back to the original; the original comes back on unload.
+ *
+ * The fallback runs only while nothing has been written. `carry` calls
+ * `wrote` once the clipboard holds its text (after that write succeeds,
+ * since a write that failed changed nothing) and right before it changes
+ * the note. An error after that point is logged and the command ends
+ * there: running Obsidian's own action on top of a carry that had already
+ * written pasted the text a second time, or ran Obsidian's cut on the
+ * emptied selection and wrote "" over the clipboard that held the cut
+ * text (hunt 2026-10-05, pin bug-wrapped-command-fallback-after-write).
+ */
+function wrapCommand(plugin: FootnotePlugin, command: EditorCommand | undefined, carry: (doc: Editor, wrote: () => void) => Promise<boolean>): void {
     const original = command?.editorCallback;
     if (!command || typeof original !== "function") return;
     const wrapped = async (editor: Editor, context: unknown): Promise<unknown> => {
         let carried = false;
+        // an object, so the type checker sees that the callback can change it
+        const progress = { written: false };
         try {
-            carried = await carry(editor);
+            carried = await carry(editor, () => {
+                progress.written = true;
+            });
         } catch (error) {
+            if (progress.written) {
+                console.error("Footnote Shortcut: carrying footnotes failed after it wrote, so the plain command does not run", error);
+                return undefined;
+            }
             console.error("Footnote Shortcut: carrying footnotes failed, so the plain command runs", error);
         }
         return carried ? undefined : original.call(command, editor, context);

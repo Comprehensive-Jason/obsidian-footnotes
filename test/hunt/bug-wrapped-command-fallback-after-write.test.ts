@@ -127,7 +127,7 @@ afterEach(() => {
 });
 
 describe("a wrapped command whose carry already wrote does not also run Obsidian's own action", () => {
-    it.fails("paste: an error after the carried text landed does not paste it a second time", async () => {
+    it("paste: an error after the carried text landed does not paste it a second time", async () => {
         const doc = editor(["x", ""], { line: 1, ch: 0 });
         const settings = {
             carryFootnotesOnCopy: true,
@@ -144,7 +144,7 @@ describe("a wrapped command whose carry already wrote does not also run Obsidian
         expect(doc.lines.filter((l) => l.includes("a[^1] b")).length).toBe(1);
     });
 
-    it.fails("cut: an error after the cut was made does not run Obsidian's cut, which overwrites the clipboard", async () => {
+    it("cut: an error after the cut was made does not run Obsidian's cut, which overwrites the clipboard", async () => {
         const doc = editor(["keep a[^1] b", "", "[^1]: one"], { line: 0, ch: 5 }, { line: 0, ch: 12 });
         // CodeMirror's error for a caret placed past the note's end, thrown after the cut.
         Object.assign(doc, {
