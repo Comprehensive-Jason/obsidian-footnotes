@@ -31,7 +31,10 @@ import { readNote } from "../../src/parsing/note-reading";
 // attribute value runs over the line break (remark-parse 8's inline HTML
 // allows it, and the plugin's reader reads no [^9] there). Whether Obsidian
 // reads such a tag the same way is not yet checked against the live app
-// (Cluster RG2); if it does not, that test is a probe error to drop.
+// (Cluster RG2); if it does not, that test is a probe error to drop. The
+// fix (label-shapes.ts offers a label only where the reader reads its
+// "[^name]" as a live reference) covers both, so the lint follows the
+// reader either way.
 
 const DEFAULT_LINT: LintOptions = {
     fixPunctuation: true,
@@ -51,16 +54,16 @@ describe("a label-shaped line inside an inline construct running over two lines"
         expect(reading.references.filter((r) => r.live).map((r) => r.name)).toEqual(["1"]);
     });
 
-    it.fails("fix-lazy leaves a label inside a multi-line inline footnote alone", () => {
+    it("fix-lazy leaves a label inside a multi-line inline footnote alone", () => {
         expect(fixLazyDefinitions(INLINE_NOTE)).toBe(INLINE_NOTE);
     });
 
-    it.fails("the default lint keeps the inline footnote whole", () => {
+    it("the default lint keeps the inline footnote whole", () => {
         // today: "Text[^1] and^[inline\n\n[^1]: one\n[^2]: not a def] end.\n"
         expect(lintFootnotes(INLINE_NOTE, DEFAULT_LINT)).toContain("and^[inline\n[^9]: not a def] end.");
     });
 
-    it.fails("the default lint keeps a multi-line inline HTML tag whole (needs a live check, RG2)", () => {
+    it("the default lint keeps a multi-line inline HTML tag whole (needs a live check, RG2)", () => {
         // today: 'a <span title="x\n\n[^1]: one\n[^2]: y">z</span> b.[^1]\n'
         expect(lintFootnotes(INLINE_TAG, DEFAULT_LINT)).toContain('<span title="x\n[^9]: y">z</span>');
     });

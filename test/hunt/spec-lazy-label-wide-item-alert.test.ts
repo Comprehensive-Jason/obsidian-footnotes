@@ -26,6 +26,12 @@ import { lazyDefinitionLabelNames, orphanedFootnoteReferenceNames } from "../../
 // Source of truth: sheet 14 (a label directly under a line of prose is
 // lazy); the column-2 case, where lazyDefinitionLabelNames names the
 // label.
+//
+// Decided (Jason, 2026-10-05, Q6): the lazy-definition alert names it, as
+// it does in an item whose text starts at column 2. Expected to fail until
+// lazyDefinitionLabelNames (remove-orphaned-references.ts) takes each
+// label's name from labelShapedLines, which finds it since 2026-10-05,
+// instead of re-reading the label from the margin.
 
 const NESTED = ["Use[^b] here.", "", "- parent", "  - child", "    [^b]: lazy in child"];
 const WIDE = ["Use[^b] here.", "", "10. item", "    [^b]: lazy in a wide ordered item"];
@@ -33,7 +39,7 @@ const WIDE = ["Use[^b] here.", "", "10. item", "    [^b]: lazy in a wide ordered
 describe("the alert for a lazy label at an item's content column of 4", () => {
     for (const [name, lines] of [["nested item", NESTED], ["wide ordered item", WIDE]] as const) {
         it.fails(`${name}: the lazy-definition alert names it, not the missing-definition alert`, () => {
-            // Today: [], the lazy-definition alert does not name it.
+            // Before the fix: [], the lazy-definition alert did not name it.
             expect(lazyDefinitionLabelNames(lines)).toEqual(["b"]);
             expect(orphanedFootnoteReferenceNames(lines.join("\n"))).toEqual([]);
         });

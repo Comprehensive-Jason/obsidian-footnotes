@@ -130,24 +130,49 @@ export function definitionLabelWithName(line: string, masked: string) {
 }
 
 /**
- * The label-shaped lines that Obsidian does not read as a definition, each
- * with whether a setext underline sits right under it. Left out: protected
- * lines, labels written inside a "%%" comment (hidden text, not a
- * definition one blank line short of working), and labels behind a "%%"
- * on their line, which no blank line can ever make a definition (Kimi hunt
- * cycle 1, 2026-09-16: fix-lazy pushed a blank line in above such a label
- * on every lint).
+ * The label-shaped lines that Obsidian does not read as a definition but a
+ * blank line above would make one, each with the label's name as written
+ * and whether a setext underline sits right under it.
+ *
+ * The label must start the line's text inside its containers, at most three
+ * spaces in, as a definition's label must: past a quote's marker, and at a
+ * list item's content column, wherever that is ("10. item" puts it at
+ * column 4). The note reading says where each line's containers end
+ * (containerEnd), so the label's shape is read from there. Read from
+ * the margin, a label in a nested or wide list item was four spaces in and
+ * no label, so the lint neither named nor fixed it, and the orphan rule
+ * cut its "[^b]" out (hunt 2026-10-05, pin
+ * bug-lazy-label-wide-item-content-column).
+ *
+ * And its "[^name]" must be read as a live reference, which a lazy
+ * label's is. One that is not sits in dead text: inside an inline footnote
+ * or an inline HTML tag that runs over a line break (rule E3; hunt
+ * 2026-10-05, pin bug-lazy-label-inside-multi-line-inline, where the lint
+ * cut an inline footnote in two), in code, or anywhere else Obsidian reads
+ * no footnote, and no blank line makes that a definition.
+ *
+ * Left out besides: a line inside a definition's body, where a blank line
+ * would make the label a definition nested in that one, which the plugin
+ * never makes (ADR 0001); labels written inside a "%%" comment (hidden
+ * text, not a definition one blank line short of working; a reference
+ * there is live, so the comment is checked on its own); and labels behind
+ * a "%%" on their line, which no blank line can ever make a definition
+ * (Kimi hunt cycle 1, 2026-09-16: fix-lazy pushed a blank line in above
+ * such a label on every lint).
  */
-function labelShapedLines(lines: string[]): { line: number; underlined: boolean }[] {
+export function labelShapedLines(lines: string[]): { line: number; name: string; underlined: boolean }[] {
     const reading = readNote(lines);
-    const out: { line: number; underlined: boolean }[] = [];
+    const out: { line: number; name: string; underlined: boolean }[] = [];
     // where each line starts, to place a label among the comments
     let offset = 0;
     for (let i = 0; i < lines.length; offset += lines[i].length + 1, i++) {
-        if (reading.labelLines[i] || reading.protectedLines[i] || !lines[i].includes("[^")) continue;
-        const hit = definitionLabelWithName(lines[i], reading.maskedLine(i));
+        if (reading.labelLines[i] || !lines[i].includes("[^") || reading.definitionAt(i) !== null) continue;
+        const textStart = reading.containerEnd(i);
+        const hit = definitionLabelWithName(lines[i].slice(textStart), reading.maskedLine(i).slice(textStart));
         if (!hit || hit.label.afterCloser) continue;
-        const at = offset + hit.label.nameStart - 2;
+        const labelStart = textStart + hit.label.nameStart - 2;
+        if (!reading.referencesOn(i).some((reference) => reference.start === labelStart)) continue;
+        const at = offset + labelStart;
         if (reading.comments.some((comment) => comment.from <= at && at < comment.to)) continue;
         // a "===" or "---" under the label makes it a heading's text (or,
         // inside a longer paragraph, plain text a blank line above would
@@ -155,7 +180,7 @@ function labelShapedLines(lines: string[]): { line: number; underlined: boolean 
         // hunt cycle 3, probed in Reading view 2026-09-16: fix-lazy piled
         // twenty blank lines above such a label)
         const underlined = i + 1 < lines.length && !reading.protectedLines[i + 1] && underlineUnder(lines[i], lines[i + 1]);
-        out.push({ line: i, underlined });
+        out.push({ line: i, name: hit.name, underlined });
     }
     return out;
 }

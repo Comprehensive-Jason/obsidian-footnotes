@@ -86,6 +86,16 @@ export interface NoteReading {
      */
     blockSyntaxEnd(line: number): number;
     /**
+     * The column where the containers at the start of `line` end and the
+     * line's own block begins: past quote markers, list markers and task
+     * boxes, the indentation of a list item's lines, a callout's marker, and
+     * a footnote's label. Unlike blockSyntaxEnd, a heading's "#" marks are
+     * left out, since they belong to the heading inside its containers: a
+     * label right after them is a heading's text, not a label at the start
+     * of a line (label-shapes.ts).
+     */
+    containerEnd(line: number): number;
+    /**
      * Line `line` of the masked twin: the line as written, with every
      * character of protected text blotted out as "\0" and every column left
      * where it was, so a scan over it sees no code while every position it
@@ -501,7 +511,12 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
     // which definition owns each line, worked out the first time it is asked
     let owners: (Definition | null)[] | null = null;
     const syntaxEnds = new Map<number, number>();
-    for (const { line, end } of facts.blockSyntax) syntaxEnds.set(line, Math.max(syntaxEnds.get(line) ?? 0, end));
+    // the same, from the containers' syntax alone
+    const containerEnds = new Map<number, number>();
+    for (const { line, end, container } of facts.blockSyntax) {
+        syntaxEnds.set(line, Math.max(syntaxEnds.get(line) ?? 0, end));
+        if (container) containerEnds.set(line, Math.max(containerEnds.get(line) ?? 0, end));
+    }
     const blockSyntaxEnd = (line: number): number => syntaxEnds.get(line) ?? 0;
 
     // where each line starts in `text`, and how long it is there (a stray
@@ -626,6 +641,7 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
             return owners[line] ?? null;
         },
         blockSyntaxEnd,
+        containerEnd: (line) => containerEnds.get(line) ?? 0,
         maskedLine,
         maskedLines: () => (maskedAll ??= Object.freeze(lines.map((_, line) => maskedLine(line)))),
         get protectedLines() {

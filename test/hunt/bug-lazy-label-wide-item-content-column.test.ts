@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { fixLazyDefinitions } from "../../src/linting/rules/fix-lazy-definitions";
 import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove-orphaned-references";
+import { labelShapedLines } from "../../src/parsing/label-shapes";
 import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (data loss with Delete orphaned references on; annoyance with the
@@ -34,12 +35,27 @@ import { readNote } from "../../src/parsing/note-reading";
 //
 // The lazy-definition alert's side of this is pinned on its own
 // (spec-lazy-label-wide-item-alert).
+//
+// Fixed in part (2026-10-05): label-shapes.ts reads a label's shape from
+// where the line's containers end (NoteReading.containerEnd), so
+// labelShapedLines finds the label and its name, and Fix lazy definitions
+// repairs it. The orphan rule and the alert still re-read each lazy line's
+// label from the margin (definitionLabelWithName in
+// remove-orphaned-references.ts, where lazyDefinitionLabelNames lives),
+// which finds no label four spaces in; once they take the name
+// labelShapedLines gives, the two orphan tests below pass.
 
 const NESTED = ["Use[^b] here.", "", "- parent", "  - child", "    [^b]: lazy in child"];
 const WIDE = ["Use[^b] here.", "", "10. item", "    [^b]: lazy in a wide ordered item"];
 
 describe("a lazy label at an item's content column of 4", () => {
-    it.fails("nested item: fix-lazy turns it into a definition inside its item", () => {
+    for (const [name, lines, line] of [["nested item", NESTED, 4], ["wide ordered item", WIDE, 3]] as const) {
+        it(`${name}: labelShapedLines finds the lazy label and its name`, () => {
+            expect(labelShapedLines([...lines])).toEqual([{ line, name: "b", underlined: false }]);
+        });
+    }
+
+    it("nested item: fix-lazy turns it into a definition inside its item", () => {
         const out = fixLazyDefinitions(NESTED.join("\n"));
         // Today: [], nothing is fixed.
         expect(readNote(out.split("\n")).definitions.map((d) => d.name)).toEqual(["b"]);

@@ -108,10 +108,17 @@ interface ProtectedSpan {
  * line that is block syntax through to its end: a thematic break, a setext
  * underline, an ATX heading with no text, and a list item or a callout
  * whose marker has nothing at all after it on its line.
+ *
+ * `container` says whose syntax it is: true for what the line's containers
+ * took (quote markers, list markers and task boxes, a list item's
+ * indentation, a callout's marker, a footnote's label), false for a block's
+ * own marks (a heading's "#" marks, a setext underline, a thematic break),
+ * which sit inside the containers.
  */
 interface BlockSyntaxFact {
     line: number;
     end: number;
+    container: boolean;
 }
 
 /**
@@ -210,7 +217,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
     const protectedSpans: ProtectedSpan[] = [];
     const blockSyntax: BlockSyntaxFact[] = [];
     const tableRows: number[] = [];
-    for (const [line, end] of Object.entries(containerColumns)) if (end > 0) blockSyntax.push({ line: Number(line) - 1, end });
+    for (const [line, end] of Object.entries(containerColumns)) if (end > 0) blockSyntax.push({ line: Number(line) - 1, end, container: true });
 
     // the offset where each line starts, to turn an offset into a line
     const lineStarts = [0];
@@ -313,8 +320,8 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
                 // setext heading's underline is its own line, all syntax
                 const first = node.children?.[0];
                 const line = node.position.start.line - 1;
-                blockSyntax.push({ line, end: first ? first.position.start.column - 1 : Infinity });
-                if (lastLineOf(node) > line) blockSyntax.push({ line: lastLineOf(node), end: Infinity });
+                blockSyntax.push({ line, end: first ? first.position.start.column - 1 : Infinity, container: false });
+                if (lastLineOf(node) > line) blockSyntax.push({ line: lastLineOf(node), end: Infinity, container: false });
                 break;
             }
             case "listItem":
@@ -333,7 +340,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
                 const line = node.position.start.line - 1;
                 const text = doc.slice(lineStarts[line], line + 1 < lineStarts.length ? lineStarts[line + 1] - 1 : doc.length);
                 const textOnLine = (node.children ?? []).some((child) => child.position.start.line === node.position.start.line);
-                if (!textOnLine && !/[ \t]$/.test(text)) blockSyntax.push({ line, end: Infinity });
+                if (!textOnLine && !/[ \t]$/.test(text)) blockSyntax.push({ line, end: Infinity, container: true });
                 break;
             }
             case "table":
@@ -341,7 +348,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
                 if (container.footnotes === 0) for (let line = node.position.start.line - 1; line <= lastLineOf(node); line++) tableRows.push(line);
                 break;
             case "thematicBreak":
-                blockSyntax.push({ line: node.position.start.line - 1, end: Infinity });
+                blockSyntax.push({ line: node.position.start.line - 1, end: Infinity, container: false });
                 break;
             case "wikiLink": {
                 const open = doc[from] === "!" ? 3 : 2;
