@@ -150,7 +150,7 @@ export interface FootnoteFacts {
      * One entry per line: the blocks the line belongs to, from the
      * outermost in, each as its kind ("blockquote", "listItem",
      * "paragraph", "heading2", "list.ordered", ...) with a "^" in front
-     * where the block starts on this line. "^paragraph" alone is the first
+     * where the block starts on this line (every kind but a quote). "^paragraph" alone is the first
      * line of a paragraph at the top level, "paragraph" one of its later
      * lines, and "" a blank line outside every container. Comparing these
      * before and after an edit says whether the edit changed how Obsidian
@@ -249,12 +249,19 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
         const to = node.position.end.offset;
         if (block) {
             // The block's kind on every line it covers, marked where it
-            // starts. A quote or a list is only the lines it gathers: where
-            // it starts moves when an edit cuts its first lines, and that
-            // changes how no line reads, so those two carry no mark.
+            // starts. A quote is only the lines it gathers: where it starts
+            // moves when an edit cuts its first lines, and that changes how
+            // no line reads, so it carries no mark. A list does carry one,
+            // since two lists that only blank lines keep apart join into
+            // one when what stood between them goes: the second list's
+            // numbers then run on from the first's, and two tight lists
+            // turn loose. With the mark, the line where the second list
+            // started reads differently, so a rule that would cut a
+            // definition from between two lists refuses (hunt 2026-10-05,
+            // pin bug-definition-between-lists-joins-them).
             const kind = node.type === "heading" ? `heading${node.depth ?? 0}` : node.type === "list" && node.ordered === true ? "list.ordered" : node.type;
             const first = node.position.start.line - 1;
-            const marked = node.type !== "blockquote" && node.type !== "list";
+            const marked = node.type !== "blockquote";
             for (let line = first; line <= lastLineOf(node); line++) lineBlocks[line]?.push(marked && line === first ? `^${kind}` : kind);
         }
         // A link-like construct is noted whole, so a press can tell a

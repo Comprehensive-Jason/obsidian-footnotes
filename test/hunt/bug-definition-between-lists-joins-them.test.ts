@@ -29,6 +29,12 @@ import { lintFootnotes } from "../../src/linting/linter";
 // lineBlocks, the list of blocks each line belongs to, and a list there
 // carries no mark of where it starts, so two lists and one list look the
 // same.
+//
+// Fixed 2026-10-05: a list carries a start mark in lineBlocks, so the
+// guards see the second list's first line read differently and the rule
+// leaves the note as it is. The first test used to require that the move
+// change the note too; no move of the one definition can keep the lists
+// apart, so that expectation was dropped.
 
 /** The lists at the top level of the note, each as [ordered, start, items, loose]. */
 function lists(md: string): [boolean, number | null, number, boolean][] {
@@ -46,20 +52,19 @@ const ORDERED = ["Intro[^b] text.", "", "1. first list", "", "[^b]: between the 
 const TIGHT = ["Intro[^b] text.", "", "- a", "- b", "", "[^b]: between the lists", "", "- c", "- d", "", "More prose."];
 
 describe("a definition between two lists", () => {
-    it.fails("move to bottom keeps the two ordered lists apart", () => {
+    it("move to bottom keeps the two ordered lists apart", () => {
         const out = moveFootnoteDefinitionsToBottom(ORDERED.join("\n"));
-        expect(out).not.toBe(ORDERED.join("\n"));
-        // Today: 1, the lists are joined.
+        // Before the fix: 1, the lists were joined.
         expect(lists(out).length).toBe(2);
     });
 
-    it.fails("move to bottom keeps the two tight bullet lists apart (and tight)", () => {
+    it("move to bottom keeps the two tight bullet lists apart (and tight)", () => {
         const out = moveFootnoteDefinitionsToBottom(TIGHT.join("\n"));
-        // Today: [[false, null, 4, true]], one loose list of four items.
+        // Before the fix: [[false, null, 4, true]], one loose list of four items.
         expect(lists(out)).toEqual(lists(TIGHT.join("\n")));
     });
 
-    it.fails("the default lint keeps them apart", () => {
+    it("the default lint keeps them apart", () => {
         const out = lintFootnotes(ORDERED.join("\n"), { sectionHeading: "" });
         expect(lists(out).length).toBe(2);
     });
