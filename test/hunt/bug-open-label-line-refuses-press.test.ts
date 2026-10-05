@@ -34,13 +34,13 @@ import { readNote } from "../../src/parsing/note-reading";
 describe("openRegionFrom for an open link-definition label", () => {
     beforeEach(resetNotices);
 
-    it.fails("says the region starts at the line of the open '['", () => {
+    it("says the region starts at the line of the open '['", () => {
         // Today: 4, the note's last line.
         expect(readNote(["text here", "", "[", "", "para"]).openRegionFrom).toBe(2);
         expect(readNote(["text here", "", "[a", "", "b"]).openRegionFrom).toBe(2);
     });
 
-    it.fails("a press at the end of plain prose above an open '[' makes a footnote whose definition Obsidian reads", async () => {
+    it("a press at the end of plain prose above an open '[' makes a footnote whose definition Obsidian reads", async () => {
         // A control: ["text here", "", "[x"] works (the definition goes above the "[x" line).
         const lines = ["text here", "", "[", "", "para"];
         const doc = fakeEditor(lines, { wholeDoc: true, edits: true, words: true, cursor: { line: 0, ch: 9 } });

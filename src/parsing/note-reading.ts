@@ -123,11 +123,12 @@ export interface NoteReading {
     /**
      * Where the note ends inside a region that never closes: the line the
      * region starts on, or -1 when it ends in the open. Such a region (an
-     * unclosed fence, "$$" block, HTML comment or block, or "%%" comment)
-     * swallows anything written after the note's last line, so a
-     * definition appended there would be hidden. Worked out by asking the
-     * reading of the note with a definition appended after a blank line,
-     * which is exactly that question.
+     * unclosed fence, "$$" block, HTML comment or block, "%%" comment, or
+     * a link definition's label left open by a "[" with no "]") swallows
+     * anything written after the note's last line, so a definition
+     * appended there would be hidden. Worked out by asking the reading of
+     * the note with a definition appended after a blank line, which is
+     * exactly that question.
      */
     readonly openRegionFrom: number;
     /** One entry per line: the blocks the line belongs to, outermost first, marked where each starts (FootnoteFacts.lineBlocks). */
@@ -715,12 +716,22 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
                 if (probe.labelOn(probeLine) !== null) {
                     openRegion = -1;
                 } else {
-                    // the region is the outermost stretch of protected text
-                    // (or "%%" comment) that takes in the probe
-                    let from = lineCount;
-                    for (const span of probe.protectedSpans) {
-                        if (span.startLine <= probeLine && span.endLine >= probeLine) from = Math.min(from, span.startLine);
-                    }
+                    // The region is the block that took the probe in, at
+                    // the top level of the note: it starts on the nearest
+                    // line above where that kind of block is marked as
+                    // starting (lineBlocks). A protected stretch did not
+                    // always say: a link definition's open label, "[" alone
+                    // on a line, swallows the probe with no protected text
+                    // around it, and the region was then taken to start on
+                    // the note's last line, below the "[", so the press put
+                    // its definition where the label swallowed it too and
+                    // was refused (hunt 2026-10-05, pin
+                    // bug-open-label-line-refuses-press; Obsidian's answer
+                    // swap34:lrd-label-blank-para).
+                    const outermost = (line: number): string => (probe.lineBlocks[line] ?? "").split(" ")[0];
+                    const start = `^${outermost(probeLine).replace(/^\^/, "")}`;
+                    let from = probeLine;
+                    while (from > 0 && outermost(from) !== start) from--;
                     openRegion = Math.min(from, Math.max(0, lineCount - 1));
                 }
             }
