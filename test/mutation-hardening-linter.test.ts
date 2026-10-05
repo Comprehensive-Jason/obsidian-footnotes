@@ -500,13 +500,16 @@ describe("replaceMinimal writes the smallest possible changes", () => {
         // inserted "\n" matches the newline right before the edit point, so
         // the suffix walk has to stop AT `start` instead of chewing past it.
         // (a heading above the label: a label directly under a PROSE line
-        // is lazy paragraph text since 2026-09-09, and nothing would move)
+        // is lazy paragraph text since 2026-09-09, and nothing would move).
+        // The new line goes in at the end of the line above, so a caret at
+        // the start of the label line stays there (hunt 2026-10-05, pin
+        // bug-caret-jumps-to-inserted-line).
         const doc = creationLint("x[^1]\n# H\n[^1]: one", {
             lintFixPunctuation: false,
             lintReindex: false,
         });
         expect(doc.appliedChanges).toEqual([
-            { from: { line: 2, ch: 0 }, to: { line: 2, ch: 0 }, text: "\n" },
+            { from: { line: 1, ch: 3 }, to: { line: 1, ch: 3 }, text: "\n" },
         ]);
         expect(doc.value).toBe("x[^1]\n# H\n\n[^1]: one");
     });

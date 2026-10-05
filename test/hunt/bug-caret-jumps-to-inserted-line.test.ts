@@ -45,7 +45,7 @@ function caretAfterLint(before: string, options: LintOptions, line: number, ch: 
 }
 
 describe("a caret at column 0 of an untouched line, with lines inserted right above it", () => {
-    it.fails("default lint, caret at the start of a lazy label: the caret stays on the label line", () => {
+    it("default lint, caret at the start of a lazy label: the caret stays on the label line", () => {
         // Fix lazy definitions inserts the blank line that makes "[^1]: def"
         // a definition; the label line itself is unchanged.
         const before = "prose[^1]\n[^1]: def";
@@ -54,7 +54,7 @@ describe("a caret at column 0 of an untouched line, with lines inserted right ab
         expect(caretAfterLint(before, {}, 1, 0)).toEqual({ line: 2, ch: 0, text: "[^1]: def" });
     });
 
-    it.fails("orphan-reference deletion, caret at the start of a comment line two lines below", () => {
+    it("orphan-reference deletion, caret at the start of a comment line two lines below", () => {
         const before = "[^1]\n\n%% c %%\n[^94]: lazy under a comment line";
         const options: LintOptions = { removeOrphanedReferences: true };
         expect(lintFootnotes(before, options)).toBe("\n\n%% c %%\n\n[^1]: lazy under a comment line");

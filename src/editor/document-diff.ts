@@ -58,9 +58,20 @@ export function lineDiffChanges(before: string, after: string): OffsetChange[] {
         const e = head + hunk.aEnd;
         const inserted = b.slice(head + hunk.bStart, head + hunk.bEnd);
         if (e < a.length) {
-            if (s === e) {
-                // lines inserted BEFORE line e: they bring their own newlines
-                changes.push({ from: starts[s], to: starts[s], text: inserted.join("\n") + "\n" });
+            if (s === e && s > 0) {
+                // lines inserted between line s - 1 and line s go in at the
+                // END of line s - 1, each after a newline of its own. The
+                // editor carries a caret that sits exactly where text goes in
+                // to the front of that text, so written at the start of line
+                // s, a caret at column 0 of that line ended up on the first
+                // inserted line; written here, a caret at the end of line
+                // s - 1 and one at the start of line s both stay on their
+                // lines (hunt 2026-10-05, pin bug-caret-jumps-to-inserted-line)
+                changes.push({ from: starts[s] - 1, to: starts[s] - 1, text: "\n" + inserted.join("\n") });
+            } else if (s === e) {
+                // lines inserted above the note's first line: they bring
+                // their own newlines, and go in at the very start
+                changes.push({ from: 0, to: 0, text: inserted.join("\n") + "\n" });
             } else if (inserted.length === 0) {
                 // lines deleted, newlines and all
                 changes.push({ from: starts[s], to: starts[e], text: "" });
