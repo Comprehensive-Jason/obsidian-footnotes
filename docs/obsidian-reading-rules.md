@@ -66,6 +66,10 @@ A tab in the indentation is consumed whole, so `\t` and `\t  ` count as inside t
 
 **B7. Empty items.** `+  \n\n\n    It[^2]` keeps the item open across two blank lines. A bare `-` directly under a label line is a setext underline (D3). Stock.
 
+**B8. A task box holds any one character.** `- [/] task`, `- [-] task`, and `- [>] task` are tasks just as `- [ ] task` and `- [x] done` are, and `- [/] [^a]: text` defines [^a] at column 7 (`h2:rf2-custom-task-def-slash`, `h2:rf1-custom-task-items`, asked of the live app on 2026-10-05). Obsidian's own list reader takes any one character between the brackets (`/^\[(.)][ \t]/` in its app code); stock takes only a space, `x`, or `X`, so the vendored list reader carries this as its second change.
+
+**B9. Two lists with only blank lines between them are one list.** `1. first list\n\n1. second list` is one ordered list of two items (the second shown as 2.), `- a\n- b\n\n- c\n- d` one loose list of four, and `1. first list\n\n5. second list` one list numbered from 1. Anything else between them, a footnote definition included, keeps them apart (`h2:cn2-*`, 2026-10-05). Stock. So removing or moving a definition that sits between two lists joins them, and the plugin refuses to (the lists carry a start mark in the reading's lineBlocks).
+
 ## C. Tables
 
 **C1. Header and delimiter must share a pipe style.** A row's style is whether its very first character is `|`. A row indented by even one space does not start with a pipe. So `| a | b |\n| --- | --- |` and `a | b\n--- | ---` are tables, `| a | b |\n | --- | --- |` (an indented delimiter) and `a | b\n| --- | --- |` are not, and ` | a | b |\n | --- | --- |` (both indented) is. A tab before the header makes it indented code. Under a label, a pair that is not a table is lazy definition text. Cell counts do not matter. Refined on 2026-10-03: the first-character test replaced "after any spaces" (45 notes of the run; family of 55).
@@ -90,13 +94,15 @@ A tab in the indentation is consumed whole, so `\t` and `\t  ` count as inside t
 
 **D5. `%%` does not end a definition.** `[^9]: orphan\n    %%\n[^1]: one\n%%` gives [^9] on lines 1-2 and [^1] on lines 3-4. A `%%` line never opens a comment while a definition's text runs on; it is lazy text. Stock remark-footnotes would end the definition there; the reader registers its comment reader after the footnote plugin, so `%%` is not in the definition's interrupt list.
 
+**D6. A link reference definition reads across blank lines.** Its title can start after blank lines and run over lines, and an `<...>` destination can run over a blank line: in `[foo]: /url\n\n'tit [^1]\nle'` the title holds the [^1], which is dead, and `[foo]: <a\n\nb\nc>` defines `[foo]` (`h2:rd2-*`, 2026-10-05). Stock. An inline HTML tag's attribute value can run over a line break too: in `a <span title="x\n[^9]: y">z</span>` the second line is part of the tag, not a definition (`h2:rg2-html-attribute-over-line`).
+
 ## E. The footnote readers
 
 **E1. What ends a definition.** ATX headings, thematic breaks, fences, a `$$` line, HTML blocks, list items (`-`, `*`, `+`, `1.`, `1)`), quotes and callouts, tables, another label, and a link reference definition. Lazy text, so the definition continues: `%%` lines, `2.` items, `####### H`, `#H`, `<span>`, and plain or indented text. Stock, apart from `%%` (D5).
 
 **E2. Continuation and labels.** After a blank line, 4 spaces or a tab continue the definition and 8 spaces make indented code inside it. `[^1]: def\n\n    [^2]: two` nests a definition. `[^1]: [^2]: x` is two definitions on line 1. `[^1]:\nx[^3]` is line 1 alone. `   [^1]: x` is a definition, `    [^1]: x` is code, `[^1]:x` is a definition, and `[^]: x` and `[^a b]: x` are not. Stock.
 
-**E3. Inside `^[...]` everything is dead.** References, labels, and nested inline footnotes inside an inline footnote are dead text: `a^[x [^1] y]`, `a^[x ^[y [^1]] z] w[^2]` ([^2] is live). Brackets must balance; an unclosed or escaped caret makes no inline footnote. An empty inline footnote `^[]` appears among the metadata cache's references with an empty name, not as an inline footnote, but Reading view renders nothing there, so it is no reference; the oracle's comparison leaves it out (2026-10-03: about 1,300 notes of the run held one).
+**E3. Inside `^[...]` everything is dead.** References, labels, and nested inline footnotes inside an inline footnote are dead text: `a^[x [^1] y]`, `a^[x ^[y [^1]] z] w[^2]` ([^2] is live). An inline footnote may run over a soft line break, and everything inside it stays dead (`a^[x\n[^1] y] w[^2]`, `probe:e3-lines`), so a label-shaped line inside one is no definition. Brackets must balance; an unclosed or escaped caret makes no inline footnote. An empty inline footnote `^[]` appears among the metadata cache's references with an empty name, not as an inline footnote, but Reading view renders nothing there, so it is no reference; the oracle's comparison leaves it out (2026-10-03: about 1,300 notes of the run held one).
 
 **E4. The 1,024-character limit.** What may end a definition is looked for only within the definition's first 1,024 characters, counted from the start of its label line. A heading, fence, list item, label, or table that starts at or after character 1,024 is lazy text of the definition, and one that starts just before is cut off: a label at character 1,020 no longer fits (`[^2]` without its colon), nor a fence at 1,022. A blank line still ends the definition at any length. Obsidian and stock remark-footnotes agree exactly (2026-10-03, 185 notes, label lines and continuation lines from 900 to 2,100 characters).
 
@@ -136,3 +142,4 @@ In these two shapes the metadata cache and the reader agree that a reference is 
 - `test/obsidian-answers/fuzz-20261003.json` and `reproducers.json`: the first fuzz and its shrunk notes.
 - `test/obsidian-answers/broad-20261004.json`: a few hundred notes of the 2026-10-03 run that the reader agreed on, and whole notes behind each rule found that night.
 - `test/obsidian-answers/overnight-probes.json`: that night's families and shrunk reproducers, with ids naming the rule (`night:f1c-...`, `night:d2c-...`, `night:c6-...`).
+- `test/obsidian-answers/h2-live-probes.json`: the shapes the pre-stable hunt of 2026-10-05 left to the live app (B8, B9, D6, the HTML tag, and a reference right after a bare email), ids `h2:...`.

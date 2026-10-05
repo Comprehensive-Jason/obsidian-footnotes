@@ -1,0 +1,14 @@
+[
+{"id":"h2:cn2-lists-apart","text":"Intro[^b] text.\n\n1. first list\n\n[^b]: between the lists\n\n1. second list\n\nMore prose.","defs":[["b",4,0,4]],"refs":[["b",0,5]],"code":[]},
+{"id":"h2:cn2-lists-joined-ordered","text":"Intro text.\n\n1. first list\n\n1. second list\n\nMore prose.","defs":[],"refs":[],"code":[]},
+{"id":"h2:cn2-lists-joined-tight","text":"Intro text.\n\n- a\n- b\n\n- c\n- d\n\nMore prose.","defs":[],"refs":[],"code":[]},
+{"id":"h2:cn2-ordered-start-dropped","text":"1. first list\n\n5. second list","defs":[],"refs":[],"code":[]},
+{"id":"h2:rf2-custom-task-def-slash","text":"- [/] [^a]: text\n\nsee [^a]","defs":[["a",0,6,0]],"refs":[["a",2,4]],"code":[]},
+{"id":"h2:rf2-custom-task-def-gt","text":"- [>] [^b]: x\n\n[^b] here","defs":[["b",0,6,0]],"refs":[["b",2,0]],"code":[]},
+{"id":"h2:rf1-custom-task-items","text":"- [/] task\n- [-] task\n- [x] done","defs":[],"refs":[],"code":[]},
+{"id":"h2:rd2-title-after-blank","text":"[foo]: /url\n\n'tit [^1]\nle'\n\nuse[^1]\n\n[^1]: d","defs":[["1",7,0,7]],"refs":[["1",5,3]],"code":[]},
+{"id":"h2:rd2-paren-title-after-blanks","text":"[foo]: <u>\n\n\n(tit [^1]\nle)\n\nuse[^1]\n\n[^1]: d","defs":[["1",8,0,8]],"refs":[["1",6,3]],"code":[]},
+{"id":"h2:rd2-angle-destination-over-blank","text":"[foo]: <a\n\nb\nc>\n\n[x][foo]\n\nuse[^1]\n\n[^1]: d","defs":[["1",9,0,9]],"refs":[["1",7,3]],"code":[]},
+{"id":"h2:rg2-html-attribute-over-line","text":"a <span title=\"x\n[^9]: y\">z</span> b[^1].\n\n[^1]: one\n","defs":[["1",3,0,3]],"refs":[["1",1,19]],"code":[]},
+{"id":"h2:rf7-bare-email-ref","text":"see me@x.org[^1] now\n\n[^1]: d","defs":[["1",2,0,2]],"refs":[["1",0,12]],"code":[]}
+]

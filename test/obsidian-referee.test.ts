@@ -36,7 +36,14 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 //   name holds a code span with a bracket, names holding a no-break or an
 //   ideographic space, a link definition's label running over blank
 //   lines (which swallows a footnote's label below it), and a reference
-//   written as a link's text ("[^1](url)" is a link, no footnote).
+//   written as a link's text ("[^1](url)" is a link, no footnote);
+// - h2-live-probes: the shapes the pre-stable hunt of 2026-10-05 left to the
+//   live app, asked after its fixes: a definition between two lists (and the
+//   two lists alone, which Obsidian reads as one list), task boxes holding
+//   another character ("- [/]", "- [>]"), a link definition's title or
+//   "<...>" destination running over blank lines, an inline HTML tag whose
+//   attribute runs over a line break, and a reference right after a bare
+//   email address.
 //
 // The comparison is the live oracle's own (scripts/oracle/compare.mts), so a
 // note agrees here exactly when `npm run oracle -- check --reader` would find
@@ -45,7 +52,7 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 // notes, run the live oracle with --answers (TESTING.md) and add the file to
 // AnswerFiles.
 
-const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes", "swap34-probes"];
+const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes", "swap34-probes", "h2-live-probes"];
 
 /**
  * Notes on which the reader and Obsidian still disagree, by id, with the
