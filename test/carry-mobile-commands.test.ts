@@ -41,7 +41,9 @@ function phonePlugin(doc: FakeEditor, settings: Record<string, unknown> = { carr
         },
         register: (dispose: () => void) => disposers.push(dispose),
     } as unknown as FootnotePlugin;
-    return { plugin, commands, unload: () => disposers.forEach((dispose) => dispose()) };
+    return { plugin, commands, unload: () => {
+        for (const dispose of disposers) dispose();
+    } };
 }
 
 function editor(lines: string[], from: { line: number; ch: number }, to = from): FakeEditor {
@@ -170,7 +172,9 @@ describe("wrapping Obsidian's commands safely", () => {
 
     it("leaves a desktop alone, where Obsidian registers none of the three", () => {
         const plugin = { settings: {}, app: { commands: { commands: {} } }, register: () => undefined } as unknown as FootnotePlugin;
-        expect(() => wrapClipboardCommands(plugin)).not.toThrow();
+        expect(() => {
+            wrapClipboardCommands(plugin);
+        }).not.toThrow();
     });
 
     it("leaves a command alone when it has no action of the expected shape", () => {
@@ -182,6 +186,8 @@ describe("wrapping Obsidian's commands safely", () => {
 
     it("leaves things alone when the app has no command registry at all", () => {
         const plugin = { settings: {}, app: {}, register: () => undefined } as unknown as FootnotePlugin;
-        expect(() => wrapClipboardCommands(plugin)).not.toThrow();
+        expect(() => {
+            wrapClipboardCommands(plugin);
+        }).not.toThrow();
     });
 });
