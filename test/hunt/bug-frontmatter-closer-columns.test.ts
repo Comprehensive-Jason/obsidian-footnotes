@@ -33,7 +33,7 @@ import { readNote } from "../../src/parsing/note-reading";
 // after a "%%" closer is placed right.
 
 describe("columns on the frontmatter closer line", () => {
-    it.fails("a reference inside a definition that starts on the closer line is where the reading says", () => {
+    it("a reference inside a definition that starts on the closer line is where the reading says", () => {
         const lines = ["---", "a: 1", "---[^1]: body [^2] tail", "", "x[^1]", "", "[^2]: two"];
         const reading = readNote(lines);
         const refs = reading.referencesOn(2);
@@ -42,7 +42,7 @@ describe("columns on the frontmatter closer line", () => {
         expect(reading.referenceAt(2, lines[2].indexOf("[^2]") + 1)?.name).toBe("2");
     });
 
-    it.fails("the label of a task item's definition on the closer line is where the reading says", () => {
+    it("the label of a task item's definition on the closer line is where the reading says", () => {
         // night:d2c-11 in overnight-probes.json: Obsidian reads [^2] as a definition.
         const lines = ["---", "title: x", "---- [ ] [^2]: two", "", "use[^2]"];
         const reading = readNote(lines);
@@ -53,19 +53,19 @@ describe("columns on the frontmatter closer line", () => {
         expect(reading.labelsOn(2).map((l) => lines[2].slice(l.start, l.end))).toEqual(["[^2]"]);
     });
 
-    it.fails("a reference in a quote that starts on the closer line is where the reading says", () => {
+    it("a reference in a quote that starts on the closer line is where the reading says", () => {
         const lines = ["---", "a: 1", "---> quoted [^1] text", "", "[^1]: d"];
         const reading = readNote(lines);
         expect(reading.referencesOn(2).map((r) => lines[2].slice(r.start, r.end))).toEqual(["[^1]"]);
     });
 
-    it.fails("a reference in a list item that starts on the closer line is where the reading says", () => {
+    it("a reference in a list item that starts on the closer line is where the reading says", () => {
         const lines = ["---", "a: 1", "---- item [^1] text", "", "[^1]: d"];
         const reading = readNote(lines);
         expect(reading.referencesOn(2).map((r) => lines[2].slice(r.start, r.end))).toEqual(["[^1]"]);
     });
 
-    it.fails("rename of a footnote referenced inside a closer-line definition rewrites exactly the name", () => {
+    it("rename of a footnote referenced inside a closer-line definition rewrites exactly the name", () => {
         const lines = ["---", "a: 1", "---[^1]: body [^2] tail", "", "x[^1]", "", "[^2]: two"];
         const doc = fakeEditor(lines, { wholeDoc: true, cursor: { line: 6, ch: 2 } });
         const plan = planFootnoteRename(doc, "2", "renamed");
@@ -77,7 +77,7 @@ describe("columns on the frontmatter closer line", () => {
         }
     });
 
-    it.fails("a press with the caret inside a quoted reference on the closer line jumps to its definition and writes nothing", async () => {
+    it("a press with the caret inside a quoted reference on the closer line jumps to its definition and writes nothing", async () => {
         const lines = ["---", "a: 1", "---> quoted [^1] text", "", "[^1]: d"];
         const doc = fakeEditor(lines, { wholeDoc: true, edits: true, cursor: { line: 2, ch: lines[2].indexOf("[^1]") + 2 } });
         await insertAutonumFootnote(fakePlugin({}, doc));
@@ -85,15 +85,20 @@ describe("columns on the frontmatter closer line", () => {
         expect(doc.moves.at(-1)?.line).toBe(4);
     });
 
-    it.fails("a code span in a quote on the closer line is masked where it is", () => {
+    it("a code span in a quote on the closer line is masked where it is", () => {
         const lines = ["---", "a: 1", "---> quoted `[^1]` text [^2]", "", "[^2]: d"];
         const reading = readNote(lines);
         expect(reading.referencesOn(2).map((r) => r.name)).toEqual(["2"]);
-        // The masked line blots code with "\0" characters so they read as no reference.
-        expect(reading.maskedLine(2)).toBe("---> quoted \0\0\0\0\0\0 text [^2]");
+        // The masked line blots code with "\0" characters so they read as no
+        // reference. The closer's "---" is the frontmatter's last characters,
+        // protected text like the rest of it, so it is blotted too, as a
+        // closer line holding nothing else is blotted whole (the expectation
+        // was "---> quoted ...", rewritten 2026-10-05 by the fix: what this
+        // test is about is the code span's place).
+        expect(reading.maskedLine(2)).toBe("\0\0\0> quoted \0\0\0\0\0\0 text [^2]");
     });
 
-    it.fails("blockSyntaxEnd on the closer line counts the '---' before the block's syntax", () => {
+    it("blockSyntaxEnd on the closer line counts the '---' before the block's syntax", () => {
         // blockSyntaxEnd is the column where a line's block syntax (quote
         // marker, list marker, label) ends and its text begins.
         const at = (line: string) => readNote(["---", "a: 1", line]).blockSyntaxEnd(2);
@@ -101,7 +106,7 @@ describe("columns on the frontmatter closer line", () => {
         expect([at("---> quoted"), at("---- item"), at("---[^1]: x")]).toEqual([5, 5, 9]);
     });
 
-    it.fails("a press with the caret in front of the list marker on the closer line is refused like any list marker", async () => {
+    it("a press with the caret in front of the list marker on the closer line is refused like any list marker", async () => {
         // A control outside the frontmatter: ["a: 1", "", "- item"] at ch 0 is
         // refused with the block-syntax notice.
         const lines = ["---", "a: 1", "---- item"];

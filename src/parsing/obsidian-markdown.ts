@@ -393,6 +393,15 @@ const Frontmatter = /^---\n(?:[^\n]*\n)*?---/;
  * thematic break, setext headings, paragraphs). A byte order
  * mark before the first "---" changes nothing (recorded fact from commit
  * bca376c); remark-parse skips it, so the note's text then starts at offset 1.
+ *
+ * When a block follows the closer's "---" on its line, the parser's table
+ * of how many characters each line's containers took is told about the
+ * three dashes, as the "%%" closer tells it (see percentComments), or every
+ * column of that block is placed three characters early: "[^2]" in
+ * "---[^1]: body [^2]" was read at "dy [", and a press in front of "- item"
+ * on "---- item" was let through as if it were text (hunt 2026-10-05, pin
+ * bug-frontmatter-closer-columns). It is told only after the frontmatter is
+ * eaten, so the frontmatter's own end is placed without the dashes counted.
  */
 function frontmatter(tables: ParserTables): void {
     tables.blockTokenizers.frontmatter = function (eat, value, silent) {
@@ -403,7 +412,12 @@ function frontmatter(tables: ParserTables): void {
         const match = Frontmatter.exec(value);
         if (!match) return undefined;
         if (silent === true) return true;
-        return eat(match[0])({ type: "yaml", value: match[0] });
+        const yaml = eat(match[0])({ type: "yaml", value: match[0] });
+        if (value.slice(match[0].length, lineEnd(value, match[0].length)).trim() !== "") {
+            const line = yaml.position.end.line;
+            this.offset[line] = (this.offset[line] ?? 0) + "---".length;
+        }
+        return yaml;
     };
     tables.blockMethods.unshift("frontmatter");
 }
