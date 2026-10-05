@@ -67,7 +67,7 @@ beforeEach(() => {
 });
 
 describe("copy text whose definition is quoted and runs over two lines, then paste it", () => {
-    it.fails("keeps a quoted definition's quoted continuation inside the definition", () => {
+    it("keeps a quoted definition's quoted continuation inside the definition", () => {
         const source = editor(["Text[^q] here", "", "> [^q]: quoted def", "> more"], { line: 0, ch: 0 }, { line: 0, ch: 13 });
         const copy = clipboardEvent();
         handleCopy(fakePlugin(on, source), copy as never);

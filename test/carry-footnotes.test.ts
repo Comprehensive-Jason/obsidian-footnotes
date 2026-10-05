@@ -50,12 +50,14 @@ describe("carriedDefinitions", () => {
         });
     });
 
-    it("carries a multi-line block whole and a quoted definition with its quoted continuation", () => {
+    // A quoted definition comes out of its quote, continuation and all
+    // (Jason, 2026-10-05, Q1: carried definitions land unwrapped).
+    it("carries a multi-line block whole and a quoted definition unwrapped, with its continuation", () => {
         expect(carry(["a[^m]", "", "[^m]: first", "    second"], { line: 0, ch: 0 }, { line: 0, ch: 5 }).carried).toEqual([
             { name: "m", lines: ["[^m]: first", "    second"] },
         ]);
         expect(carry(["a[^q]", "", "> [^q]: quoted", "> more"], { line: 0, ch: 0 }, { line: 0, ch: 5 }).carried).toEqual([
-            { name: "q", lines: ["> [^q]: quoted", "> more"] },
+            { name: "q", lines: ["[^q]: quoted", "more"] },
         ]);
     });
 
@@ -65,12 +67,21 @@ describe("carriedDefinitions", () => {
     });
 
     // Jason's ruling 1, option a (2026-10-03): a definition in a list item
-    // is carried like a quoted one, its lines as they stand.
-    it("carries an in-item definition with its lines as they stand", () => {
+    // is carried like a quoted one. Jason, 2026-10-05, Q1: it travels as an
+    // ordinary top-level definition, list marker and the item's
+    // indentation taken off, and its own continuation lines indented 4, as
+    // a top-level definition's are.
+    it("carries an in-item definition lifted to the top level", () => {
         expect(carry(["- a[^i]", "- [^i]: in the item"], { line: 0, ch: 0 }, { line: 0, ch: 7 })).toEqual({
-            carried: [{ name: "i", lines: ["- [^i]: in the item"] }],
+            carried: [{ name: "i", lines: ["[^i]: in the item"] }],
             missing: [],
         });
+        expect(carry(["a[^i]", "", "10. [^i]: one", "", "        two", "    lazy"], { line: 0, ch: 0 }, { line: 0, ch: 5 }).carried).toEqual([
+            { name: "i", lines: ["[^i]: one", "", "    two", "lazy"] },
+        ]);
+        expect(carry(["a[^i]", "", "> - [^i]: one", ">       two"], { line: 0, ch: 0 }, { line: 0, ch: 5 }).carried).toEqual([
+            { name: "i", lines: ["[^i]: one", "    two"] },
+        ]);
     });
 
     it("ignores a reference in protected text and one the selection cuts through", () => {

@@ -21,11 +21,12 @@ import { Definition, readNote } from "../parsing/note-reading";
 // editor-side hooks live in carry-footnotes-hooks.ts.
 
 /**
- * One definition block to carry: its name as written, and its lines exactly
- * as they stand in the source note, continuation lines included. A
- * definition in a quote or a list item travels with its quote or list
- * markers, as it stands (Jason's ruling 1, option a, 2026-10-03, made it
- * carriable; how it should land at the destination is open for Jason).
+ * One definition block to carry: its name as written, and its lines,
+ * continuation lines included, lifted to the top level (liftedBlock). A
+ * definition that sat in a quote or a list item travels as an ordinary
+ * definition, its label at the start of its line (Jason's ruling 1, option
+ * a, 2026-10-03, made it carriable; Jason, 2026-10-05, Q1: it lands
+ * unwrapped).
  */
 export interface CarriedDefinition {
     name: string;
@@ -54,12 +55,77 @@ export interface CarriedDefinitions {
 export function carriedDefinitions(markdown: string, from: EditorPosition, to: EditorPosition): CarriedDefinitions {
     const lines = normalizeEol(markdown).text.split("\n");
     const { blocks, missing } = carriedBlocks(lines, from, to);
-    return { carried: blocks.map((block) => asCarried(lines, block)), missing };
+    return { carried: blocks.map((block) => liftedBlock(lines, block)), missing };
 }
 
-/** A block as the clipboard carries it: its name and its lines exactly as they stand. */
-function asCarried(lines: string[], block: Definition): CarriedDefinition {
-    return { name: block.name, lines: lines.slice(block.start, block.end + 1) };
+/**
+ * A block as the clipboard carries it: its name, and its lines lifted to
+ * the top level of the note.
+ *
+ * Every carried block is made here, whichever way it travels: the copy's
+ * register, the clipboard text, and a clipboard read back by a paste with
+ * no register (splitCarriedText). The destination has no list or quote for
+ * a block to sit in, so each one lands as an ordinary definition (Jason,
+ * 2026-10-05, Q1).
+ *
+ * What comes off: everything in front of the label on its own line (list
+ * markers, quote markers, the item's indentation), and, on each line
+ * after it, the same columns of the container: up to as many quote
+ * markers as the label's line had, and spaces up to the label's column.
+ * What stays is how far each line sat beyond its container, so a
+ * definition's own continuation line, indented 4 columns past the label,
+ * is indented 4 columns at the top level, as a top-level definition's is.
+ *
+ * Before this, the blocks travelled exactly as they stood, and only the
+ * first one had its label's line unwrapped when it landed. A second block
+ * indented 4 or with a "3." in front was then read as more of the first
+ * one's text, and one indented 4 was read as code in the clipboard text
+ * on its own (hunt 2026-10-05, pins bug-carried-second-definition-glued,
+ * bug-in-item-definition-clipboard-code, and
+ * bug-indented-carried-definition-not-reused).
+ */
+function liftedBlock(lines: readonly string[], block: Definition): CarriedDefinition {
+    const label = lines[block.start];
+    const container = label.slice(0, block.labelStart);
+    const width = columnsOf(container);
+    const quotes = container.split(">").length - 1;
+    const rest = lines.slice(block.start + 1, block.end + 1).map((line) => withoutContainer(line, width, quotes));
+    return { name: block.name, lines: [label.slice(block.labelStart), ...rest] };
+}
+
+/** How many columns `text` takes up, a tab running on to the next multiple of 4. */
+function columnsOf(text: string): number {
+    let column = 0;
+    for (const c of text) column = c === "\t" ? column + 4 - (column % 4) : column + 1;
+    return column;
+}
+
+/**
+ * `line` without the part of it that belongs to a container `width`
+ * columns wide holding `quotes` quote markers: spaces, tabs, and up to
+ * `quotes` ">" characters, taken from the front until `width` columns are
+ * used up or another character comes. A tab that runs past `width` leaves
+ * the columns it has left over as spaces.
+ */
+function withoutContainer(line: string, width: number, quotes: number): string {
+    let column = 0;
+    let quotesLeft = quotes;
+    let i = 0;
+    while (i < line.length && column < width) {
+        const c = line[i];
+        if (c === "\t") {
+            const next = column + 4 - (column % 4);
+            if (next > width) return " ".repeat(next - width) + line.slice(i + 1);
+            column = next;
+        } else if (c === " " || (c === ">" && quotesLeft > 0)) {
+            if (c === ">") quotesLeft--;
+            column++;
+        } else {
+            break;
+        }
+        i++;
+    }
+    return line.slice(i);
 }
 
 /**
@@ -266,7 +332,28 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
  */
 export function withCarriedText(body: string, carried: CarriedDefinition[]): string {
     if (carried.length === 0) return body;
-    return body.replace(/\n+$/, "") + "\n\n" + carried.map((definition) => definition.lines.join("\n")).join("\n");
+    return body.replace(/\n+$/, "") + "\n\n" + carriedLines(carried).join("\n");
+}
+
+/**
+ * The lines of the carried blocks one under the other, the way both the
+ * clipboard text and the paste write them.
+ *
+ * A label at the start of a line ends the block above it, almost always.
+ * Where it does not (the block above ends inside raw HTML, which runs on
+ * until a blank line), the label would read as more of that block, and
+ * its footnote would lose its definition; that block gets a blank line in
+ * front. Each block keeps its own lines otherwise (hunt 2026-10-05, pin
+ * bug-carried-second-definition-glued).
+ */
+export function carriedLines(carried: readonly CarriedDefinition[]): string[] {
+    const joined: string[] = [];
+    for (const block of carried) {
+        const start = joined.length;
+        joined.push(...block.lines);
+        if (start > 0 && readNote(joined).labelOn(start)?.movable !== true) joined.splice(start, 0, "");
+    }
+    return joined;
 }
 
 /**
@@ -280,7 +367,9 @@ export function withCarriedText(body: string, carried: CarriedDefinition[]): str
  */
 export function splitCarriedText(text: string): { body: string; carried: CarriedDefinition[] } {
     const lines = normalizeEol(text).text.split("\n");
-    // the definitions at the top level of the text, the ones withCarriedText appends
+    // the definitions at the top level of the text, the ones withCarriedText
+    // appends, lifted as every carried block is (liftedBlock), which takes
+    // off any indentation in front of a label
     const blocks = readNote(lines).blocks;
     const byEnd = new Map(blocks.map((block) => [block.end, block]));
     let cut = lines.length;
@@ -293,7 +382,7 @@ export function splitCarriedText(text: string): { body: string; carried: Carried
     if (cut === lines.length) return { body: text, carried: [] };
     const carried = blocks
         .filter((block) => block.start >= cut)
-        .map((block) => ({ name: block.name, lines: lines.slice(block.start, block.end + 1) }));
+        .map((block) => liftedBlock(lines, block));
     let bodyEnd = cut;
     while (bodyEnd > 0 && lines[bodyEnd - 1].trim() === "") bodyEnd--;
     return { body: lines.slice(0, bodyEnd).join("\n"), carried };
@@ -351,7 +440,7 @@ export function planCut(
 ): CutPlan {
     const lines = normalizeEol(markdown).text.split("\n");
     const { blocks, missing } = carriedBlocks(lines, from, to);
-    const carried = blocks.map((block) => asCarried(lines, block));
+    const carried = blocks.map((block) => liftedBlock(lines, block));
     // the note with the selection deleted: what was left of its first line
     // and of its last line, joined into one
     const joined = [

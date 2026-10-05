@@ -24,9 +24,14 @@ import { handleCopy, handlePaste, resetCarryRegister } from "../../src/commands/
 //
 // Hunt 2026-10-05, round 1, lens carry. Cluster CA7.
 //
+// Decided (Jason, 2026-10-05, Q1, the recommended pick): both land
+// unwrapped, as ordinary top-level definitions, list marker and
+// indentation removed, in the clipboard text too. The test pins that
+// answer.
+//
 // Source of truth: ruling 1, option a, 2026-10-03 (in-item definitions
-// are carried, never moved out of their item in the source); the open
-// question in carry-footnotes.ts.
+// are carried, never moved out of their item in the source); Jason's
+// answer to Q1, 2026-10-05.
 
 /** A stand-in for the browser's clipboard event, holding `text` to paste and recording what the hook writes. */
 function clipboardEvent(text = "") {
@@ -71,11 +76,9 @@ beforeEach(() => {
 });
 
 describe("two carried list-item definitions land the same way", () => {
-    it.fails("both unwrapped, or both kept in list items", () => {
+    it("both unwrapped", () => {
         const dest = copyAndPaste(["x[^1] y[^2]", "", "- [^1]: one", "- [^2]: two"], { line: 0, ch: 0 }, { line: 0, ch: 11 });
-        // Today: [..., "[^1]: one", "- [^2]: two"].
-        const one = dest.find((l) => l.includes("[^1]:")) as string;
-        const two = dest.find((l) => l.includes("[^2]:")) as string;
-        expect(one.startsWith("- ")).toBe(two.startsWith("- "));
+        // Before the fix: [..., "[^1]: one", "- [^2]: two"].
+        expect(dest.filter((l) => l.includes("]:"))).toEqual(["[^1]: one", "[^2]: two"]);
     });
 });

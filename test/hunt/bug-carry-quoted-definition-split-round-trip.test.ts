@@ -31,6 +31,12 @@ import { carriedInputHandler, handleCopy, resetCarryRegister } from "../../src/c
 // only forms blocks for labels at column 0, so it never sees a quoted
 // one. The phone route (carriedInputHandler) reads only splitCarriedText,
 // finds nothing carried, and leaves the text to the editor.
+//
+// Expectation rewritten 2026-10-05 (Jason's Q1: a carried definition that
+// sat in a quote or a list item lands unwrapped, in the clipboard text
+// too). The pin first expected the quote markers kept, "> [^1]: quoted";
+// the copy now carries "[^1]: quoted", and the round trip and the phone
+// route are checked on that.
 
 // A stand-in for the browser's clipboard event: it reads `text` and
 // records what the plugin writes back.
@@ -67,10 +73,10 @@ beforeEach(() => {
 });
 
 describe("a carried quoted definition, read back from the clipboard text", () => {
-    it.fails("d: splitCarriedText hands back the quoted definition that withCarriedText wrote", () => {
+    it("d: splitCarriedText hands back the quoted definition that withCarriedText wrote", () => {
         const source = "a[^1] b\n\n> [^1]: quoted";
         const { carried } = carriedDefinitions(source, { line: 0, ch: 0 }, { line: 0, ch: 7 });
-        expect(carried).toEqual([{ name: "1", lines: ["> [^1]: quoted"] }]);
+        expect(carried).toEqual([{ name: "1", lines: ["[^1]: quoted"] }]);
         const text = withCarriedText("a[^1] b", carried);
         // Today the split finds nothing: the whole text comes back as the
         // body and the carried list is empty.
@@ -81,12 +87,12 @@ describe("a carried quoted definition, read back from the clipboard text", () =>
     // through the input method (the system that turns key presses into
     // text) instead of firing a paste event, so carriedInputHandler sees
     // it and returns whether it took the text over.
-    it.fails("3a: a copy whose definition sat in a blockquote lands as a paste would, not as plain text", () => {
+    it("3a: a copy whose definition sat in a blockquote lands as a paste would, not as plain text", () => {
         const source = editor(["a[^1] b", "", "> [^1]: quoted"], { line: 0, ch: 0 }, { line: 0, ch: 7 });
         const copy = clipboardEvent();
         handleCopy(fakePlugin(on, source), copy as never);
         const text = copy.written["text/plain"];
-        expect(text).toBe("a[^1] b\n\n> [^1]: quoted");
+        expect(text).toBe("a[^1] b\n\n[^1]: quoted");
         const doc = editor(["p"], { line: 0, ch: 1 });
         const handle = carriedInputHandler(fakePlugin(on, doc), () => doc);
         const at = doc.posToOffset({ line: 0, ch: 1 });

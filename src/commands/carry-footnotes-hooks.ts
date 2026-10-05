@@ -16,6 +16,7 @@ import {
     CarriedDefinition,
     CarriedDefinitions,
     carriedDefinitions,
+    carriedLines,
     planCarriedPaste,
     planCut,
     splitCarriedText,
@@ -371,15 +372,17 @@ function landCarriedText(
         // against the note with the text already pasted, all in the same
         // transaction as the text; the caret goes right after the pasted
         // text, wherever the definitions pushed it (hunt 2026-10-02, pin
-        // bug-carry-paste-caret-before-append)
-        const [first, ...rest] = plan.definitions;
+        // bug-carry-paste-caret-before-append). The other blocks go in
+        // under the first one as the clipboard text has them (carriedLines),
+        // so a block that needs a blank line in front gets it here too.
+        const [first] = plan.definitions;
         const append = planDefinitionAppend({
             lines,
             edits,
             footnoteId: first.name,
             plugin,
             body: blockBody(first),
-            moreDefinitionLines: rest.flatMap((block) => block.lines),
+            moreDefinitionLines: carriedLines(plan.definitions).slice(first.lines.length),
         });
         changes = append.changes;
         end = append.edits[0].end;
@@ -453,11 +456,16 @@ function asOwnParagraph(lines: string[], at: EditorPosition, text: string): { te
     return { text, after: demotes ? "\n" : "" };
 }
 
-/** A carried block's text after its label, continuation lines joined with newlines, the way seedDefinitionBody wants a body. */
+/**
+ * A carried block's text after its label, continuation lines joined with
+ * newlines, the way seedDefinitionBody wants a body. Every carried block
+ * starts with its label, because it was lifted to the top level when it
+ * was carried (liftedBlock in carry-footnotes.ts), so the first block is
+ * read the same way as every other.
+ */
 function blockBody(block: CarriedDefinition): string {
     const first = block.lines[0];
-    const label = first.indexOf("]:");
-    const head = label === -1 ? first : first.slice(label + 2).replace(/^ /, "");
+    const head = first.slice(first.indexOf("]:") + 2).replace(/^ /, "");
     return [head, ...block.lines.slice(1)].join("\n");
 }
 

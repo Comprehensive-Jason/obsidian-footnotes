@@ -82,12 +82,12 @@ describe("a carried definition indented 4 or more is reused when the destination
         expect(pasteInto(["x[^1]", "", "- [^1]: one"]).filter((l) => l.endsWith(": one")).length).toBe(1);
     });
 
-    it.fails("a definition at the list item's margin (4 spaces) is reused, not added as [^2]", () => {
+    it("a definition at the list item's margin (4 spaces) is reused, not added as [^2]", () => {
         // Today: ["y[^1]", "", "[^1]: one", "[^2]: one", "", "x[^2]"].
         expect(pasteInto(["x[^1]", "", "- a", "", "    [^1]: one"]).filter((l) => l.endsWith(": one")).length).toBe(1);
     });
 
-    it.fails("a definition nested in another footnote's body is reused, not added as [^2]", () => {
+    it("a definition nested in another footnote's body is reused, not added as [^2]", () => {
         expect(pasteInto(["x[^1]", "", "[^a]: outer", "", "    [^1]: one"]).filter((l) => l.endsWith(": one")).length).toBe(1);
     });
 });

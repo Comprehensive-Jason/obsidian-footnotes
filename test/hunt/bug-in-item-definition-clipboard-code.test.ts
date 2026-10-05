@@ -76,7 +76,7 @@ beforeEach(() => {
 describe("a carried definition from a list item's margin keeps being a definition in the clipboard text", () => {
     const source = ["x[^1]", "", "- a", "", "    [^1]: one"];
 
-    it.fails("copy of x[^1] whose definition sits at the item's margin writes a clipboard text that defines [^1]", () => {
+    it("copy of x[^1] whose definition sits at the item's margin writes a clipboard text that defines [^1]", () => {
         expect(definedNames(source)).toEqual(["1"]);
         const doc = editor(source, { line: 0, ch: 0 }, { line: 0, ch: 5 });
         const copy = clipboardEvent();
@@ -85,7 +85,7 @@ describe("a carried definition from a list item's margin keeps being a definitio
         expect(definedNames(copy.written["text/plain"].split("\n"))).toEqual(["1"]);
     });
 
-    it.fails("a paste of that text from another window (no register) still carries [^1]", () => {
+    it("a paste of that text from another window (no register) still carries [^1]", () => {
         const doc = editor(source, { line: 0, ch: 0 }, { line: 0, ch: 5 });
         const copy = clipboardEvent();
         handleCopy(fakePlugin(on, doc), copy as never);

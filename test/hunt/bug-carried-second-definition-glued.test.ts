@@ -109,7 +109,7 @@ beforeEach(() => {
 });
 
 describe("a second carried definition that sat in a list item lands as a definition", () => {
-    it.fails("an in-item definition indented 4 (item paragraph after a blank line)", () => {
+    it("an in-item definition indented 4 (item paragraph after a blank line)", () => {
         const source = ["x[^1] y[^2]", "", "[^1]: one", "", "- item", "", "    [^2]: two"];
         expect(definedNames(source)).toEqual(["1", "2"]);
         const dest = copyAndPaste(source, { line: 0, ch: 0 }, { line: 0, ch: 11 });
@@ -117,7 +117,7 @@ describe("a second carried definition that sat in a list item lands as a definit
         expect(definedNames(dest)).toContain("2");
     });
 
-    it.fails("an in-item definition in an ordered list that starts at 3", () => {
+    it("an in-item definition in an ordered list that starts at 3", () => {
         const source = ["x[^1] y[^2]", "", "[^1]: one", "", "3. [^2]: two"];
         expect(definedNames(source)).toEqual(["1", "2"]);
         const dest = copyAndPaste(source, { line: 0, ch: 0 }, { line: 0, ch: 11 });
@@ -125,7 +125,7 @@ describe("a second carried definition that sat in a list item lands as a definit
         expect(definedNames(dest)).toContain("2");
     });
 
-    it.fails("the clipboard text itself (what a paste outside Obsidian gets) keeps [^2] a definition", () => {
+    it("the clipboard text itself (what a paste outside Obsidian gets) keeps [^2] a definition", () => {
         const source = ["x[^1] y[^2]", "", "[^1]: one", "", "- item", "", "    [^2]: two"];
         const doc = editor(source, { line: 0, ch: 0 }, { line: 0, ch: 11 });
         const copy = clipboardEvent();
@@ -135,13 +135,13 @@ describe("a second carried definition that sat in a list item lands as a definit
         expect(definedNames(text.split("\n"))).toEqual(["1", "2"]);
     });
 
-    it.fails("two definitions in an ordered list (2. ...) pasted into a plain note: both still define their footnotes", () => {
+    it("two definitions in an ordered list (2. ...) pasted into a plain note: both still define their footnotes", () => {
         const source = ["a[^i] b[^j] c", "", "1. [^i]: one", "2. [^j]: two"];
         const doc = copyThenPaste(source, { line: 0, ch: 0 }, { line: 0, ch: 13 }, ["Dest text", ""], { line: 1, ch: 0 });
         expect({ lines: doc.lines, problems: soundness(doc.lines) }).toEqual({ lines: doc.lines, problems: [] });
     });
 
-    it.fails("an in-item definition after a top-level one, into a note that has definitions: both still define their footnotes", () => {
+    it("an in-item definition after a top-level one, into a note that has definitions: both still define their footnotes", () => {
         const source = ["a[^t] b[^j] c", "", "[^t]: top", "", "3. [^j]: third item"];
         const doc = copyThenPaste(source, { line: 0, ch: 0 }, { line: 0, ch: 13 }, ["Dest[^d] text", "", "[^d]: dee"], { line: 0, ch: 13 });
         expect({ lines: doc.lines, problems: soundness(doc.lines) }).toEqual({ lines: doc.lines, problems: [] });

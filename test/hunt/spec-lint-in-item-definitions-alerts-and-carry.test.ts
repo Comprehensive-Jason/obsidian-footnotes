@@ -1,4 +1,4 @@
-// RULED 2026-10-03 by Jason's ruling 1, option a (a definition inside a list item is modelled everywhere, like any other; the runtime swap, step 1): the nested-footnote, duplicate, and orphan-definition alerts all count in-item definitions, an in-item label is no reference, and a copy carries an in-item definition with its lines as they stand. The question below is kept as it was asked.
+// RULED 2026-10-03 by Jason's ruling 1, option a (a definition inside a list item is modelled everywhere, like any other; the runtime swap, step 1): the nested-footnote, duplicate, and orphan-definition alerts all count in-item definitions, an in-item label is no reference, and a copy carries an in-item definition (lifted to the top level since Jason's Q1, 2026-10-05). The question below is kept as it was asked.
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { carriedDefinitions } from "../../src/commands/carry-footnotes";
