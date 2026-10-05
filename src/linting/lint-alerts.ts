@@ -14,6 +14,7 @@ import {
 } from "../parsing/footnote-grammar";
 import { duplicateFootnoteDefinitionNames, mergeDuplicateFootnoteDefinitions } from "./rules/merge-duplicate-definitions";
 import {
+    definitionsHeldBy,
     orphanedFootnoteDefinitionNames,
     removeOrphanedFootnoteDefinitions,
 } from "./rules/remove-orphaned-definitions";
@@ -174,6 +175,19 @@ function noticeUnderlinedDefinitions(lines: string[]) {
     );
 }
 
+// Why the lint left an orphan in place with its delete toggle on, in one
+// general sentence that names no cause, so a new reason for leaving one
+// never makes the text wrong (Jason, 2026-10-05; hunt 2026-10-05, pin
+// spec-callout-title-orphan-alert-wording, where it blamed a comment's
+// closer for a definition on a callout's title). `them` is "it" or "them".
+function leftInPlace(them: "it" | "them"): string {
+    return `the lint left ${them} in place, because deleting ${them} would change how Obsidian reads the lines around ${them}.`;
+}
+
+// Why the lint left a duplicate's copies alone with merging on (Jason,
+// 2026-10-05; see noticeDuplicateDefinitions).
+const MergeLeftAsTheyAre = "the lint left them as they are, because merging them would change how Obsidian reads the lines around them.";
+
 // The alert half of "Delete orphaned references". While that toggle is off,
 // the lint reports orphaned references instead of deleting them: an orphan
 // is never passed over in silence.
@@ -215,8 +229,8 @@ function noticeOrphanedReferences(
         if (names.length === 0) return;
         showNotice(
             names.length === 1
-                ? `This note has a footnote reference with no definition (${referenceList(names)}) that the lint left in place: deleting it would change how the lines around it are read. Write its definition or delete the reference by hand.`
-                : `This note has ${names.length} footnote references with no definition (${referenceList(names)}) that the lint left in place: deleting them would change how the lines around them are read. Write their definitions or delete the references by hand.`,
+                ? `This note has a footnote reference with no definition (${referenceList(names)}), and ${leftInPlace("it")} Write its definition or delete the reference by hand.`
+                : `This note has ${names.length} footnote references with no definition (${referenceList(names)}), and ${leftInPlace("them")} Write their definitions or delete the references by hand.`,
             8000,
         );
         return;
@@ -242,8 +256,9 @@ function noticeOrphanedDefinitions(
     if (plugin.settings.lintDeleteOrphanedDefinitions) {
         // With the toggle ON, an orphaned definition still in the note is
         // one the rule refused to cut (the cut would change how a nearby
-        // line is read, or the line holds a comment's closer); say so
-        // rather than pass it over (ADR 2; Kimi hunt cycle 2, 2026-09-16).
+        // line is read, take a callout's title or a comment's closer with
+        // it, or take a definition nested inside it); say so rather than
+        // pass it over (ADR 2; Kimi hunt cycle 2, 2026-09-16).
         // Each orphan is judged on its own by the rule now (cycle 4), so
         // the ones it would still leave are the refused ones: those are
         // named, and one the next lint deletes is not.
@@ -255,8 +270,8 @@ function noticeOrphanedDefinitions(
         if (names.length === 0) return;
         showNotice(
             names.length === 1
-                ? `This note has a footnote definition nothing references (${referenceList(names)}) that the lint left in place: deleting it would change how the lines around it are read, or cut a comment's closer. Add its reference in the text, or delete the definition by hand.`
-                : `This note has ${names.length} footnote definitions nothing references (${referenceList(names)}) that the lint left in place: deleting them would change how the lines around them are read, or cut a comment's closer. Add their references in the text, or delete the definitions by hand.`,
+                ? `This note has a footnote definition nothing references (${referenceList(names)}), and ${leftInPlace("it")} Add its reference in the text, or delete the definition by hand.`
+                : `This note has ${names.length} footnote definitions nothing references (${referenceList(names)}), and ${leftInPlace("them")} Add their references in the text, or delete the definitions by hand.`,
             8000,
         );
         return;
@@ -283,16 +298,20 @@ function noticeDuplicateDefinitions(
     if (names.length === 0) return;
     if (plugin.settings.lintMergeDuplicateDefinitions) {
         // With the toggle on, a duplicate the merge rule can still not
-        // touch is one with a copy on the line of a "%%" comment's closer
-        // (that line is never merged away). It is named with that reason
-        // rather than passed over (ADR 2; Kimi hunt cycle 4, 2026-09-16).
+        // touch is one with a copy the merge never moves: on the line of a
+        // "%%" comment's closer, holding a table, or inside a list item or a
+        // quote. It is named rather than passed over (ADR 2; Kimi hunt
+        // cycle 4, 2026-09-16), with one general reason, so a new case
+        // never makes the text wrong (Jason, 2026-10-05, after the reason
+        // named a closer or a table for a copy in a list item; hunt
+        // 2026-10-05, pin bug-duplicate-alert-container-reason).
         // A duplicate the merge WOULD fix, left behind by a single-rule
         // command, waits for the next lint as before.
         if (mergeDuplicateFootnoteDefinitions(markdown) !== markdown) return;
         showNotice(
             names.length === 1
-                ? `This note defines ${referenceList(names)} more than once, and the lint could not merge them: a copy sits on the line of a "%%" comment's closer, or holds a table. Obsidian renders only the last definition. Merge them by hand.`
-                : `This note defines ${names.length} footnotes more than once (${referenceList(names)}), and the lint could not merge them: a copy sits on the line of a "%%" comment's closer, or holds a table. Obsidian renders only each one's last definition. Merge them by hand.`,
+                ? `This note defines ${referenceList(names)} more than once, and ${MergeLeftAsTheyAre} Obsidian renders only the last definition. Merge them by hand.`
+                : `This note defines ${names.length} footnotes more than once (${referenceList(names)}), and ${MergeLeftAsTheyAre} Obsidian renders only each one's last definition. Merge them by hand.`,
             8000,
         );
         return;
@@ -360,7 +379,8 @@ function noticeInvalidNames(lines: string[]) {
 /**
  * The names of definitions that have another footnote INSIDE them: a live
  * reference or an inline footnote, either on the label line after the label
- * itself, or on one of the continuation lines.
+ * itself, or on one of the continuation lines, or another footnote's
+ * definition on one of the continuation lines.
  *
  * A nested footnote is one footnote sitting inside another footnote's text.
  * The plugin refuses to create one anywhere (Jason's ruling, 2026-08-24,
@@ -386,7 +406,10 @@ export function nestedFootnoteDefinitionNames(lines: string[]): string[] {
     // label line after the label and the lines of its body.
     const spans = reading.definitions;
     for (const span of spans) {
-        let nested = false;
+        // a definition written inside this one's body is nesting too, and
+        // the alert ADR 0001 promises for it used to stay silent (hunt
+        // 2026-10-05, pin bug-nested-definition-deleted-with-outer)
+        let nested = definitionsHeldBy(spans, span).length > 0;
         for (let i = span.start; i <= span.end && !nested; i++) {
             const startAt = i === span.start ? span.labelEnd : 0;
             nested =

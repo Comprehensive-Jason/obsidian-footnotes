@@ -28,26 +28,37 @@ import { messages, resetNotices } from "../helpers/notices";
 // every name the merge refused: the one for a copy on a "%%" closer's
 // line or a copy holding a table. A refusal because a copy sits in a
 // list item or a quote has no reason of its own.
+//
+// Decided (Jason, 2026-10-05, Q6 option 1): one general reason that names
+// no cause, so a new case never makes the text wrong: "...more than once,
+// and the lint left them as they are, because merging them would change
+// how Obsidian reads the lines around them. Obsidian renders only the last
+// definition. Merge them by hand."
+
+const Expected =
+    'This note defines "[^a]" more than once, and the lint left them as they are, because merging them would change how Obsidian reads the lines around them. Obsidian renders only the last definition. Merge them by hand.';
 
 beforeEach(resetNotices);
 
 const mergeOn = { ...DEFAULT_SETTINGS, lintMergeDuplicateDefinitions: true };
 
 describe("the merge-on duplicate alert for an in-container copy", () => {
-    it.fails("an in-item copy and a top-level copy: the alert's reason fits (no %% closer, no table)", () => {
+    it("an in-item copy and a top-level copy: the alert's reason fits (no %% closer, no table)", () => {
         const note = ["a[^a] b", "", "- [^a]: in the item", "", "[^a]: at the top"];
         noticeLintAlerts(fakePlugin(mergeOn), note.join("\n"));
         const dup = messages().find((m) => m.includes("more than once"));
         expect(dup).toBeDefined();
         // Today: the reason names a comment's closer or a table.
         expect(dup).not.toMatch(/comment's closer|holds a table/);
+        expect(dup).toBe(Expected);
     });
 
-    it.fails("a quoted copy and a top-level copy: the alert's reason fits", () => {
+    it("a quoted copy and a top-level copy: the alert's reason fits", () => {
         const note = ["a[^a] b", "", "> [^a]: in the quote", "", "[^a]: at the top"];
         noticeLintAlerts(fakePlugin(mergeOn), note.join("\n"));
         const dup = messages().find((m) => m.includes("more than once"));
         expect(dup).toBeDefined();
         expect(dup).not.toMatch(/comment's closer|holds a table/);
+        expect(dup).toBe(Expected);
     });
 });

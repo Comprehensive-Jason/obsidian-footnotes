@@ -78,6 +78,33 @@ function scanReferences(lines: string[]): ReferenceScan {
  * one block.
  */
 function orphanedBlocks(referenceScan: ReferenceScan): Definition[] {
+    const { blocks } = referenceScan;
+    // A definition can hold another one inside its body, as an indented
+    // "[^b]: inner" under "[^a]: outer". Cutting the outer one takes the
+    // inner one's lines with it, so an outer definition may only die when
+    // every definition it holds dies too. One that would die while
+    // something inside it lives is kept, like a definition the rule never
+    // cuts, and the count is run again, since keeping it keeps the
+    // references in its body alive as well (hunt 2026-10-05, pin
+    // bug-nested-definition-deleted-with-outer; ADR 0001: hand-typed
+    // nesting is reported, never destroyed).
+    const held = blocks.map((_, i) => heldIndices(blocks, i));
+    const kept = new Set<number>();
+    for (;;) {
+        const alive = survivors(referenceScan, kept);
+        const holders = blocks.flatMap((_, i) => (!alive.has(i) && held[i].some((j) => alive.has(j)) ? [i] : []));
+        if (holders.length === 0) return blocks.filter((_, i) => !alive.has(i));
+        for (const i of holders) kept.add(i);
+    }
+}
+
+/**
+ * Which definitions, by their index in the scan, stay alive once every
+ * unreferenced one is taken away, round after round, as orphanedBlocks
+ * describes. The definitions in `kept` stay whatever their references,
+ * as a definition that is not removable does.
+ */
+function survivors(referenceScan: ReferenceScan, kept: ReadonlySet<number>): Set<number> {
     const { blocks, liveRefs, blockRefs } = referenceScan;
     const refCount = new Map(liveRefs);
     for (const refs of blockRefs) {
@@ -92,7 +119,7 @@ function orphanedBlocks(referenceScan: ReferenceScan): Definition[] {
         for (const i of [...alive]) {
             if ((refCount.get(blocks[i].name.toLowerCase()) ?? 0) > 0) continue;
             // a definition the rule never cuts stays, references and all
-            if (!blocks[i].removable) continue;
+            if (!blocks[i].removable || kept.has(i)) continue;
             alive.delete(i);
             for (const name of blockRefs[i]) {
                 refCount.set(name, (refCount.get(name) ?? 0) - 1);
@@ -100,7 +127,32 @@ function orphanedBlocks(referenceScan: ReferenceScan): Definition[] {
             changed = true;
         }
     }
-    return blocks.filter((_, i) => !alive.has(i));
+    return alive;
+}
+
+/**
+ * The definitions that sit inside `outer`'s body: their labels are on one
+ * of its continuation lines, so cutting `outer` from its label line to its
+ * last line would cut them too. `definitions` is the note reading's list.
+ * Shared by the orphan rule, the Delete footnote command, and the nesting
+ * alert (hunt 2026-10-05, pin bug-nested-definition-deleted-with-outer).
+ */
+export function definitionsHeldBy(definitions: readonly Definition[], outer: Definition): Definition[] {
+    return heldIndices(definitions, definitions.indexOf(outer)).map((j) => definitions[j]);
+}
+
+/**
+ * The indices of the definitions inside definition `i`'s body. The
+ * reading lists definitions in the order of their labels, so these are the
+ * ones straight after it whose labels still fall within its lines.
+ */
+function heldIndices(definitions: readonly Definition[], i: number): number[] {
+    const out: number[] = [];
+    if (i < 0) return out;
+    for (let j = i + 1; j < definitions.length && definitions[j].start <= definitions[i].end; j++) {
+        if (definitions[j].start > definitions[i].start) out.push(j);
+    }
+    return out;
 }
 
 /**

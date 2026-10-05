@@ -3,7 +3,7 @@ import { definitionLabelWithName } from "../parsing/label-shapes";
 import { lazyDefinitionLabelLines, underlinedDefinitionLabelLines } from "../parsing/label-shapes";
 import { definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../parsing/line-edits";
 import { readNote } from "../parsing/note-reading";
-import { linesReadDifferently } from "../linting/rules/remove-orphaned-definitions";
+import { definitionsHeldBy, linesReadDifferently } from "../linting/rules/remove-orphaned-definitions";
 import { cutOne, readsDifferently } from "../linting/rules/remove-orphaned-references";
 import { MarkdownView } from "obsidian";
 
@@ -75,6 +75,22 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
             kind: "refused",
             reason: `Nothing was deleted: the ${quotedDefinitionLabel(unremovable.name)} definition shares its line with other text, such as a callout's title or the "%%" that closes a comment, which cutting it would take too. Delete it by hand.`,
         };
+    }
+    // A definition can hold another footnote's definition inside its body
+    // (an indented "[^b]: inner" under "[^a]: outer"). Cutting the outer
+    // block would cut the inner definition too, and the text citing it
+    // would be left with nothing, so the command refuses and names it, as
+    // it refuses a definition it never cuts (hunt 2026-10-05, pin
+    // bug-nested-definition-deleted-with-outer; ADR 0001: hand-typed
+    // nesting is never destroyed).
+    for (const definition of named) {
+        const inner = definitionsHeldBy(reading.definitions, definition).find((held) => held.name.toLowerCase() !== folded);
+        if (inner) {
+            return {
+                kind: "refused",
+                reason: `Nothing was deleted: the ${quotedDefinitionLabel(inner.name)} definition sits inside the ${quotedDefinitionLabel(definition.name)} definition, which cutting it would take too. Move it out, or delete it by hand.`,
+            };
+        }
     }
     const definitionCut = definitionCuts(lines, named);
     const blocks = definitionCut.ranges;

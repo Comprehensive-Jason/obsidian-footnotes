@@ -25,16 +25,23 @@ import { messages, resetNotices } from "../helpers/notices";
 // Source of truth: the orphan alert's own text in lint-alerts.ts, and
 // the promise that an alert names the reason the lint left something in
 // place.
+//
+// Decided (Jason, 2026-10-05, Q6 option 1): one general reason that names
+// no cause, so a new case never makes the text wrong: "...and the lint
+// left it in place, because deleting it would change how Obsidian reads
+// the lines around it."
 
 beforeEach(resetNotices);
 
 describe("the orphan alert for a definition on a callout's title line", () => {
-    it.fails("an orphaned definition on a callout's title line, deletion on: the alert's reason names the title, not a comment's closer", () => {
+    it("an orphaned definition on a callout's title line, deletion on: the alert gives the general reason, not a comment's closer", () => {
         const note = ["a b", "", "> [!note] [^o]: on the title line", "> callout body"];
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS, lintDeleteOrphanedDefinitions: true }), note.join("\n"));
         const orphan = messages().find((m) => m.includes("nothing references"));
         expect(orphan).toBeDefined();
-        // Today: the reason speaks of the lines around it and a comment's closer.
-        expect(orphan).toMatch(/title/);
+        // Before: the reason spoke of the lines around it and a comment's closer.
+        expect(orphan).toBe(
+            'This note has a footnote definition nothing references ("[^o]"), and the lint left it in place, because deleting it would change how Obsidian reads the lines around it. Add its reference in the text, or delete the definition by hand.',
+        );
     });
 });
