@@ -280,12 +280,6 @@ const parts = new Map<string, RememberedPart>();
 /** How many parts have been parsed since the plugin loaded, and how many of those were tried as a part and did not end cleanly. */
 const partCounts = { parsed: 0, unclean: 0 };
 
-/** Forgets every remembered reading and part, so that the next read parses the note from scratch, as the first read of a note just opened does: for the dev benchmark's cold read (benchmark-parsers.ts). */
-export function forgetReadings(): void {
-    cache.clear();
-    parts.clear();
-}
-
 /** How many parts have been parsed so far, and how many of them did not end cleanly, so that a longer part was tried; for the tests and the speed measurements. */
 export function partParseCounts(): { parsed: number; unclean: number } {
     return { ...partCounts };

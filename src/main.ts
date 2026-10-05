@@ -25,7 +25,6 @@ import { deleteFootnote, registerDeleteFootnoteMenu } from "./commands/delete-fo
 import { convertInlineToNormalCommand, convertNormalToInlineCommand } from "./commands/convert-footnotes";
 import { installCarryFootnoteHooks, resetCarryRegister, wrapClipboardCommands } from "./commands/carry-footnotes-hooks";
 import { SetFootnotePrefixModal } from "./commands/set-footnote-prefix";
-import { benchmarkParsers } from "./commands/benchmark-parsers";
 import {
   installLintOnSave,
   installVimWriteHook,
@@ -258,22 +257,6 @@ export default class FootnotePlugin extends Plugin {
         );
       },
     });
-
-    // DEV ONLY, to be removed before the 0.3.0 stable release unless Jason
-    // says otherwise: times the note reading on the open note, read cold and
-    // after a one-character edit, for the phone test (benchmark-parsers.ts;
-    // Jason, 2026-10-03). Registered only in a beta build, whose version has
-    // a "-".
-    if (this.manifest.version.includes("-")) {
-      this.addCommand({
-        id: "benchmark-footnote-parsers",
-        name: "Benchmark footnote parsers on this note",
-        checkCallback: (checking: boolean) => {
-          if (checking) return !!this.app.workspace.getActiveViewOfType(MarkdownView);
-          benchmarkParsers(this.app);
-        },
-      });
-    }
 
     this.addSettingTab(new FootnotePluginSettingTab(this.app, this));
 
