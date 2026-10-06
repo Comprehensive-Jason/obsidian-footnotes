@@ -71,7 +71,7 @@ beforeEach(() => {
 });
 
 describe("bug: a line-wise paste at column 0 of a label right under another definition", () => {
-    it.fails("the pasted paragraph stays its own paragraph, not [^1]'s lazy continuation", () => {
+    it("the pasted paragraph stays its own paragraph, not [^1]'s lazy continuation", () => {
         const note = ["Body[^1] and[^2].", "", "[^1]: a", "[^2]: b"];
         // a line-wise copy: the text ends in a line break, then the carried definition
         const back = paste(note, { line: 3, ch: 0 }, ["See[^3].", "", "", "[^3]: c"].join("\n"));

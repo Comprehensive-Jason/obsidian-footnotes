@@ -463,7 +463,8 @@ function landCarriedText(
     // right above the shown copy of a name defined twice was pointed at
     // the hidden first copy (hunt 2026-10-06 cycle 4, cluster K1, pin
     // bug-paste-planner-reads-label-lazy).
-    const landing = asOwnParagraph(cleared, noteFrom, inNote(body));
+    const selected = noteFrom.line !== noteTo.line || noteFrom.ch !== noteTo.ch;
+    const landing = asOwnParagraph(cleared, noteFrom, inNote(body), selected ? noteLines : cleared);
     const after = landing.after;
     const plan = planCarriedPaste(cleared.join("\n"), landing.text + inNote(after), carried, noteFrom);
     // a text that carries nothing is only landed to rename a definition of
@@ -621,13 +622,30 @@ function lintAfterPaste(plugin: FootnotePlugin, doc: Editor, note: () => string)
  * definition into lazy text (hunt 2026-10-06 cycle 3, cluster M5, pin
  * bug-paste-above-label-makes-it-lazy).
  *
+ * Whether the paste is made inside a definition is asked of `original`,
+ * the note before the paste's selection is cleared, where the caret still
+ * sits in the text around it. Asked of the note with the selection
+ * cleared, a selection from the start of a footnote's second line through
+ * the paragraph citing it left the caret on an empty line, outside the
+ * footnote, and a paste of that very text back over it split the footnote
+ * into two paragraphs (hunt 2026-10-06 cycle 4, cluster RT1, pin
+ * bug-paste-over-selection-from-definition-continuation). A caret in front
+ * of a label on its own line is not inside that definition: the text lands
+ * before the label, and right under another definition it would carry on
+ * that one's paragraph (hunt 2026-10-06 cycle 4, cluster K3, pin
+ * bug-paste-before-label-under-definition).
+ *
  * Returns the text with any blank line in front already added, and in
  * `after` the blank line to add after it ("" for none).
  */
-function asOwnParagraph(lines: string[], at: EditorPosition, text: string): { text: string; after: string } {
+function asOwnParagraph(lines: string[], at: EditorPosition, text: string, original: string[]): { text: string; after: string } {
     const before = contextOfLines(lines);
     const landed = (pasted: string) => contextOfLines(simulateChanges(lines, [{ from: at, text: pasted }]));
-    if (!insideDefinition(before, at.line)) {
+    // a paste with no selection has nothing to clear, so its note is read once
+    const madeInside = (original === lines ? before : contextOfLines(original))
+        .reading()
+        .definitions.some((definition) => definition.start <= at.line && at.line <= definition.end && !(definition.start === at.line && at.ch <= definition.labelStart));
+    if (!madeInside) {
         const joined = landed(text);
         if (insideDefinition(joined, at.line) && joined.reading().labelOn(at.line) === null) text = "\n" + text;
     }

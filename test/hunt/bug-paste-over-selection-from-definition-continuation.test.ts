@@ -100,7 +100,7 @@ describe("bug: copy, then paste over the same selection, from a footnote's secon
     const note = ["Intro.", "", "[^x]: charlie", "    continued alpha", "", "See[^x].", "", "End."];
     const to = { line: 6, ch: 0 };
 
-    it.fails("from the start of the indented second line: the note is left as it was, the footnote one paragraph", () => {
+    it("from the start of the indented second line: the note is left as it was, the footnote one paragraph", () => {
         const from = { line: 3, ch: 0 };
         const c = copy(note, from, to);
         expect(c.taken).toBe(true);
@@ -111,7 +111,7 @@ describe("bug: copy, then paste over the same selection, from a footnote's secon
         expect(back.lines).toEqual(note);
     });
 
-    it.fails("from inside the indentation of the second line: the note is left as it was", () => {
+    it("from inside the indentation of the second line: the note is left as it was", () => {
         const from = { line: 3, ch: 2 };
         const c = copy(note, from, to);
         expect(c.taken).toBe(true);
@@ -121,7 +121,7 @@ describe("bug: copy, then paste over the same selection, from a footnote's secon
         expect(back.lines).toEqual(note);
     });
 
-    it.fails("from the start of a lazy second line: the note is left as it was", () => {
+    it("from the start of a lazy second line: the note is left as it was", () => {
         const lazy = ["Intro.", "", "[^x]: charlie", "lazy more", "", "See[^x].", "", "End."];
         const c = copy(lazy, { line: 3, ch: 0 }, to);
         const back = paste(lazy, { line: 3, ch: 0 }, c.clip, to);
