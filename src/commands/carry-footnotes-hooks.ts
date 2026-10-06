@@ -578,7 +578,13 @@ function lintAfterPaste(plugin: FootnotePlugin, doc: Editor, note: () => string)
  * Below: a definition label right under the pasted text would read as
  * more of its paragraph (a lazy label), and that footnote would lose its
  * definition. The text then gets a blank line after it too (2026-10-03,
- * the same paste on the empty line between two definitions).
+ * the same paste on the empty line between two definitions). The label
+ * that ends up under the text is the one on the line below the caret, or,
+ * when the caret sits in front of a label on its own line and the text
+ * ends its own line, that label: a cut that takes a definition out leaves
+ * the caret at the start of the next label, and pasting there turned that
+ * definition into lazy text (hunt 2026-10-06 cycle 3, cluster M5, pin
+ * bug-paste-above-label-makes-it-lazy).
  *
  * Returns the text with any blank line in front already added, and in
  * `after` the blank line to add after it ("" for none).
@@ -590,11 +596,13 @@ function asOwnParagraph(lines: string[], at: EditorPosition, text: string): { te
         const joined = landed(text);
         if (insideDefinition(joined, at.line) && joined.reading().labelOn(at.line) === null) text = "\n" + text;
     }
-    const below = at.line + 1;
+    // the label line the text pushes down, and the line it lands on
+    const onCaretLine = before.reading().labelOn(at.line);
+    const pushed = text.endsWith("\n") && onCaretLine !== null && onCaretLine.labelStart >= at.ch ? at.line : at.line + 1;
     const demotes =
-        below < lines.length &&
-        before.reading().labelOn(below) !== null &&
-        landed(text).reading().labelOn(below + text.split("\n").length - 1) === null;
+        pushed < lines.length &&
+        before.reading().labelOn(pushed) !== null &&
+        landed(text).reading().labelOn(pushed + text.split("\n").length - 1) === null;
     return { text, after: demotes ? "\n" : "" };
 }
 

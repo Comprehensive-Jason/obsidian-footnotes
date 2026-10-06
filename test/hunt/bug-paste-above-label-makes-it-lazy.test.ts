@@ -86,7 +86,7 @@ beforeEach(() => {
 });
 
 describe("bug: a carried paste at the start of a label line makes the label lazy", () => {
-    it.fails("a paste at column 0 of a definition's label line leaves that definition a definition", () => {
+    it("a paste at column 0 of a definition's label line leaves that definition a definition", () => {
         const note = ["Intro.", "", "[^2]: beta", "", "uses[^2]"];
         const back = paste(note, { line: 2, ch: 0 }, "x[^1] y\n\n\n[^1]: one");
         const i = back.lines.indexOf("[^2]: beta");
@@ -95,7 +95,7 @@ describe("bug: a carried paste at the start of a label line makes the label lazy
         expect(back.lines[i - 1].trim()).toBe("");
     });
 
-    it.fails("cut then paste back at the caret leaves [^2]'s definition a definition", () => {
+    it("cut then paste back at the caret leaves [^2]'s definition a definition", () => {
         // The selection: the blank line under [^1]'s definition and the
         // line citing it, through its line break. The cut takes [^1]'s
         // definition and a blank line out, and the caret comes to rest at
