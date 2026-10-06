@@ -28,6 +28,10 @@ import { messages, resetNotices } from "../helpers/notices";
 // the next lint's orphan rule. After the first lint, the orphan alert
 // stays quiet about [^b], taking it for an orphan a single-rule command
 // left, though the orphan rule would now delete it.
+//
+// Fix (Jason's decision, 2026-10-05): while Delete orphaned definitions is
+// on, reindex leaves an orphan in its own slot (its leaveOrphansInPlace
+// option), so the orphan stays between the lists, lint after lint.
 
 beforeEach(resetNotices);
 
@@ -35,16 +39,16 @@ const NOTE = ["Text[^1].", "", "- one", "", "[^b]: orphan", "", "- two", "", "[^
 const OPTIONS = { sectionHeading: "# Footnotes", removeOrphanedDefinitions: true };
 
 describe("reindex moves an orphan the orphan rule refused", () => {
-    it.fails("lint is idempotent", () => {
+    it("lint is idempotent", () => {
         const once = lintFootnotes(NOTE, OPTIONS);
-        // Today once = "Text.[^1]\n\n- one\n\n[^1]: used\n\n- two\n\n[^b]: orphan", and lint 2 deletes "[^b]: orphan".
+        // Before the fix, once ="Text.[^1]\n\n- one\n\n[^1]: used\n\n- two\n\n[^b]: orphan", and lint 2 deleted "[^b]: orphan".
         expect(lintFootnotes(once, OPTIONS)).toBe(once);
     });
 
-    it.fails("after the first lint, the orphan alert names [^b]", () => {
+    it("after the first lint, the orphan alert names [^b]", () => {
         const once = lintFootnotes(NOTE, OPTIONS);
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS, lintDeleteOrphanedDefinitions: true }), once);
-        // Today: no alert names [^b].
+        // Before the fix, no alert named [^b].
         expect(messages().some((m) => m.includes('"[^b]"'))).toBe(true);
     });
 });

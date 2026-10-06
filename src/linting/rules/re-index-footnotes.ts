@@ -21,7 +21,8 @@ import { FootnoteRule } from "../rule";
 //   that would change how Obsidian reads the lines around it. Reindex had
 //   its own unguarded orphan cut, behind a keepOrphanedDefinitions option
 //   no setting reached, and it was removed (hunt 2026-10-05 round 2,
-//   cluster L7).
+//   cluster L7). Their definitions go after the referenced ones, unless
+//   leaveOrphansInPlace keeps each in its own slot (cluster L4).
 // - Code and frontmatter are invisible to all of this.
 
 export interface ReindexOptions {
@@ -53,6 +54,29 @@ export interface ReindexOptions {
      * precaution.
      */
     prefix?: string;
+    /**
+     * Leave each orphaned definition (one nothing references) in its own
+     * slot, instead of swapping it into the slot of a later definition
+     * (off by default; the lint turns it on while Delete orphaned
+     * definitions is on). The orphan still takes its number after every
+     * referenced footnote, as it always does.
+     *
+     * Why: with that setting on, an orphan still in the note when reindex
+     * runs is one the orphan rule left on purpose, usually because cutting
+     * it would change how Obsidian reads the lines around it, such as one
+     * sitting between two lists. Swapped into a later definition's slot,
+     * at the end of the note, it could land where nothing stops the cut,
+     * and the next lint deleted it: linting twice did more than linting
+     * once, and the alert after the first lint did not name it. In its own
+     * slot the reason it was left still holds, lint after lint, and the
+     * alert names it (hunt 2026-10-05 round 2, cluster L4, pin
+     * bug-reindex-moves-refused-orphan; Jason's decision, 2026-10-05).
+     *
+     * With the setting off, nothing deletes an orphan, so moving it is
+     * harmless; it still goes after the referenced definitions, so the
+     * definitions read in the order of their numbers.
+     */
+    leaveOrphansInPlace?: boolean;
 }
 
 /**
@@ -94,7 +118,7 @@ function referenceAppearanceOrder(reading: NoteReading, lineCount: number): stri
  *
  * Orphaned definitions are kept and numbered after the referenced ones.
  * `options` chooses whether named footnotes are renumbered or given names,
- * and the note's prefix.
+ * the note's prefix, and whether orphans keep their own slots.
  */
 export function reindexFootnotes(
     markdown: string,
@@ -268,7 +292,13 @@ function reindexOnce(
         // which is what the old `?? 0` made it do (review C9).
         const orderIndex = new Map(order.map((name, i) => [name, i]));
         const rank = (name: string) => orderIndex.get(name.toLowerCase()) ?? order.length;
-        const blocks = movedDefinitions(definitions);
+        // With leaveOrphansInPlace, an orphan takes no part in the swap: it
+        // keeps its own slot, renamed there, and only the referenced
+        // definitions trade places (see the option for why).
+        const referenced = new Set(referenceOrder);
+        const blocks = movedDefinitions(definitions).filter(
+            (block) => !options.leaveOrphansInPlace || referenced.has(block.name.toLowerCase()),
+        );
         const sorted = blocks
             .map((block, i) => ({ block, i }))
             .sort((a, b) => rank(a.block.name) - rank(b.block.name) || a.i - b.i)

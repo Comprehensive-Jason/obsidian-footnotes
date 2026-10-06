@@ -540,6 +540,8 @@ describe("single-rule invariants over random documents", () => {
                 fc.record({
                     renumberNamedFootnotes: fc.boolean(),
                     prefix: fc.constantFrom("", ...PREFIXES),
+                    // on while Delete orphaned definitions is on (cluster L4)
+                    leaveOrphansInPlace: fc.boolean(),
                 }),
                 (doc, options) => {
                     const once = reindexFootnotes(doc, options);

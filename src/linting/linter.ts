@@ -307,6 +307,11 @@ export function lintFootnotes(
                 // string unless the apply-prefix rule is on, so one flag drives
                 // both prefix behaviours.
                 prefix: validPrefix,
+                // An orphan still here is one the orphan rule refused to
+                // cut, so reindex leaves it in its slot rather than moving
+                // it where the next lint would cut it (hunt 2026-10-05
+                // round 2, cluster L4).
+                leaveOrphansInPlace: options.removeOrphanedDefinitions ?? false,
             });
         }
         // Last of all, once every rule has had its say about what stays:
@@ -342,10 +347,10 @@ let lastLint: { options: string; text: string } | null = null;
  * What the user sees is unchanged: the callers still say "No linting
  * needed." and still show the lint alerts after a skipped lint, so the
  * lint is never silent about what it left in place (ADR 0002). Only the
- * rules' work is saved, never the alerts'. Worth knowing: where the lint
- * does not yet settle a note in one run (a known bug, such as hunt
- * 2026-10-05's pin bug-reindex-moves-refused-orphan), the change a second
- * run would make now waits for the next edit to the note.
+ * rules' work is saved, never the alerts'. Worth knowing: if the lint
+ * ever fails to settle a note in one run (always a bug, such as the one
+ * hunt 2026-10-05's pin bug-reindex-moves-refused-orphan caught), the
+ * change a second run would make waits for the next edit to the note.
  */
 export function lintNote(plugin: FootnotePlugin, markdown: string, sectionHeading: string): string {
     const options = lintOptionsFromSettings(plugin, sectionHeading, markdown);

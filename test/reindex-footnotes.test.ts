@@ -302,6 +302,32 @@ describe("reindexFootnotes after the orphan rule", () => {
     });
 });
 
+// While Delete orphaned definitions is on, the lint passes
+// leaveOrphansInPlace: an orphan still there is one the orphan rule left on
+// purpose, so reindex keeps it in its own slot instead of swapping it to
+// the end, where the next lint would cut it (hunt 2026-10-05 round 2,
+// cluster L4, pin bug-reindex-moves-refused-orphan; Jason's decision,
+// 2026-10-05).
+describe("reindexFootnotes with leaveOrphansInPlace: true", () => {
+    const inPlace = { leaveOrphansInPlace: true };
+    const input = "text[^3] and[^5].\n\n[^9]: orphan\n[^5]: five\n[^3]: three";
+
+    it("a numbered orphan keeps its slot and takes the number after the referenced ones", () => {
+        const expected = "text[^1] and[^2].\n\n[^3]: orphan\n[^1]: three\n[^2]: five";
+        expect(reindexFootnotes(input, inPlace)).toBe(expected);
+    });
+
+    it("a named orphan keeps its slot and its name", () => {
+        const named = "text[^2].\n\n[^lost]: named orphan\n[^2]: used";
+        expect(reindexFootnotes(named, inPlace)).toBe("text[^1].\n\n[^lost]: named orphan\n[^1]: used");
+    });
+
+    it("control (today's behaviour, unchanged): without the option the orphan goes after the referenced ones", () => {
+        const expected = "text[^1] and[^2].\n\n[^1]: three\n[^2]: five\n[^3]: orphan";
+        expect(reindexFootnotes(input)).toBe(expected);
+    });
+});
+
 describe("reindexFootnotes with renumberNamedFootnotes: true", () => {
     const renumberNamed = { renumberNamedFootnotes: true };
 
