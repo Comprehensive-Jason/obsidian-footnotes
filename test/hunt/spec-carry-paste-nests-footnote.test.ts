@@ -337,8 +337,14 @@ async function closePopup() {
     await settleFootnotePopupWithFeedback();
 }
 
+// These two pass since the fix for cluster M2 (hunt 2026-10-06 cycle 3,
+// pin bug-cut-kept-definition-lazy-join-paste-back): the paste reads the
+// note's definitions with the pasted text already in place, so the
+// definition the paste lands in no longer reads "the source" and is not
+// offered for a merge. That is option (a) of the triage's Q7, which
+// Jason has not ruled on yet; if he picks (b), these change.
 describe("spec question: a paste merged into the very definition it lands in", () => {
-    it.fails("a paste inside a definition's own text is not merged into that same definition (no self-citing definition)", () => {
+    it("a paste inside a definition's own text is not merged into that same definition (no self-citing definition)", () => {
         const dest = editor(["Mine[^1].", "", "[^1]: the source"], { line: 2, ch: "[^1]: the source".length });
         handlePaste(fakePlugin(on, dest), clipboardEvent(" see[^7]\n\n[^7]: the source") as never, dest);
         const def = dest.lines.find((l) => l.startsWith("[^1]:")) ?? "";
@@ -346,7 +352,7 @@ describe("spec question: a paste merged into the very definition it lands in", (
         expect(def.slice(5)).not.toContain("[^1]");
     });
 
-    it.fails("a pasted footnote is not merged into the very footnote the popup is editing (no self-citing definition)", async () => {
+    it("a pasted footnote is not merged into the very footnote the popup is editing (no self-citing definition)", async () => {
         const { editor: main, popup, plugin } = await openPopup("Mine[^1].\n\n[^1]: the source", "1");
         handlePaste(plugin, clipboardEvent(" see[^7]\n\n[^7]: the source") as never, popup);
         await closePopup();

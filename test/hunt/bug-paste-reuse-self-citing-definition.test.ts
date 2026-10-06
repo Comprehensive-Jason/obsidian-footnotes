@@ -97,7 +97,7 @@ const cases: [string, string[], string, { name: string; lines: string[] }[]][] =
 
 describe("bug: paste reuse of identical definitions that cite themselves", () => {
     for (const [title, destination, body, carried] of cases) {
-        it.fails(`reuses the identical definition: ${title}`, () => {
+        it(`reuses the identical definition: ${title}`, () => {
             const plan = planCarriedPaste(destination.join("\n"), body, carried, { line: destination.length - 1, ch: 1 });
             // Today the plan adds the carried definitions again, renamed.
             expect(plan.added).toBe(0);
@@ -105,7 +105,7 @@ describe("bug: paste reuse of identical definitions that cite themselves", () =>
         });
     }
 
-    it.fails("cut then paste back at the caret reuses the identical definition", () => {
+    it("cut then paste back at the caret reuses the identical definition", () => {
         // The definition's own text cites [^9], so the cut keeps it in the
         // note and carries a copy; the paste back should find it.
         const note = ["[^9]: alpha", "    continued sees [^9]", "", "alpha[^9]."];

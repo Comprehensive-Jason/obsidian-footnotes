@@ -67,7 +67,7 @@ beforeEach(() => {
 });
 
 describe("bug: a two-line quoted definition is never reused by a paste", () => {
-    it.fails("text citing a two-line quoted definition, copied and pasted in the same note, reuses that definition", () => {
+    it("text citing a two-line quoted definition, copied and pasted in the same note, reuses that definition", () => {
         const note = ["See[^q] here.", "", "> [^q]: one", "> two", "", "End."];
         const src = fakeEditor(note, { wholeDoc: true, edits: true, cursor: { line: 0, ch: 0 }, selection: { anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 7 } } });
         const ev = clip();
@@ -77,7 +77,7 @@ describe("bug: a two-line quoted definition is never reused by a paste", () => {
         expect(out).toEqual(["See[^q] here.", "", "> [^q]: one", "> two", "", "End.See[^q]"]);
     });
 
-    it.fails("reuses a quoted definition whose text is the same as the carried one (README: same text, whatever its name)", () => {
+    it("reuses a quoted definition whose text is the same as the carried one (README: same text, whatever its name)", () => {
         const dest = ["Text[^q].", "", "> [^q]: one", "> two"];
         const plan = planCarriedPaste(dest.join("\n"), "x[^1]", [{ name: "1", lines: ["[^1]: one", "two"] }], { line: 0, ch: 9 });
         expect({ reused: plan.reused, body: plan.body }).toEqual({ reused: 1, body: "x[^q]" });

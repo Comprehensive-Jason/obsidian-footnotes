@@ -106,6 +106,14 @@ export function carriedDefinitions(markdown: string, from: EditorPosition, to: E
  * top-level ones of a clipboard text.
  */
 function liftedBlocks(lines: readonly string[], blocks: readonly Definition[]): CarriedDefinition[] {
+    return liftedCuts(lines, blocks).map((cuts, k) => ({
+        name: blocks[k].name,
+        lines: cuts.map((cut, i) => lines[blocks[k].start + i].slice(cut)),
+    }));
+}
+
+/** For each of the `blocks`, how many characters liftedBlocks takes off the front of each of its lines, the label's line first. */
+function liftedCuts(lines: readonly string[], blocks: readonly Definition[]): number[][] {
     if (blocks.length === 0) return [];
     // the note with every block's ":" after its label turned into a space
     const unlabelled = [...lines];
@@ -122,9 +130,9 @@ function liftedBlocks(lines: readonly string[], blocks: readonly Definition[]): 
         return Number.isFinite(end) ? end : 0;
     };
     return blocks.map((block) => {
-        const rest: string[] = [];
-        for (let line = block.start + 1; line <= block.end; line++) rest.push(lines[line].slice(containerWidth(line)));
-        return { name: block.name, lines: [lines[block.start].slice(block.labelStart), ...rest] };
+        const cuts = [block.labelStart];
+        for (let line = block.start + 1; line <= block.end; line++) cuts.push(containerWidth(line));
+        return cuts;
     });
 }
 
@@ -289,25 +297,9 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     const lines = normalizeEol(destination).text.split("\n");
     const reading = readNote(lines);
 
-    // What the destination holds: every name in use (definitions and
-    // references, folded), and the text of every definition it shows,
-    // wherever the definition sits (a list item's included: hunt
-    // 2026-10-02, pin spec-carry-paste-reuse-in-item-definition). Of two
-    // definitions of one name only the last is shown, as in Obsidian, so
-    // only the last is offered for a merge; offering the first, hidden one
-    // pointed the pasted reference at the text Obsidian shows instead
-    // (hunt 2026-10-02, pin bug-carry-merge-into-shadowed-duplicate).
+    // Every name the destination uses (definitions and references, folded).
     const taken = new Set<string>();
-    const shown = new Map<string, Definition>();
-    for (const block of reading.definitions) {
-        taken.add(block.name.toLowerCase());
-        shown.set(block.name.toLowerCase(), block);
-    }
-    const bodies = new Map<string, string>();
-    for (const block of reading.definitions) {
-        if (shown.get(block.name.toLowerCase()) !== block) continue;
-        bodies.set(normalisedBody(lines.slice(block.start, block.end + 1), block.labelEnd), block.name);
-    }
+    for (const block of reading.definitions) taken.add(block.name.toLowerCase());
     for (let i = 0; i < lines.length; i++) {
         for (const occurrence of reading.referencesOn(i)) taken.add(occurrence.name.toLowerCase());
     }
@@ -319,9 +311,40 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     // ordinary text (hunt 2026-10-02, pin
     // bug-carry-indented-body-not-renamed).
     const bodyLines = normalizeEol(body).text.split("\n");
-    const landed = landedFootnoteSyntax(lines, bodyLines, at);
+    const landing = landedText(lines, bodyLines, at);
+    const landed = landedFootnoteSyntax(landing, bodyLines);
     const bodyDefines = landed.flatMap((line) => line.labels.map((occurrence) => occurrence.name));
     const bodyCites = landed.flatMap((line) => line.references.map((occurrence) => occurrence.name));
+
+    // The definitions the destination shows, offered for a merge, wherever
+    // they sit (a list item's included: hunt 2026-10-02, pin
+    // spec-carry-paste-reuse-in-item-definition). Of two definitions of one
+    // name only the last is shown, as in Obsidian, so only the last is
+    // offered; offering the first, hidden one pointed the pasted reference
+    // at the text Obsidian shows instead (hunt 2026-10-02, pin
+    // bug-carry-merge-into-shadowed-duplicate).
+    //
+    // They are read in the note with the body already landed, the body's
+    // own labels left out. A cut can leave text joined under a definition
+    // as its lazy continuation (a line that carries on the paragraph above
+    // it without being indented), which the paste back takes away again:
+    // read before the body landed, that definition's text held the joined
+    // line and matched nothing, so the paste back added a renamed copy of
+    // it (hunt 2026-10-06 cycle 3, cluster M2, pin
+    // bug-cut-kept-definition-lazy-join-paste-back).
+    const host = at ? landing : { reading, lines, line: 0, shift: () => 0 };
+    const ownLabel = (block: Definition) => {
+        const i = block.start - landing.line;
+        return at !== undefined && i >= 0 && i < bodyLines.length && block.labelStart >= landing.shift(i) && block.labelStart < landing.shift(i) + bodyLines[i].length;
+    };
+    const shown = new Map<string, Definition>();
+    for (const block of host.reading.definitions) if (!ownLabel(block)) shown.set(block.name.toLowerCase(), block);
+    const shownBlocks = [...shown.values()].sort((a, b) => a.start - b.start || a.labelStart - b.labelStart);
+    const shownShapes = destinationShapes(host, shownBlocks);
+    const existing = new Map(shownBlocks.map((block, k) => [block.name.toLowerCase(), { name: block.name, shape: shownShapes[k] }]));
+    // the shown definitions by their text set aside, in note order
+    const byText = new Map<string, { name: string; shape: Shape }[]>();
+    for (const offered of existing.values()) byText.set(offered.shape.text, [...(byText.get(offered.shape.text) ?? []), offered]);
 
     // Each carried block read on its own, the way it lands: at the top
     // level, among the definitions.
@@ -352,15 +375,28 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
         if (!defined.has(name.toLowerCase())) taken.add(name.toLowerCase());
     }
 
-    // Merges first, each block after the blocks it cites, since a block's
-    // text is compared as it reads once the paste's own merges are made:
-    // "see [^b]" is the destination's "see [^b]" only if the pasted [^b]
-    // is merged into the destination's [^b]. A name the paste brings and
-    // does not merge lands under a name the destination does not use at
-    // all, so a block citing one, or holding a definition (which is never
-    // merged), matches nothing there and is not merged either. Comparing
-    // before the renames merged a citing block into one citing a different
-    // footnote (hunt 2026-10-02, pin bug-carry-merge-before-renames).
+    // Merges first. A block's text is compared as it reads once the
+    // paste's own merges are made: "see [^b]" is the destination's
+    // "see [^b]" only if the pasted [^b] is merged into the destination's
+    // [^b]. So the two texts must be the same with their footnote names set
+    // aside (Shape), and each name in the block must pair up with the name
+    // in the same place in the destination's text: a name the paste does
+    // not define with itself, and a carried block's name with the
+    // definition it is merged into, which must then match too. A name the
+    // paste brings and does not merge lands under a name the destination
+    // does not use at all, so a block citing one, or holding a definition
+    // (which is never merged), matches nothing there and is not merged
+    // either. Comparing before the renames merged a citing block into one
+    // citing a different footnote (hunt 2026-10-02, pin
+    // bug-carry-merge-before-renames).
+    //
+    // A block that cites itself, or blocks that cite each other in a ring,
+    // are matched together: the match a block is being tried for counts as
+    // made while its own text is compared. Waiting for each cited block to
+    // be merged first, a block citing itself waited on itself and the
+    // blocks of a ring on each other, so none was ever merged and a cut
+    // pasted back added renamed copies (hunt 2026-10-06 cycle 3, cluster
+    // M1, pin bug-paste-reuse-self-citing-definition).
     //
     // Only a name the paste defines once can be merged. A held definition
     // cannot, since its lines are part of the block that holds it, and nor
@@ -369,23 +405,44 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     // pin bug-carry-duplicate-clipboard-name-dropped). Both copies then
     // land under one name, the last still the one shown.
     const merged = new Map<string, string>();
+    const unmerged = new Set<string>();
     const blockOf = new Map(carried.map((definition, i) => [definition.name.toLowerCase(), i]));
-    const decided = new Set<string>();
-    const decide = (i: number) => {
-        const folded = carried[i].name.toLowerCase();
-        if (decided.has(folded)) return;
-        decided.add(folded);
-        const inside = [...citedIn(i), ...heldIn(i)];
-        for (const name of inside) {
-            const j = blockOf.get(name.toLowerCase());
-            if (j !== undefined) decide(j);
-        }
-        if (defined.get(folded) !== 1) return;
-        if (inside.some((name) => defined.has(name.toLowerCase()) && !merged.has(name.toLowerCase()))) return;
-        const existing = bodies.get(normalisedBody(renamedLines(carried[i].lines, blockSyntax(i), merged)));
-        if (existing !== undefined) merged.set(folded, existing);
+    const shapes = carried.map((definition, i) => shapeOf(definition.lines, blockReadings[i].labelOn(0)?.labelEnd ?? 0, blockSyntax(i)));
+    // whether carried block `i` reads as the destination's `offered` once
+    // every name in it is paired up; `pairs` holds the matches assumed so
+    // far, and gains the ones this match needs
+    const matches = (i: number, offered: { name: string; shape: Shape }, pairs: Map<string, string>): boolean => {
+        const there = offered.shape.names;
+        if (shapes[i].text !== offered.shape.text || shapes[i].names.length !== there.length) return false;
+        return shapes[i].names.every((name, k) => {
+            const folded = name.toLowerCase();
+            const target = there[k].toLowerCase();
+            const paired = merged.get(folded) ?? pairs.get(folded);
+            if (paired !== undefined) return paired.toLowerCase() === target;
+            if (!defined.has(folded)) return folded === target;
+            const j = blockOf.get(folded);
+            const definition = existing.get(target);
+            if (j === undefined || defined.get(folded) !== 1 || unmerged.has(folded) || !definition) return false;
+            pairs.set(folded, definition.name);
+            return matches(j, definition, pairs);
+        });
     };
-    for (let i = 0; i < carried.length; i++) decide(i);
+    carried.forEach((definition, i) => {
+        const folded = definition.name.toLowerCase();
+        if (merged.has(folded) || unmerged.has(folded) || defined.get(folded) !== 1) return;
+        // Of two shown definitions with the same text, one with the same
+        // name serves first (in a ring of look-alike definitions, "[^a]:
+        // see [^b]" and "[^b]: see [^a]", the pasted [^a] could otherwise
+        // pair with [^b] and [^b] with [^a]), then the later one.
+        const offers = [...(byText.get(shapes[i].text) ?? [])].reverse();
+        for (const offered of [...offers.filter((offer) => offer.name.toLowerCase() === folded), ...offers.filter((offer) => offer.name.toLowerCase() !== folded)]) {
+            const pairs = new Map([[folded, offered.name]]);
+            if (!matches(i, offered, pairs)) continue;
+            for (const [incoming, name] of pairs) merged.set(incoming, name);
+            return;
+        }
+        unmerged.add(folded);
+    });
 
     // Then every other name is kept or renamed, in the order the pasted
     // text meets them: the body's own definitions, then each carried block
@@ -446,7 +503,7 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
  * starts at the caret, every later one at the start of its line). Without
  * `at` the text is read on its own.
  */
-function landedText(lines: readonly string[], text: readonly string[], at: EditorPosition | undefined): { reading: NoteReading; line: number; shift: (i: number) => number } {
+function landedText(lines: readonly string[], text: readonly string[], at: EditorPosition | undefined): Landing {
     const origin = at ?? { line: 0, ch: 0 };
     let note = [...text];
     if (at) {
@@ -455,7 +512,15 @@ function landedText(lines: readonly string[], text: readonly string[], at: Edito
         note[note.length - 1] += host.slice(at.ch);
         note = [...lines.slice(0, at.line), ...note, ...lines.slice(at.line + 1)];
     }
-    return { reading: readNote(note), line: origin.line, shift: (i) => (i === 0 ? origin.ch : 0) };
+    return { lines: note, reading: readNote(note), line: origin.line, shift: (i) => (i === 0 ? origin.ch : 0) };
+}
+
+/** A text landed in a note (landedText): the note's lines and reading, the line the text starts on, and where its own stretch of each of its lines starts. */
+interface Landing {
+    lines: readonly string[];
+    reading: NoteReading;
+    line: number;
+    shift: (i: number) => number;
 }
 
 /**
@@ -481,17 +546,13 @@ export function landsInProtectedText(lines: readonly string[], at: EditorPositio
 }
 
 /**
- * The footnote syntax of the pasted `body` as it reads once it lands in
- * `lines` at `at`: for each line of the body, the live references and the
- * definition labels on it, with columns counted from the start of that
- * line of the body. Without `at` the body is read on its own.
+ * The footnote syntax of the pasted `body` as it reads where it landed
+ * (`landing`, from landedText): for each line of the body, the live
+ * references and the definition labels on it, with columns counted from
+ * the start of that line of the body.
  */
-function landedFootnoteSyntax(
-    lines: readonly string[],
-    body: readonly string[],
-    at: EditorPosition | undefined,
-): { references: ReferenceOccurrence[]; labels: ReferenceOccurrence[] }[] {
-    const { reading, line, shift } = landedText(lines, body, at);
+function landedFootnoteSyntax(landing: Landing, body: readonly string[]): { references: ReferenceOccurrence[]; labels: ReferenceOccurrence[] }[] {
+    const { reading, line, shift } = landing;
     return body.map((text, i) => {
         const own = (occurrences: readonly ReferenceOccurrence[]) =>
             occurrences
@@ -732,12 +793,57 @@ function leftWhole(lines: string[], from: EditorPosition, to: EditorPosition, bl
 }
 
 /**
- * A definition block's body with the label stripped and whitespace
- * collapsed, the key two definitions are compared by. `labelEnd` is where
- * the label ends on the first line; without it, the block is read on its
- * own to find out (a carried block, as the clipboard holds it).
+ * A definition's text with its footnote names set aside, the key two
+ * definitions are compared by: the text after its label, every name in a
+ * label or a reference taken out ("see [^b]" reads "see [^]"), whitespace
+ * collapsed; and the names taken out, in the order they come. Two
+ * definitions with the same text read the same once each name in one is
+ * paired with the name in the same place in the other.
  */
-function normalisedBody(blockLines: string[], labelEnd = readNote(blockLines).labelOn(0)?.labelEnd ?? 0): string {
-    const first = blockLines[0].slice(labelEnd);
-    return [first, ...blockLines.slice(1)].join("\n").replace(/\s+/g, " ").trim();
+interface Shape {
+    text: string;
+    names: string[];
+}
+
+/** The Shape of a definition's `lines`, its label ending at column `labelEnd` of the first line, with `syntaxOn` listing the labels and references on each line. */
+function shapeOf(lines: readonly string[], labelEnd: number, syntaxOn: (line: number) => readonly ReferenceOccurrence[]): Shape {
+    const names: string[] = [];
+    const text = lines.map((line, i) => {
+        let kept = "";
+        let from = i === 0 ? labelEnd : 0;
+        for (const { name, start, end } of [...syntaxOn(i)].filter((occurrence) => occurrence.start >= from).sort((a, b) => a.start - b.start)) {
+            kept += line.slice(from, start + 2);
+            from = end - 1;
+            names.push(name);
+        }
+        return kept + line.slice(from);
+    });
+    return { text: text.join("\n").replace(/\s+/g, " ").trim(), names };
+}
+
+/**
+ * The Shape of each of the `blocks` of the note `host` reads, each lifted
+ * to the top level of the note first, as a carried block is, so that a
+ * definition in a quote compares with a carried copy of it line for line.
+ * Compared as it stood, the second line of "> [^q]: one" / "> two" kept its
+ * quote marker and read "one > two", and a paste never reused it (hunt
+ * 2026-10-06 cycle 3, cluster K5, pin
+ * bug-paste-reuse-multi-line-quoted-definition). Only a quote's markers are
+ * text; a list item takes only indentation from the lines after its first,
+ * and whitespace does not count, so only definitions in a quote that run
+ * over lines are lifted, and the note is read once more only for those.
+ */
+function destinationShapes(host: Landing, blocks: readonly Definition[]): Shape[] {
+    const quoted = blocks.filter((block) => block.container.quotes > 0 && block.end > block.start);
+    const lifted = new Map(liftedCuts(host.lines, quoted).map((cuts, k) => [quoted[k], cuts]));
+    return blocks.map((block) => {
+        const cuts = lifted.get(block) ?? [block.labelStart];
+        const cut = (k: number) => cuts[k] ?? 0;
+        const lines = host.lines.slice(block.start, block.end + 1).map((line, k) => line.slice(cut(k)));
+        const syntaxOn = (k: number) =>
+            [...host.reading.labelsOn(block.start + k), ...host.reading.referencesOn(block.start + k)]
+                .filter((occurrence) => occurrence.start >= cut(k))
+                .map((occurrence) => ({ ...occurrence, start: occurrence.start - cut(k), end: occurrence.end - cut(k) }));
+        return shapeOf(lines, block.labelEnd - block.labelStart, syntaxOn);
+    });
 }

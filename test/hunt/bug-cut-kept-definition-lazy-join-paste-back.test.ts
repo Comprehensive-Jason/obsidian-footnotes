@@ -95,7 +95,7 @@ describe("bug: a cut whose join hands the carried definition a lazy continuation
     const from = { line: 1, ch: 0 };
     const to = { line: 2, ch: 9 };
 
-    it.fails("cut then paste back at the caret gives the note back, with one definition", () => {
+    it("cut then paste back at the caret gives the note back, with one definition", () => {
         const after = cut(note, from, to);
         const back = paste(after.lines, after.caret, after.clip);
         // Today the note reads "[^1]: one", "[^2]: one", "", "alpha[^2]. more".
