@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
+import { noticeLintAlerts } from "../../src/linting/lint-alerts";
 import { lintFootnotes } from "../../src/linting/linter";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 import { readNote } from "../../src/parsing/note-reading";
+import { DEFAULT_SETTINGS } from "../../src/settings";
+import { fakePlugin } from "../helpers/fake-plugin";
+import { messages, resetNotices } from "../helpers/notices";
 
 // BUG (wrong output): the lint moves a definition whose label is indented
 // one to three spaces to the bottom of a note that ends in a list item,
@@ -45,6 +49,8 @@ const bodyOf = (text: string, name: string) => {
     return d ? lines.slice(d.start, d.end + 1).map((l) => l.trim()).join(" ") : null;
 };
 
+beforeEach(resetNotices);
+
 describe("move-to-bottom puts an indented top-level label into the list item above it", () => {
     it("control: the label starts top-level", () => {
         expect(container("Text[^c]\n\n  [^c]: def\n\n- last item", "c")).toEqual({ quotes: 0, listItems: 0, footnotes: 0 });
@@ -52,17 +58,31 @@ describe("move-to-bottom puts an indented top-level label into the list item abo
 
     // Now: "Text[^c]", "", "- last item", "", "  [^c]: def", with the
     // definition inside the list item.
-    it.fails("two-space label, bullet item: the moved definition stays at the top level", () => {
+    it("two-space label, bullet item: the moved definition stays at the top level", () => {
         const out = moveFootnoteDefinitionsToBottom("Text[^c]\n\n  [^c]: def\n\n- last item", "");
         expect(container(out, "c")).toEqual({ quotes: 0, listItems: 0, footnotes: 0 });
     });
 
     // Now: "Text[^c]", "- item", "", "  [^c]: two-space c", "2. two[^c]":
     // the definition is only "two-space c", and "2. two[^c]" is a new list.
-    it.fails("the default lint keeps the definition's text whole (a lazy '2. two' line stays its text)", () => {
+    it("the default lint keeps the definition's text whole (a lazy '2. two' line stays its text)", () => {
         const doc = "  [^c]: two-space c\n2. two[^c]\n\nText[^c]\n- item";
         expect(bodyOf(doc, "c")).toBe("[^c]: two-space c 2. two[^c]");
         const out = lintFootnotes(doc, {});
         expect(bodyOf(out, "c")).toBe("[^c]: two-space c 2. two[^c]");
+    });
+
+    // Added with the fix (hunt 2026-10-06, cycle 4): the move is skipped,
+    // so the move alert names the definition it left, as for a definition
+    // between two lists (ADR 0002: the lint is never silent about what it
+    // leaves). The wording is the existing one.
+    it("the lint leaves the note as it is, and the move alert names [^c]", () => {
+        const doc = ["Text[^c]", "", "  [^c]: def", "", "- last item"].join("\n");
+        const out = lintFootnotes(doc, {});
+        expect(out).toBe(doc);
+        noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS }), out);
+        expect(messages()).toContain(
+            'This note has a footnote definition the lint could not move to the bottom ("[^c]"), and the lint left it in place, because moving it would change how Obsidian reads the lines around it. Move it by hand, and the next lint gathers the rest.',
+        );
     });
 });

@@ -1,7 +1,7 @@
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { nameForBody } from "../../parsing/footnote-grammar";
 import { keepsEveryFootnote, NoteReading } from "../../parsing/note-reading";
-import { endsInLazyLine, movedDefinitions, rewriteDocument } from "../rewrite-document";
+import { definitionsReadDifferently, endsInLazyLine, movedDefinitions, protectedTextAlike, rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
 import { FootnoteRule } from "../rule";
 
@@ -339,6 +339,15 @@ function reindexOnce(
                 i++;
             }
         }
+        // The swap moves whole definitions, and a definition must read the
+        // same in its new slot as in its old one. One whose last line is a
+        // "$$" that ends the note, swapped into an earlier slot, has lines
+        // after it there, and the "$$" opens a math block that swallows
+        // the definitions below (live Obsidian 1.14.4, 2026-10-06; hunt
+        // 2026-10-06, cycle 4, pin bug-end-dollar-line-swallows-definition).
+        // Such a swap is not made: the footnotes are renamed, and their
+        // definitions stay in the order they were in.
+        if (definitionsReadDifferently(rewritten, out).length > 0 || !protectedTextAlike(rewritten, out)) return rewritten.join("\n");
         return out.join("\n");
     });
 }

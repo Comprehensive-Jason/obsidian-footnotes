@@ -56,19 +56,19 @@ describe("a definition ending in an end-of-note '$$' line, moved by the lint", (
     });
 
     // Now: only [^1] is defined.
-    it.fails("the default lint keeps both definitions defined", () => {
+    it("the default lint keeps both definitions defined", () => {
         expect(defined(lintFootnotes(doc, {}))).toEqual(["1", "2"]);
     });
 
     // Now: "Text[^1] and." with [^2] deleted.
-    it.fails("the default lint, then a lint deleting orphaned references, keeps every reference", () => {
+    it("the default lint, then a lint deleting orphaned references, keeps every reference", () => {
         const once = lintFootnotes(doc, {});
         const twice = lintFootnotes(once, { removeOrphanedReferences: true });
         expect(readNote(twice.split("\n")).references.filter((r) => r.live).length).toBe(2);
     });
 
     // Now: "[^a]: one", "    two", "$$", "", "middle": "middle" is math.
-    it.fails("the merge keeps the paragraph after the first copy out of math", () => {
+    it("the merge keeps the paragraph after the first copy out of math", () => {
         const dup = "Text[^a]\n\n[^a]: one\n\nmiddle\n\n[^a]: two\n$$";
         const out = mergeDuplicateFootnoteDefinitions(dup);
         const lines = out.split("\n");

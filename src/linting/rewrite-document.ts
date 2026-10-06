@@ -152,6 +152,63 @@ export function endsInLazyLine(reading: NoteReading, lines: readonly string[], b
 // share the reading (test/rewrite-document-memo.test.ts).
 const movedOf = new WeakMap<readonly Definition[], readonly Definition[]>();
 
+/**
+ * The definitions of `before` that `after` no longer reads the same: each
+ * definition with its name (in any case), its container, and its lines
+ * exactly as written must still be there in `after`, wherever it now
+ * sits. A rule that only moves whole definitions, or moves other lines
+ * past them, asks this of its result, and keeps the note as it was when
+ * anything comes back.
+ *
+ * A move can change how a definition reads in its new place, though not
+ * one of its characters changed. A label indented two spaces, moved under
+ * a list item, becomes part of that item (live Obsidian 1.14.4,
+ * 2026-10-06; hunt 2026-10-06, cycle 4, pin
+ * bug-moved-definition-joins-list-item). A "$$" line that ended the note
+ * as the last line of a definition, moved to where lines follow it, opens
+ * a math block that swallows the definition after it (pin
+ * bug-end-dollar-line-swallows-definition). Both show here: the first
+ * definition is in a list item now, and the second is gone.
+ */
+export function definitionsReadDifferently(before: readonly string[], after: readonly string[]): Definition[] {
+    const key = (lines: readonly string[], definition: Definition): string => {
+        const { quotes, listItems, footnotes } = definition.container;
+        return [definition.name.toLowerCase(), quotes, listItems, footnotes, ...lines.slice(definition.start, definition.end + 1)].join("\n");
+    };
+    // how many definitions of `after` read each way, each taken once
+    const left = new Map<string, number>();
+    for (const definition of readNote(after).definitions) {
+        const k = key(after, definition);
+        left.set(k, (left.get(k) ?? 0) + 1);
+    }
+    return readNote(before).definitions.filter((definition) => {
+        const k = key(before, definition);
+        const n = left.get(k) ?? 0;
+        if (n > 0) left.set(k, n - 1);
+        return n === 0;
+    });
+}
+
+/**
+ * Whether `after` holds the same protected text and "%%" comments as
+ * `before`, as lines: the same lines with the same contents, wherever they
+ * now sit (a sorted list of their contents compared whole). A rule that
+ * moves or merges definitions asks this, since a line that ended the note
+ * can open something once lines follow it: a "$$" moved into the middle
+ * of the note opens a math block that runs over the lines after it (hunt
+ * 2026-10-06, cycle 4, pin bug-end-dollar-line-swallows-definition).
+ */
+export function protectedTextAlike(before: readonly string[], after: readonly string[]): boolean {
+    const hidden = (lines: readonly string[]): string => {
+        const reading = readNote(lines);
+        return lines
+            .filter((_line, i) => reading.protectedLines[i] || reading.commentLines[i])
+            .sort()
+            .join("\n");
+    };
+    return hidden(before) === hidden(after);
+}
+
 function documentView(lines: string[]): DocumentView {
     // whether anything has been read through this view yet (the trim guard)
     let read = false;

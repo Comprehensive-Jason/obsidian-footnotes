@@ -1,6 +1,6 @@
 import { normalizeEol, removeLineRanges } from "../../parsing/line-edits";
 import { Definition, readNote } from "../../parsing/note-reading";
-import { rewriteDocument } from "../rewrite-document";
+import { protectedTextAlike, rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 import { definitionsHeldBy, linesReadDifferently } from "./remove-orphaned-definitions";
 
@@ -104,7 +104,7 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
         // Two things are collected here: the continuation lines to add,
         // keyed by the LAST line of the block they are joining, and the
         // ranges of lines the duplicates occupy, to be cut out.
-        const appendAfter = new Map<number, string[]>();
+        let appendAfter = new Map<number, string[]>();
         let doomed: { start: number; end: number }[] = [];
         for (const group of groups.values()) {
             if (group.length < 2 || group.some((block) => !blocks.includes(block))) continue;
@@ -131,7 +131,6 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
             const cuts = group.slice(1).map((duplicate) => ({ start: duplicate.start, end: duplicate.end }));
             const trial = [...doomed, ...cuts].sort((a, b) => a.start - b.start);
             if (linesReadDifferently(lines, { lines, ranges: trial }, removeLineRanges(lines, trial))) continue;
-            doomed = trial;
             const base = group[0];
             const appended: string[] = [];
             for (const duplicate of group.slice(1)) {
@@ -151,36 +150,55 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
             if (appended.length > 0 && appended[0] !== "" && definitionsHeldBy(definitions, base).some((held) => held.end === base.end)) {
                 appended.unshift("");
             }
-            if (appended.length > 0) appendAfter.set(base.end, appended);
+            const appends = new Map(appendAfter);
+            if (appended.length > 0) appends.set(base.end, appended);
+            // The merged note must protect the same text as before. A copy
+            // whose last line is a "$$" that ends the note, merged into a
+            // first copy with lines after it, opens a math block there that
+            // takes those lines in (hunt 2026-10-06, cycle 4, pin
+            // bug-end-dollar-line-swallows-definition). Such a name is
+            // left as written, and the duplicate alert names it.
+            if (!protectedTextAlike(lines, mergedLines(lines, appends, trial))) continue;
+            doomed = trial;
+            appendAfter = appends;
         }
         if (doomed.length === 0) return text;
-
-        // Glue the new lines onto the first block's last line BEFORE
-        // cutting the duplicates out. removeLineRanges does not look inside
-        // a line, so one entry holding several lines joined together passes
-        // through it untouched and comes apart again at the final join.
-        const mutated = lines.slice();
-        for (const [end, appended] of appendAfter) {
-            mutated[end] = [mutated[end], ...appended].join("\n");
-        }
-        const out = removeLineRanges(mutated, doomed);
-        // Cutting a duplicate at the very end of the note can leave behind
-        // the blank line that used to separate it. Never hand back more
-        // blank lines at the end than the note started with.
-        let trailingBefore = 0;
-        for (let i = lines.length - 1; i >= 0 && lines[i] === ""; i--) {
-            trailingBefore++;
-        }
-        let trailingAfter = 0;
-        for (let i = out.length - 1; i >= 0 && out[i] === ""; i--) {
-            trailingAfter++;
-        }
-        while (trailingAfter > trailingBefore) {
-            out.pop();
-            trailingAfter--;
-        }
-        return out.join("\n");
+        return mergedLines(lines, appendAfter, doomed).join("\n");
     });
+}
+
+/**
+ * `lines` with the merges made: the lines in `appendAfter` added under the
+ * line each is keyed by (the last line of a first copy), and the duplicates
+ * in `doomed` cut out.
+ */
+function mergedLines(lines: readonly string[], appendAfter: ReadonlyMap<number, string[]>, doomed: readonly { start: number; end: number }[]): string[] {
+    // Glue the new lines onto the first block's last line BEFORE
+    // cutting the duplicates out. removeLineRanges does not look inside
+    // a line, so one entry holding several lines joined together passes
+    // through it untouched and comes apart again when the result is joined
+    // and split back into lines.
+    const mutated = lines.slice();
+    for (const [end, appended] of appendAfter) {
+        mutated[end] = [mutated[end], ...appended].join("\n");
+    }
+    const out = removeLineRanges(mutated, doomed).join("\n").split("\n");
+    // Cutting a duplicate at the very end of the note can leave behind
+    // the blank line that used to separate it. Never hand back more
+    // blank lines at the end than the note started with.
+    let trailingBefore = 0;
+    for (let i = lines.length - 1; i >= 0 && lines[i] === ""; i--) {
+        trailingBefore++;
+    }
+    let trailingAfter = 0;
+    for (let i = out.length - 1; i >= 0 && out[i] === ""; i--) {
+        trailingAfter++;
+    }
+    while (trailingAfter > trailingBefore) {
+        out.pop();
+        trailingAfter--;
+    }
+    return out;
 }
 
 /** This rule's catalogue entry. The id matches the settings toggle's rule. */

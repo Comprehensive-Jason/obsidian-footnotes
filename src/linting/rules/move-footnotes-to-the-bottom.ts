@@ -1,7 +1,7 @@
 import { findLineRunEnd, normalizeEol, removeLineRanges } from "../../parsing/line-edits";
 import { Definition, readNote } from "../../parsing/note-reading";
 import { linesReadDifferently } from "./remove-orphaned-definitions";
-import { DocumentView, endsInLazyLine, movedDefinitions, rewriteDocument } from "../rewrite-document";
+import { definitionsReadDifferently, DocumentView, endsInLazyLine, movedDefinitions, rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
 // The obsidian-linter plugin's "move footnotes to the bottom" rule,
@@ -69,16 +69,36 @@ export function moveFootnoteDefinitionsToBottom(
 ): string {
     return rewriteDocument(markdown, (text, view) => {
         const moved = gathered(text, view, sectionHeading);
-        // A move must leave every definition a definition, as Obsidian reads
-        // the note. Where the end of the note sits inside something only
-        // Obsidian's reading knows about (a "$$" line under a paragraph
-        // opens a math block to the end of the note, recorded fact 1c658e2),
-        // the gathered definitions would land inside it and stop being
-        // footnotes, so the note comes back untouched (the runtime swap,
-        // 2026-10-03; found by the adjacency property).
-        if (moved !== text && readNote(moved.split("\n")).definitions.length !== view.definitions.length) return text;
-        return moved;
+        // A move must leave every definition reading as it did, as Obsidian
+        // reads the note: still a definition, in the same container, with
+        // the same lines (definitionsReadDifferently). Where the end of the
+        // note sits inside something only Obsidian's reading knows about (a
+        // "$$" line under a paragraph opens a math block to the end of the
+        // note, recorded fact 1c658e2), the gathered definitions would land
+        // inside it and stop being footnotes (the runtime swap, 2026-10-03;
+        // found by the adjacency property). And a label indented one to
+        // three spaces, gathered under a note that ends in a list item,
+        // would join that item (hunt 2026-10-06, cycle 4, pin
+        // bug-moved-definition-joins-list-item). Either way the note comes
+        // back untouched, and the move alert names the definitions
+        // (definitionsHoldingTheMoveBack).
+        return moved !== text && definitionsReadDifferently(view.lines, moved.split("\n")).length > 0 ? text : moved;
     });
+}
+
+/**
+ * The definitions the move would read differently in their new place
+ * (the rule's check above), with no section heading: the definitions
+ * gathered at the end of the note. Empty when the move changes nothing.
+ */
+function misreadByGathering(markdown: string): readonly Definition[] {
+    let misread: readonly Definition[] = [];
+    rewriteDocument(markdown, (text, view) => {
+        const moved = gathered(text, view, "");
+        if (moved !== text) misread = definitionsReadDifferently(view.lines, moved.split("\n"));
+        return text;
+    });
+    return misread;
 }
 
 /** The note with its movable definitions gathered under the section heading or at the end, before the check above. */
@@ -281,10 +301,22 @@ export function definitionsHoldingTheMoveBack(markdown: string): string[] {
     for (let i = blocks[0].start; i < lines.length && alreadyGathered; i++) alreadyGathered = inBlock(i) || lines[i].trim() === "";
     if (alreadyGathered) return [];
     const holdsBack = (cut: readonly Definition[]): boolean => linesReadDifferently(lines, { lines, ranges: cut }, bodyWithout(lines, cut));
-    if (!holdsBack(blocks)) return [];
-    const holding = blocks.filter((block) => holdsBack([block]));
+    // When taking the definitions out leaves the lines around them reading
+    // as they did, the gathered note may still read a definition
+    // differently in its new place, the rule's own check; then the
+    // definitions it reads differently are named (hunt 2026-10-06, cycle
+    // 4, pin bug-moved-definition-joins-list-item). That gathering is
+    // worked out with no section heading, at the end of the note, since
+    // this function is not told the heading.
+    let holding: readonly Definition[];
+    if (holdsBack(blocks)) {
+        const one = blocks.filter((block) => holdsBack([block]));
+        holding = one.length > 0 ? one : blocks;
+    } else {
+        holding = misreadByGathering(lines.join("\n"));
+    }
     const names: string[] = [];
-    for (const block of holding.length > 0 ? holding : blocks) {
+    for (const block of holding) {
         if (!names.some((name) => name.toLowerCase() === block.name.toLowerCase())) names.push(block.name);
     }
     return names;
