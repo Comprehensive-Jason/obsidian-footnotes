@@ -45,6 +45,9 @@ The suite has five kinds of files:
   disagreement except a short list of known ones, each with its reason.
   `test/footnote-facts.test.ts` pins the positions the reader derives
   (label columns, reference ends, protected spans).
+  `test/tokenizer-differential.test.ts` parses the same notes with and
+  without the reader's speed-ups (the vendored tokenizer loop and the
+  plain-text shortcut) and requires identical trees.
 - **Properties** (`test/properties.test.ts`) — fast-check invariants over
   randomly generated documents and option combos: lint idempotence, no
   mask (NUL) leakage, protected-region preservation, reference/definition

@@ -18,7 +18,8 @@
 // ("tokenizers") and the lists of readers allowed to interrupt a paragraph,
 // a list, or a quote. The one stock reader that had to change, the list
 // reader, is vendored next to this file (remark-parse-list.js) rather than
-// patched inside node_modules (Jason, 2026-10-03).
+// patched inside node_modules (Jason, 2026-10-03). The loop that runs the
+// readers is vendored too (remark-parse-tokenizer.js), for speed only.
 //
 // test/obsidian-referee checks this reader against Obsidian's saved
 // answers, and the plugin's commands read notes through it (the note
@@ -40,6 +41,7 @@ import remarkFootnotes from "remark-footnotes";
 import remarkMath from "remark-math";
 import remarkParse from "remark-parse";
 import listTokenizer from "./remark-parse-list";
+import tokenizerLoop from "./remark-parse-tokenizer";
 
 /** A place in the note as remark-parse reports it: line and column count from 1, the offset from 0. */
 interface Point {
@@ -127,6 +129,10 @@ interface ParserTables {
     interruptParagraph: InterruptRule[];
     interruptList: InterruptRule[];
     interruptBlockquote: InterruptRule[];
+    /** The loop that hands the remaining text to each block reader in turn (remark-parse's tokenizer.js). */
+    tokenizeBlock: ParserState["tokenizeBlock"];
+    /** The same loop for the text inside a block. */
+    tokenizeInline: ParserState["tokenizeInline"];
 }
 
 /** The stand-in for a vfile that remark-parse's Parser reads the text from. */
@@ -581,8 +587,12 @@ function htmlBlockPrecheck(tables: ParserTables): void {
  * where its search would have sent it, because what the readers look for
  * (a "[", a "%%", a "`", ...) never runs across a line break, except a hard
  * line break, whose spaces and "\n" stay inside the line handed over.
+ *
+ * With `plainTextAsIs` set, a stretch holding no "&" is taken as it
+ * stands, without the stock reader's walk for character references (see
+ * the comment inside).
  */
-function textLineByLine(tables: ParserTables): void {
+function textLineByLine(tables: ParserTables, plainTextAsIs: boolean): void {
     const stockText = tables.inlineTokenizers.text;
     tables.inlineTokenizers.text = function (eat, value, silent) {
         const lineEnd = value.indexOf("\n");
@@ -591,7 +601,21 @@ function textLineByLine(tables: ParserTables): void {
         // the stock reader, handed the line only up to where the next
         // reader could match, finds no match before that point and reads
         // the stretch up to it, exactly as it would have on the whole line
-        return stockText.call(this, eat, line.slice(0, nextInlineMatch(this, eat.now().offset, line)), silent);
+        const stretch = line.slice(0, nextInlineMatch(this, eat.now().offset, line));
+        // A speed-up with no change to the reading. The stock reader
+        // passes every stretch to a decoder (the parse-entities package)
+        // that turns character references such as "&amp;" into the
+        // character they stand for. The decoder walks the stretch one
+        // character at a time and builds a copy of it as it goes, which was
+        // about a quarter of a long note's parse (the speed brief,
+        // 2026-10-05). Every character reference starts with "&", and with
+        // none in the stretch the decoder hands back the stretch unchanged
+        // as one piece of text, so that one piece is made here directly.
+        if (plainTextAsIs && stretch !== "" && !stretch.includes("&")) {
+            eat(stretch)({ type: "text", value: stretch });
+            return undefined;
+        }
+        return stockText.call(this, eat, stretch, silent);
     };
 }
 
@@ -645,8 +669,15 @@ function nextInlineMatch(state: ParserState, start: number, line: string): numbe
  * registered when it attaches. Math is registered before it, so a "$$" line
  * ends a definition; Obsidian's readers come after it, so a "%%" line does
  * not (rules E1 and D5).
+ *
+ * With `speedUps` set (always, outside one test), the parser also runs the
+ * two speed-ups of the speed brief of 2026-10-05, which change how fast a
+ * note is read and nothing about the reading: the vendored tokenizer loop
+ * (remark-parse-tokenizer.js) and plain text taken as it stands
+ * (textLineByLine). test/tokenizer-differential.test.ts builds the parser
+ * without them too, and checks that both read every saved note alike.
  */
-function buildParser(): ParserConstructor {
+function buildParser(speedUps: boolean): ParserConstructor {
     class ObsidianParser extends StockParser {}
     const tables = ObsidianParser.prototype;
     tables.options = { ...tables.options, commonmark: true };
@@ -669,15 +700,20 @@ function buildParser(): ParserConstructor {
     listLazyLines(tables);
     tablePipeStyles(tables);
     htmlBlockPrecheck(tables);
-    textLineByLine(tables);
+    textLineByLine(tables, speedUps);
     wikilinks(tables);
     frontmatter(tables);
     doubleDollarMath(tables);
     mathWithoutRescans(tables);
+    if (speedUps) {
+        tables.tokenizeBlock = tokenizerLoop("block");
+        tables.tokenizeInline = tokenizerLoop("inline");
+    }
     return ObsidianParser;
 }
 
-let parserClass: ParserConstructor | null = null;
+/** The parser class with the speed-ups and the one without, each built when first needed. */
+const parserClasses = new Map<boolean, ParserConstructor>();
 
 /** The note with Windows line breaks turned into "\n", the text every offset in the tree refers to. */
 export function normalizeLineBreaks(text: string): string {
@@ -716,12 +752,20 @@ export function frontmatterEnd(doc: string): number {
  * `readsPastEnd` says whether a link definition at the top level would
  * read differently with more text after the end (linkDefinitionsAtTheEnd),
  * which matters only to a part of a note.
+ *
+ * `speedUps` is false only in the test that checks the speed-ups change
+ * nothing (see buildParser).
  */
 export function parseObsidianNote(
     text: string,
     startsNote = true,
+    speedUps = true,
 ): { tree: MarkdownNode; containerColumns: Readonly<Record<number, number>>; readsPastEnd: boolean } {
-    parserClass ??= buildParser();
+    let parserClass = parserClasses.get(speedUps);
+    if (parserClass === undefined) {
+        parserClass = buildParser(speedUps);
+        parserClasses.set(speedUps, parserClass);
+    }
     const doc = normalizeLineBreaks(text);
     const input: ParseInput = {
         toString: () => doc,

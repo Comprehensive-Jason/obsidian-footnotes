@@ -41,8 +41,8 @@ export default defineConfig([
 		},
 	},
 	{
-		// remark-parse-list.js is remark-parse 8's list reader, vendored as
+		// remark-parse-list.js and remark-parse-tokenizer.js are remark-parse 8's list reader and tokenizer loop, vendored as
 		// plain JavaScript and kept as close to upstream as possible
-		ignores: ["node_modules/**", "main.js", "scripts/**", "src/parsing/remark-parse-list.js"],
+		ignores: ["node_modules/**", "main.js", "scripts/**", "src/parsing/remark-parse-list.js", "src/parsing/remark-parse-tokenizer.js"],
 	},
 ]);
