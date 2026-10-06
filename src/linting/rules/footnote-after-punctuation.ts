@@ -198,6 +198,26 @@ function swapInSegment(
  */
 export function footnoteAfterPunctuation(markdown: string, placement: FootnotePlacement = "after"): string {
     if (placement === "none") return markdown;
+    // Each move is worked out on the line as it was, so a move can leave a
+    // footnote next to punctuation that only a second pass sees: under
+    // "before", 'He said "yes[^1]![^2]" and' first became
+    // 'He said "yes[^1]!"[^2] and', and only the next lint moved [^1] out
+    // after the quote; "true?[^1]![^2]" took two lints the same way. So
+    // the pass repeats until it changes nothing, as fix-lazy's does, and
+    // one lint settles the note (hunt 2026-10-06, cycle 3, pin
+    // bug-placement-before-punctuation-between-references). A note that
+    // needs no move takes one pass; the cap is a safety net.
+    let current = markdown;
+    for (let pass = 0; pass < 10; pass++) {
+        const next = placedOnce(current, placement);
+        if (next === current) break;
+        current = next;
+    }
+    return current;
+}
+
+/** One pass of footnoteAfterPunctuation: every move worked out on the note as it is. */
+function placedOnce(markdown: string, placement: "after" | "before"): string {
     // The masked twin is built with the whole note in view. On a line where
     // a comment opens or closes, the part inside the comment is blanked
     // while the part outside it still gets the swap

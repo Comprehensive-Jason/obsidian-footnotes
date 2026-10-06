@@ -42,7 +42,7 @@ describe("before: two references with a punctuation mark between them settle in 
         ["他说「好[^1]！[^2]」然后", "他说「好！」[^1][^2]然后"],
     ];
     for (const [line, settled] of cases) {
-        it.fails(`${line} settles in one lint`, () => {
+        it(`${line} settles in one lint`, () => {
             const doc = `${line}\n\n[^1]: a\n[^2]: b`;
             const once = footnoteAfterPunctuation(doc, "before");
             expect(footnoteAfterPunctuation(once, "before")).toBe(once);
@@ -50,7 +50,7 @@ describe("before: two references with a punctuation mark between them settle in 
         });
     }
 
-    it.fails("a reference after a question mark and another after an exclamation mark", () => {
+    it("a reference after a question mark and another after an exclamation mark", () => {
         const doc = "Is it true?[^1]![^2] Yes.\n\n[^1]: a\n[^2]: b";
         const once = footnoteAfterPunctuation(doc, "before");
         expect(footnoteAfterPunctuation(once, "before")).toBe(once);
