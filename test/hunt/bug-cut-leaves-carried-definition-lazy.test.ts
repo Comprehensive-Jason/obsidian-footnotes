@@ -90,13 +90,13 @@ describe("bug: a cut that leaves its carried definition as a lazy label", () => 
     const from = { line: 0, ch: 1 };
     const to = { line: 1, ch: 0 };
 
-    it.fails("the cut takes the definition it carries out of the note (nothing else uses it)", () => {
+    it("the cut takes the definition it carries out of the note (nothing else uses it)", () => {
         const after = cut(note, from, to);
         // Today the note reads "B", "[^1]: alpha".
         expect(after.lines).toEqual(["B"]);
     });
 
-    it.fails("cut then paste back at the caret gives the note back, with one definition", () => {
+    it("cut then paste back at the caret gives the note back, with one definition", () => {
         const after = cut(note, from, to);
         const back = paste(after.lines, after.caret, after.clip);
         // Today the note reads "Body text with a note[^2].", "", "[^1]: alpha", "[^2]: alpha".

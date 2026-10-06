@@ -689,8 +689,18 @@ export function planCut(
             .filter((block) => !wasOrphan.has(block.name.toLowerCase()))
             .map((block) => block.start),
     );
+    // A block the deletion leaves right under a line of text, with no blank
+    // line between, is no definition any more: its label reads as more of
+    // that paragraph (a lazy label). The orphan rule's reader never sees it,
+    // so it is judged by its name alone: it goes when nothing outside it
+    // cites it (definitionsToCut checks that). Kept, it stayed in the note
+    // as plain text while the clipboard carried it too, and a paste back
+    // gave the footnote twice (hunt 2026-10-06 cycle 3, cluster M3, pin
+    // bug-cut-leaves-carried-definition-lazy).
+    const joinedReading = readNote(joined);
+    const undone = (block: Definition) => joinedReading.labelOn(moved(block.start)) === null && !wasOrphan.has(block.name.toLowerCase());
     const candidates = blocks
-        .filter((block) => leftWhole(lines, from, to, block) && orphanedAt.has(moved(block.start)) && block.removable)
+        .filter((block) => leftWhole(lines, from, to, block) && (orphanedAt.has(moved(block.start)) || undone(block)) && block.removable)
         .map((block) => ({ ...block, start: moved(block.start), end: moved(block.end) }));
     // A definition the cut leaves in place, such as one between two lists,
     // still travels on the clipboard, so pasting the text back reuses it
