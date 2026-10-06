@@ -40,8 +40,16 @@ export const TrailingPunctuationChars = ".,;:!?\u2026。，、；：！？．｡
  * this one question, so none of them can disagree about what a
  * punctuation run is (hunt 2026-10-02, pin
  * bug-placement-before-onto-backslash).
+ *
+ * A "!" right in front of a "[" is no exclamation mark either: it opens an
+ * image, "![alt](pic.png)", or an embed, "![[file]]". Stepping over it put
+ * the reference between the "!" and the "[", where the image or embed
+ * falls apart into a stray "!" and a plain link (hunt 2026-10-06, cycle 3,
+ * pin bug-punctuation-splits-image-bang). A "[^" after the "!" is the next
+ * footnote's reference, not an image, so that "!" stays punctuation.
  */
 export function punctuationAt(text: string, i: number): boolean {
+    if (text[i] === "!" && text[i + 1] === "[" && text[i + 2] !== "^") return false;
     return i >= 0 && i < text.length && TrailingPunctuationChars.includes(text[i]) && !escapedAt(text, i);
 }
 

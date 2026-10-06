@@ -47,12 +47,12 @@ function linkStarts(text: string): number[] {
 
 describe("after: a reference in front of an image is not moved over the image's '!'", () => {
     // Before the fix: "See the chart![^1][[chart.png]]".
-    it.fails("an embed ![[chart.png]] stays an embed", () => {
+    it("an embed ![[chart.png]] stays an embed", () => {
         const out = lintFootnotes("See the chart[^1]![[chart.png]]\n\n[^1]: a");
         expect(out).toContain("![[chart.png]]");
     });
 
-    it.fails("an inline image ![chart](chart.png) stays an image", () => {
+    it("an inline image ![chart](chart.png) stays an image", () => {
         const doc = "See the chart[^1]![chart](chart.png)\n\n[^1]: a";
         const out = lintFootnotes(doc);
         expect(out).toContain("![chart](chart.png)");
@@ -62,12 +62,12 @@ describe("after: a reference in front of an image is not moved over the image's 
         expect(linkStarts(out).map((start) => out[start])).toEqual(["!"]);
     });
 
-    it.fails("a reference image ![x] with [x] defined stays an image", () => {
+    it("a reference image ![x] with [x] defined stays an image", () => {
         const out = lintFootnotes("Wow[^1]![x] more\n\n[^1]: a\n\n[x]: pic.png");
         expect(out.split("\n")[0]).toContain("![x]");
     });
 
-    it.fails("a numbered press at the end of 'chart' keeps the embed", async () => {
+    it("a numbered press at the end of 'chart' keeps the embed", async () => {
         const doc = fakeEditor(["See the chart![[chart.png]]"], { cursor: { line: 0, ch: "See the ch".length }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(
             fakePlugin(
