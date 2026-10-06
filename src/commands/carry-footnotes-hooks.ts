@@ -467,7 +467,7 @@ function asOwnParagraph(lines: string[], at: EditorPosition, text: string): { te
  * A carried block's text after its label, continuation lines joined with
  * newlines, the way seedDefinitionBody wants a body. Every carried block
  * starts with its label, because it was lifted to the top level when it
- * was carried (liftedBlock in carry-footnotes.ts), so the first block is
+ * was carried (liftedBlocks in carry-footnotes.ts), so the first block is
  * read the same way as every other.
  */
 function blockBody(block: CarriedDefinition): string {

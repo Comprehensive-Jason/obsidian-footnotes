@@ -149,7 +149,7 @@ describe("a top-level definition whose label is indented keeps its later paragra
         ["label indented 2, code at 8 stays code", ["See[^a].", "", "  [^a]: first", "", "        code"], { a: ["1:text:first", "0:code:code"] }],
     ];
     for (const [name, source, want] of cases) {
-        it.fails(name, () => {
+        it(name, () => {
             expect(defContents(source)).toEqual(want);
             const text = copyText(source, { line: 0, ch: 0 }, { line: 0, ch: 8 }) as string;
             const dest = pasteInto(text, [""], { line: 0, ch: 0 });
@@ -166,7 +166,7 @@ describe("a top-level definition whose label is indented keeps its later paragra
         });
     }
 
-    it.fails("a cut of the only reference takes the whole definition out, and pasting it back keeps the second paragraph in the footnote", () => {
+    it("a cut of the only reference takes the whole definition out, and pasting it back keeps the second paragraph in the footnote", () => {
         const source = ["See[^a].", "", "  [^a]: first", "", "    second"];
         const c = cut(source, { line: 0, ch: 0 }, { line: 0, ch: 8 });
         // The cut removed the definition with its second paragraph.
@@ -175,7 +175,7 @@ describe("a top-level definition whose label is indented keeps its later paragra
         expect(defContents(back), JSON.stringify(back)).toEqual({ a: ["1:text:first", "1:text:second"] });
     });
 
-    it.fails("a clipboard from outside that ends in an indented definition: the paste keeps its second paragraph in the footnote", () => {
+    it("a clipboard from outside that ends in an indented definition: the paste keeps its second paragraph in the footnote", () => {
         // A plain paste of this text would keep the paragraph; the carry's split rewrites it.
         const text = "See[^a].\n\n  [^a]: first\n\n    second";
         expect(defContents(text.split("\n"))).toEqual({ a: ["1:text:first", "1:text:second"] });
@@ -191,7 +191,7 @@ describe("a definition indented inside its list item or quote keeps its later pa
         ["label in an ordered item, indented 2 past its content column", ["See[^a].", "", "1. item", "", "     [^a]: first", "", "        second"], { a: ["1:text:first", "1:text:second"] }],
     ];
     for (const [name, source, want] of cases) {
-        it.fails(name, () => {
+        it(name, () => {
             expect(defContents(source)).toEqual(want);
             const text = copyText(source, { line: 0, ch: 0 }, { line: 0, ch: 8 }) as string;
             const dest = pasteInto(text, [""], { line: 0, ch: 0 });
@@ -212,7 +212,7 @@ describe("a tab right after a quote marker is measured as the quote's content ha
         ["\">\\t\\tcode\" stays code", ["See[^a].", "", "> [^a]: first", ">", ">" + T + T + "code"], { a: ["1:text:first", "0:code:code"] }],
     ];
     for (const [name, source, want] of cases) {
-        it.fails(name, () => {
+        it(name, () => {
             expect(defContents(source)).toEqual(want);
             const text = copyText(source, { line: 0, ch: 0 }, { line: 0, ch: 8 }) as string;
             const dest = pasteInto(text, [""], { line: 0, ch: 0 });

@@ -106,7 +106,7 @@ function defContents(lines: string[]): Record<string, string[]> {
 }
 
 describe("an ordered item's continuation column", () => {
-    it.fails("\"1. [^a]: first\", blank, 11 spaces \"second\": the pasted footnote keeps \"second\" as a paragraph", () => {
+    it("\"1. [^a]: first\", blank, 11 spaces \"second\": the pasted footnote keeps \"second\" as a paragraph", () => {
         const source = ["See[^a].", "", "1. [^a]: first", "", "           second"];
         const want = { a: ["1:text:first", "1:text:second"] };
         // The reader reads the source as Obsidian does.
