@@ -27,6 +27,9 @@ import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-foo
 // Cause: inlineNoteBody in src/commands/inline-footnotes.ts takes each later line of the
 // footnote from column 0 of the line, so the "> " quote marker on the second line counts as
 // the footnote's text and the body is never empty.
+//
+// Fix (2026-10-06): inlineNoteBody reads each later line from where its
+// containers end (NoteReading.containerEnd).
 
 const Empty = "This inline footnote is empty. Type its text between the brackets.";
 
@@ -51,7 +54,7 @@ describe("an empty inline footnote over two lines", () => {
         expect(doc.getCursor()).toEqual({ line: 0, ch: 6 });
     });
 
-    // Today: no notice, and the caret hops to line 1, column 3.
+    // Before the fix, no notice, and the caret hopped to line 1, column 3.
     it("over two lines of a quote warns that it is empty, as in a list item", async () => {
         const lines = ["> a ^[", "> ] b"];
         const { doc, messages } = await press(lines, { line: 0, ch: 6 });
@@ -60,7 +63,7 @@ describe("an empty inline footnote over two lines", () => {
         expect(doc.getCursor()).toEqual({ line: 0, ch: 6 });
     });
 
-    // Today: no notice, and the caret hops to line 2, column 3.
+    // Before the fix, no notice, and the caret hopped to line 2, column 3.
     it("over two lines of a callout warns that it is empty", async () => {
         const lines = ["> [!note]", "> a ^[", "> ] b"];
         const { doc, messages } = await press(lines, { line: 1, ch: 6 });
@@ -80,7 +83,7 @@ describe("several carets in empty inline footnotes in a quote", () => {
         expect(messages()).toEqual([Empty]);
     });
 
-    // Today: the note is unchanged, but the notice is the one about nesting footnotes.
+    // Before the fix, the note was unchanged, but the notice was the one about nesting footnotes.
     it("carets in an empty inline footnote over two quote lines and an empty one-line one warn as empty, as in a list item", async () => {
         const lines = ["> a ^[", "> ] b ^[ ] c"];
         const doc = fakeEditor([...lines], { carets: [{ line: 0, ch: 6 }, { line: 1, ch: 8 }], edits: true, wholeDoc: true, words: true });

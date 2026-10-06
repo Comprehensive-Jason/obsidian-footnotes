@@ -22,13 +22,17 @@ import { countEmptyFootnoteReferences, nestedFootnoteDefinitionNames } from "../
 // countEmptyFootnoteReferences skips a "[^]" only when inlineNoteAt finds an inline footnote
 // around it, and nestedFootnoteDefinitionNames looks for one with inlineNotesOn; both leave
 // out an inline footnote that runs over a line break.
+//
+// Fix (2026-10-06): countEmptyFootnoteReferences asks inlineNoteHolding,
+// and nestedFootnoteDefinitionNames also asks whether an inline footnote
+// holds the end of a line of the definition.
 
 describe("lint alerts and an inline footnote over two lines", () => {
     it("control: a '[^]' inside a one-line inline footnote is its body's text, no abandoned placeholder", () => {
         expect(countEmptyFootnoteReferences("a ^[x [^] z] w")).toBe(0);
     });
 
-    // Today: 1.
+    // Before the fix, 1.
     it("a '[^]' inside an inline footnote over two lines is its body's text too", () => {
         expect(countEmptyFootnoteReferences("a ^[x\ny [^] z] w")).toBe(0);
     });
@@ -37,7 +41,7 @@ describe("lint alerts and an inline footnote over two lines", () => {
         expect(nestedFootnoteDefinitionNames(["see[^1]", "", "[^1]: a ^[x y] b"])).toEqual(["1"]);
     });
 
-    // Today: [].
+    // Before the fix, [].
     it("a definition holding an inline footnote over two lines gets the nesting alert too", () => {
         expect(nestedFootnoteDefinitionNames(["see[^1]", "", "[^1]: a ^[x", "y] b"])).toEqual(["1"]);
     });
