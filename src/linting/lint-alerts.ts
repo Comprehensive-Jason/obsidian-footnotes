@@ -77,8 +77,11 @@ export function countEmptyFootnoteReferences(markdown: string, prefix = ""): num
             // "[^]" inside a longer inline footnote's body is that body's
             // literal text: Reading view renders both as inline footnotes
             // (Kimi hunt cycle 4, probed 2026-09-16), so neither is a
-            // placeholder the user abandoned
-            if (reading.inlineNoteAt(i, at) !== null) continue;
+            // placeholder the user abandoned. That holds for an inline
+            // footnote that runs over a line break too, so the lookup is
+            // the one that takes those in (hunt 2026-10-05, round 2, pin
+            // bug-alerts-multi-line-inline).
+            if (reading.inlineNoteHolding(i, at) !== null) continue;
             count++;
         }
         // the bare prefix is a live reference to the reading, so its own
@@ -436,9 +439,17 @@ export function nestedFootnoteDefinitionNames(lines: string[]): string[] {
         let nested = definitionsHeldBy(spans, span).length > 0;
         for (let i = span.start; i <= span.end && !nested; i++) {
             const startAt = i === span.start ? span.labelEnd : 0;
+            // inlineNotesOn lists only the inline footnotes wholly on one
+            // line. One that runs over a line break holds the end of the
+            // line it opens on, so the definition holds one when one holds
+            // the end of any of its lines. It can only have opened in the
+            // definition's own text, since a paragraph never runs on into
+            // a definition (hunt 2026-10-05, round 2, pin
+            // bug-alerts-multi-line-inline).
             nested =
                 reading.referencesOn(i).some((occurrence) => occurrence.start >= startAt) ||
-                reading.inlineNotesOn(i).some((note) => note.open >= startAt);
+                reading.inlineNotesOn(i).some((note) => note.open >= startAt) ||
+                reading.inlineNoteHolding(i, lines[i].length) !== null;
         }
         if (nested && !seen.has(span.name.toLowerCase())) {
             seen.add(span.name.toLowerCase());

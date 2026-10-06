@@ -29,7 +29,7 @@ describe("lint alerts and an inline footnote over two lines", () => {
     });
 
     // Today: 1.
-    it.fails("a '[^]' inside an inline footnote over two lines is its body's text too", () => {
+    it("a '[^]' inside an inline footnote over two lines is its body's text too", () => {
         expect(countEmptyFootnoteReferences("a ^[x\ny [^] z] w")).toBe(0);
     });
 
@@ -38,7 +38,7 @@ describe("lint alerts and an inline footnote over two lines", () => {
     });
 
     // Today: [].
-    it.fails("a definition holding an inline footnote over two lines gets the nesting alert too", () => {
+    it("a definition holding an inline footnote over two lines gets the nesting alert too", () => {
         expect(nestedFootnoteDefinitionNames(["see[^1]", "", "[^1]: a ^[x", "y] b"])).toEqual(["1"]);
     });
 });
