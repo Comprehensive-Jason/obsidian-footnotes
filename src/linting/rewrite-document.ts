@@ -1,5 +1,6 @@
 import { normalizeEol, restoreEol } from "../parsing/line-edits";
 import { Definition, NoteReading, readNote } from "../parsing/note-reading";
+import { definitionsHeldBy } from "./rules/remove-orphaned-definitions";
 
 // The setup and teardown every rewriting rule used to repeat for itself,
 // gathered here (duplicated-logic audit, 2026-09-05). The steps: convert the
@@ -63,14 +64,36 @@ export interface DocumentView {
  * too, and only the duplicate alert speaks about them. Move-to-bottom and
  * reindex both take their blocks from here, so neither can do it (hunt
  * 2026-10-05, pin bug-lint-reorders-mixed-container-duplicates).
+ *
+ * A copy held inside another footnote's definition (an indented
+ * "[^b]: inner" under "[^a]: outer") counts in "the last copy wins" too,
+ * and it travels with the definition that holds it. So a movable
+ * definition that holds a copy of a name with another copy outside it
+ * stays where it is as well, and so do the other copies of its own name,
+ * as for a copy that stays put (live Obsidian 1.14.4, 2026-10-05; hunt
+ * 2026-10-05 round 2, pin bug-lint-moves-held-duplicate). The merge rule
+ * takes its copies from here for the same reason.
  */
 export function movedDefinitions(definitions: readonly Definition[]): readonly Definition[] {
     let moved = movedOf.get(definitions);
     if (moved === undefined) {
-        const staying = new Set(definitions.filter((definition) => !definition.movable).map((definition) => definition.name.toLowerCase()));
+        const folded = (definition: Definition): string => definition.name.toLowerCase();
+        const copies = new Map<string, number>();
+        for (const definition of definitions) copies.set(folded(definition), (copies.get(folded(definition)) ?? 0) + 1);
+        const staying = new Set(definitions.filter((definition) => !definition.movable).map(folded));
+        for (const definition of definitions) {
+            if (!definition.movable) continue;
+            // the definitions this one carries along when it moves: itself
+            // and every one held inside it
+            const carried = [definition, ...definitionsHeldBy(definitions, definition)];
+            const holdsSharedCopy = carried.some(
+                (held) => held !== definition && (copies.get(folded(held)) ?? 0) > carried.filter((other) => folded(other) === folded(held)).length,
+            );
+            if (holdsSharedCopy) staying.add(folded(definition));
+        }
         // frozen, as the reading's own lists are, so a rule cannot change
         // the list another rule is handed (spec-document-view-memo-mutation)
-        moved = Object.freeze(definitions.filter((definition) => definition.movable && !staying.has(definition.name.toLowerCase())));
+        moved = Object.freeze(definitions.filter((definition) => definition.movable && !staying.has(folded(definition))));
         movedOf.set(definitions, moved);
     }
     return moved;

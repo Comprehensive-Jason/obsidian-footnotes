@@ -67,21 +67,21 @@ function cited(text: string): (string | undefined)[] {
 }
 
 describe("a movable definition holding a copy of a duplicated name", () => {
-    it.fails("move to bottom keeps the copy of b Obsidian renders", () => {
+    it("move to bottom keeps the copy of b Obsidian renders", () => {
         const note = ["Text[^a] and[^b].", "", "[^a]: outer", "", "    [^b]: inner copy", "", "Para.", "", "[^b]: top copy"].join("\n");
         expect(rendered(note, "b")).toBe("top copy");
         // Today: "inner copy"; the note ends "[^b]: top copy", "", "[^a]: outer", "", "    [^b]: inner copy".
         expect(rendered(moveFootnoteDefinitionsToBottom(note, ""), "b")).toBe("top copy");
     });
 
-    it.fails("reindex keeps the copy of b Obsidian renders", () => {
+    it("reindex keeps the copy of b Obsidian renders", () => {
         const note = ["Text[^c] and[^a] and[^b].", "", "[^a]: outer", "", "    [^b]: inner copy", "", "[^b]: top copy", "", "[^c]: cee"].join("\n");
         expect(rendered(note, "b")).toBe("top copy");
         // Today: "inner copy"; [^c] swaps into a's slot and [^a] (with the held [^b]) into c's, below "[^b]: top copy".
         expect(rendered(reindexFootnotes(note, {}), "b")).toBe("top copy");
     });
 
-    it.fails("the default lint keeps every reference's text", () => {
+    it("the default lint keeps every reference's text", () => {
         const note = "x[^b] y[^a]\n\n[^a]: outer\n\n    [^b]: held\n\n[^b]: top";
         expect(cited(note)).toEqual(["top", "outer [^b]: held"]);
         // Today: ["held", "outer [^b]: held"], the reference to b shows the held copy.
