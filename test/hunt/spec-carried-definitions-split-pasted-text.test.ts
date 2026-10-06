@@ -29,6 +29,12 @@ import { handleCopy, handlePaste, resetCarryRegister } from "../../src/commands/
 // Source of truth: the carry's placement rule (planDefinitionAppend in
 // src/commands/definition-append.ts, which reads the note after the
 // paste); no ruling covers a pasted text that holds a definition line.
+//
+// Decided (Jason, 2026-10-05, triage decision Q3, the recommended pick):
+// leave it as it is. Carried definitions land where a creation press
+// would put a definition, after the last definition as the note reads
+// after the paste, even when that is a definition the paste brought in.
+// The test pins today's behaviour.
 
 beforeEach(() => {
     resetNotices();
@@ -80,13 +86,10 @@ function pasteInto(text: string, dest: string[], at: Pos): string[] {
 }
 
 describe("carried definitions and the text just pasted", () => {
-    it.fails("selection \"[^x]: ex\", blank, \"See[^a] and[^x].\" pasted under \"Intro.\": the carried definition lands after the pasted sentence", () => {
+    it("selection \"[^x]: ex\", blank, \"See[^a] and[^x].\" pasted under \"Intro.\": the carried definition lands after the pasted definition, before the pasted sentence", () => {
         const source = ["[^x]: ex", "", "See[^a] and[^x].", "", "[^a]: first"];
         const text = copyText(source, { line: 0, ch: 0 }, { line: 2, ch: 16 }) as string;
         const dest = pasteInto(text, ["Intro.", "", ""], { line: 2, ch: 0 });
-        // Today: ["Intro.", "", "[^x]: ex", "[^a]: first", "", "See[^a] and[^x]."]
-        const pastedProse = dest.indexOf("See[^a] and[^x].");
-        const carried = dest.indexOf("[^a]: first");
-        expect({ dest, carriedAfterPastedText: carried > pastedProse }).toEqual({ dest, carriedAfterPastedText: true });
+        expect(dest).toEqual(["Intro.", "", "[^x]: ex", "[^a]: first", "", "See[^a] and[^x]."]);
     });
 });
