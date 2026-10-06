@@ -58,7 +58,7 @@ function configuredSectionHeading(plugin: FootnotePlugin): string {
  * pin bug-settings-section-heading-trailing-newline). A blank line at
  * either end says nothing: the plugin always puts one around the heading.
  */
-function trimmedSectionHeading(heading: string): string {
+export function trimmedSectionHeading(heading: string): string {
     return heading.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/(?:\r?\n[ \t]*)+$/, "");
 }
 

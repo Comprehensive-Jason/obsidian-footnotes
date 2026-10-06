@@ -4,6 +4,7 @@ import type FootnotePlugin from "../main";
 import { contextOfLines, DocContext, definitionNames } from "../editor/doc-context";
 import { composeChanges, mapPosition, simulateChanges, simulatedAnchors } from "../editor/insertion-liveness";
 import { definitionLabel } from "../parsing/footnote-grammar";
+import { trimmedSectionHeading } from "../linting/linter";
 import { findLineRunEnd } from "../parsing/line-edits";
 import { readNote } from "../parsing/note-reading";
 
@@ -11,6 +12,20 @@ import { readNote } from "../parsing/note-reading";
 // section-heading setting and the append edit, both of which every
 // creation press shares. Split out of the one big commands file on
 // 2026-08-11.
+
+/**
+ * The section heading a first footnote goes under: the setting's text when
+ * the setting is on, without the blank lines at its start and end, the way
+ * the lint reads it (trimmedSectionHeading); "" when the setting is off.
+ * The setting is a text box that takes several lines, so a line break after
+ * "# Footnotes" is one Enter away. Read as typed, it put an extra blank line
+ * under a new heading, and a "# Footnotes" already ending the note was not
+ * found, so a second one was added (found while fixing, 2026-10-06, pin
+ * bug-settings-section-heading-trailing-newline).
+ */
+function sectionHeading(plugin: FootnotePlugin): string {
+    return plugin.settings.enableFootnoteSectionHeading ? trimmedSectionHeading(plugin.settings.footnoteSectionHeading) : "";
+}
 
 function addFootnoteSectionHeader(plugin: FootnotePlugin): string {
     //If the "Enable Footnote Section Heading" setting is on, return the
@@ -20,17 +35,15 @@ function addFootnoteSectionHeader(plugin: FootnotePlugin): string {
     // all. Lint already reads "" that way, and without this check the
     // "\n\n" prefix plus an empty heading would leave stray blank lines
     // sitting above the first footnote.
-    if (
-        plugin.settings.enableFootnoteSectionHeading &&
-        plugin.settings.footnoteSectionHeading
-    ) {
+    const heading = sectionHeading(plugin);
+    if (heading) {
         // The setting holds real markdown; older plain-text values are
         // converted when the plugin loads. A blank line always goes
         // between the heading and whatever is above it. That is the
         // markdown convention for blocks (requested 2026-07-20), and it
         // also stops a heading that begins with a divider from turning the
         // line above it into a setext heading.
-        return `\n\n${plugin.settings.footnoteSectionHeading}`;
+        return `\n\n${heading}`;
     }
     return "";
 }
@@ -111,15 +124,13 @@ export function buildDefinitionAppend(
     // put the definition under it, rather than adding a second heading at
     // the end of the note. The setting can hold markdown spanning several
     // lines, so what is matched is a run of lines, not one line.
-    if (
-        plugin.settings.enableFootnoteSectionHeading &&
-        plugin.settings.footnoteSectionHeading
-    ) {
+    const heading = sectionHeading(plugin);
+    if (heading) {
         // findLineRunEnd is the single piece of code that finds the
         // heading, shared with the move-to-bottom rule. They have to agree
         // on what counts as the existing heading, or running lint twice
         // would keep changing the note instead of settling.
-        const headingLines = plugin.settings.footnoteSectionHeading.split("\n");
+        const headingLines = heading.split("\n");
         const anchorEnd = findLineRunEnd(lines, isProtected, headingLines, reading.commentLines);
         if (anchorEnd !== -1) {
             let fromLine = anchorEnd;

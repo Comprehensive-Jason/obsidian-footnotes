@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { convertInlineFootnotesToNormal } from "../../src/commands/convert-footnotes";
+import { planDefinitionAppend } from "../../src/commands/definition-append";
 import { deleteFootnote } from "../../src/commands/delete-footnote";
 import { lintFootnotes, lintOptionsFromSettings } from "../../src/linting/linter";
 import { fakeEditor } from "../helpers/fake-editor";
@@ -42,9 +43,14 @@ import { fakePlugin } from "../helpers/fake-plugin";
 // Fix (2026-10-06): linter.ts trims the blank lines at the start and end of
 // the setting (trimmedSectionHeading), both where the commands read the
 // setting and where the pure lint takes the heading as an option, so the
-// heading is matched as the note holds it. The first-footnote append in
-// src/commands/definition-append.ts still reads the setting untrimmed
-// (another group's file).
+// heading is matched as the note holds it.
+//
+// Fix, the append half (2026-10-06, found while fixing): the first
+// footnote's append in src/commands/definition-append.ts read the setting
+// untrimmed in both of its places, so a new heading got two blank lines
+// under it and a "# Footnotes" already ending the note was not found and
+// was added again. It reads the setting through trimmedSectionHeading too
+// (the last describe below; red without the fix).
 
 /** The lint with the section heading set to `heading` and the main rules on. */
 function lint(md: string, heading: string): string {
@@ -101,4 +107,28 @@ describe("a section heading setting ending in a line break", () => {
         convertInlineFootnotesToNormal(plugin, doc);
         expect(doc.lines.filter((l) => l === "# Footnotes")).toHaveLength(1);
     });
+});
+
+describe("a section heading setting ending in a line break, and the first footnote's append", () => {
+    // A press that writes [^1] at the end of "Alpha", with the heading set
+    // to `heading`; returns the note as the press leaves it. Found while
+    // fixing, 2026-10-06: the append in definition-append.ts read the
+    // setting untrimmed, in both of its places.
+    function press(lines: string[], heading: string): string[] {
+        const plugin = fakePlugin({ enableFootnoteSectionHeading: true, footnoteSectionHeading: heading, enableRemoveBlankLastLines: true });
+        return planDefinitionAppend({ lines, edits: [{ from: { line: 0, ch: 5 }, text: "[^1]" }], footnoteId: "1", plugin }).final;
+    }
+
+    for (const heading of ["# Footnotes\n", "\n# Footnotes\n\n"]) {
+        it(`${JSON.stringify(heading)}: the first footnote gets the heading with one blank line under it, as "# Footnotes" does`, () => {
+            // Before the fix for "# Footnotes\n": two blank lines under the heading.
+            expect(press(["Alpha"], heading)).toEqual(press(["Alpha"], "# Footnotes"));
+            expect(press(["Alpha"], heading)).toEqual(["Alpha[^1]", "", "# Footnotes", "", "[^1]: "]);
+        });
+
+        it(`${JSON.stringify(heading)}: a "# Footnotes" heading already ending the note is reused, not added again`, () => {
+            // Before the fix: a second "# Footnotes" at the end of the note.
+            expect(press(["Alpha", "", "# Footnotes"], heading)).toEqual(["Alpha[^1]", "", "# Footnotes", "", "[^1]: "]);
+        });
+    }
 });
