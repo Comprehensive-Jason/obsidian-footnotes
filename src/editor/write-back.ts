@@ -1,7 +1,7 @@
 import { EditorView } from "@codemirror/view";
-import { Editor, EditorPosition, MarkdownView } from "obsidian";
+import { Editor, EditorPosition, EditorSelection, MarkdownView } from "obsidian";
 
-import { lineDiffChanges, lineMapper, mapFoldLines } from "./document-diff";
+import { lineDiffChanges, lineMapper, mapFoldLines, OffsetChange } from "./document-diff";
 import { codeMirrorViewOf } from "./obsidian-internals";
 
 // Writing a whole new text for the note back into the editor as the
@@ -39,6 +39,7 @@ export function replaceMinimal(doc: Editor, before: string, after: string, mdVie
             text: change.text,
         })),
     });
+    keepCaretBelowLinesAbove(doc, changes);
     if (foldInfo && foldInfo.folds.length > 0 && mode?.applyFoldInfo) {
         mode.applyFoldInfo({
             folds: mapFoldLines(foldInfo.folds, changes, before),
@@ -46,6 +47,39 @@ export function replaceMinimal(doc: Editor, before: string, after: string, mdVie
         });
     }
     if (otherPanes.length > 0) restoreOtherPanes(otherPanes, after, lineMapper(changes, before));
+}
+
+/**
+ * After the edits: a caret that sat at the very start of the note, when
+ * lines went in above the note's first line, is put back at the start of
+ * its own line, now below the new lines.
+ *
+ * The editor keeps a caret that sits exactly where text goes in in front
+ * of that text. lineDiffChanges writes lines inserted between two lines at
+ * the end of the line above, so a caret at the start of the line below
+ * stays on its line. The first line has no line above it: lines inserted
+ * there go in at the very start of the note, where a caret at the start of
+ * the first line also sits, so the editor put that caret on the first
+ * inserted line (with a section heading set, a note that starts with
+ * "[^1]: alpha" gets "# Footnotes" and a blank line above it, and the
+ * caret went onto "# Footnotes"). No placement of the edit can avoid that.
+ * Every other caret and selection is left where the editor carried it; a
+ * selection that starts at the very start of the note, such as Select
+ * all, already starts after the new lines, since the editor keeps
+ * inserted text out of a selection's start (hunt 2026-10-05 round 2,
+ * cluster D2, pin bug-caret-jumps-to-inserted-line).
+ */
+function keepCaretBelowLinesAbove(doc: Editor, changes: OffsetChange[]): void {
+    const first = changes[0];
+    // lines inserted above the first line come as one edit at offset 0
+    // that ends with a line break; no other edit touches offset 0, so a
+    // caret there now is one that was there before
+    if (first.from !== 0 || first.to !== 0 || !first.text.endsWith("\n")) return;
+    const atNoteStart = (range: EditorSelection) => range.anchor.line === 0 && range.anchor.ch === 0 && range.head.line === 0 && range.head.ch === 0;
+    const ranges = doc.listSelections();
+    if (!ranges.some(atNoteStart)) return;
+    const ownLine = { line: first.text.split("\n").length - 1, ch: 0 };
+    doc.setSelections(ranges.map((range) => (atNoteStart(range) ? { anchor: ownLine, head: ownLine } : range)));
 }
 
 /**
