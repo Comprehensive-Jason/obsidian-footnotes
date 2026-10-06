@@ -463,6 +463,9 @@ function landCarriedText(
         // under the first one as the clipboard text has them (carriedLines),
         // so a block that needs a blank line in front gets it here too.
         const [first] = plan.definitions;
+        // in the popup, its text stays whole: the definitions go after all
+        // of it, its empty last lines included
+        const popupStart = popup ? toNote({ line: 0, ch: 0 }).line : 0;
         const append = planDefinitionAppend({
             lines: noteLines,
             edits: noteEdits,
@@ -470,6 +473,7 @@ function landCarriedText(
             plugin,
             body: blockBody(first),
             moreDefinitionLines: carriedLines(plan.definitions).slice(first.lines.length),
+            whole: popup ? { from: popupStart, to: popupStart + simulateChanges(lines, edits).length - 1 } : undefined,
         });
         changes = append.changes;
         noteAfter = append.final;

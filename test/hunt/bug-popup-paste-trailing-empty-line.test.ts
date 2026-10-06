@@ -293,7 +293,7 @@ async function closePopup() {
 }
 
 describe("bug: a carried paste in a popup whose text ends in an empty line", () => {
-    it.fails("a paste in a popup whose text ends in an empty line still takes the paste over and lands the definition in the note", async () => {
+    it("a paste in a popup whose text ends in an empty line still takes the paste over and lands the definition in the note", async () => {
         // the popup holds "first" and an empty second line (Enter pressed at its end); the caret is back at the end of "first"
         const at = { line: 0, ch: "first".length };
         const { editor, popup, plugin } = await openPopup("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: first\n\t", "2", { selection: { anchor: at, head: at } });

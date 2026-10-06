@@ -63,11 +63,15 @@ function addFootnoteSectionHeader(plugin: FootnotePlugin): string {
 // Every caller goes through planDefinitionAppend below, which hands this
 // the note as it reads AFTER the caller's own edit and puts the two into
 // one single transaction.
+//
+// `whole` is a stretch of lines the definition must not go between (see
+// planDefinitionAppend).
 export function buildDefinitionAppend(
     ctx: DocContext,
     footnoteId: string,
     isFirstFootnote: boolean,
     plugin: FootnotePlugin,
+    whole?: { from: number; to: number },
 ): { change: EditorChange; cursor: EditorPosition; prepend?: EditorChange } {
     const lines = ctx.lines;
     const reading = ctx.reading();
@@ -94,7 +98,9 @@ export function buildDefinitionAppend(
     // (Claude sweep 2026-09-13).
     if (blocks.length > 0 && (openFrom === -1 || blocks[blocks.length - 1].end < openFrom)) {
         const last = blocks[blocks.length - 1];
-        const lastLine = last.end;
+        // A last block that ends inside the stretch kept whole takes the
+        // new definition after the stretch's last line instead.
+        const lastLine = whole && last.end >= whole.from && last.end < whole.to ? whole.to : last.end;
         // A block that ends on a paragraph line (a lazy continuation
         // directly under the label, or the live tail after a comment
         // closer one of its lines opened) needs a blank line before the
@@ -353,6 +359,15 @@ export interface DefinitionAppendPlan {
  * conversion, a carried definition), and `moreDefinitionLines` are whole
  * definition lines added right under it (the other carried or converted
  * definitions). Leave both out for an empty definition.
+ *
+ * `whole` is a stretch of lines, from line `from` to line `to` of the note
+ * after the edits, that the definition must not go between: the footnote
+ * popup's text, which the popup's editor holds and the note shows as that
+ * footnote's own. A popup text that ends in an empty line ends in a blank
+ * line of the note, which the footnote's definition does not take in, so
+ * the definition went in after the footnote and before that blank line,
+ * between two lines of the popup, where nothing could write it (hunt
+ * 2026-10-06 cycle 3, cluster K4, pin bug-popup-paste-trailing-empty-line).
  */
 export function planDefinitionAppend(opts: {
     lines: string[];
@@ -361,6 +376,7 @@ export function planDefinitionAppend(opts: {
     plugin: FootnotePlugin;
     body?: string;
     moreDefinitionLines?: string[];
+    whole?: { from: number; to: number };
 }): DefinitionAppendPlan {
     const middle = simulateChanges(opts.lines, opts.edits);
     const editStarts = simulatedAnchors(opts.lines, opts.edits, opts.edits.map((_, i) => i), middle);
@@ -368,7 +384,7 @@ export function planDefinitionAppend(opts: {
     const body = opts.body ?? "";
     const bodyExtraLines = body.split("\n").length - 1;
     const seeded = seedDefinitionBody(
-        buildDefinitionAppend(ctx, opts.footnoteId, definitionNames(ctx).length === 0, opts.plugin),
+        buildDefinitionAppend(ctx, opts.footnoteId, definitionNames(ctx).length === 0, opts.plugin, opts.whole),
         opts.footnoteId,
         body,
     );
