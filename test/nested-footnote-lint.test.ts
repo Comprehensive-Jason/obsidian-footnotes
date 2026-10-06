@@ -16,7 +16,7 @@ const base: LintOptions = {
     fixPunctuation: true,
     moveDefinitionsToBottom: true,
     reindex: true,
-    reindexOptions: { renumberNamedFootnotes: false, keepOrphanedDefinitions: true },
+    reindexOptions: { renumberNamedFootnotes: false },
     removeOrphanedReferences: false,
     removeOrphanedDefinitions: false,
     mergeDuplicateDefinitions: false,

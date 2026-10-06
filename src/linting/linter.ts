@@ -219,28 +219,17 @@ export function lintFootnotes(
         // pointing at a definition is exactly what keeps that definition
         // alive.
         //
-        // Reindex has its own orphan deletion (keepOrphanedDefinitions:
-        // false); it is hoisted up to here as well. Both routes call the
-        // same orphanedDefinitionBlocks, so they always agree, and reindex's
-        // own pass later finds nothing left to do.
+        // This is the only place the lint deletes orphaned definitions.
+        // Reindex had a deletion of its own that skipped this rule's check
+        // on how the lines around a cut read, and it was removed (hunt
+        // 2026-10-05 round 2, cluster L7).
         //
         // The order matters: EVERY definition deletion has to happen before
         // the reference deletion further down. That rule looks at where the
         // definitions sit before it decides whether to refuse a deletion, so
         // a definition deleted after it looked would flip its verdict on the
         // next run. (Caught by the idempotence property, 2026-08-10.)
-        //
-        // One more thing about keepOrphanedDefinitions: the settings tab
-        // never sets it, because the user-facing route is
-        // removeOrphanedDefinitions. So the branch is dead on every path a
-        // user can take. It stays for code that calls lintFootnotes
-        // directly, the property test suite among it, so that reindexOptions
-        // keeps meaning what reindexFootnotes says it means. (Review C6,
-        // 2026-09-09: documented rather than removed.)
-        const reindexDeletesOrphans =
-            (options.reindex ?? true) &&
-            options.reindexOptions?.keepOrphanedDefinitions === false;
-        if (options.removeOrphanedDefinitions || reindexDeletesOrphans) {
+        if (options.removeOrphanedDefinitions) {
             result = removeOrphanedDefinitionsRule.apply(result);
         }
         if (options.fixPunctuation ?? true) {

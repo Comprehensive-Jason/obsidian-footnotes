@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
+import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 
 // BUG: deleting an orphan definition under "> closing words[^1]" followed by
 // "> ---" leaves a pair that renders as a blockquoted H2.
@@ -21,7 +22,7 @@ describe("fixed 2026-08-10: orphan deletion and setext headings inside a blockqu
             "",
             "[^1]: used",
         ].join("\n");
-        expect(reindexFootnotes(input, { keepOrphanedDefinitions: false })).toBe(
+        expect(reindexFootnotes(removeOrphanedFootnoteDefinitions(input))).toBe(
             input.replace("[^9]: orphan", "[^2]: orphan"),
         );
     });

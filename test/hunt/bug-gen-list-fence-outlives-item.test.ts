@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
+import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 import { readNote } from "../../src/parsing/note-reading";
 
 // What a user sees: a fenced code block inside a list item that is never
@@ -109,7 +110,7 @@ describe("an unclosed fence inside a list item dies with the item", () => {
 
     it("drop-orphans deletes a real orphan below a dead list fence", () => {
         const doc = "- ```\n  code\n\nreal[^1]\n\n[^1]: def\n\n[^9]: stray";
-        expect(reindexFootnotes(doc, { keepOrphanedDefinitions: false })).toBe(
+        expect(reindexFootnotes(removeOrphanedFootnoteDefinitions(doc))).toBe(
             "- ```\n  code\n\nreal[^1]\n\n[^1]: def",
         );
     });

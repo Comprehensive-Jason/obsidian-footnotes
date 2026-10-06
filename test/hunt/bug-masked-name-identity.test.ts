@@ -5,6 +5,7 @@ import FootnotePlugin from "../../src/main";
 import { createMatchingFootnoteDefinition } from "../../src/commands/create-footnote";
 import { shouldJumpFromDefinitionToReference, shouldJumpFromReferenceToDefinition } from "../../src/commands/navigation";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
+import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 import {
     fakeEditor as sharedFakeEditor,
     FakeEditor,
@@ -102,7 +103,7 @@ describe("reindex with a code-span-named footnote (fixed 2026-08-10)", () => {
     });
 
     it("drop-orphans does not delete a referenced code-span-named definition", () => {
-        expect(reindexFootnotes(doc, { keepOrphanedDefinitions: false })).toBe(doc);
+        expect(reindexFootnotes(removeOrphanedFootnoteDefinitions(doc))).toBe(doc);
     });
 
     // The comment span carries no whitespace: a name holding whitespace is

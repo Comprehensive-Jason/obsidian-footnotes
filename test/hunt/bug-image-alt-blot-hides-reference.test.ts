@@ -61,7 +61,7 @@ const deleteOrphans: LintOptions = {
     fixLazyDefinitions: false,
     moveDefinitionsToBottom: false,
     reindex: false,
-    reindexOptions: { renumberNamedFootnotes: false, keepOrphanedDefinitions: true },
+    reindexOptions: { renumberNamedFootnotes: false },
     removeOrphanedReferences: false,
     removeOrphanedDefinitions: true,
     mergeDuplicateDefinitions: false,

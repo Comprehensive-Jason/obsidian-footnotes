@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
+import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 import { lintFootnotes } from "../../src/linting/linter";
 import { readNote } from "../../src/parsing/note-reading";
@@ -18,16 +19,14 @@ describe("fixed 2026-08-10: a cut stranding '---' at document start manufactures
         expect(readNote(lines).protectedLines[proseLine]).toBe(false);
     });
 
-    it("reindex drop-orphans keeps the definition whose reference sits after a stranded '---'", () => {
+    it("the orphan rule and reindex keep the definition whose reference sits after a stranded '---'", () => {
         // "[^9]: orphan" over "---" is an H2 heading to Obsidian, not a
         // definition (Kimi hunt cycle 3, probed in Reading view
         // 2026-09-16), so its "[^9]" is a bare reference that reindex may
         // renumber; the live definition must survive under whatever
         // number its reference gets
         const doc = "[^9]: orphan\n---\ntext[^1]\n---\n\n[^1]: def";
-        const out = reindexFootnotes(doc, {
-            keepOrphanedDefinitions: false,
-        });
+        const out = reindexFootnotes(removeOrphanedFootnoteDefinitions(doc));
         const reference = /text\[\^([^\]]+)\]/.exec(out);
         expect(reference).not.toBeNull();
         expect(out).toContain(`[^${reference?.[1] ?? ""}]: def`);

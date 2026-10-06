@@ -19,19 +19,19 @@ describe("orphan-reference deletion never re-classifies other lines", () => {
         expect(removeOrphanedFootnoteReferences(doc)).toBe(doc);
     });
 
-    it("reindex's keepOrphanedDefinitions:false deletion is hoisted before the guard", () => {
+    it("definition deletion happens before the reference rule's guard looks", () => {
         // Reindex used to delete the shielding [^1]: alpha definition
         // AFTER the reference rule refused [^42]'s deletion because of it -
         // pass two then deleted what pass one refused. All definition
-        // deletion now happens up front.
+        // deletion now happens up front, in the orphan rule (reindex's own
+        // deletion was removed, hunt 2026-10-05 round 2, cluster L7).
         const doc = "[^1]: alpha\n\n[^42]\n\n    indented code[^73]";
         const options = {
             fixPunctuation: false,
             moveDefinitionsToBottom: false,
             reindex: true,
-            reindexOptions: { keepOrphanedDefinitions: false },
             removeOrphanedReferences: true,
-            removeOrphanedDefinitions: false,
+            removeOrphanedDefinitions: true,
         };
         const once = lintFootnotes(doc, options);
         expect(once).toContain("indented code[^73]");

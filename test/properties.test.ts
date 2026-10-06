@@ -63,7 +63,6 @@ const optionsArb: fc.Arbitrary<LintOptions> = fc.record({
         renumberNamedFootnotes: fc.boolean(),
         // the Named half of the Preferred footnote naming style setting (2026-09-22)
         nameNumberedFootnotes: fc.boolean(),
-        keepOrphanedDefinitions: fc.boolean(),
     }),
     removeOrphanedReferences: fc.boolean(),
     removeOrphanedDefinitions: fc.boolean(),
@@ -83,10 +82,6 @@ const keepingOptionsArb: fc.Arbitrary<LintOptions> = optionsArb.map(
         // merging collapses duplicate definitions into one - a deliberate
         // structure change the conservation/oracle properties must not see
         mergeDuplicateDefinitions: false,
-        reindexOptions: {
-            ...options.reindexOptions,
-            keepOrphanedDefinitions: true,
-        },
     }),
 );
 
@@ -102,10 +97,6 @@ const definitionKeepingOptionsArb: fc.Arbitrary<LintOptions> = optionsArb.map(
         // only unprotected duplicate label lines and carries continuation
         // content along verbatim, so the protected-line conservation this
         // arb feeds must hold with merging active too
-        reindexOptions: {
-            ...options.reindexOptions,
-            keepOrphanedDefinitions: true,
-        },
     }),
 );
 
@@ -261,7 +252,6 @@ describe("differential oracle over random documents", () => {
             reindex: true,
             reindexOptions: {
                 renumberNamedFootnotes: false,
-                keepOrphanedDefinitions: true,
             },
             removeOrphanedReferences: false,
             removeOrphanedDefinitions: false,
@@ -549,7 +539,6 @@ describe("single-rule invariants over random documents", () => {
                 docArb,
                 fc.record({
                     renumberNamedFootnotes: fc.boolean(),
-                    keepOrphanedDefinitions: fc.boolean(),
                     prefix: fc.constantFrom("", ...PREFIXES),
                 }),
                 (doc, options) => {

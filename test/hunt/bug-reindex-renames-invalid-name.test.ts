@@ -46,7 +46,7 @@ const options: LintOptions = {
     fixLazyDefinitions: false,
     moveDefinitionsToBottom: false,
     reindex: true,
-    reindexOptions: { renumberNamedFootnotes: true, keepOrphanedDefinitions: true },
+    reindexOptions: { renumberNamedFootnotes: true },
     removeOrphanedReferences: true,
     removeOrphanedDefinitions: false,
     mergeDuplicateDefinitions: false,

@@ -67,7 +67,7 @@ describe("a top-level definition and a quoted or in-item copy of the same name",
             fixLazyDefinitions: true,
             moveDefinitionsToBottom: false,
             reindex: true,
-            reindexOptions: { renumberNamedFootnotes: false, nameNumberedFootnotes: false, keepOrphanedDefinitions: true },
+            reindexOptions: { renumberNamedFootnotes: false, nameNumberedFootnotes: false },
         });
         // Reindex renames [^42] to [^2]. Before the lint, it showed "a quoted
         // definition". Today the top-level "[^2]: alpha" block is swapped into

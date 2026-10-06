@@ -61,11 +61,11 @@ describe("lintFootnotes", () => {
     });
 
     it("passes reindex options through", () => {
-        const input = "Word[^3].\n\n[^3]: def\n[^9]: orphan";
+        const input = "Word[^note].\n\n[^note]: def";
         const expected = "Word.[^1]\n\n[^1]: def";
         expect(
             lintFootnotes(input, {
-                reindexOptions: { keepOrphanedDefinitions: false },
+                reindexOptions: { renumberNamedFootnotes: true },
             }),
         ).toBe(expected);
     });

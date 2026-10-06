@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
+import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 
 // BUG (turns body prose into an h2): "prose\n---" is a setext H2. Removing or
 // moving the definition line(s) that sat between a paragraph line and a "---"
@@ -24,7 +25,7 @@ describe("bug: removing definition lines can silently create a setext heading", 
     // renumbers it in appearance order like any other; the line itself stays.
     it("a label directly under the paragraph is prose: drop-orphans deletes nothing", () => {
         const input = "closing words[^1]\n[^9]: orphan\n---\n\n[^1]: def";
-        expect(reindexFootnotes(input, { keepOrphanedDefinitions: false })).toBe(
+        expect(reindexFootnotes(removeOrphanedFootnoteDefinitions(input))).toBe(
             "closing words[^1]\n[^2]: orphan\n---\n\n[^1]: def",
         );
     });
@@ -36,7 +37,7 @@ describe("bug: removing definition lines can silently create a setext heading", 
 
     it("with the blank line that makes it a definition, the orphan goes and no setext pair forms", () => {
         const input = "closing words[^1]\n\n[^9]: orphan\n---\n\n[^1]: def";
-        const out = reindexFootnotes(input, { keepOrphanedDefinitions: false });
+        const out = reindexFootnotes(removeOrphanedFootnoteDefinitions(input));
         expect(out).not.toContain("closing words[^1]\n---");
         expect(out).not.toContain("[^9]");
     });

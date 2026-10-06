@@ -240,17 +240,16 @@ describe("lintOptionsFromSettings", () => {
 // ---------- the pipeline ----------
 
 describe("lintFootnotes composition", () => {
-    // L118-123 (options.reindex ?? true): with `reindex` unset, reindex's own
-    // orphaned-definition deletion still has to be HOISTED above the move.
-    // The mutants ("reindex && true", "reindex ?? false") make the hoist
-    // conditional on an explicit flag, so the move gathers the doomed
-    // definition first and reindex's later deletion strands the section
-    // heading it caused to be written.
-    it("hoists reindex's own orphan deletion above the move", () => {
+    // Orphaned definitions are deleted BEFORE the move. The other way
+    // round, the move gathers the doomed definition first and writes the
+    // section heading for it, and the deletion then strands that heading.
+    // (This pinned reindex's own deletion, hoisted above the move, until
+    // that deletion was removed: hunt 2026-10-05 round 2, cluster L7.)
+    it("deletes orphaned definitions before the move gathers them", () => {
         expect(
             lintFootnotes("body text\n\n[^9]: orphan", {
                 sectionHeading: "# Footnotes",
-                reindexOptions: { keepOrphanedDefinitions: false },
+                removeOrphanedDefinitions: true,
             }),
         ).toBe("body text");
     });

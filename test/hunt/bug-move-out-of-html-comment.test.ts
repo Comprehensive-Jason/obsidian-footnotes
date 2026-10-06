@@ -2,13 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
+import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 
 // BUG (data loss): protectedLines/findDefinitionBlocks have no awareness of HTML
 // comments, so a definition-shaped line inside a multi-line <!-- --> block is
 // treated as a real definition.
 //  - move-to-bottom rips "[^9]: hidden note" out of the comment and re-exposes
 //    it as a live definition at the bottom.
-//  - reindex({ keepOrphanedDefinitions: false }) sees it as an orphan (its
+//  - reindex({ keepOrphanedDefinitions: false }), an option since removed
+//    (hunt 2026-10-05 round 2, cluster L7), saw it as an orphan (its
 //    "[^9]:" never counts as a reference thanks to AllReferences' (?!:)) and
 //    permanently DELETES the commented-out text - silent content loss.
 // Scenario: a footnote definition inside an HTML comment is relocated / deleted.
@@ -31,9 +33,9 @@ describe("bug: HTML-comment definition mishandled by the transforms", () => {
         expect(moveFootnoteDefinitionsToBottom(input)).toBe(input);
     });
 
-    it("reindex drop-orphans does not delete a commented-out definition", () => {
+    it("the orphan rule and reindex do not delete a commented-out definition", () => {
         expect(
-            reindexFootnotes(input, { keepOrphanedDefinitions: false }),
+            reindexFootnotes(removeOrphanedFootnoteDefinitions(input)),
         ).toBe(input);
     });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
+import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 
 // BUG: reindex orphan-deletion is non-transitive (single pass). Two definitions
 // that only reference EACH OTHER ("[^1]: uses[^2] inside" / "[^2]: two body",
@@ -14,10 +15,13 @@ import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
 // Hunt: 2026-07-17. Lens: properties. Severity: data-loss.
 // fixed 2026-07-17: reindexFootnotes now re-runs reindexOnce to a fixpoint,
 // so all transitive orphans are removed within a single call.
+// Since hunt 2026-10-05 round 2 (cluster L7) reindex never deletes
+// anything: its keepOrphanedDefinitions option is gone, and these tests
+// run the orphan rule and then reindex, which is the lint's only route.
 
 describe("bug: reindex orphan deletion needs two runs (destroys text on the 2nd)", () => {
     const doc = "para.\n\n[^1]: uses[^2] inside\n[^2]: two body";
-    const f = (d: string) => reindexFootnotes(d, { keepOrphanedDefinitions: false });
+    const f = (d: string) => reindexFootnotes(removeOrphanedFootnoteDefinitions(d));
 
     it("deleting orphans is idempotent (f(f(doc)) === f(doc))", () => {
         const once = f(doc);

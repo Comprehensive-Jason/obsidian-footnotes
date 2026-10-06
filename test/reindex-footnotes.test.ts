@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { reindexFootnotes } from "../src/linting/rules/re-index-footnotes";
+import { removeOrphanedFootnoteDefinitions } from "../src/linting/rules/remove-orphaned-definitions";
 
 // The full spec of the reindex algorithm, pinned as tests. Policy decisions
 // made here (and nowhere else):
@@ -248,19 +249,24 @@ describe("reindexFootnotes", () => {
     });
 });
 
-describe("reindexFootnotes with keepOrphanedDefinitions: false", () => {
-    const deleteOrphans = { keepOrphanedDefinitions: false };
+// Reindex never deletes an orphaned definition: the orphan rule does, and
+// these run it first, as the lint does. Reindex's own deletion skipped the
+// orphan rule's check on how the lines around a cut read, and was removed
+// with its keepOrphanedDefinitions option (hunt 2026-10-05 round 2,
+// cluster L7).
+describe("reindexFootnotes after the orphan rule", () => {
+    const reindexAfterOrphanRule = (input: string) => reindexFootnotes(removeOrphanedFootnoteDefinitions(input));
 
     it("deletes a numbered orphaned definition", () => {
         const input = "text[^3].\n\n[^3]: used\n[^9]: orphan";
         const expected = "text[^1].\n\n[^1]: used";
-        expect(reindexFootnotes(input, deleteOrphans)).toBe(expected);
+        expect(reindexAfterOrphanRule(input)).toBe(expected);
     });
 
     it("deletes a named orphaned definition", () => {
         const input = "text[^2].\n\n[^lost]: named orphan\n[^2]: used";
         const expected = "text[^1].\n\n[^1]: used";
-        expect(reindexFootnotes(input, deleteOrphans)).toBe(expected);
+        expect(reindexAfterOrphanRule(input)).toBe(expected);
     });
 
     it("deletes an orphan's continuation lines with it", () => {
@@ -274,27 +280,25 @@ describe("reindexFootnotes with keepOrphanedDefinitions: false", () => {
             "    orphan paragraph two",
         ].join("\n");
         const expected = "text[^1].\n\n[^1]: used";
-        expect(reindexFootnotes(input, deleteOrphans)).toBe(expected);
+        expect(reindexAfterOrphanRule(input)).toBe(expected);
     });
 
     it("collapses the blank gap a mid-document orphan leaves behind", () => {
         const input = "para one[^1].\n\n[^9]: orphan\n\npara two.\n\n[^1]: def";
         const expected = "para one[^1].\n\npara two.\n\n[^1]: def";
-        expect(reindexFootnotes(input, deleteOrphans)).toBe(expected);
+        expect(reindexAfterOrphanRule(input)).toBe(expected);
     });
 
     it("orphans never consume a number", () => {
         const input = "a[^7] b[^5].\n\n[^9]: orphan\n[^5]: five\n[^7]: seven";
         const expected = "a[^1] b[^2].\n\n[^1]: seven\n[^2]: five";
-        expect(reindexFootnotes(input, deleteOrphans)).toBe(expected);
+        expect(reindexAfterOrphanRule(input)).toBe(expected);
     });
 
-    it("keeps orphans when the option is on (the default)", () => {
+    it("reindex on its own keeps orphans, numbered after the rest", () => {
         const input = "text[^3].\n\n[^3]: used\n[^9]: orphan";
         const expected = "text[^1].\n\n[^1]: used\n[^2]: orphan";
-        expect(
-            reindexFootnotes(input, { keepOrphanedDefinitions: true }),
-        ).toBe(expected);
+        expect(reindexFootnotes(input)).toBe(expected);
     });
 });
 
@@ -323,9 +327,8 @@ describe("reindexFootnotes with renumberNamedFootnotes: true", () => {
         const input = "text[^b] more[^2].\n\n[^lost]: orphan\n[^2]: two\n[^b]: bee";
         const expected = "text[^1] more[^2].\n\n[^1]: bee\n[^2]: two";
         expect(
-            reindexFootnotes(input, {
+            reindexFootnotes(removeOrphanedFootnoteDefinitions(input), {
                 renumberNamedFootnotes: true,
-                keepOrphanedDefinitions: false,
             }),
         ).toBe(expected);
     });

@@ -48,7 +48,7 @@ import { readNote } from "../../src/parsing/note-reading";
 // `Reindex` (on by default); the same masked scan feeds every rename rule
 // (apply-prefix, rename), so they all miss the chunk.
 
-const opts = { renumberNamedFootnotes: false, keepOrphanedDefinitions: true };
+const opts = { renumberNamedFootnotes: false };
 
 const protectedFlags = (doc: string): readonly boolean[] => readNote(doc.split("\n")).protectedLines;
 

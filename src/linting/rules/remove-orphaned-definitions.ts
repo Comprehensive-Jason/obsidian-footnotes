@@ -4,9 +4,11 @@ import { FootnoteRule } from "../rule";
 
 // Deleting orphaned definitions, as a rule of its own (2026-08-10).
 //
-// This used to live inside reindex, as its keepOrphanedDefinitions option,
-// which reindexFootnotes still honours for code that calls it directly. The
-// lint runs this rule instead, for two reasons: the "Delete orphaned
+// This used to live inside reindex, as its keepOrphanedDefinitions option.
+// That option is gone (hunt 2026-10-05 round 2, cluster L7: its cut skipped
+// the check below on how the lines around a cut read), so this rule is the
+// only place the lint deletes an orphaned definition. It is a rule of its
+// own for two reasons: the "Delete orphaned
 // definitions" toggle then works even with reindexing switched off, and the
 // two orphan settings behave the same as each other.
 //
@@ -196,10 +198,6 @@ export function orphanedFootnoteDefinitionNames(
 /**
  * The definition blocks nothing keeps alive, following chains all the way
  * down; see the note at the top of this file.
- *
- * Reindex's own keepOrphanedDefinitions:false path calls this too, so both
- * routes to deleting orphaned definitions always agree, however long the
- * chain.
  */
 export function orphanedDefinitionBlocks(lines: string[]): Definition[] {
     // a definition that is not removable is reported by the alert but

@@ -50,7 +50,6 @@ describe("phantom frontmatter from a leading thematic break", () => {
             reindex: true,
             reindexOptions: {
                 renumberNamedFootnotes: true,
-                keepOrphanedDefinitions: true,
             },
             removeOrphanedReferences: false,
             removeOrphanedDefinitions: false,

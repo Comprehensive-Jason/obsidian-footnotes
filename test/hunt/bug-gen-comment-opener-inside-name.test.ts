@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
+import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
 import { readNote } from "../../src/parsing/note-reading";
 
@@ -36,7 +37,7 @@ describe("an unclosed comment opener inside a footnote name", () => {
 
     it("drop-orphans does not delete a definition whose reference carries the opener", () => {
         const doc = "[^a<!--b]: body\n\nsee[^a<!--b] here.";
-        expect(reindexFootnotes(doc, { keepOrphanedDefinitions: false })).toBe(doc);
+        expect(reindexFootnotes(removeOrphanedFootnoteDefinitions(doc))).toBe(doc);
     });
 
     it("renumber-named renames reference and definition together", () => {

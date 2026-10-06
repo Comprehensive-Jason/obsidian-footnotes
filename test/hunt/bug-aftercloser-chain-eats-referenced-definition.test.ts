@@ -58,7 +58,7 @@ const deleteOrphans: LintOptions = {
     fixLazyDefinitions: false,
     moveDefinitionsToBottom: false,
     reindex: false,
-    reindexOptions: { renumberNamedFootnotes: false, keepOrphanedDefinitions: true },
+    reindexOptions: { renumberNamedFootnotes: false },
     removeOrphanedReferences: false,
     removeOrphanedDefinitions: true,
     mergeDuplicateDefinitions: false,
@@ -77,8 +77,8 @@ describe("a never-cut %%-closer definition must not drag its cited definition in
         expect(lintFootnotes(doc, deleteOrphans)).toContain("[^b]: b body");
     });
 
-    it("reindex's keepOrphanedDefinitions:false path keeps it as well", () => {
-        const out = reindexFootnotes(doc, { keepOrphanedDefinitions: false });
+    it("the orphan rule followed by reindex keeps it as well", () => {
+        const out = reindexFootnotes(removeOrphanedFootnoteDefinitions(doc));
         expect(out).toContain("[^b]: b body");
     });
 

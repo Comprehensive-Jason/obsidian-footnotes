@@ -223,7 +223,6 @@ describe("section E: every rule on, plus deleting orphaned definitions", () => {
         expect(
             lintFootnotes(FIXTURE, {
                 removeOrphanedDefinitions: true,
-                reindexOptions: { keepOrphanedDefinitions: false },
             }),
         ).toBe(WITHOUT_ORPHANS);
     });

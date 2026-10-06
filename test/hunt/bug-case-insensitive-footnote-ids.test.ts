@@ -6,13 +6,15 @@ import { fakePlugin as sharedFakePlugin } from "../helpers/fake-plugin";
 import FootnotePlugin from "../../src/main";
 import { createMatchingFootnoteDefinition } from "../../src/commands/create-footnote";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
+import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 
 // BUG: Obsidian footnote labels are case-insensitive - "[^Note]" and "[^note]:"
 // are the SAME footnote, and the metadata cache lowercases ids. The plugin's own
 // popup code already relies on this (footnote-popup.ts lowercases the id, issue
 // #50), but every other comparison keys on the raw match and is case-sensitive.
 // Three concrete failures:
-//  1. Data loss on reindex: keepOrphanedDefinitions:false classifies "[^note]:"
+//  1. Data loss on reindex: keepOrphanedDefinitions:false (an option since
+//     removed, hunt 2026-10-05 round 2, cluster L7) classified "[^note]:"
 //     as an orphan of "[^Note]" ("note" !== "Note") and DELETES the definition.
 //  2. Split pair: renumberNamedFootnotes:true numbers the reference [^1] and its
 //     definition [^2] - one footnote torn into a broken pair.
@@ -36,8 +38,7 @@ function fakePlugin(overrides: Record<string, unknown> = {}): FootnotePlugin {
 describe("bug: footnote ids compared case-sensitively", () => {
     it("reindex must not delete a definition referenced with different casing", () => {
         const result = reindexFootnotes(
-            "Alpha[^Note].\n\n[^note]: the definition text",
-            { keepOrphanedDefinitions: false },
+            removeOrphanedFootnoteDefinitions("Alpha[^Note].\n\n[^note]: the definition text"),
         );
         expect(result).toContain("the definition text");
     });

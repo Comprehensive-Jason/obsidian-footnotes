@@ -1,11 +1,9 @@
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { nameForBody } from "../../parsing/footnote-grammar";
-import { definitionCuts, removeLineRanges } from "../../parsing/line-edits";
-import { keepsEveryFootnote, NoteReading, readNote } from "../../parsing/note-reading";
+import { keepsEveryFootnote, NoteReading } from "../../parsing/note-reading";
 import { movedDefinitions, rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
 import { FootnoteRule } from "../rule";
-import { orphanedDefinitionBlocks } from "./remove-orphaned-definitions";
 
 // Reindex: renumbering the note's footnotes. This is a pure function,
 // markdown in and markdown out, with no editor involved.
@@ -18,16 +16,15 @@ import { orphanedDefinitionBlocks } from "./remove-orphaned-definitions";
 // - Named footnotes keep their names, unless renumberNamedFootnotes is on,
 //   but they still take their place in that ordering of definitions.
 // - Orphaned definitions are kept, and numbered after everything that is
-//   referenced, unless keepOrphanedDefinitions is off.
+//   referenced. Reindex never deletes anything: deleting orphans is the
+//   orphan rule's job (remove-orphaned-definitions.ts), which refuses a cut
+//   that would change how Obsidian reads the lines around it. Reindex had
+//   its own unguarded orphan cut, behind a keepOrphanedDefinitions option
+//   no setting reached, and it was removed (hunt 2026-10-05 round 2,
+//   cluster L7).
 // - Code and frontmatter are invisible to all of this.
 
 export interface ReindexOptions {
-    /**
-     * Keep orphaned definitions, the ones nothing references, and number
-     * them after everything that is referenced. This is what happens by
-     * default; turn it off and they are deleted instead.
-     */
-    keepOrphanedDefinitions?: boolean;
     /**
      * Give named footnotes numbers, in order of appearance, instead of
      * leaving their names alone (off by default). When a `prefix` is in
@@ -95,9 +92,9 @@ function referenceAppearanceOrder(reading: NoteReading, lineCount: number): stri
  * same order, but only by swapping them between the places definitions
  * already sit: everything in between stays exactly where it was.
  *
- * `options` chooses the two alternatives: deleting orphaned definitions
- * rather than keeping them, and renumbering named footnotes rather than
- * leaving their names alone.
+ * Orphaned definitions are kept and numbered after the referenced ones.
+ * `options` chooses whether named footnotes are renumbered or given names,
+ * and the note's prefix.
  */
 export function reindexFootnotes(
     markdown: string,
@@ -118,9 +115,6 @@ export function reindexFootnotes(
     // text; any fixed choice would do. That makes running the lint again
     // safe, because starting from that state walks the same loop and lands
     // on the same choice.
-    //
-    // Deleting orphaned definitions does not drive this loop: it follows
-    // chains of any length within ONE pass, see orphanedDefinitionBlocks.
     //
     // The limit is a pure safety net, in case of a loop longer than that.
     // None has ever been seen. It was 30, which a chain of definitions
@@ -152,7 +146,6 @@ function reindexOnce(
     markdown: string,
     options: ReindexOptions = {},
 ): string {
-    const keepOrphans = options.keepOrphanedDefinitions ?? true;
     const renumberNamed = options.renumberNamedFootnotes ?? false;
     const nameNumbered = options.nameNumberedFootnotes ?? false;
     // The namespace prefix. It is written out with the case the user gave
@@ -169,34 +162,10 @@ function reindexOnce(
         /^\d+$/.test(name.slice(prefixFolded.length));
 
     return rewriteDocument(markdown, (text, view) => {
-        // These are all replaced further down if orphan deletion rewrites
-        // the note part way through this pass
-        let lines = view.lines;
-        let reading = view.reading;
-        let definitions = view.definitions;
-        let referenceOrder = referenceAppearanceOrder(reading, lines.length);
-
-        if (!keepOrphans) {
-            // The shared orphan-finding code. It follows chains of any
-            // length in THIS one pass: a definition kept alive only by an
-            // orphan that is itself being deleted goes too, and so on down.
-            // The loop above used to peel off one link per go, and its
-            // limit meant a chain 21 or more deep was left half deleted
-            // (bug-reindex-orphan-cap). Definitions that reference each
-            // other in a ring count as referenced and survive.
-            const orphans = orphanedDefinitionBlocks(lines);
-            if (orphans.length > 0) {
-                // Cut the orphaned blocks out, then work everything out
-                // again from scratch: the line numbers have all shifted,
-                // and removing lines can even change which code fences pair
-                // with which.
-                const cut = definitionCuts(lines, orphans);
-                lines = removeLineRanges(cut.lines, cut.ranges);
-                reading = readNote(lines);
-                definitions = reading.definitions;
-                referenceOrder = referenceAppearanceOrder(reading, lines.length);
-            }
-        }
+        const lines = view.lines;
+        const reading = view.reading;
+        const definitions = view.definitions;
+        const referenceOrder = referenceAppearanceOrder(reading, lines.length);
 
         // The full order: names that are referenced first, in the order
         // their references first appear, then any orphaned definitions that

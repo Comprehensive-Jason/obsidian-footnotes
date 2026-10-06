@@ -40,7 +40,7 @@ import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove
 describe("a whitespace name is prose, and no rule may rewrite it", () => {
     it("deleting orphaned definitions does not eat a [^1 ]: prose line", () => {
         const before = "Alpha.\n\n[^1 ]: prose that only looks like a label\n";
-        expect(reindexFootnotes(before, { keepOrphanedDefinitions: false })).toContain(
+        expect(reindexFootnotes(removeOrphanedFootnoteDefinitions(before))).toContain(
             "prose that only looks like a label",
         );
     });

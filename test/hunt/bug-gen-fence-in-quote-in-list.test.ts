@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
+import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 import { readNote } from "../../src/parsing/note-reading";
 
 // What a user sees: in a note with a fenced code block inside a blockquote
@@ -35,6 +36,6 @@ describe("a fence inside a blockquote inside a list item is protected", () => {
         // like a live (quoted, C22) definition; nothing references "9", so
         // reindex's drop-orphans deletes the code line
         const withLabel = "- > ```\n  > [^9]: fake\n  > ```\nreal[^1]\n\n[^1]: real";
-        expect(reindexFootnotes(withLabel, { keepOrphanedDefinitions: false })).toBe(withLabel);
+        expect(reindexFootnotes(removeOrphanedFootnoteDefinitions(withLabel))).toBe(withLabel);
     });
 });
