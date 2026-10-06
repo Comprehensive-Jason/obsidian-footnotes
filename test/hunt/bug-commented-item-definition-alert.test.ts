@@ -24,15 +24,20 @@ import { commentedDefinitionNames } from "../../src/linting/lint-alerts";
 // behind quote markers only, so a label behind a list marker is not found.
 // labelShapedLines (9dc04b1) reads a label from where the line's
 // containers end, list markers included.
+//
+// Fix (2026-10-06): the alert reads a commented line's label from where
+// the containers around the comment end, and a label behind a list marker
+// written in the comment by reading that line on its own, since the note
+// reading sees no list item inside a comment.
 
 describe("a list-item definition inside a %% comment", () => {
-    it.fails("a bullet item's label inside the comment is named", () => {
-        // Today: [].
+    it("a bullet item's label inside the comment is named", () => {
+        // Before the fix, [].
         expect(commentedDefinitionNames("Text[^x].\n\n%%\n- [^x]: hidden in item\n%%")).toEqual(["x"]);
     });
 
-    it.fails("an ordered item's label inside the comment is named", () => {
-        // Today: [].
+    it("an ordered item's label inside the comment is named", () => {
+        // Before the fix, [].
         expect(commentedDefinitionNames("Text[^x].\n\n%%\n1. [^x]: hidden in ordered item\n%%")).toEqual(["x"]);
     });
 });

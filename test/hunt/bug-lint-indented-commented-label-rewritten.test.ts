@@ -41,7 +41,9 @@ import { messages, resetNotices } from "../helpers/notices";
 // The lint half is fixed (2026-10-05, round 2's cluster L5, pin
 // bug-punctuation-wide-item-label): the punctuation rule reads a label
 // from where the line's containers end, here past the definition's four
-// columns, so it steps over "[^k]:". The alert half is still open.
+// columns, so it steps over "[^k]:". The alert half is fixed too
+// (2026-10-06, round 2's cluster L11): the commented-definition alert
+// reads a label from where the line's containers end as well.
 
 /** Lint `doc` on default settings, then run the alerts on the result, as linter.ts does. */
 function lintThenAlerts(doc: string) {
@@ -69,8 +71,8 @@ describe("a commented label inside a definition's indented %% block", () => {
         expect(lintThenAlerts(DOC).after).toBe(DOC);
     });
 
-    it.fails("the commented-definition alert names it", () => {
-        // Today: no such alert.
+    it("the commented-definition alert names it", () => {
+        // Before the fix, no such alert.
         expect(alertsOn(DOC).some((m) => m.includes('inside a %% comment ("[^k]:")'))).toBe(true);
     });
 

@@ -489,14 +489,14 @@ export function commentedDefinitionNames(markdown: string): string[] {
     let offset = 0;
     for (let i = 0; i < lines.length; offset += lines[i].length + 1, i++) {
         if (!reading.commentLines[i] || reading.protectedLines[i]) continue;
-        const hit = definitionLabelWithName(lines[i], reading.maskedLine(i));
+        const hit = commentedLabel(lines[i], reading.maskedLine(i), reading.containerEnd(i));
         if (!hit) continue;
         // Only a label inside the comment is hidden: on the closer line the
         // text after the "%%" is outside it ("%%[^1]: def" renders a
         // footnote; GLM hunt cycle 5, probed in Reading view 2026-09-16),
         // and a label BEFORE the closer ("[^1]: dead %%") is hidden like any
         // interior line (Kimi hunt cycle 3, 2026-09-16)
-        const at = offset + hit.label.nameStart - 2;
+        const at = offset + hit.start;
         if (!reading.comments.some((comment) => comment.block && comment.from <= at && at < comment.to)) continue;
         const folded = hit.name.toLowerCase();
         if (seen.has(folded)) continue;
@@ -504,6 +504,35 @@ export function commentedDefinitionNames(markdown: string): string[] {
         names.push(hit.name);
     }
     return names;
+}
+
+/**
+ * The definition label on a line of a "%%" comment, as the line would read
+ * with the comment taken away: its name as written and the column of its
+ * "[". `textStart` is where the containers around the comment end
+ * (containerEnd): a quote's marker, a list item's indentation, or the four
+ * columns of a definition the comment is written in. The label is read
+ * from there, as labelShapedLines reads a lazy label. Read from the
+ * margin, a label in a comment indented inside a definition was four
+ * columns in and no label to the alert (hunt 2026-10-02, round 4, pin
+ * bug-lint-indented-commented-label-rewritten).
+ *
+ * Obsidian reads a comment's lines as hidden text, not as blocks, so the
+ * note reading sees no list item inside one. A label behind a list marker
+ * written in the comment ("- [^x]: hidden", "1. [^x]: hidden") is found
+ * by reading that line on its own, which says what it would be outside the
+ * comment: a definition in a list item, which counts like any other
+ * (Jason's ruling 1, option a, 2026-10-03; hunt 2026-10-05, round 2, pin
+ * bug-commented-item-definition-alert). That reading is asked only when
+ * the line holds a label's shape past its start, so most commented lines
+ * never need it.
+ */
+function commentedLabel(line: string, masked: string, textStart: number): { name: string; start: number } | null {
+    const hit = definitionLabelWithName(line.slice(textStart), masked.slice(textStart));
+    if (hit) return { name: hit.name, start: textStart + hit.label.nameStart - 2 };
+    if (!/\[\^[^[\]\s]+\]:/.test(masked.slice(textStart))) return null;
+    const own = readNote([line.slice(textStart)]).labelsOn(0).at(0);
+    return own === undefined ? null : { name: own.name, start: textStart + own.start };
 }
 
 function noticeCommentedDefinitions(markdown: string) {
