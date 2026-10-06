@@ -36,13 +36,13 @@ import { lintFootnotes } from "../../src/linting/linter";
 describe("reindex leaves a lazy block's blank line behind in the slot it came from", () => {
     // Once: "a[^1] b[^2]" / "" / "[^1]: one" / "" / "[^2]: two" / "lazy tail".
     // Twice: the blank line between the two definitions is gone.
-    it.fails("default lint is idempotent: a lazy-tailed definition swapped after a plain one", () => {
+    it("default lint is idempotent: a lazy-tailed definition swapped after a plain one", () => {
         const doc = "a[^1] b[^2]\n\n[^2]: two\nlazy tail\n\n[^1]: one";
         const once = lintFootnotes(doc);
         expect(lintFootnotes(once)).toBe(once);
     });
 
-    it.fails("three definitions, the lazy one first", () => {
+    it("three definitions, the lazy one first", () => {
         const doc = "a[^1] b[^2] c[^3]\n\n[^3]: three\nlazy tail\n\n[^2]: two\n[^1]: one";
         const once = lintFootnotes(doc);
         expect(lintFootnotes(once)).toBe(once);

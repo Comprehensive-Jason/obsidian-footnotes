@@ -321,6 +321,23 @@ function reindexOnce(
             // definition; the next lint then added the blank line, so a
             // lint was not idempotent (endsInLazyLine).
             if (block !== blocks[slot] && endsInLazyLine(reading, lines, block) && reading.labelLines[i + 1]) out.push("");
+            // And the other way round: when the slot's old block ended in a
+            // lazy line, the blank line under it was there to keep the next
+            // label a definition. A block that does not end in a lazy line
+            // needs no such line, and move-to-bottom packs it label to
+            // label, so the blank line goes with the block that needed it.
+            // Left behind, the next lint's move took it out, and a lint was
+            // not idempotent (hunt 2026-10-06, cycle 3, pin
+            // bug-lint-lazy-tail-swapped-after-plain).
+            else if (
+                block !== blocks[slot] &&
+                endsInLazyLine(reading, lines, blocks[slot]) &&
+                !endsInLazyLine(reading, lines, block) &&
+                lines[i + 1] === "" &&
+                reading.labelLines[i + 2]
+            ) {
+                i++;
+            }
         }
         return out.join("\n");
     });
