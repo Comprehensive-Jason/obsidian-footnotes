@@ -294,6 +294,11 @@ export function warnPrefilledReferenceIfInside(
  * `placeholder`, which is either "[^]" or the prefilled "[^7-]". It looks
  * in the table cell's text, or on the caret's own line.
  *
+ * Case does not matter, as it does not for any footnote name in
+ * Obsidian: under the prefix "p.", "[^P.]" is the placeholder just as
+ * "[^p.]" is, and a press inside it created a definition named after the
+ * bare prefix (hunt 2026-10-02, pin bug-press-prefilled-placeholder-case).
+ *
  * A hit on the raw line is confirmed against the masked text before it
  * counts. Placeholder-shaped text inside inline code or a code fence is
  * just plain text (#41 semantics), and warning about it would block a
@@ -307,20 +312,26 @@ function caretInsidePlaceholder(
     placeholder: string,
     cursorPosition?: EditorPosition,
 ): boolean {
+    const inside = (text: string, ch: number) => emptyReferenceStart(lowerCased(text), ch, lowerCased(placeholder)) !== null;
     if (cell) {
         const head = cellCaret(cell);
         const cellText = cell.state.doc.toString();
-        if (emptyReferenceStart(cellText, head, placeholder) === null) return false;
+        if (!inside(cellText, head)) return false;
         // a cell's text is a single line, so masking that one line is enough
-        return emptyReferenceStart(maskInlineRegions(cellText), head, placeholder) !== null;
+        return inside(maskInlineRegions(cellText), head);
     }
     const pos = cursorPosition ?? doc.getCursor();
-    const lineText = doc.getLine(pos.line);
-    if (emptyReferenceStart(lineText, pos.ch, placeholder) === null) {
-        return false;
-    }
-    const maskedLine = readNote(docLines(doc)).maskedLine(pos.line);
-    return emptyReferenceStart(maskedLine, pos.ch, placeholder) !== null;
+    if (!inside(doc.getLine(pos.line), pos.ch)) return false;
+    return inside(readNote(docLines(doc)).maskedLine(pos.line), pos.ch);
+}
+
+/**
+ * `text` in lower case, character by character, except a character whose
+ * lower case is longer than itself (the Turkish dotted capital I is one),
+ * so every column of `text` is the same column of the result.
+ */
+function lowerCased(text: string): string {
+    return text.replace(/[\s\S]/gu, (c) => (c.toLowerCase().length === c.length ? c.toLowerCase() : c));
 }
 
 /**

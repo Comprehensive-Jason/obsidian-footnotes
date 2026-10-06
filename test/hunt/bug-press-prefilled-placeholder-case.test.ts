@@ -28,6 +28,9 @@ import { messages, resetNotices } from "../helpers/notices";
 // Cause: warnPrefilledReferenceIfInside in src/commands/press-guards.ts
 // builds the needle "[^p.]" from the prefix and finds it with
 // emptyReferenceStart, an exact-case search, so "[^P.]" is never found.
+//
+// Fix (2026-10-06): caretInsidePlaceholder lower-cases the text and the
+// needle before the search, keeping every column where it was.
 
 /** A note whose frontmatter sets the footnote prefix "p.", with `body` on line 3. */
 const note = (body: string) => ["---", 'footnote-prefix: "p."', "---", body];
@@ -35,7 +38,7 @@ const note = (body: string) => ["---", 'footnote-prefix: "p."', "---", body];
 describe("the prefilled-placeholder guard folds case", () => {
     beforeEach(resetNotices);
 
-    it.fails("warns inside '[^P.]' under the prefix 'p.'", () => {
+    it("warns inside '[^P.]' under the prefix 'p.'", () => {
         const doc = fakeEditor(note("see [^P.] here"));
         // Today: false, and no toast
         expect(
@@ -44,7 +47,7 @@ describe("the prefilled-placeholder guard folds case", () => {
         expect(messages()).toEqual([PrefixOnlyNotice]);
     });
 
-    it.fails("a numbered press inside '[^P.]' creates no definition named after the bare prefix", async () => {
+    it("a numbered press inside '[^P.]' creates no definition named after the bare prefix", async () => {
         const lines = note("see [^P.] here");
         const doc = fakeEditor(lines, { cursor: { line: 3, ch: 6 }, edits: true, wholeDoc: true });
         await insertAutonumFootnote(
