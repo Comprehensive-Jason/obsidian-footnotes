@@ -12,8 +12,9 @@
 //
 // How it works: lines that match at the start and at the end are skipped
 // first. What is left in the middle is compared line by line with Myers'
-// diff (unmatchedRuns), which keeps as many lines as it can, and each run
-// of lines that does not match becomes one edit. Two versions that differ
+// diff (unmatchedRuns), which keeps as many lines as it can, the prose
+// lines before the rest (proseFirstRuns), and each run of lines that does
+// not match becomes one edit. Two versions that differ
 // in thousands of lines fall back to one edit for the whole middle, so a
 // rewrite of a giant note never stalls the app.
 
@@ -66,8 +67,10 @@ export function lineDiffChanges(before: string, after: string): OffsetChange[] {
     // comparison had thousands of differences to find and took as long as
     // the rest of the lint (the speed brief, 2026-10-05). Lined up without
     // their references, they cost nothing, and only the lines the lint
-    // really moved, added, or removed are left to find.
-    const hunks = withRewrittenLines(unmatchedRuns(middleA.map(withoutReferences), middleB.map(withoutReferences)), middleA, middleB);
+    // really moved, added, or removed are left to find. The prose lines
+    // are lined up before the rest (proseFirstRuns).
+    const runs = proseFirstRuns(middleA.map(withoutReferences), middleB.map(withoutReferences), proseLines(a).slice(head, aTail), proseLines(b).slice(head, bTail));
+    const hunks = withRewrittenLines(runs, middleA, middleB);
 
     // where each line of `before` starts
     const starts: number[] = [0];
@@ -269,6 +272,76 @@ function withRewrittenLines(runs: readonly Run[], a: readonly string[], b: reado
     return out;
 }
 
+/**
+ * For each line of `lines`, whether it is prose: a line with text on it
+ * that is no part of a footnote definition, read the way Obsidian reads the
+ * note (so a "[^1]: x" line inside a code block is prose).
+ */
+function proseLines(lines: readonly string[]): boolean[] {
+    const prose = lines.map((line) => line.trim() !== "");
+    for (const definition of readNote(lines).definitions) {
+        for (let line = definition.start; line <= definition.end; line++) prose[line] = false;
+    }
+    return prose;
+}
+
+/**
+ * unmatchedRuns, with the prose lines lined up before the rest.
+ *
+ * Myers' diff keeps the most lines it can, and a lint that gathers a block
+ * of definitions at the bottom moves more lines than the prose it moves
+ * them past. Lining up every line at once, the diff kept the definitions
+ * where they were and took the prose line between them and the bottom as
+ * the line that moved: deleted below them and written again above them.
+ * The caret on that line, the line the user was typing on, went with the
+ * deleted copy and landed on the last definition (hunt 2026-10-05, cluster
+ * D1, pin bug-caret-below-moved-definitions). The lint never moves prose
+ * (it only rewrites the footnotes on a line), so the prose lines are lined
+ * up first, on their own, and only the stretches between two paired prose
+ * lines are then compared line by line, definitions, blank lines, and all.
+ * `proseA` and `proseB` say which lines of `a` and `b` are prose
+ * (proseLines).
+ */
+function proseFirstRuns(a: readonly string[], b: readonly string[], proseA: readonly boolean[], proseB: readonly boolean[]): Run[] {
+    const linesA = a.flatMap((_, i) => (proseA[i] ? [i] : []));
+    const linesB = b.flatMap((_, i) => (proseB[i] ? [i] : []));
+    const pairs = matchedPairs(
+        linesA,
+        linesA.map((i) => a[i]),
+        linesB,
+        linesB.map((i) => b[i]),
+    );
+    const runs: Run[] = [];
+    let aFrom = 0;
+    let bFrom = 0;
+    for (const [aLine, bLine] of [...pairs, [a.length, b.length] as [number, number]]) {
+        for (const run of unmatchedRuns(a.slice(aFrom, aLine), b.slice(bFrom, bLine))) {
+            runs.push({ aStart: run.aStart + aFrom, aEnd: run.aEnd + aFrom, bStart: run.bStart + bFrom, bEnd: run.bEnd + bFrom });
+        }
+        aFrom = aLine + 1;
+        bFrom = bLine + 1;
+    }
+    return runs;
+}
+
+/**
+ * Some lines of two texts, each given by its line number (`linesA`,
+ * `linesB`) and a key to compare it by (`keysA`, `keysB`): the pairs of
+ * line numbers whose keys Myers' diff matches, in order.
+ */
+function matchedPairs(linesA: readonly number[], keysA: readonly string[], linesB: readonly number[], keysB: readonly string[]): [number, number][] {
+    const pairs: [number, number][] = [];
+    let ai = 0;
+    let bi = 0;
+    for (const run of [...unmatchedRuns(keysA, keysB), { aStart: keysA.length, bStart: keysB.length, aEnd: 0, bEnd: 0 }]) {
+        // the lines between one unmatched run and the next match
+        while (ai < run.aStart && bi < run.bStart) pairs.push([linesA[ai++], linesB[bi++]]);
+        ai = run.aEnd;
+        bi = run.bEnd;
+    }
+    return pairs;
+}
+
 /** A fold as Obsidian's view reports it: the heading (or list item) line and the last folded line, both 0-based. */
 export interface FoldRange {
     from: number;
@@ -438,21 +511,14 @@ export function positionAfterRewrite(before: string, after: string, pos: { line:
 function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
     const anchorsA = headingKeys(a);
     const anchorsB = headingKeys(b);
-    const pairs: [number, number][] = [];
-    let ai = 0;
-    let bi = 0;
-    const runs = unmatchedRuns(anchorsA.keys, anchorsB.keys);
-    for (const run of [...runs, { aStart: anchorsA.keys.length, bStart: anchorsB.keys.length, aEnd: 0, bEnd: 0 }]) {
-        // the headings between one unmatched run and the next match
-        while (ai < run.aStart && bi < run.bStart) pairs.push([anchorsA.lines[ai++], anchorsB.lines[bi++]]);
-        ai = run.aEnd;
-        bi = run.bEnd;
-    }
+    const pairs = matchedPairs(anchorsA.lines, anchorsA.keys, anchorsB.lines, anchorsB.keys);
+    const proseA = proseLines(a);
+    const proseB = proseLines(b);
     const map: { from: number; to: number }[] = [];
     let aFrom = 0;
     let bFrom = 0;
     for (const [aLine, bLine] of [...pairs, [a.length, b.length] as [number, number]]) {
-        for (const { from, to } of alignRun(a.slice(aFrom, aLine), b.slice(bFrom, bLine))) {
+        for (const { from, to } of alignRun(a.slice(aFrom, aLine), b.slice(bFrom, bLine), proseA.slice(aFrom, aLine), proseB.slice(bFrom, bLine))) {
             map.push({ from: from === -1 ? -1 : from + bFrom, to: to + bFrom });
         }
         if (aLine < a.length) map.push({ from: bLine, to: bLine });
@@ -486,13 +552,15 @@ function headingKeys(lines: string[]): { lines: number[]; keys: string[] } {
  * Lines are matched with their footnote references stripped out, because
  * that is what a lint changes: a renumbered line is the same line, and
  * matching on the raw text paired up look-alike lines across each other
- * instead. Inside a run of lines that do not match, old lines and new
+ * instead. Prose lines are lined up first, as lineDiffChanges does
+ * (proseFirstRuns), so a line of prose the lint moved definitions past
+ * stays the same line. Inside a run of lines that do not match, old lines and new
  * lines pair up by position; old lines left over past the new count are
  * gone; a fold ending on the run's last old line ends on the run's last
  * new line, so it grows or shrinks with the run; and a fold ending on a
  * line that was deleted outright ends on the line before the deletion.
  */
-function alignRun(a: string[], b: string[]): { from: number; to: number }[] {
+function alignRun(a: string[], b: string[], proseA: boolean[], proseB: boolean[]): { from: number; to: number }[] {
     const na = a.map(withoutReferences);
     const nb = b.map(withoutReferences);
     // The lines that match at the end are taken first, then those at the
@@ -508,7 +576,7 @@ function alignRun(a: string[], b: string[]): { from: number; to: number }[] {
     }
     let head = 0;
     while (head < aTail && head < bTail && na[head] === nb[head]) head++;
-    const hunks = unmatchedRuns(na.slice(head, aTail), nb.slice(head, bTail));
+    const hunks = proseFirstRuns(na.slice(head, aTail), nb.slice(head, bTail), proseA.slice(head, aTail), proseB.slice(head, bTail));
     const map: { from: number; to: number }[] = [];
     let bi = 0;
     const matchedUpTo = (aEnd: number) => {

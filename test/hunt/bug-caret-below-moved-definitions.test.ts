@@ -50,16 +50,16 @@ const TYPING = "More text[^2][^3] and I am typing here";
 const NOTE = ["# Part one", "Text.[^1]", "", "[^1]: one", "[^2]: two", "[^3]: three", "", TYPING].join("\n");
 
 describe("a caret on a prose line below a block of definitions the lint moves to the bottom", () => {
-    it.fails("default lint: the caret stays on the line being typed, not on the last definition", () => {
+    it("default lint: the caret stays on the line being typed, not on the last definition", () => {
         const after = lintFootnotes(NOTE, {});
         expect(after.split("\n")).toEqual(["# Part one", "Text.[^1]", "", TYPING, "", "[^1]: one", "[^2]: two", "[^3]: three"]);
-        // Today: { line: 7, ch: 11, text: "[^3]: three" }.
+        // Before the fix: { line: 7, ch: 11, text: "[^3]: three" }.
         expect(caretAfter(NOTE, after, 7, TYPING.length)).toEqual({ line: 3, ch: TYPING.length, text: TYPING });
     });
 
-    it.fails("the same note in a second pane: that pane's caret on the typing line follows it", () => {
+    it("the same note in a second pane: that pane's caret on the typing line follows it", () => {
         const after = lintFootnotes(NOTE, {});
-        // Today: 7, the last definition's line.
+        // Before the fix: 7, the last definition's line.
         expect(lineMapper(lineDiffChanges(NOTE, after), NOTE)(7)).toBe(3);
     });
 });
