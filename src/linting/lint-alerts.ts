@@ -563,13 +563,19 @@ function noticeCommentedDefinitions(markdown: string) {
     );
 }
 
-// A line shaped like a table row for the alert's "row below the label"
-// question: it holds a pipe and is not itself a label. The note reading's
-// table rows answer the "row above" question, so a pipe-less GFM table
-// ("a | b" over "--- | ---") counts like a piped one (Kimi hunt cycle 3,
-// 2026-09-16: Reading view breaks both the same way, folding the rows
-// after the label into the footnote's text).
-const rowShaped = (line: string): boolean => line.includes("|") && line.trim() !== "" && !/^ {0,3}\[\^/.test(line);
+// Whether `line`, right under a label, has the shape of another row of the
+// table whose row `row` sits right above the label: it holds a pipe, is
+// not itself a label, and starts with a pipe when that row does. The note
+// reading's table rows answer the "row above" question, so a pipe-less GFM
+// table ("a | b" over "--- | ---") counts like a piped one (Kimi hunt
+// cycle 3, 2026-09-16: Reading view breaks both the same way, folding the
+// rows after the label into the footnote's text). Under a table written
+// with outer pipes, a sentence with a pipe in it ("where a|b is
+// shorthand") is the footnote's own text, not a row someone typed there
+// (hunt 2026-10-02, round 4, cluster A2, pin
+// bug-lint-pipe-prose-false-in-table-alert).
+const rowShaped = (line: string, row: string): boolean =>
+    line.includes("|") && line.trim() !== "" && !/^ {0,3}\[\^/.test(line) && (!row.trimStart().startsWith("|") || line.trimStart().startsWith("|"));
 
 /**
  * The names of definitions that sit INSIDE a table: a table row directly
@@ -587,7 +593,7 @@ export function definitionsInsideTableNames(markdown: string): string[] {
     for (let i = 1; i + 1 < lines.length; i++) {
         const label = reading.labelOn(i);
         if (!label) continue;
-        if (!rows[i - 1] || !rowShaped(lines[i + 1])) continue;
+        if (!rows[i - 1] || !rowShaped(lines[i + 1], lines[i - 1])) continue;
         const folded = label.name.toLowerCase();
         if (seen.has(folded)) continue;
         seen.add(folded);
