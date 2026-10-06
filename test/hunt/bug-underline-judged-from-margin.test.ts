@@ -34,6 +34,10 @@ import { fixLazyDefinitions } from "../../src/linting/rules/fix-lazy-definitions
 // margin closes it) or continues the quoted paragraph lazily (a "===" with no ">" in front).
 // The wide-item faces of this root are cluster L6, pinned in
 // bug-underlined-label-wide-item.test.ts.
+//
+// Fixed 2026-10-05: underlinedAt (it replaced underlineUnder) reads the line under the label from
+// where its containers end, and counts it an underline only when the reading puts it in the same
+// containers as the label's line.
 
 const Cases: { what: string; lines: string[]; label: number; fixed: string[] }[] = [
     {
@@ -69,13 +73,13 @@ describe("a thematic break under a lazy label in a list item is no underline", (
             expect(readNote(c.fixed).labelOn(c.label + 1)?.name).toBe("1");
         });
 
-        it.fails(`${c.what}: the label is lazy, not underlined`, () => {
+        it(`${c.what}: the label is lazy, not underlined`, () => {
             expect(underlinedDefinitionLabelLines(c.lines)).toEqual([]);
             expect(lazyDefinitionLabelLines(c.lines)).toEqual([c.label]);
         });
 
-        // Today fix-lazy returns the note unchanged.
-        it.fails(`${c.what}: fix-lazy inserts the blank line`, () => {
+        // Before the fix fix-lazy returns the note unchanged.
+        it(`${c.what}: fix-lazy inserts the blank line`, () => {
             expect(fixLazyDefinitions(c.lines.join("\n"))).toBe(c.fixed.join("\n"));
         });
     }
@@ -92,7 +96,7 @@ describe("a quoted label the reading makes a heading is underlined, not lazy", (
             expect(readNote(c.lines).lineBlocks[c.label]).toMatch(/\^heading\d$/);
         });
 
-        it.fails(`${c.what}: it is filed as underlined, not lazy`, () => {
+        it(`${c.what}: it is filed as underlined, not lazy`, () => {
             expect(lazyDefinitionLabelLines(c.lines)).toEqual([]);
             expect(underlinedDefinitionLabelLines(c.lines)).toEqual([c.label]);
         });

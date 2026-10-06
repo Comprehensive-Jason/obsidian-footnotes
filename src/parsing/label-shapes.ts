@@ -8,7 +8,7 @@
 // here from markdown-scan.ts in step 4 of the runtime swap, 2026-10-03,
 // when the rest of that file went).
 
-import { readNote } from "./note-reading";
+import { NoteReading, readNote } from "./note-reading";
 
 /**
  * A footnote definition at the start of a line ("[^x]: …"). Up to three
@@ -179,26 +179,39 @@ export function labelShapedLines(lines: string[]): { line: number; name: string;
         // turn INTO a heading), so a blank line above cannot fix it (Kimi
         // hunt cycle 3, probed in Reading view 2026-09-16: fix-lazy piled
         // twenty blank lines above such a label)
-        const underlined = i + 1 < lines.length && !reading.protectedLines[i + 1] && underlineUnder(lines[i], lines[i + 1]);
+        const underlined = underlinedAt(reading, lines, i);
         out.push({ line: i, name: hit.name, underlined });
     }
     return out;
 }
 
-/** How many quote markers start the line, the way BlockquotePrefix reads them. */
-function quoteDepth(line: string): number {
-    return (line.match(BlockquotePrefix)?.[0].match(/>/g) ?? []).length;
+/**
+ * Whether the line under line `i` is shaped like a setext underline
+ * ("===", "---", "-") inside the same containers as line `i`. Directly
+ * under a one-line paragraph it makes a heading. Under a longer paragraph
+ * it is plain text, or a break of its own, that a blank line above line
+ * `i` would turn into a heading's underline.
+ *
+ * Both lines are read from where their containers end, and the reading
+ * says which containers those are (lineBlocks, without the line's own
+ * block). So a "---" that ends the label's list item is a break of its
+ * own, which a blank line above the label leaves alone, and a "===" that
+ * carries on a quote's paragraph with no ">" in front still underlines
+ * it. Judged from the margin, both came out the wrong way round, and an
+ * underline under a label at a list item's content column of 4 or more
+ * ("10. item") sat four spaces in and was no underline at all (hunt
+ * 2026-10-05, round 2, pins bug-underline-judged-from-margin and
+ * bug-underlined-label-wide-item; live Obsidian 1.14.4, 2026-10-05).
+ */
+function underlinedAt(reading: NoteReading, lines: readonly string[], i: number): boolean {
+    if (i + 1 >= lines.length) return false;
+    const next = lines[i + 1].replace(/\r$/, "").slice(reading.containerEnd(i + 1));
+    return /^ {0,3}(?:=+|-+) *$/.test(next) && containersOf(reading.lineBlocks[i]) === containersOf(reading.lineBlocks[i + 1]);
 }
 
-/**
- * Whether `next`, the line under `line`, is shaped like a setext underline
- * ("===", "---", "-") at the same quote depth. Directly under a one-line
- * paragraph it makes a heading; under a longer paragraph it is plain text
- * that a blank line above `line` would turn into a heading's underline.
- */
-function underlineUnder(line: string, next: string): boolean {
-    const text = next.replace(/\r$/, "");
-    return quoteDepth(text) === quoteDepth(line) && /^ {0,3}(?:=+|-+) *$/.test(text.replace(BlockquotePrefix, ""));
+/** The containers in one line's entry of lineBlocks, outermost first, without the line's own block and without the marks where blocks start. */
+function containersOf(blocks: string | undefined): string {
+    return (blocks ?? "").replace(/\^/g, "").split(" ").slice(0, -1).join(" ");
 }
 
 /**

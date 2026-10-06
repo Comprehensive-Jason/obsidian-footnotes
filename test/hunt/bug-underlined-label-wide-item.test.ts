@@ -37,6 +37,11 @@ import { messages, resetNotices } from "../helpers/notices";
 // label is filed as lazy. Delete footnote everywhere then cuts only the
 // label line, which would leave the "---" under the item's text and turn
 // that text into a heading, so its guard refuses.
+//
+// Fixed 2026-10-05: underlinedAt (it replaced underlineUnder) reads the
+// line under the label from where its containers end, as the label is
+// read, and counts it an underline when the reading puts it in the same
+// containers as the label's line.
 
 beforeEach(resetNotices);
 
@@ -48,22 +53,22 @@ const WIDE: { what: string; note: string[] }[] = [
 
 describe("an underlined label at a wide item's content column", () => {
     for (const { what, note } of WIDE) {
-        it.fails(`${what}: the label is underlined, not lazy`, () => {
-            // Today: lazyDefinitionLabelNames gives ["b"].
+        it(`${what}: the label is underlined, not lazy`, () => {
+            // Before the fix: lazyDefinitionLabelNames gives ["b"].
             expect(lazyDefinitionLabelNames(note)).toEqual([]);
             expect(underlinedDefinitionLabelNames(note)).toEqual(["b"]);
         });
 
-        it.fails(`${what}: the alert gives the underline's advice, not "Add a blank line above it"`, () => {
+        it(`${what}: the alert gives the underline's advice, not "Add a blank line above it"`, () => {
             noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS }), note.join("\n"));
-            // Today: the lazy-label alert ("no blank line above") speaks instead.
+            // Before the fix: the lazy-label alert ("no blank line above") speaks instead.
             expect(messages().some((m) => m.includes("reads as a heading"))).toBe(true);
             expect(messages().some((m) => m.includes("no blank line above"))).toBe(false);
         });
 
-        it.fails(`${what}: Delete footnote everywhere takes the label and its underline, as in a narrow item`, () => {
+        it(`${what}: Delete footnote everywhere takes the label and its underline, as in a narrow item`, () => {
             const plan = deleteFootnoteEverywhere(note.join("\n"), "b");
-            // Today: refused, since the "---" left under the item's text would make a heading.
+            // Before the fix: refused, since the "---" left under the item's text would make a heading.
             expect(plan.kind).toBe("deleted");
         });
     }
