@@ -79,13 +79,13 @@ describe("an emptied orphan citation line next to a renumbered one", () => {
 
     // Now: the caret at the end of "[^2]" (line 4) lands at the start of
     // "End" (line 6, column 0).
-    it.fails("the caret at the end of the renumbered citation line stays at its end", () => {
+    it("the caret at the end of the renumbered citation line stays at its end", () => {
         const after = lintFootnotes(before, options);
         expect(mapCaret(before, after, 4, 4)).toEqual({ line: 4, ch: 4 });
     });
 
     // Now: lines 2 and 4 both map to line 4.
-    it.fails("a second pane's caret on the emptied line stays on its line", () => {
+    it("a second pane's caret on the emptied line stays on its line", () => {
         const after = lintFootnotes(before, options);
         const map = lineMapper(lineDiffChanges(before, after), before);
         expect([2, 4].map(map)).toEqual([2, 4]);
@@ -101,7 +101,7 @@ describe("an emptied citation line among renumbered ones (every text changes, so
     // Now: the diff rewrites "[^9]" into "[^1]" and "[^5]" into "[^2]", and
     // deletes the "[^7]" line, so the caret at the end of "[^5]" goes to
     // line 6.
-    it.fails("orphan at the top, two renumbered below: the caret at the end of each renumbered line stays there", () => {
+    it("orphan at the top, two renumbered below: the caret at the end of each renumbered line stays there", () => {
         const before = ["Text", "", "[^9]", "", "[^5]", "", "[^7]", "", "[^5]: five", "[^7]: seven"].join("\n");
         const after = lintFootnotes(before, { removeOrphanedReferences: true });
         expect(after.split("\n").slice(0, 7)).toEqual(["Text", "", "", "", "[^1]", "", "[^2]"]);
@@ -112,7 +112,7 @@ describe("an emptied citation line among renumbered ones (every text changes, so
     });
 
     // Now: lines 4 and 6 both map to line 6.
-    it.fails("orphan at the top, two renumbered below: another pane's caret on each renumbered line stays on it", () => {
+    it("orphan at the top, two renumbered below: another pane's caret on each renumbered line stays on it", () => {
         const before = ["Text", "", "[^9]", "", "[^5]", "", "[^7]", "", "[^5]: five", "[^7]: seven"].join("\n");
         const after = lintFootnotes(before, { removeOrphanedReferences: true });
         const map = lineMapper(lineDiffChanges(before, after), before);
@@ -121,7 +121,7 @@ describe("an emptied citation line among renumbered ones (every text changes, so
 
     // Now: the caret at the end of "[^7]" (line 6) lands at the start of the
     // first definition (line 8).
-    it.fails("orphan in the middle of two renumbered lines: the caret at the end of the last stays there", () => {
+    it("orphan in the middle of two renumbered lines: the caret at the end of the last stays there", () => {
         const before = ["Text", "", "[^5]", "", "[^9]", "", "[^7]", "", "[^5]: five", "[^7]: seven"].join("\n");
         const after = lintFootnotes(before, { removeOrphanedReferences: true });
         expect(after.split("\n").slice(0, 7)).toEqual(["Text", "", "[^1]", "", "", "", "[^2]"]);
@@ -131,7 +131,7 @@ describe("an emptied citation line among renumbered ones (every text changes, so
     });
 
     // Now: the caret at the end of "[^2]" (line 4) goes to line 6.
-    it.fails("orphan at the top, two swapped below: the caret at the end of each stays there", () => {
+    it("orphan at the top, two swapped below: the caret at the end of each stays there", () => {
         const before = ["Text", "", "[^9]", "", "[^2]", "", "[^1]", "", "[^1]: one", "[^2]: two"].join("\n");
         const after = lintFootnotes(before, { removeOrphanedReferences: true });
         expect(after.split("\n").slice(0, 7)).toEqual(["Text", "", "", "", "[^1]", "", "[^2]"]);

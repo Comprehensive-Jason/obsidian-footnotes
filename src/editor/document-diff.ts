@@ -471,16 +471,19 @@ function proseFirstRuns(a: readonly string[], b: readonly string[], kindsA: read
         linesB.map((i) => b[i]),
     );
     // the citation lines of each stretch between two paired prose lines,
-    // paired up, with the prose pairs in order
+    // paired up, with the prose pairs in order; the blank lines of `b` go
+    // along, since a citation line the lint emptied is blank there
     const pairs: [number, number][] = [];
     let aCitation = 0;
     let bCitation = 0;
     for (const [aLine, bLine] of [...prosePairs, [a.length, b.length] as [number, number]]) {
         const citationsA: number[] = [];
         const citationsB: number[] = [];
+        // how far the stretch of `b` starts, and ends, below that of `a`
+        const shifts = { start: bCitation - aCitation, end: bLine - aLine };
         for (; aCitation < aLine; aCitation++) if (kindsA[aCitation] === "citation") citationsA.push(aCitation);
-        for (; bCitation < bLine; bCitation++) if (kindsB[bCitation] === "citation") citationsB.push(bCitation);
-        pairs.push(...citationPairs(citationsA, citationsA.map((i) => a[i]), citationsB, citationsB.map((i) => b[i])));
+        for (; bCitation < bLine; bCitation++) if (kindsB[bCitation] === "citation" || b[bCitation] === "") citationsB.push(bCitation);
+        pairs.push(...citationPairs(citationsA, citationsA.map((i) => a[i]), citationsB, citationsB.map((i) => b[i]), shifts));
         if (aLine < a.length) pairs.push([aLine, bLine]);
         aCitation = aLine + 1;
         bCitation = bLine + 1;
@@ -509,43 +512,89 @@ const MaxCitationComparisons = 1_000_000;
 /**
  * The citation lines of one stretch between two paired prose lines, each
  * given by its line number (`linesA`, `linesB`) and its key (`keysA`,
- * `keysB`): the pairs that line them up, in order. As many are paired as
- * the two counts allow, and of the ways to do that, the one that pairs the
- * most lines with the same text is taken.
+ * `keysB`; a blank line of `b` keys as ""): the pairs that line them up,
+ * in order.
  *
  * The lint never moves a citation line and never adds one; it rewrites the
  * names on it, or empties it when it takes out an orphaned reference. So
- * with as many citation lines after as before, each is the one in the same
- * place: two neighbouring lines "[^2]" and "[^1]" whose names the lint
- * swapped are each rewritten in place, and the caret at the end of the
- * first stays there (hunt 2026-10-06 cycle 4, cluster D2, pin
- * bug-diff-swapped-reference-only-lines; paired by text, the one was
- * deleted and written again below the other). With fewer after, the one
- * the lint emptied is the one left out, and the text says which: when the
- * orphaned "[^9]" is taken out above an untouched "[^1]", the "[^1]" lines
- * pair up, not the "[^9]" line with the "[^1]" line (hunt 2026-10-06 cycle
- * 3, cluster D1, pin bug-caret-reference-only-line).
+ * each citation line is still the line in its own place afterwards, citing
+ * something or blank. Its place is its distance from the stretch's start
+ * or from its end (`shifts` says how much further down the stretch of `b`
+ * starts and ends). Neither is sure: a definition the lint moved out of
+ * the stretch, or into it at the bottom of the note, shifts the lines on
+ * one side of it. Its text is not sure either: a lint that renumbers gives
+ * a line the text another line had. So each pair is weighed by how much
+ * agrees with it.
+ *
+ * Of the ways to pair them, the one taken pairs the most citation lines
+ * with citation lines; then the most pairs that agree with something, the
+ * same text or the same place; then the most pairs with the same text;
+ * then the most in the same place (counted from the start and from the
+ * end, each); then the most emptied lines with a blank line in their place.
+ *
+ * When the lint empties an orphaned "[^9]" line and renames the "[^2]" and
+ * "[^1]" lines below it to "[^1]" and "[^2]", the old "[^2]" line has the
+ * text of the new line below it, but two lines in their own place outweigh
+ * that one. Paired by text alone (or, with no text matching, by the first
+ * pair the table met), the emptied line was paired with a renumbered one,
+ * and a caret at the end of a renumbered line went to the next citation
+ * line or the next paragraph (hunt 2026-10-06, cycle 5, cluster X16, pin
+ * bug-citation-tie-break-position). When a definition above them moves to
+ * the bottom, the untouched "[^1]" line below an emptied "[^9]" line comes
+ * up into the emptied line's place, and its text says which line it is
+ * (hunt 2026-10-06 cycle 3, cluster D1, pin bug-caret-reference-only-line).
+ * Two neighbouring lines whose names the lint swapped are each rewritten in
+ * place (hunt 2026-10-06 cycle 4, cluster D2, pin
+ * bug-diff-swapped-reference-only-lines). An emptied line paired with the
+ * blank line in its place is rewritten in place too, so another pane's
+ * caret on it stays on it.
  *
  * The answer is worked out on a table of the best pairing of each start of
  * the one list with each start of the other (a longest-common-subsequence
- * table that scores a pair of lines with the same text a little higher than
- * any other pair).
+ * table with a score for each kind of pair).
  */
-function citationPairs(linesA: readonly number[], keysA: readonly string[], linesB: readonly number[], keysB: readonly string[]): [number, number][] {
+function citationPairs(
+    linesA: readonly number[],
+    keysA: readonly string[],
+    linesB: readonly number[],
+    keysB: readonly string[],
+    shifts: { start: number; end: number },
+): [number, number][] {
     const n = keysA.length;
     const m = keysB.length;
     if (n === 0 || m === 0) return [];
     if (n * m > MaxCitationComparisons) return matchedPairs(linesA, keysA, linesB, keysB);
-    // A pair is worth more than every same-text bonus together, so the
-    // count of pairs comes first and the same text breaks ties.
-    const pairWorth = Math.min(n, m) + 1;
+    // The scores, each worth more than every score below it together, in
+    // the order above: a pair of two citation lines; a pair that agrees with
+    // its text or its place; the same text; the same place, counted from
+    // the start and from the end; a citation line paired with a blank line
+    // in its place.
+    const most = Math.min(n, m);
+    const emptied = 1;
+    const place = most * emptied + 1;
+    const text = most * (2 * place + emptied) + 1;
+    const agrees = most * (text + 2 * place + emptied) + 1;
+    const cited = most * (agrees + text + 2 * place + emptied) + 1;
+    // what pairing line i of A with line j of B scores, or -1 when the two
+    // may not be paired: a blank line only takes the line in its own place
+    const worth = (i: number, j: number) => {
+        const shift = linesB[j] - linesA[i];
+        const places = (shift === shifts.start ? 1 : 0) + (shift === shifts.end ? 1 : 0);
+        if (keysB[j] === "") return places > 0 ? emptied : -1;
+        const sameText = keysA[i] === keysB[j];
+        return cited + (sameText || places > 0 ? agrees : 0) + (sameText ? text : 0) + place * places;
+    };
     // best[i * (m + 1) + j]: the best score for lines i.. of A and j.. of B
-    const best = new Int32Array((n + 1) * (m + 1));
+    // (a score can pass what 32 bits hold, so the table holds doubles)
+    const best = new Float64Array((n + 1) * (m + 1));
     const at = (i: number, j: number) => i * (m + 1) + j;
+    const pairedScore = (i: number, j: number) => {
+        const score = worth(i, j);
+        return score === -1 ? -1 : best[at(i + 1, j + 1)] + score;
+    };
     for (let i = n - 1; i >= 0; i--) {
         for (let j = m - 1; j >= 0; j--) {
-            const paired = best[at(i + 1, j + 1)] + pairWorth + (keysA[i] === keysB[j] ? 1 : 0);
-            best[at(i, j)] = Math.max(paired, best[at(i + 1, j)], best[at(i, j + 1)]);
+            best[at(i, j)] = Math.max(pairedScore(i, j), best[at(i + 1, j)], best[at(i, j + 1)]);
         }
     }
     // walk the table from the start, taking a pair wherever it is part of the best score
@@ -553,7 +602,7 @@ function citationPairs(linesA: readonly number[], keysA: readonly string[], line
     let i = 0;
     let j = 0;
     while (i < n && j < m) {
-        if (best[at(i, j)] === best[at(i + 1, j + 1)] + pairWorth + (keysA[i] === keysB[j] ? 1 : 0)) {
+        if (best[at(i, j)] === pairedScore(i, j)) {
             pairs.push([linesA[i], linesB[j]]);
             i++;
             j++;
