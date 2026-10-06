@@ -39,6 +39,10 @@ import { fakePlugin } from "../helpers/fake-plugin";
 // (2e58d86 left the selection conversions on it), so a selection that
 // touches one over two lines is not seen as touching a footnote.
 //
+// Fixed 2026-10-05: spanTouchesFootnote also asks inlineNoteHolding, the
+// press's lookup, whether either edge of the range sits inside an inline
+// footnote, wherever it opens and closes.
+//
 // Left out: the numbered key with "note" selected inside it already
 // refuses, with the protected-selection notice rather than the nesting
 // notice; only the wording differs, so it is not pinned.
@@ -71,27 +75,27 @@ describe.each([
     ["numbered key", insertAutonumFootnote],
     ["inline key", insertInlineFootnote],
 ] as const)("selection and an inline footnote over two lines, %s", (_name, key) => {
-    it.fails("selecting 'text ^[an' (cuts its opening off) is refused and the note is unchanged", async () => {
+    it("selecting 'text ^[an' (cuts its opening off) is refused and the note is unchanged", async () => {
         const doc = await convert(TwoLines, [0, 0], [0, 9], key);
-        // Today (numbered): ["[^1] inline", "note here] after", "", "[^1]: text ^[an"]
-        // Today (inline):   ["^[text ^\\[an] inline", "note here] after"]
+        // Before the fix (numbered): ["[^1] inline", "note here] after", "", "[^1]: text ^[an"]
+        // Before the fix (inline):   ["^[text ^\\[an] inline", "note here] after"]
         expect(doc.lines).toEqual(TwoLines);
         expect(messages()).toEqual([NestedFootnoteNotice]);
     });
 
-    it.fails("selecting 'note here] after' (cuts its closing off) is refused and the note is unchanged", async () => {
+    it("selecting 'note here] after' (cuts its closing off) is refused and the note is unchanged", async () => {
         const doc = await convert(TwoLines, [1, 0], [1, 16], key);
-        // Today (numbered): ["text ^[an inline", "[^1]", "", "[^1]: note here] after"]
-        // Today (inline):   ["text ^[an inline", "^[note here\\] after]"]
+        // Before the fix (numbered): ["text ^[an inline", "[^1]", "", "[^1]: note here] after"]
+        // Before the fix (inline):   ["text ^[an inline", "^[note here\\] after]"]
         expect(doc.lines).toEqual(TwoLines);
         expect(messages()).toEqual([NestedFootnoteNotice]);
     });
 });
 
 describe("selection inside an inline footnote over two lines, inline key", () => {
-    it.fails("selecting 'note' inside it is refused with the nesting notice", async () => {
+    it("selecting 'note' inside it is refused with the nesting notice", async () => {
         const doc = await convert(TwoLines, [1, 0], [1, 4], insertInlineFootnote);
-        // Today: ["text ^[an inline", "^[note] here] after"], a nested inline footnote.
+        // Before the fix: ["text ^[an inline", "^[note] here] after"], a nested inline footnote.
         expect(doc.lines).toEqual(TwoLines);
         expect(messages()).toEqual([NestedFootnoteNotice]);
     });

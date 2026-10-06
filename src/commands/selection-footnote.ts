@@ -528,6 +528,13 @@ function trimSelectionEdges(
  * that reference into the new footnote (Kimi and Claude sweeps
  * 2026-09-13).
  *
+ * An inline footnote that runs over a line break of its paragraph counts
+ * as one on a single line does: a range that starts or ends inside its
+ * brackets touches it, on any of its lines (hunt 2026-10-05, round 2, pin
+ * bug-selection-multi-line-inline-footnote: the one-line lookup let such a
+ * selection tear it in half or nest a new footnote inside it). It is the
+ * lookup the press's hop uses (inlineNoteHolding, 2e58d86).
+ *
  * Fakes do not count. A fake is reference-shaped text that is not really a
  * footnote, usually because it sits in code, math, or a comment.
  */
@@ -542,7 +549,10 @@ function spanTouchesFootnote(reading: NoteReading, line: number, from: number, t
         if (escapedAt(masked, i)) continue;
         if (i < to && i + "[^]".length > from) return true;
     }
-    return reading.inlineNotesOn(line).some((note) => note.open < to && note.close + 1 > from);
+    // one the range holds whole sits on this line; one the range starts or
+    // ends inside holds that edge, wherever it opens and closes
+    if (reading.inlineNotesOn(line).some((note) => note.open < to && note.close + 1 > from)) return true;
+    return reading.inlineNoteHolding(line, from) !== null || reading.inlineNoteHolding(line, to) !== null;
 }
 
 /**
