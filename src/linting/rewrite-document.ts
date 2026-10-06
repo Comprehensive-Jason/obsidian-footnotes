@@ -133,6 +133,20 @@ export function labelInsideTable(reading: NoteReading, line: number): boolean {
     return !reading.maskedLine(line - 1).trimStart().startsWith("|") || below.trimStart().startsWith("|");
 }
 
+/**
+ * Whether `block` ends in a lazy continuation: a last line, after its
+ * label line, that carries on the footnote's text without being indented.
+ * A label right under such a line reads as more of that text, not as a
+ * definition, so a rule that puts another definition after this one puts
+ * a blank line between them (Kimi hunt cycle 3, 2026-09-16, for
+ * move-to-bottom; hunt 2026-10-02, round 2, cluster P5, for reindex, pin
+ * bug-lint-reindex-lazy-tail-not-idempotent).
+ */
+export function endsInLazyLine(reading: NoteReading, lines: readonly string[], block: Definition): boolean {
+    const last = lines[block.end];
+    return block.end > block.start && !reading.protectedLines[block.end] && !/^(?: {4}|\t)/.test(last) && last.trim() !== "";
+}
+
 // The answer above, remembered per list: the note reading hands out one
 // list per text, so rules handed the same text share one answer, as they
 // share the reading (test/rewrite-document-memo.test.ts).

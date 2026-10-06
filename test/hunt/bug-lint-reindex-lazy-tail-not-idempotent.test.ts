@@ -24,9 +24,13 @@ import { lintFootnotes } from "../../src/linting/linter";
 // lazy continuation unless that block is the last one (Kimi hunt cycle 3,
 // 2026-09-16). Reindex then swaps blocks between slots, so the lazy-tailed
 // block can land in front of another label with no blank line between.
+//
+// Fix (2026-10-06): reindex puts a blank line after a block it swaps into a
+// slot when the block ends in a lazy line and a label sits right under the
+// slot (endsInLazyLine in rewrite-document.ts, shared with move-to-bottom).
 
 describe("reindex reorders a lazy-tailed definition in front of another label", () => {
-    it.fails("default lint is idempotent", () => {
+    it("default lint is idempotent", () => {
         const doc = "a[^2] b[^1]\n\n[^1]: one\n[^2]: two\nlazy tail";
         const once = lintFootnotes(doc);
         // Today once ends "[^1]: two\nlazy tail\n[^2]: one", and lint 2 adds a blank line before "[^2]: one".

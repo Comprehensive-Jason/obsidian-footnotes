@@ -1,7 +1,7 @@
 import { findLineRunEnd, normalizeEol, removeLineRanges } from "../../parsing/line-edits";
 import { Definition, readNote } from "../../parsing/note-reading";
 import { linesReadDifferently } from "./remove-orphaned-definitions";
-import { DocumentView, movedDefinitions, rewriteDocument } from "../rewrite-document";
+import { DocumentView, endsInLazyLine, movedDefinitions, rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
 // The obsidian-linter plugin's "move footnotes to the bottom" rule,
@@ -110,10 +110,7 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
     const packed: string[] = [];
     blocks.forEach((block, index) => {
         packed.push(lines.slice(block.start, block.end + 1).join("\n"));
-        const last = lines[block.end];
-        const lazyTail =
-            block.end > block.start && !isProtected[block.end] && !/^(?: {4}|\t)/.test(last) && last.trim() !== "";
-        if (lazyTail && index < blocks.length - 1) packed.push("");
+        if (endsInLazyLine(reading, lines, block) && index < blocks.length - 1) packed.push("");
     });
     const definitions = packed.join("\n");
 

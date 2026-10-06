@@ -1,7 +1,7 @@
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { nameForBody } from "../../parsing/footnote-grammar";
 import { keepsEveryFootnote, NoteReading } from "../../parsing/note-reading";
-import { movedDefinitions, rewriteDocument } from "../rewrite-document";
+import { endsInLazyLine, movedDefinitions, rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
 import { FootnoteRule } from "../rule";
 
@@ -315,6 +315,12 @@ function reindexOnce(
             const block = sorted[slot];
             for (let j = block.start; j <= block.end; j++) out.push(rewritten[j]);
             i = blocks[slot].end;
+            // A block that ends in a lazy line, swapped into a slot with a
+            // label right under it, gets a blank line after it, or that
+            // label would read as more of its text and stop being a
+            // definition; the next lint then added the blank line, so a
+            // lint was not idempotent (endsInLazyLine).
+            if (block !== blocks[slot] && endsInLazyLine(reading, lines, block) && reading.labelLines[i + 1]) out.push("");
         }
         return out.join("\n");
     });
