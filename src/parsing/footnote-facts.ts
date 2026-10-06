@@ -388,11 +388,26 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
             }
             case "image":
             case "imageReference": {
-                // an image's alt text is not read as Markdown: a reference
+                // An image's alt text is not read as Markdown: a reference
                 // written there renders no footnote (GLM hunt cycle 3,
-                // probed in Reading view 2026-09-16)
+                // probed in Reading view 2026-09-16). That holds for
+                // "![alt](url)" and for "![alt][img]", whose label comes
+                // after the alt.
+                //
+                // It does not hold for "![alt text]" or "![alt text][]",
+                // whose alt is its own label. A reference written in that
+                // alt changes the label, so the brackets are read again as
+                // text holding a live reference: "![alt[^1] text]" shows a
+                // footnote (Obsidian 1.14.4, asked live 2026-10-05). When
+                // the note defines "[alt text]:", the press is still
+                // refused, since the image it would undo is a drawn link
+                // (pressLineVerdict); when it does not, the brackets were
+                // never an image, and the press lands like one in any
+                // bracketed text. So that alt is left unprotected (hunt
+                // 2026-10-05, round 2, pin bug-undefined-image-alt-press).
                 const altEnd = afterLabel(doc, from, to);
-                if (altEnd - 1 > from + 2) protect("imageAlt", false, from + 2, altEnd - 1);
+                const altIsLabel = node.type === "imageReference" && (altEnd === to || doc.slice(altEnd, to) === "[]");
+                if (altEnd - 1 > from + 2 && !altIsLabel) protect("imageAlt", false, from + 2, altEnd - 1);
                 if (node.type === "image") protect("linkDestination", false, altEnd, to);
                 break;
             }

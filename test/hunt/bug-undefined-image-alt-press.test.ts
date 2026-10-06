@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { InsideLinkNotice } from "../../src/editor/notice";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import type { FootnotePlacement } from "../../src/parsing/landing";
 import { readNote } from "../../src/parsing/note-reading";
@@ -33,6 +34,10 @@ import { fakePlugin } from "../helpers/fake-plugin";
 // alt text, so a caret inside a word of it counts as a caret in
 // protected text. A caret at the word's start sits just outside the
 // blanked span and passes.
+//
+// Fix: footnote-facts.ts no longer protects the alt of "![alt text]" or
+// "![alt text][]", whose alt is its own label. A defined one is still
+// refused, with the link notice, as a drawn link the press would undo.
 
 const Settings = (footnotePlacement: FootnotePlacement) => ({
     insertAtEndOfWord: true,
@@ -56,14 +61,14 @@ const Line = "I said ![alt text] here";
 beforeEach(resetNotices);
 
 describe.each(["after", "none"] as const)("undefined '![alt text]', placement %s", (placement) => {
-    it.fails("a caret inside 'alt' gives the same result as a caret at its start", async () => {
+    it("a caret inside 'alt' gives the same result as a caret at its start", async () => {
         // The reader reads the landed reference as live, as Obsidian does.
         expect(readNote(["I said ![alt[^1] text] here"]).referencesOn(0).map((r) => r.name)).toEqual(["1"]);
         const atStart = await press([Line], Line.indexOf("alt"), placement);
         expect(atStart.lines[0]).toBe("I said ![alt[^1] text] here");
         resetNotices();
         const inside = await press([Line], Line.indexOf("alt") + 2, placement);
-        // Today: inside is refused with the protected-text notice.
+        // Before the fix, inside was refused with the protected-text notice.
         expect(inside).toEqual(atStart);
     });
 
@@ -72,5 +77,11 @@ describe.each(["after", "none"] as const)("undefined '![alt text]', placement %s
         const inside = await press([line], line.indexOf("alt") + 2, placement);
         expect(inside.lines).toEqual([line]);
         expect(inside.messages.length).toBe(1);
+    });
+
+    it("control: in a defined '![alt text]', a caret inside 'alt' stays refused with the link notice", async () => {
+        const lines = [Line, "", "[alt text]: http://u"];
+        const inside = await press(lines, Line.indexOf("alt") + 2, placement);
+        expect(inside).toEqual({ lines, messages: [InsideLinkNotice] });
     });
 });
