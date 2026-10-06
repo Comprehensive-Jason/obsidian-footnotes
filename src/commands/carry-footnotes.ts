@@ -3,7 +3,7 @@ import { EditorPosition } from "obsidian";
 import { positionAfterRewrite } from "../editor/document-diff";
 import { definitionsToCut, orphanedDefinitionBlocks } from "../linting/rules/remove-orphaned-definitions";
 import { normalizeEol } from "../parsing/line-edits";
-import { Definition, readNote, ReferenceOccurrence } from "../parsing/note-reading";
+import { Definition, NoteReading, readNote, ReferenceOccurrence } from "../parsing/note-reading";
 
 // Carrying footnote definitions along on copy, cut, and paste (issue #59;
 // Jason's rulings 2026-09-21 and 2026-09-22).
@@ -258,15 +258,6 @@ export interface CarriedPastePlan {
     repointed: number;
     /** incoming names the destination already used for a different body, given a new name */
     renamed: number;
-    /**
-     * True when the pasted body holds footnote syntax ("[^") and every bit
-     * of it lands in protected text, as in a paste inside a code block,
-     * where no reference is live. There is then no footnote for the carried
-     * definitions to serve, so the paste is left to the editor, which puts
-     * the text in as it is (hunt 2026-10-02, pin
-     * bug-carry-paste-in-protected-text).
-     */
-    landsInProtectedText: boolean;
 }
 
 /**
@@ -329,8 +320,8 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     // bug-carry-indented-body-not-renamed).
     const bodyLines = normalizeEol(body).text.split("\n");
     const landed = landedFootnoteSyntax(lines, bodyLines, at);
-    const bodyDefines = landed.lines.flatMap((line) => line.labels.map((occurrence) => occurrence.name));
-    const bodyCites = landed.lines.flatMap((line) => line.references.map((occurrence) => occurrence.name));
+    const bodyDefines = landed.flatMap((line) => line.labels.map((occurrence) => occurrence.name));
+    const bodyCites = landed.flatMap((line) => line.references.map((occurrence) => occurrence.name));
 
     // Each carried block read on its own, the way it lands: at the top
     // level, among the definitions.
@@ -439,56 +430,75 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
 
     const repointed = [...merged].filter(([incoming, existing]) => existing.toLowerCase() !== incoming).length;
     return {
-        body: renamedLines(bodyLines, (line) => [...landed.lines[line].labels, ...landed.lines[line].references], finalName).join("\n"),
+        body: renamedLines(bodyLines, (line) => [...landed[line].labels, ...landed[line].references], finalName).join("\n"),
         definitions,
         added: definitions.length,
         reused: merged.size,
         repointed,
         renamed,
-        landsInProtectedText: landed.inProtectedText,
     };
+}
+
+/**
+ * The note `lines` with `text` written in at `at`, between what came before
+ * the caret on that line and what came after it, read; and where the text's
+ * own stretch of each of its lines starts (the first line of the text
+ * starts at the caret, every later one at the start of its line). Without
+ * `at` the text is read on its own.
+ */
+function landedText(lines: readonly string[], text: readonly string[], at: EditorPosition | undefined): { reading: NoteReading; line: number; shift: (i: number) => number } {
+    const origin = at ?? { line: 0, ch: 0 };
+    let note = [...text];
+    if (at) {
+        const host = lines[at.line] ?? "";
+        note[0] = host.slice(0, at.ch) + note[0];
+        note[note.length - 1] += host.slice(at.ch);
+        note = [...lines.slice(0, at.line), ...note, ...lines.slice(at.line + 1)];
+    }
+    return { reading: readNote(note), line: origin.line, shift: (i) => (i === 0 ? origin.ch : 0) };
+}
+
+/**
+ * Whether `text`, pasted into `lines` at `at` just as it is, holds footnote
+ * syntax ("[^") and every bit of it lands in protected text: code, math,
+ * frontmatter, and the like. A "%%" comment is no such place, since a
+ * reference inside one is live (Jason's ruling A1), and the masked twin
+ * keeps a comment's text for that reason.
+ *
+ * The paste asks this of the whole clipboard, its definition lines
+ * included, and of the text in front of them (landCarriedText in
+ * carry-footnotes-hooks.ts). It used to ask only of the text in front, so
+ * a clipboard of definition lines and nothing else (or prose citing
+ * nothing, then its definitions) never counted as landing in a code block,
+ * and the definitions were pulled out of the code (hunt 2026-10-06 cycle
+ * 3, clusters K1 and K2, pin bug-carry-paste-definitions-into-protected-text).
+ */
+export function landsInProtectedText(lines: readonly string[], at: EditorPosition, text: string): boolean {
+    const pasted = normalizeEol(text).text.split("\n");
+    const landed = landedText(lines, pasted, at);
+    const opens = pasted.flatMap((line, i) => [...line.matchAll(/\[\^/g)].map((match) => landed.reading.maskedLine(landed.line + i)[landed.shift(i) + match.index]));
+    return opens.length > 0 && opens.every((character) => character === "\0");
 }
 
 /**
  * The footnote syntax of the pasted `body` as it reads once it lands in
  * `lines` at `at`: for each line of the body, the live references and the
  * definition labels on it, with columns counted from the start of that
- * line of the body; and whether the body holds a "[^" and every one of
- * them lands in protected text (code, math, frontmatter, and the like).
- * Without `at` the body is read on its own.
+ * line of the body. Without `at` the body is read on its own.
  */
 function landedFootnoteSyntax(
     lines: readonly string[],
     body: readonly string[],
     at: EditorPosition | undefined,
-): { lines: { references: ReferenceOccurrence[]; labels: ReferenceOccurrence[] }[]; inProtectedText: boolean } {
-    const origin = at ?? { line: 0, ch: 0 };
-    let note = [...body];
-    if (at) {
-        // the body written into the line at `at`, between what came before
-        // the caret on that line and what came after it
-        const host = lines[at.line] ?? "";
-        note[0] = host.slice(0, at.ch) + note[0];
-        note[note.length - 1] += host.slice(at.ch);
-        note = [...lines.slice(0, at.line), ...note, ...lines.slice(at.line + 1)];
-    }
-    const reading = readNote(note);
-    // the body's own stretch of each line: the first line of the body
-    // starts at the caret, every later one at the start of its line
-    const shift = (i: number) => (i === 0 ? origin.ch : 0);
-    // The masked twin blots out protected text, but keeps a "%%" comment's
-    // text, since a reference inside one is live (Jason's ruling A1).
-    const opens = body.flatMap((text, i) => [...text.matchAll(/\[\^/g)].map((match) => reading.maskedLine(origin.line + i)[shift(i) + match.index]));
-    return {
-        lines: body.map((text, i) => {
-            const own = (occurrences: readonly ReferenceOccurrence[]) =>
-                occurrences
-                    .filter((occurrence) => occurrence.start >= shift(i) && occurrence.end <= shift(i) + text.length)
-                    .map((occurrence) => ({ ...occurrence, start: occurrence.start - shift(i), end: occurrence.end - shift(i) }));
-            return { references: own(reading.referencesOn(origin.line + i)), labels: own(reading.labelsOn(origin.line + i)) };
-        }),
-        inProtectedText: opens.length > 0 && opens.every((character) => character === "\0"),
-    };
+): { references: ReferenceOccurrence[]; labels: ReferenceOccurrence[] }[] {
+    const { reading, line, shift } = landedText(lines, body, at);
+    return body.map((text, i) => {
+        const own = (occurrences: readonly ReferenceOccurrence[]) =>
+            occurrences
+                .filter((occurrence) => occurrence.start >= shift(i) && occurrence.end <= shift(i) + text.length)
+                .map((occurrence) => ({ ...occurrence, start: occurrence.start - shift(i), end: occurrence.end - shift(i) }));
+        return { references: own(reading.referencesOn(line + i)), labels: own(reading.labelsOn(line + i)) };
+    });
 }
 
 /**

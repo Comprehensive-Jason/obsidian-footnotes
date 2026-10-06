@@ -74,20 +74,20 @@ beforeEach(() => {
 });
 
 describe("bug: definition lines pasted into a code fence or math block stay in the block", () => {
-    it.fails("a clipboard of definition lines alone, pasted inside a code fence, is left to the editor", () => {
+    it("a clipboard of definition lines alone, pasted inside a code fence, is left to the editor", () => {
         const doc = ed(["Text[^1].", "", "```md", "", "```", "", "[^1]: mine"], { line: 3, ch: 0 });
         const took = handlePaste(fakePlugin(on, doc), clip("[^1]: one\n[^2]: two") as never, doc);
         // Today the paste is taken over and the two lines land at the bottom as definitions.
         expect({ took, lines: doc.lines }).toEqual({ took: false, lines: ["Text[^1].", "", "```md", "", "```", "", "[^1]: mine"] });
     });
 
-    it.fails("a clipboard of prose with no reference and its definition lines, pasted inside a code fence, is left to the editor", () => {
+    it("a clipboard of prose with no reference and its definition lines, pasted inside a code fence, is left to the editor", () => {
         const doc = ed(["```md", "", "```", "", "after"], { line: 1, ch: 0 });
         const took = handlePaste(fakePlugin(on, doc), clip("Last paragraph.\n\n[^1]: one") as never, doc);
         expect({ took, lines: doc.lines }).toEqual({ took: false, lines: ["```md", "", "```", "", "after"] });
     });
 
-    it.fails("the same through the phone keyboard's clipboard history", () => {
+    it("the same through the phone keyboard's clipboard history", () => {
         // The keyboard's clipboard history inserts text through the input
         // method, with no paste event, so the plugin's input handler sees it.
         const doc = ed(["```md", "", "```"], { line: 1, ch: 0 });
@@ -96,7 +96,7 @@ describe("bug: definition lines pasted into a code fence or math block stay in t
         expect({ took, lines: doc.lines }).toEqual({ took: false, lines: ["```md", "", "```"] });
     });
 
-    it.fails("the plugin's own copy of a definition line, pasted into a math block, stays in the math block", () => {
+    it("the plugin's own copy of a definition line, pasted into a math block, stays in the math block", () => {
         const src = ed(["See[^1].", "", "[^1]: one"], { line: 2, ch: 0 }, { line: 2, ch: 9 });
         const ev = clip();
         handleCopy(fakePlugin(on, src), ev as never);

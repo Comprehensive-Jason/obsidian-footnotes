@@ -17,6 +17,7 @@ import {
     CarriedDefinitions,
     carriedDefinitions,
     carriedLines,
+    landsInProtectedText,
     planCarriedPaste,
     planCut,
     splitCarriedText,
@@ -311,7 +312,7 @@ function landPastedText(plugin: FootnotePlugin, doc: Editor, text: string, befor
     if (selections.length !== 1) return false;
     const [a, b] = [selections[0].anchor, selections[0].head];
     const [from, to] = a.line < b.line || (a.line === b.line && a.ch <= b.ch) ? [a, b] : [b, a];
-    return landCarriedText(plugin, doc, from, to, body, carried, missing, beforeWrite);
+    return landCarriedText(plugin, doc, from, to, text, body, carried, missing, beforeWrite);
 }
 
 /**
@@ -339,7 +340,7 @@ export function carriedInputHandler(
         if (carried.length === 0) return false;
         const doc = editorFor(view);
         if (!doc || nestedSubEditorOwnsFocus(doc)) return false;
-        return landCarriedText(plugin, doc, doc.offsetToPos(from), doc.offsetToPos(to), body, carried, []);
+        return landCarriedText(plugin, doc, doc.offsetToPos(from), doc.offsetToPos(to), text, body, carried, []);
     };
 }
 
@@ -371,21 +372,26 @@ function editorOwning(plugin: FootnotePlugin, view: EditorView): Editor | null {
  * references whose definitions could not be found at copy time.
  * `beforeWrite` runs right before the transaction that changes the note.
  *
- * Returns false, having changed nothing, when the body holds footnote
- * syntax and all of it lands in protected text: a paste inside a code
- * block, a math block, or the frontmatter. Nothing there needs a
- * definition, so the editor pastes the text as it is, definition lines
- * and all, as plain text inside the block. Taking such a paste over pulled
- * the definitions out of the code and landed them as live footnotes that
- * nothing referenced (hunt 2026-10-02, pin
- * bug-carry-paste-in-protected-text). A "%%" comment is no such place,
- * since a reference inside one is live (Jason's ruling A1).
+ * `pasted` is the text as it arrived, definition lines and all. Returns
+ * false, having changed nothing, when its footnote syntax all lands in
+ * protected text, pasted as it is or with only the text in front of the
+ * definitions landed at the caret: a paste inside a code block, a math
+ * block, or the frontmatter. Nothing there needs a definition, so the
+ * editor pastes the text as it is, definition lines and all, as plain text
+ * inside the block. Taking such a paste over pulled the definitions out of
+ * the code and landed them as live footnotes that nothing referenced (hunt
+ * 2026-10-02, pin bug-carry-paste-in-protected-text; and, for a clipboard
+ * whose text before the definitions cites nothing, hunt 2026-10-06 cycle
+ * 3, pin bug-carry-paste-definitions-into-protected-text). A "%%" comment
+ * is no such place, since a reference inside one is live (Jason's ruling
+ * A1).
  */
 function landCarriedText(
     plugin: FootnotePlugin,
     doc: Editor,
     from: EditorPosition,
     to: EditorPosition,
+    pasted: string,
     body: string,
     carried: CarriedDefinition[],
     missing: string[],
@@ -417,13 +423,20 @@ function landCarriedText(
     // bug-carry-paste-over-selection-holding-definitions: Ctrl+A and paste
     // pointed the pasted reference at the definition it was deleting).
     const cleared = simulateChanges(noteLines, [{ from: noteFrom, to: noteTo, text: "" }]);
+    // Both ways the text could land are asked: the whole clipboard pasted as
+    // it is, which is what the editor would do, and the text in front of
+    // the definitions, which is what the plugin lands at the caret. A
+    // clipboard of definition lines alone has nothing in front of them, so
+    // only the first can find it in a code block; and a text of several
+    // lines pasted into inline code breaks out of the code span, so only
+    // the second finds the text in front of the definitions inside it.
+    if (landsInProtectedText(cleared, noteFrom, inNote(normalizeEol(pasted).text)) || landsInProtectedText(cleared, noteFrom, inNote(body))) return false;
     // The body is planned where it lands, with any blank line in front of
     // it already there: the planner reads its footnotes in place (renames
     // only change names, so the blank lines asOwnParagraph wants are the
     // same before and after them).
     const landing = asOwnParagraph(cleared, noteFrom, inNote(body));
     const plan = planCarriedPaste(cleared.join("\n"), landing.text, carried, noteFrom);
-    if (plan.landsInProtectedText) return false;
     // the pasted text as the editor gets it, and as the note reads it
     const text = fromNote(plan.body);
     const after = landing.after;

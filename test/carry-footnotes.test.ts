@@ -120,7 +120,6 @@ describe("planCarriedPaste", () => {
             reused: 0,
             repointed: 0,
             renamed: 0,
-            landsInProtectedText: false,
         });
     });
 
@@ -162,7 +161,6 @@ describe("planCarriedPaste", () => {
             reused: 0,
             repointed: 0,
             renamed: 1,
-            landsInProtectedText: false,
         });
     });
 
