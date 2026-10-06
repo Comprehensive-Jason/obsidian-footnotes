@@ -240,11 +240,16 @@ function unmatchedRuns(a: readonly string[], b: readonly string[]): Run[] {
  * lint only changes the footnotes on a line, never its other text: it
  * renumbers references, turns a reference into an inline footnote and
  * back, moves a footnote past the punctuation next to it, and takes out a
- * reference with the space before it. So every "[^...]" (references and
+ * reference with the space next to it. So every "[^...]" (references and
  * labels alike) and every inline footnote "^[...]" is taken out, and each
- * run of spaces becomes one space, with none at the end. A line the lint
+ * run of spaces becomes one space, with none at either end. A line the lint
  * rewrote in place then has the same key before and after, and is lined
- * up with itself. (An inline footnote used to be left in the key, so
+ * up with itself. (A space was left at the front: "[^2] alpha[^1] bravo."
+ * keyed as " alpha bravo.", and once Delete orphaned references took out
+ * "[^2] " the line keyed as "alpha bravo.", so it was taken as deleted and
+ * written again, and the caret at its end went to a definition the lint
+ * moved past it: hunt 2026-10-06, cycle 5, cluster X21, pin
+ * bug-linekey-leading-space.) (An inline footnote used to be left in the key, so
  * "- item^[note]." and the "- item.^[note]" the punctuation rule makes of
  * it did not match, and a fold on that item was dropped: hunt 2026-10-05
  * round 2, cluster D5, pin bug-fold-list-item-rewritten-in-place.)
@@ -261,8 +266,8 @@ function unmatchedRuns(a: readonly string[], b: readonly string[]): Run[] {
 function lineKey(line: string): string {
     // most lines hold no footnote, and two searches are quicker than the scan
     const plain = line.includes("[^") || line.includes("^[") ? withoutFootnotes(line) : line;
-    const key = plain.replace(/\s+/g, " ").trimEnd();
-    return key === "" ? line.replace(/\s+/g, " ").trimEnd() : key;
+    const key = plain.replace(/\s+/g, " ").trim();
+    return key === "" ? line.replace(/\s+/g, " ").trim() : key;
 }
 
 /**
