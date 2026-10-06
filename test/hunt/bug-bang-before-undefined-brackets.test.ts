@@ -63,13 +63,19 @@ function liveReferences(lines: string[], line = 0): string[] {
 
 describe("'!' before bracketed text that is no image", () => {
     // Now: "Wow[^1]![x] more".
-    it.fails("press at the end of 'Wow' in 'Wow![x] more' (no [x]: line) lands after the '!'", async () => {
+    it("press at the end of 'Wow' in 'Wow![x] more' (no [x]: line) lands after the '!'", async () => {
         const doc = fakeEditor(["Wow![x] more"], { cursor: { line: 0, ch: 1 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(After, doc));
         expect(doc.lines[0]).toBe("Wow![^1][x] more");
         expect(liveReferences(doc.lines)).toEqual(["1"]);
     });
 
+    // Still expected to fail: the press, the selection, and the table cell
+    // now ask the note reading which "!" opens an image (imageStartsOn in
+    // src/parsing/landing.ts), but the punctuation rule
+    // (src/linting/rules/footnote-after-punctuation.ts, another fix group's
+    // file this round) does not hand the reading's answer to the walk yet,
+    // so the lint still takes every "!" before a "[" for an image's.
     // Now: the line stays "Wow[^1]![x] more".
     it.fails("lint (after): 'Wow[^1]![x] more' moves the reference past the '!'", () => {
         const out = footnoteAfterPunctuation("Wow[^1]![x] more\n\n[^1]: a", "after");
@@ -83,7 +89,7 @@ describe("'!' before bracketed text that is no image", () => {
     });
 
     // Now: the footnote's text is "Wow" and the "!" stays behind.
-    it.fails("selection 'Wo' of 'Wow![x] more' expands to 'Wow!' under after", async () => {
+    it("selection 'Wo' of 'Wow![x] more' expands to 'Wow!' under after", async () => {
         const doc = fakeEditor(["Wow![x] more"], {
             cursor: { line: 0, ch: 2 },
             selection: { anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 2 } },
@@ -100,7 +106,7 @@ describe("'!' before bracketed text that is no image, table cell face", () => {
     // A table cell is edited in its own small editor; this stands in for
     // it and records where the press writes. Now: at offset 3, before the
     // "!".
-    it.fails("cell press at the end of 'Wow' in 'Wow![x] more' lands after the '!'", () => {
+    it("cell press at the end of 'Wow' in 'Wow![x] more' lands after the '!'", () => {
         const dispatched: { changes?: { from: number } }[] = [];
         const cell = {
             state: { doc: { toString: () => "Wow![x] more" }, selection: { main: { head: 1, anchor: 1 } } },

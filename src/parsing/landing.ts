@@ -41,16 +41,44 @@ export const TrailingPunctuationChars = ".,;:!?\u2026。，、；：！？．｡
  * punctuation run is (hunt 2026-10-02, pin
  * bug-placement-before-onto-backslash).
  *
- * A "!" right in front of a "[" is no exclamation mark either: it opens an
- * image, "![alt](pic.png)", or an embed, "![[file]]". Stepping over it put
- * the reference between the "!" and the "[", where the image or embed
- * falls apart into a stray "!" and a plain link (hunt 2026-10-06, cycle 3,
- * pin bug-punctuation-splits-image-bang). A "[^" after the "!" is the next
- * footnote's reference, not an image, so that "!" stays punctuation.
+ * The "!" that opens an image, "![alt](pic.png)", or an embed, "![[file]]",
+ * is no exclamation mark either. Stepping over it put the reference
+ * between the "!" and the "[", where the image or embed falls apart into a
+ * stray "!" and a plain link (hunt 2026-10-06, cycle 3, pin
+ * bug-punctuation-splits-image-bang). Whether a "!" opens one is the note
+ * reading's answer, which a caller hands in as `images`, the columns where
+ * the line draws an image or an embed (imageStartsOn): "![x]" is an image
+ * only when the note has a "[x]: pic.png" line, and without one it is an
+ * exclamation mark and bracketed text, so in "Wow![x] more" a reference
+ * still lands after the "!" (hunt 2026-10-06, cycle 4, cluster P1, pin
+ * bug-bang-before-undefined-brackets: every "!" right in front of a "["
+ * was taken for an image's). A caller with no reading at hand leaves
+ * `images` out, and then every "!" right in front of a "[" that does not
+ * start "[^" (the next footnote's reference) counts as an image's.
  */
-export function punctuationAt(text: string, i: number): boolean {
-    if (text[i] === "!" && text[i + 1] === "[" && text[i + 2] !== "^") return false;
+export function punctuationAt(text: string, i: number, images?: ReadonlySet<number>): boolean {
+    if (images !== undefined ? images.has(i) : text[i] === "!" && text[i + 1] === "[" && text[i + 2] !== "^") return false;
     return i >= 0 && i < text.length && TrailingPunctuationChars.includes(text[i]) && !escapedAt(text, i);
+}
+
+/**
+ * The columns of `line` where `reading` draws an image or an embed: the
+ * column of its "!", for every link that starts with one and that the
+ * note draws (drawnAsLink, judged with `linkLabels`). This is the `images`
+ * the landing walk takes (punctuationAt).
+ */
+export function imageStartsOn(reading: NoteReading, line: number, linkLabels: ReadonlySet<string> = reading.linkLabels): ReadonlySet<number> {
+    const starts = new Set<number>();
+    for (const link of reading.links) {
+        if (link.startLine === line && reading.maskedLine(line)[link.start] === "!" && drawnAsLink(link, linkLabels)) starts.add(link.start);
+    }
+    return starts;
+}
+
+/** imageStartsOn for a table cell's own text, read as the note holds it (readCell), as offsets into `text`; `linkLabels` are the labels of the note's link reference definitions, as for cellLinkLikeEndAt. */
+export function cellImageStarts(text: string, linkLabels: ReadonlySet<string> = new Set()): ReadonlySet<number> {
+    const cell = readCell(text);
+    return new Set([...imageStartsOn(cell.reading, 0, linkLabels)].map((column) => cell.offset(column)));
 }
 
 /**
@@ -107,8 +135,10 @@ export const ClosingMarkChars = "\"'’”)]}」』）】〕》〉*_~=｣］｝�
  * A markdown link's "(url)" tail right after a "]" is stepped over whole,
  * so the reference never splits "[text](url)". A space, a letter, or an
  * opening bracket (the start of a following reference) ends the walk.
+ * `images` are the columns where the line draws an image or an embed, as
+ * punctuationAt takes them.
  */
-export function referenceLandingAfter(text: string, end: number, placement: FootnotePlacement = "after"): number {
+export function referenceLandingAfter(text: string, end: number, placement: FootnotePlacement = "after", images?: ReadonlySet<number>): number {
     if (placement === "none") return end;
     let at = end;
     for (;;) {
@@ -135,8 +165,8 @@ export function referenceLandingAfter(text: string, end: number, placement: Foot
                 continue;
             }
         }
-        if (!ClosingMarkChars.includes(c) && !punctuationAt(text, at)) return at;
-        if (placement === "before" && punctuationAt(text, at)) {
+        if (!ClosingMarkChars.includes(c) && !punctuationAt(text, at, images)) return at;
+        if (placement === "before" && punctuationAt(text, at, images)) {
             // "before": the run of punctuation from here is stepped over
             // only when a closing mark follows it (the period inside
             // "quoted." or 「句子。」), and that mark must be a real closer
@@ -150,7 +180,7 @@ export function referenceLandingAfter(text: string, end: number, placement: Foot
             // the press landed after the "。" and every lint flipped the
             // reference from one side to the other).
             let runEnd = at;
-            while (punctuationAt(text, runEnd)) runEnd++;
+            while (punctuationAt(text, runEnd, images)) runEnd++;
             if (
                 runEnd >= text.length ||
                 !ClosingMarkChars.includes(text[runEnd]) ||

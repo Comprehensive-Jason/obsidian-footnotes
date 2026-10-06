@@ -3,7 +3,7 @@ import { Editor, EditorChange, EditorPosition } from "obsidian";
 import type FootnotePlugin from "../main";
 import { docLines } from "./doc-context";
 import { mapPosition, safeInsertionCh } from "./insertion-liveness";
-import { FootnotePlacement, lineLinkLikeEndAt, linkLikeEndAt, punctuationAt, referenceLandingAfter } from "../parsing/landing";
+import { FootnotePlacement, imageStartsOn, lineLinkLikeEndAt, linkLikeEndAt, punctuationAt, referenceLandingAfter } from "../parsing/landing";
 import type { NoteReading } from "../parsing/note-reading";
 import {
     EditorWithCm,
@@ -125,25 +125,28 @@ export function comparePositions(a: EditorPosition, b: EditorPosition): number {
  * `linkEnd` is where the link-like construct holding `offset` ends, or -1
  * when there is none (linkLikeEndAt). The main editor passes what the note
  * reading says and a table cell what its cell reading says; by default the
- * text is read on its own, as a note of one line.
+ * text is read on its own, as a note of one line. `images` are the columns
+ * where the line draws an image or an embed, whose "!" is no punctuation
+ * (punctuationAt), handed in the same way.
  */
 export function endOfWordOffset(
     text: string,
     offset: number,
     placement: FootnotePlacement = "after",
     linkEnd: number = lineLinkLikeEndAt(text, offset),
+    images?: ReadonlySet<number>,
 ): number {
     // Inside a link, a wikilink, an address, or an email address the
     // "word" is the whole construct: a reference written inside
     // "[text](url)" or between the segments of "example.com" breaks the
     // link (Jason's landing rulings, 2026-09-15).
-    if (linkEnd !== -1) return referenceLandingAfter(text, linkEnd, placement);
+    if (linkEnd !== -1) return referenceLandingAfter(text, linkEnd, placement, images);
     const end = wordEndOffset(text, offset);
     if (end === -1) return offset;
     // then past the closing marks, and past or in front of the punctuation
     // that follows the word as the placement setting says (the landing
     // convention, referenceLandingAfter)
-    return referenceLandingAfter(text, end, placement);
+    return referenceLandingAfter(text, end, placement, images);
 }
 
 /**
@@ -193,16 +196,17 @@ function wordEndOffset(text: string, offset: number): number {
  * closing mark belongs to the text around the new footnote, not inside it
  * ("This is \"some bravo\". End" gives "some bravo" and leaves the quote;
  * Claude sweep 2026-09-13, the README's "plus one trailing punctuation
- * mark").
+ * mark"). `images` are the columns where the line draws an image or an
+ * embed, as endOfWordOffset takes them.
  */
-export function endOfWordForSelection(text: string, offset: number, placement: FootnotePlacement = "after"): number {
+export function endOfWordForSelection(text: string, offset: number, placement: FootnotePlacement = "after", images?: ReadonlySet<number>): number {
     const end = wordEndOffset(text, offset);
     if (end === -1) return offset;
     // the trailing mark comes along only when the reference is to land
     // after it: under "before" or "don't move" the reference goes in front
     // of the mark, so the mark stays outside the selection (T5, 2026-09-21)
     if (placement !== "after") return end;
-    return punctuationAt(text, end) ? end + 1 : end;
+    return punctuationAt(text, end, images) ? end + 1 : end;
 }
 
 /**
@@ -286,7 +290,8 @@ export function adjustFootnotePosition(
         const link = linkLikeEndAt(reading, cursorPosition.line, cursorPosition.ch);
         if (link !== null && link.line !== cursorPosition.line) {
             const endText = reading.maskedLine(link.line);
-            return { line: link.line, ch: safeInsertionCh(endText, referenceLandingAfter(endText, link.ch, plugin.settings.footnotePlacement)) };
+            const landing = referenceLandingAfter(endText, link.ch, plugin.settings.footnotePlacement, imageStartsOn(reading, link.line));
+            return { line: link.line, ch: safeInsertionCh(endText, landing) };
         }
         // The insertion point is the end of the word, then past the closing
         // marks and punctuation that follow it (the landing convention,
@@ -295,12 +300,14 @@ export function adjustFootnotePosition(
         // walk decides the word, rather than the editor's, because the
         // editor's stops at an apostrophe or a dot inside a word and knows
         // nothing of links (Jason's landing rulings, 2026-09-15). A caret
-        // on no word at all stays where it is.
+        // on no word at all stays where it is. The reading says which "!"
+        // opens an image or an embed (hunt 2026-10-06, cycle 4, cluster P1).
         const landing = endOfWordOffset(
             lineText,
             cursorPosition.ch,
             plugin.settings.footnotePlacement,
             link?.ch ?? -1,
+            imageStartsOn(reading, cursorPosition.line),
         );
         if (landing !== cursorPosition.ch) {
             cursorPosition = { line: cursorPosition.line, ch: landing };

@@ -19,7 +19,7 @@ import { openFootnotePopup, popupEditingAvailable } from "./footnote-popup";
 import { jumpToFootnoteDefinition } from "./navigation";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
 import { adjustFootnotePosition, endOfWordOffset, moveCursorAndSetJumpPoint } from "../editor/cursor-motion";
-import { cellLinkLikeEndAt } from "../parsing/landing";
+import { cellImageStarts, cellLinkLikeEndAt } from "../parsing/landing";
 import { planDefinitionAppend } from "./definition-append";
 import {
     DocContext,
@@ -106,7 +106,13 @@ export function insertInTableCell(
     const at = safeInsertionCh(
         cellText,
         plugin.settings.insertAtEndOfWord
-            ? endOfWordOffset(cellText, head, plugin.settings.footnotePlacement, cellLinkLikeEndAt(cellText, head, linkLabels))
+            ? endOfWordOffset(
+                  cellText,
+                  head,
+                  plugin.settings.footnotePlacement,
+                  cellLinkLikeEndAt(cellText, head, linkLabels),
+                  cellImageStarts(cellText, linkLabels),
+              )
             : head,
     );
     return dispatchCellEditIfLive(cell, text, at, at, caretOffsetInText, linkLabels);

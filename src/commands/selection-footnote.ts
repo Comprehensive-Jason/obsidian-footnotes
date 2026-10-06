@@ -25,6 +25,7 @@ import {
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
 import { maskInlineRegions, readCell } from "../parsing/cell-reading";
+import { cellImageStarts, imageStartsOn } from "../parsing/landing";
 import { linesReadAlike, NoteReading, readNote } from "../parsing/note-reading";
 import {
     autonumFootnoteId,
@@ -214,7 +215,7 @@ export function selectionPressHandled(
         // main-editor branch below does.
         if (plugin.settings.expandSelectionToWholeWords) {
             from = startOfWordOffset(cellText, from);
-            to = endOfWordForSelection(cellText, to, plugin.settings.footnotePlacement);
+            to = endOfWordForSelection(cellText, to, plugin.settings.footnotePlacement, cellImageStarts(cellText, docContext(doc).reading().linkLabels));
         }
         // Refuse an edge that cuts into protected text here and now,
         // rather than leaving it to the simulation. The liveness checks
@@ -311,6 +312,7 @@ export function selectionPressHandled(
     // This growing happens BEFORE every refusal check below, so those
     // checks judge the range that would really be converted, not the one
     // you happened to drag.
+    const ctx = docContext(doc);
     if (plugin.settings.expandSelectionToWholeWords) {
         trimmed.from = {
             line: trimmed.from.line,
@@ -318,7 +320,15 @@ export function selectionPressHandled(
         };
         trimmed.to = {
             line: trimmed.to.line,
-            ch: endOfWordForSelection(doc.getLine(trimmed.to.line), trimmed.to.ch, plugin.settings.footnotePlacement),
+            // the reading says which "!" opens an image or an embed, which
+            // the selection does not take in as its punctuation mark (hunt
+            // 2026-10-06, cycle 4, cluster P1)
+            ch: endOfWordForSelection(
+                doc.getLine(trimmed.to.line),
+                trimmed.to.ch,
+                plugin.settings.footnotePlacement,
+                imageStartsOn(ctx.reading(), trimmed.to.line),
+            ),
         };
     }
     // The inline key works within a single line only. A selection that
@@ -328,7 +338,6 @@ export function selectionPressHandled(
         showNotice(InlineSelectionNotice, 8000);
         return true;
     }
-    const ctx = docContext(doc);
     const text = rangeText(ctx.lines, trimmed.from, trimmed.to);
     const table = tableVerdict(ctx, trimmed.from, trimmed.to);
     if (table === "cuts") {
