@@ -77,7 +77,7 @@ beforeEach(() => {
 });
 
 describe("the missing names of a foreign clipboard whose text is indented", () => {
-    it.fails("a body indented four columns (code when read alone) still names the reference it cites with no definition", () => {
+    it("a body indented four columns (code when read alone) still names the reference it cites with no definition", () => {
         // landed after "Dest." the text is prose and [^9] is a live reference with no definition
         const clip = ["    a[^9] b[^1]", "", "[^1]: one"].join("\n");
         const back = paste(["Dest."], { line: 0, ch: 5 }, clip);

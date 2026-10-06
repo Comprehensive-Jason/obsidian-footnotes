@@ -740,27 +740,38 @@ export interface SelectedIn {
 }
 
 /**
- * The names a pasted `text` from anywhere cites with no definition of its
- * own: the live references in it, read on its own, whose name nothing in
- * the text defines; spelled as first seen, each once. This is the
- * `missing` list the plugin's own copy keeps (CarriedDefinitions), read
- * off the clipboard text instead of the note it came from, since the paste
- * has nothing else to read. A clipboard from another app was pasted with
- * an empty list, so its toast never named a reference that travelled
- * without a definition, as the README promises (hunt 2026-10-06 cycle 4,
- * cluster K5, pin bug-foreign-paste-toast-missing-definition).
+ * The names a pasted text cites with no definition of its own: the live
+ * references in its `body`, read where it lands in `lines` at `at`, and in
+ * its `carried` blocks, whose name neither the body as it lands nor a
+ * carried block defines; spelled as first seen, each once. A text from
+ * another app has only this for the `missing` list the plugin's own copy
+ * keeps (CarriedDefinitions), since the paste has nothing else to read. A
+ * clipboard from another app was pasted with an empty list, so its toast
+ * never named a reference that travelled without a definition, as the
+ * README promises (hunt 2026-10-06 cycle 4, cluster K5, pin
+ * bug-foreign-paste-toast-missing-definition).
+ *
+ * The body is read where it lands, as planCarriedPaste reads it, not on
+ * its own. Read on its own, a body indented 4 columns is code, so a
+ * reference in it went unnamed though it landed as prose (hunt 2026-10-06
+ * cycle 5, cluster X8, pin bug-foreign-indented-body-missing-names); and a
+ * body pasted into code or math was named though "[^1]" is no reference
+ * there (cluster X11, pin bug-missing-notice-in-protected-text).
  */
-export function uncarriedNames(text: string): string[] {
+export function uncarriedNames(lines: readonly string[], at: EditorPosition, body: string, carried: readonly CarriedDefinition[]): string[] {
     // a text with no "[^" cites nothing, so it is not read
-    if (!text.includes("[^")) return [];
-    const lines = normalizeEol(text).text.split("\n");
-    const reading = readNote(lines);
-    const defined = new Set(reading.definitions.map((definition) => definition.name.toLowerCase()));
+    if (!body.includes("[^") && carried.length === 0) return [];
+    const bodyLines = normalizeEol(body).text.split("\n");
+    const landed = landedFootnoteSyntax(landedText(lines, bodyLines, at), bodyLines);
+    const blockReadings = carried.map((block) => readNote(block.lines));
+    const defined = new Set([...landed.flatMap((line) => line.labels), ...blockReadings.flatMap((reading) => reading.definitions)].map(({ name }) => name.toLowerCase()));
+    const cited = [
+        ...landed.flatMap((line) => line.references),
+        ...carried.flatMap((block, i) => block.lines.flatMap((_, line) => blockReadings[i].referencesOn(line))),
+    ];
     const missing = new Map<string, string>();
-    for (let line = 0; line < lines.length; line++) {
-        for (const { name } of reading.referencesOn(line)) {
-            if (!defined.has(name.toLowerCase()) && !missing.has(name.toLowerCase())) missing.set(name.toLowerCase(), name);
-        }
+    for (const { name } of cited) {
+        if (!defined.has(name.toLowerCase()) && !missing.has(name.toLowerCase())) missing.set(name.toLowerCase(), name);
     }
     return [...missing.values()];
 }

@@ -299,32 +299,72 @@ function landPastedText(plugin: FootnotePlugin, doc: Editor, text: string, befor
     if (!text) return false;
     let body: string;
     let carried: CarriedDefinition[];
-    let missing: string[];
+    // the names the plugin's own copy found no definition for; null for a
+    // text from anywhere else, whose names are read where it lands
+    // (missingWhereLanded)
+    let known: string[] | null = null;
     if (register && normalizeEol(register.text).text === normalizeEol(text).text) {
         // the plugin's own copy: the exact blocks it remembered, and the
         // names it could not find
-        ({ body, carried, missing } = register);
+        ({ body, carried, missing: known } = register);
     } else {
-        // a clipboard from anywhere that ends in definition lines, and the
-        // names it cites without carrying a definition for them
+        // a clipboard from anywhere that ends in definition lines
         ({ body, carried } = splitCarriedText(text));
-        missing = uncarriedNames(text);
     }
     const selections = doc.listSelections();
-    const landed = () => {
-        if (carried.length === 0 && !definesFootnotes(body)) return false;
-        if (selections.length !== 1) return false;
-        const [a, b] = [selections[0].anchor, selections[0].head];
-        const [from, to] = a.line < b.line || (a.line === b.line && a.ch <= b.ch) ? [a, b] : [b, a];
-        return landCarriedText(plugin, doc, from, to, text, body, carried, missing, beforeWrite);
-    };
-    if (landed()) return true;
-    // nothing landed, so the editor pastes as usual; a reference that
-    // travelled without a definition is still worth a word
+    const [a, b] = [selections[0].anchor, selections[0].head];
+    const [from, to] = a.line < b.line || (a.line === b.line && a.ch <= b.ch) ? [a, b] : [b, a];
+    return landOrNameMissing(plugin, doc, from, to, text, body, carried, known, selections.length === 1, beforeWrite);
+}
+
+/**
+ * Lands `body` and its `carried` definitions in place of the text between
+ * `from` and `to` (landCarriedText), when it carries any or defines a
+ * footnote of its own, the editor holds `one` selection, and the landing
+ * goes through. Otherwise the editor pastes as usual, and a text that
+ * carries nothing still gets a word for each reference it brings without
+ * a definition. Both routes a text can arrive by, the paste event and the
+ * phone keyboard's input (carriedInputHandler), come through here, so they
+ * say the same: the input route used to say nothing (hunt 2026-10-06
+ * cycle 5, cluster X9, pin bug-input-route-missing-notice). Returns
+ * whether the text was landed.
+ */
+function landOrNameMissing(
+    plugin: FootnotePlugin,
+    doc: Editor,
+    from: EditorPosition,
+    to: EditorPosition,
+    text: string,
+    body: string,
+    carried: CarriedDefinition[],
+    known: string[] | null,
+    one: boolean,
+    beforeWrite: () => void = () => undefined,
+): boolean {
+    const missing = missingWhereLanded(doc, from, to, body, carried, known);
+    if (one && (carried.length > 0 || definesFootnotes(body)) && landCarriedText(plugin, doc, from, to, text, body, carried, missing, beforeWrite)) return true;
     if (carried.length === 0 && missing.length > 0) {
         showNotice(`${missing.map(quotedReference).join(", ")} ${missing.length === 1 ? "has" : "have"} no definition to carry.`, 8000);
     }
     return false;
+}
+
+/**
+ * The references a pasted text brings with no definition, read where its
+ * `body` lands in place of the text between `from` and `to`
+ * (uncarriedNames). Of the plugin's own copy, only the names the copy
+ * found no definition for in its note (`known`) are named, and only those
+ * the text still cites as references where it lands: pasted into a code
+ * block or math, "[^1]" is no reference, and nothing is said (hunt
+ * 2026-10-06 cycle 5, cluster X11, pin bug-missing-notice-in-protected-text).
+ */
+function missingWhereLanded(doc: Editor, from: EditorPosition, to: EditorPosition, body: string, carried: CarriedDefinition[], known: string[] | null): string[] {
+    // the copy found every definition, so there is nothing to read
+    if (known?.length === 0) return [];
+    const uncarried = uncarriedNames(simulateChanges(docLines(doc), [{ from, to, text: "" }]), from, body, carried);
+    if (!known) return uncarried;
+    const cited = new Set(uncarried.map((name) => name.toLowerCase()));
+    return known.filter((name) => cited.has(name.toLowerCase()));
 }
 
 /**
@@ -349,7 +389,9 @@ function definesFootnotes(body: string): boolean {
  * 2026-09-25). CodeMirror reports such an insert to its input handlers,
  * so this one looks at any inserted text that spans lines and ends in
  * definition lines, and lands it the way a paste would, with the same
- * toast and lint. `editorFor` turns the CodeMirror view into the Obsidian
+ * toast and lint; a text that carries nothing gets the same word a paste
+ * gives about the references it brings without a definition
+ * (landOrNameMissing). `editorFor` turns the CodeMirror view into the Obsidian
  * editor that owns it (the unit tests hand in the fake editor directly).
  * Returns whether it took the insert over. A real paste never reaches
  * here: CodeMirror handles those itself and the editor-paste hook covers
@@ -362,10 +404,12 @@ export function carriedInputHandler(
     return (view, from, to, text) => {
         if (!plugin.settings.carryFootnotesOnCopy || !text.includes("\n")) return false;
         const { body, carried } = splitCarriedText(text);
-        if (carried.length === 0 && !definesFootnotes(body)) return false;
+        // a text with no "[^" left in its body, and nothing carried, has
+        // nothing to land, rename, or name
+        if (carried.length === 0 && !body.includes("[^")) return false;
         const doc = editorFor(view);
         if (!doc || nestedSubEditorOwnsFocus(doc)) return false;
-        return landCarriedText(plugin, doc, doc.offsetToPos(from), doc.offsetToPos(to), text, body, carried, uncarriedNames(text));
+        return landOrNameMissing(plugin, doc, doc.offsetToPos(from), doc.offsetToPos(to), text, body, carried, null, true);
     };
 }
 

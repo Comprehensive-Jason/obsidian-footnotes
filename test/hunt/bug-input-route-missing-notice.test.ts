@@ -85,7 +85,7 @@ beforeEach(() => {
 });
 
 describe("the notice for a text that carries nothing, on both routes", () => {
-    it.fails("the paste event route and the phone input route give the same word for a text that carries nothing and cites [^9]", () => {
+    it("the paste event route and the phone input route give the same word for a text that carries nothing and cites [^9]", () => {
         const clip = "see [^9]\nmore";
         paste(["Dest.", ""], { line: 1, ch: 0 }, clip);
         const eventToasts = messages().slice();

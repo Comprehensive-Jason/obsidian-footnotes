@@ -81,7 +81,7 @@ beforeEach(() => {
 });
 
 describe("no missing-definition notice for a paste into protected text", () => {
-    it.fails("a foreign text citing [^1] pasted inside a fenced code block says nothing about a missing definition", () => {
+    it("a foreign text citing [^1] pasted inside a fenced code block says nothing about a missing definition", () => {
         const note = ["Intro.", "", "```", "", "```"];
         const back = paste(note, { line: 3, ch: 0 }, "Here is a footnote[^1].");
         expect(back.taken).toBe(false);
@@ -89,14 +89,14 @@ describe("no missing-definition notice for a paste into protected text", () => {
         expect(noDefinitionNotices()).toEqual([]);
     });
 
-    it.fails("a foreign text citing [^1] pasted inside inline code says nothing about a missing definition", () => {
+    it("a foreign text citing [^1] pasted inside inline code says nothing about a missing definition", () => {
         const note = ["Write `` here."];
         const back = paste(note, { line: 0, ch: 7 }, "x[^1]");
         expect(back.taken).toBe(false);
         expect(noDefinitionNotices()).toEqual([]);
     });
 
-    it.fails("a foreign text citing [^1] pasted inside a math block says nothing about a missing definition", () => {
+    it("a foreign text citing [^1] pasted inside a math block says nothing about a missing definition", () => {
         const note = ["$$", "", "$$"];
         paste(note, { line: 1, ch: 0 }, "a^[1] x[^1]");
         expect(noDefinitionNotices()).toEqual([]);
