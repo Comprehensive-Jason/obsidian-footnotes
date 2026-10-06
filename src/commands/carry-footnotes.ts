@@ -218,9 +218,20 @@ function carriedBlocks(lines: string[], from: EditorPosition, to: EditorPosition
     // A block whose lines lie inside another carried block (a footnote
     // defined in another footnote's body) already travels with that block,
     // so it is not carried a second time, whichever of the two the copy met
-    // first (hunt 2026-10-05, pin bug-nested-definition-carried-twice)
-    const outermost = carried.filter((block) => !carried.some((other) => other !== block && other.start <= block.start && block.end <= other.end));
+    // first (hunt 2026-10-05, pin bug-nested-definition-carried-twice).
+    // Two definitions can share their lines, as in "[^1]: [^2]: x", where
+    // [^2] is held in [^1]'s text (rule E2). Comparing lines alone, each
+    // then lay inside the other, and both were dropped, so the copy carried
+    // neither; the holder is the one whose label comes first (hunt
+    // 2026-10-06 cycle 5, cluster X6, pin bug-carry-equal-extent-definitions).
+    const outermost = carried.filter((block) => !carried.some((other) => other !== block && holds(other, block)));
     return { blocks: copiesInNoteOrder(outermost, reading.definitions), missing };
+}
+
+/** Whether the definition `outer` holds `inner` in its body: `inner` starts after `outer`'s label and ends by `outer`'s last line. */
+function holds(outer: Definition, inner: Definition): boolean {
+    const startsAfter = outer.start < inner.start || (outer.start === inner.start && outer.labelStart < inner.labelStart);
+    return startsAfter && inner.end <= outer.end;
 }
 
 /**
@@ -355,9 +366,14 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     // another footnote's definition travels inside that block, and lands
     // in the destination as a definition like any other, so its name is
     // kept or renamed like the block's own (hunt 2026-10-05 round 2,
-    // cluster C6, pin bug-paste-held-definition-name-collision).
-    const heldIn = (i: number) =>
-        blockReadings[i].definitions.filter((held) => held.start > 0).map((held) => held.name);
+    // cluster C6, pin bug-paste-held-definition-name-collision). Every
+    // definition in the block but the block's own counts, a held one on
+    // the label's line too ("[^1]: [^2]: x"; hunt 2026-10-06 cycle 5,
+    // cluster X6, pin bug-carry-equal-extent-definitions).
+    const heldIn = (i: number) => {
+        const ownLabel = blockReadings[i].labelOn(0)?.labelStart ?? 0;
+        return blockReadings[i].definitions.filter((held) => held.start > 0 || held.labelStart > ownLabel).map((held) => held.name);
+    };
 
     // How many definitions the paste brings for each name, folded.
     const defined = new Map<string, number>();

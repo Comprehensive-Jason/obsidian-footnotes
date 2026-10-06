@@ -77,7 +77,7 @@ beforeEach(() => {
 const note = ["a[^1] b[^2]", "", "[^1]: [^2]: x"];
 
 describe("two definitions on one line (rule E2) travel with text citing both", () => {
-    it.fails("copying text that cites both carries a definition for each (nothing missing)", () => {
+    it("copying text that cites both carries a definition for each (nothing missing)", () => {
         // the reader sees both definitions on the last line
         expect(readNote(note).definitions.map((d) => d.name).sort()).toEqual(["1", "2"]);
         const { carried, missing } = carriedDefinitions(note.join("\n"), { line: 0, ch: 0 }, { line: 0, ch: 11 });
@@ -88,7 +88,7 @@ describe("two definitions on one line (rule E2) travel with text citing both", (
         expect(defined).toEqual(["1", "2"]);
     });
 
-    it.fails("the copy hook writes the definitions into the clipboard text", () => {
+    it("the copy hook writes the definitions into the clipboard text", () => {
         const doc = editor(note, { line: 0, ch: 0 }, { line: 0, ch: 11 });
         const event = clipboardEvent();
         handleCopy(fakePlugin(settings, doc), event as never);
@@ -98,7 +98,7 @@ describe("two definitions on one line (rule E2) travel with text citing both", (
         expect(carryRegister()?.carried.length).toBeGreaterThan(0);
     });
 
-    it.fails("a cut of the only references takes the line that defines both, and a paste elsewhere defines both", () => {
+    it("a cut of the only references takes the line that defines both, and a paste elsewhere defines both", () => {
         const plan = planCut(note.join("\n"), { line: 0, ch: 0 }, { line: 0, ch: 11 });
         // Today the plan carries nothing and leaves "[^1]: [^2]: x" in the note.
         expect(plan.carried.length).toBeGreaterThan(0);
