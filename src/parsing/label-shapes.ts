@@ -202,12 +202,32 @@ export function labelShapedLines(lines: string[]): { line: number; name: string;
  * ("10. item") sat four spaces in and was no underline at all (hunt
  * 2026-10-05, round 2, pins bug-underline-judged-from-margin and
  * bug-underlined-label-wide-item; live Obsidian 1.14.4, 2026-10-05).
+ *
+ * The underline is a run of "=" or of "-" and nothing else, from the very
+ * start of the line's text inside its containers: no space in front, none
+ * after. That is the shape Obsidian's parser (remark-parse 8) takes as an
+ * underline. An indented "  ---" or a "--- " is a horizontal rule of its
+ * own, and an indented "   ===" or a "=== " is plain text. The old test
+ * allowed three spaces in front and any number after, so a lazy label
+ * over such a line was taken for a heading's text: fix-lazy left it alone,
+ * and Delete footnote everywhere cut the line under it too (hunt
+ * 2026-10-06, cycle 3, pin bug-underline-regex-too-wide; live Obsidian
+ * 1.14.4, 2026-10-06).
  */
 function underlinedAt(reading: NoteReading, lines: readonly string[], i: number): boolean {
     if (i + 1 >= lines.length) return false;
     const next = lines[i + 1].replace(/\r$/, "").slice(reading.containerEnd(i + 1));
-    return /^ {0,3}(?:=+|-+) *$/.test(next) && containersOf(reading.lineBlocks[i]) === containersOf(reading.lineBlocks[i + 1]);
+    return SetextUnderline.test(next) && containersOf(reading.lineBlocks[i]) === containersOf(reading.lineBlocks[i + 1]);
 }
+
+/**
+ * A setext underline, the "===" or "---" line that turns the one-line
+ * paragraph above it into a heading, as Obsidian's parser takes it: one
+ * kind of mark repeated, alone on the line's text inside its containers,
+ * with no space before or after (remark-parse 8,
+ * lib/tokenize/heading-setext.js; live Obsidian 1.14.4, 2026-10-06).
+ */
+const SetextUnderline = /^(?:=+|-+)$/;
 
 /** The containers in one line's entry of lineBlocks, outermost first, without the line's own block and without the marks where blocks start. */
 function containersOf(blocks: string | undefined): string {

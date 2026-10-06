@@ -115,11 +115,19 @@ export function removeLineRanges(
         // heading. A blank separator goes back in only when the two lines
         // have just become neighbours, which is what mergeBlanks means: no
         // blank line between them survived the cut.
+        //
+        // The marks must end the line: a "=== " or "--- " is never an
+        // underline, so a blank line there only split a paragraph the cut
+        // had left whole (hunt 2026-10-06, cycle 3, pin
+        // bug-underline-regex-too-wide). Up to three spaces in front stay
+        // allowed, since this function cannot see a list item's content
+        // column, where such a line can be an underline; a blank line too
+        // many is the safe mistake.
         if (
             mergeBlanks &&
             out.length > 0 &&
             out[out.length - 1] !== "" &&
-            /^\s{0,3}(-+|=+)\s*$/.test(lines[i].replace(BlockquotePrefix, ""))
+            /^\s{0,3}(-+|=+)$/.test(lines[i].replace(BlockquotePrefix, ""))
         ) {
             out.push("");
         }

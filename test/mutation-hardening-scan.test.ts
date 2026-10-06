@@ -1113,15 +1113,18 @@ describe("round 2", () => {
             expect(out).toEqual(["para", "", "  ---"]);
         });
 
-        // line 724: swapping the trailing "\s*$" for "\S*$" rejects a
-        // setext underline that has trailing whitespace after the
-        // delimiter run.
-        it("a setext underline with trailing whitespace is still guarded", () => {
+        // A "---" with spaces after it is no underline to Obsidian's parser
+        // (remark-parse 8 takes the marks only when they end the line; live
+        // Obsidian 1.14.4, 2026-10-06: "--- " is a horizontal rule of its
+        // own), so no blank line goes in. This test used to expect one,
+        // after CommonMark, which allows the spaces (hunt 2026-10-06, cycle
+        // 3, pin bug-underline-regex-too-wide).
+        it("a '---' with trailing whitespace is no underline and gets no blank line", () => {
             const out = removeLineRanges(
                 ["para", "cut1", "---   "],
                 [{ start: 1, end: 1 }],
             );
-            expect(out).toEqual(["para", "", "---   "]);
+            expect(out).toEqual(["para", "---   "]);
         });
 
         // line 724: dropping the "+" quantifier on the equals branch

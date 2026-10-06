@@ -61,25 +61,38 @@ describe("an underline-shaped line that Obsidian reads as no underline", () => {
             expect(readNote(fixed).labelOn(2)?.name).toBe("1");
         });
 
-        it.fails(`${what}: the label is lazy, not underlined`, () => {
+        it(`${what}: the label is lazy, not underlined`, () => {
             expect(underlinedDefinitionLabelLines(lines)).toEqual([]);
             expect(lazyDefinitionLabelLines(lines)).toEqual([1]);
         });
 
-        it.fails(`${what}: fix-lazy inserts the blank line`, () => {
+        it(`${what}: fix-lazy inserts the blank line`, () => {
             expect(fixLazyDefinitions(lines.join("\n"))).toBe(fixed.join("\n"));
         });
 
-        it.fails(`${what}: Delete footnote everywhere keeps the line under the label`, () => {
+        it(`${what}: Delete footnote everywhere keeps the line under the label`, () => {
             const plan = deleteFootnoteEverywhere(lines.join("\n"), "1") as { kind: string; markdown?: string };
             // A refusal would do too; cutting the line under the label would not.
             expect(plan.kind === "refused" || (plan.markdown ?? "").split("\n").includes(under)).toBe(true);
         });
     }
 
+    // The twin in removeLineRanges (src/parsing/line-edits.ts), which puts
+    // a blank line back where a cut would drop a paragraph onto an
+    // underline, allowed spaces after the marks too. So the delete above
+    // split "Text here" from a "=== " that had been the same paragraph's
+    // text, read the change, and refused. A "=== " is no underline in any
+    // container, so the paragraph stays whole and the delete goes through
+    // (added by the fix, 2026-10-06).
+    it("a lazy label over '=== ': Delete footnote everywhere keeps the paragraph whole", () => {
+        const lines = ["Text[^1] here", "[^1]: def", "=== ", "", "More"];
+        const plan = deleteFootnoteEverywhere(lines.join("\n"), "1") as { kind: string; markdown?: string };
+        expect(plan.markdown).toBe(["Text here", "=== ", "", "More"].join("\n"));
+    });
+
     // The face new since cec4352 (R2). At cec4352 the quote depths of the
     // two lines differed, the label counted as lazy, and the delete refused.
-    it.fails("a lazy label in a quote over '>    ===': Delete footnote everywhere keeps the quoted line", () => {
+    it("a lazy label in a quote over '>    ===': Delete footnote everywhere keeps the quoted line", () => {
         const lines = ["See[^1]", "", "> a", "[^1]: lazy", ">    ===", "", "More"];
         expect(readNote(lines).lineBlocks[4]).toBe("blockquote paragraph");
         const plan = deleteFootnoteEverywhere(lines.join("\n"), "1") as { kind: string; markdown?: string };
