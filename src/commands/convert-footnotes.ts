@@ -9,7 +9,7 @@ import type FootnotePlugin from "../main";
 import { docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
 import { showNotice } from "../editor/notice";
 import { runOutsideTableCell } from "../editor/table-cursor";
-import { replaceMinimal } from "../editor/write-back";
+import { replaceMinimal, writeChanges } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
 import { lintAfterFootnoteCreation, withEmptySectionHeadingRemoved } from "../linting/linter";
 import { computeNextFootnoteNumber, definitionLabel, nameForBody, quotedReference } from "../parsing/footnote-grammar";
@@ -342,7 +342,13 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         body: bodies[0],
         moreDefinitionLines: ids.slice(1).map((id, k) => `${definitionLabel(id)} ${bodies[k + 1]}`),
     });
-    doc.transaction({ changes: plan.changes });
+    // through the shared write-back, so a folded section the conversion
+    // edits stays folded and a second pane on the note stays where it was
+    // (hunt 2026-10-02, round 4, cluster U2)
+    const offsetChanges = plan.changes
+        .map((change) => ({ from: doc.posToOffset(change.from), to: doc.posToOffset(change.to ?? change.from), text: change.text }))
+        .sort((a, b) => a.from - b.from);
+    writeChanges(doc, doc.getValue(), offsetChanges, plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined);
 
     const result: ConversionToNormal = {
         converted: spans.length,

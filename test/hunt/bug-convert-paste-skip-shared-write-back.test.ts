@@ -42,6 +42,13 @@ import { resetNotices } from "../helpers/notices";
 // landCarriedText (carry-footnotes-hooks.ts) write with a plain
 // doc.transaction instead of replaceMinimal, so nothing reads or restores
 // the folds or the other panes.
+//
+// Fix (2026-10-06), the convert face: convertInlineFootnotesToNormal hands
+// its planned edits to writeChanges (write-back.ts), the shared write-back
+// that replaceMinimal now runs on too. The paste faces stay expected-fail:
+// landCarriedText is in carry-footnotes-hooks.ts, the carry group's file.
+// Its transaction also places the caret after the pasted text, so it
+// needs writeChanges to take that selection too before it can use it.
 
 type Fold = { from: number; to: number };
 type Pos = { line: number; ch: number };
@@ -150,7 +157,7 @@ describe("folds after the 0.3.0 rewrites", () => {
         expect(applied).toEqual([[{ from: 3, to: 4 }]]);
     });
 
-    it.fails("Convert inline to normal puts back a fold on the section it edits", () => {
+    it("Convert inline to normal puts back a fold on the section it edits", () => {
         // The folded section holds the inline footnote that becomes [^1], and
         // the new definition is appended at the end of that section.
         const lines = ["# Title", "Intro.", "", "## Part", "Text^[a note] here.", "More text."];
@@ -158,7 +165,7 @@ describe("folds after the 0.3.0 rewrites", () => {
         const { view, applied } = foldingView(doc, [{ from: 3, to: 5 }]);
         const result = convertInlineFootnotesToNormal(pluginOn(view), doc);
         expect(result.converted).toBe(1);
-        // Today: 0 (no fold is put back).
+        // Before the fix: 0 (no fold is put back).
         expect(applied.length).toBe(1);
     });
 

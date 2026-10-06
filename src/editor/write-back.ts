@@ -1,7 +1,7 @@
 import { EditorView } from "@codemirror/view";
 import { Editor, EditorPosition, EditorSelection, MarkdownView } from "obsidian";
 
-import { lineDiffChanges, lineMapper, mapFoldLines, OffsetChange } from "./document-diff";
+import { applyOffsetChanges, lineDiffChanges, lineMapper, mapFoldLines, OffsetChange } from "./document-diff";
 import { codeMirrorViewOf } from "./obsidian-internals";
 
 // Writing a whole new text for the note back into the editor as the
@@ -20,7 +20,21 @@ import { codeMirrorViewOf } from "./obsidian-internals";
  * transaction expects.
  */
 export function replaceMinimal(doc: Editor, before: string, after: string, mdView?: MarkdownView) {
-    const changes = lineDiffChanges(before, after);
+    writeChanges(doc, before, lineDiffChanges(before, after), mdView);
+}
+
+/**
+ * Write `changes` (edits in the positions of `before`, the editor's text
+ * now, in document order and never overlapping) into the editor as one
+ * transaction, keeping folds, the caret, and the other panes on the same
+ * note where they were. replaceMinimal works its edits out from the text
+ * before and after; a command that has planned its own edits, such as the
+ * conversion of inline footnotes to normal ones, hands them here, so its
+ * edits land exactly as planned and still keep the folds and the other
+ * panes (hunt 2026-10-02, round 4, cluster U2, pin
+ * bug-convert-paste-skip-shared-write-back).
+ */
+export function writeChanges(doc: Editor, before: string, changes: OffsetChange[], mdView?: MarkdownView) {
     if (changes.length === 0) return;
     // the other panes showing this note, and where each one is, read
     // before anything moves (see restoreOtherPanes)
@@ -40,6 +54,7 @@ export function replaceMinimal(doc: Editor, before: string, after: string, mdVie
         })),
     });
     keepCaretBelowLinesAbove(doc, changes);
+    const after = applyOffsetChanges(before, changes);
     if (foldInfo && foldInfo.folds.length > 0 && mode?.applyFoldInfo) {
         mode.applyFoldInfo({
             folds: mapFoldLines(foldInfo.folds, changes, before),

@@ -664,7 +664,7 @@ function alignRun(a: string[], b: string[], proseA: boolean[], proseB: boolean[]
 }
 
 /** `before` with `changes` (offsets into `before`, in order, non-overlapping) applied. */
-function applyOffsetChanges(before: string, changes: OffsetChange[]): string {
+export function applyOffsetChanges(before: string, changes: OffsetChange[]): string {
     let out = "";
     let copied = 0;
     for (const change of changes) {
