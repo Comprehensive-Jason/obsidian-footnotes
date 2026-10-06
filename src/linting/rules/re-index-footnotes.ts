@@ -77,6 +77,21 @@ export interface ReindexOptions {
      * definitions read in the order of their numbers.
      */
     leaveOrphansInPlace?: boolean;
+    /**
+     * Leave every copy of a name defined more than once in its own slot
+     * (off by default; the lint turns it on while Merge duplicate
+     * definitions is on), as leaveOrphansInPlace does for orphans.
+     *
+     * Why: with that setting on, a name still defined twice when reindex
+     * runs is one the merge left on purpose, such as a copy between two
+     * lists, whose cut would join them. Swapped to the end of the note,
+     * the copy landed where the cut is clean, and the next lint merged
+     * it: linting twice did more than linting once, and the duplicate
+     * alert after the first lint said nothing. In their own slots the
+     * reason the copies were left still holds, and the alert names the
+     * name (hunt 2026-10-06, cycle 5, pin bug-merge-refused-then-relocated).
+     */
+    leaveDuplicatesInPlace?: boolean;
 }
 
 /**
@@ -294,10 +309,16 @@ function reindexOnce(
         const rank = (name: string) => orderIndex.get(name.toLowerCase()) ?? order.length;
         // With leaveOrphansInPlace, an orphan takes no part in the swap: it
         // keeps its own slot, renamed there, and only the referenced
-        // definitions trade places (see the option for why).
+        // definitions trade places (see the option for why). With
+        // leaveDuplicatesInPlace, the same goes for every copy of a name
+        // defined more than once.
         const referenced = new Set(referenceOrder);
+        const copies = new Map<string, number>();
+        for (const definition of definitions) copies.set(definition.name.toLowerCase(), (copies.get(definition.name.toLowerCase()) ?? 0) + 1);
         const blocks = movedDefinitions(reading).filter(
-            (block) => !options.leaveOrphansInPlace || referenced.has(block.name.toLowerCase()),
+            (block) =>
+                (!options.leaveOrphansInPlace || referenced.has(block.name.toLowerCase())) &&
+                (!options.leaveDuplicatesInPlace || copies.get(block.name.toLowerCase()) === 1),
         );
         const sorted = blocks
             .map((block, i) => ({ block, i }))

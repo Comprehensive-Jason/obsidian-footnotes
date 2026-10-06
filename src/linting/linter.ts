@@ -369,6 +369,11 @@ export function lintFootnotes(
                 // it where the next lint would cut it (hunt 2026-10-05
                 // round 2, cluster L4).
                 leaveOrphansInPlace: options.removeOrphanedDefinitions ?? false,
+                // And a name still defined twice is one the merge refused
+                // to fold, so its copies stay in their slots too, where the
+                // merge's reason still holds (hunt 2026-10-06, cycle 5, pin
+                // bug-merge-refused-then-relocated).
+                leaveDuplicatesInPlace: options.mergeDuplicateDefinitions ?? false,
             });
         }
         // Last of all, once every rule has had its say about what stays:
