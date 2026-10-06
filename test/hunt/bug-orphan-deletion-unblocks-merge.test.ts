@@ -36,6 +36,11 @@ import { messages, resetNotices } from "../helpers/notices";
 // "    body5 outer" into [^2]'s paragraph). Recheck this pin after that
 // fix: the second lint should then merge cleanly, and the first lint
 // should either do it too or name [^a] in the alert.
+//
+// Fixed with cluster L1 (hunt 2026-10-05 round 2): both top-level copies
+// of [^a] hold a copy of [^2], which is defined twice, so the merge leaves
+// [^a]'s copies as they are on every lint (movedDefinitions). The first
+// lint's result is then settled, and the duplicate alert names [^a].
 
 beforeEach(resetNotices);
 
@@ -65,13 +70,13 @@ const OPTIONS = {
 };
 
 describe("orphan deletion unblocks a merge the same lint does not make", () => {
-    it.fails("lint is idempotent", () => {
+    it("lint is idempotent", () => {
         const once = lintFootnotes(NOTE, OPTIONS);
         // Today: the second lint merges, turning "[^a]: body5 outer" into "    body5 outer".
         expect(lintFootnotes(once, OPTIONS)).toBe(once);
     });
 
-    it.fails("the duplicate alert names a after the lint", () => {
+    it("the duplicate alert names a after the lint", () => {
         const once = lintFootnotes(NOTE, OPTIONS);
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS, lintDeleteOrphanedDefinitions: true, lintMergeDuplicateDefinitions: true }), once);
         // Today: no alert names [^a].

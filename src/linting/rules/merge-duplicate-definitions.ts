@@ -2,6 +2,7 @@ import { normalizeEol, removeLineRanges } from "../../parsing/line-edits";
 import { Definition, readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
+import { definitionsHeldBy, linesReadDifferently } from "./remove-orphaned-definitions";
 
 // Duplicate footnote definitions: two or more "[^x]:" definition blocks for
 // the same name, treating upper and lower case as the same.
@@ -66,12 +67,13 @@ export function duplicateFootnoteDefinitionNames(
 
 /**
  * Merge every later duplicate into the FIRST definition block for that name.
- * Only a name whose every copy sits at the top level of the note, alone on
- * its lines (Definition.movable), is merged: a copy in a quote, a list
- * item, or another footnote cannot take or give indented continuation
- * lines without changing its container, so such a name is left as written
- * and the duplicate alert names it (ADR 2; Jason's ruling 1, option a,
- * 2026-10-03).
+ * Only a name whose every copy the lint may move is merged (movedDefinitions
+ * in rewrite-document.ts): a copy in a quote, a list item, or another
+ * footnote cannot take or give indented continuation lines without changing
+ * its container, and a copy that holds a copy of some other duplicated name
+ * would carry that copy past its twins (hunt 2026-10-05 round 2, cluster
+ * L1). Such a name is left as written and the duplicate alert names it
+ * (ADR 2; Jason's ruling 1, option a, 2026-10-03).
  *
  * What was written after the duplicate's label becomes an indented
  * continuation line, and the duplicate's own continuation lines follow it
@@ -81,11 +83,16 @@ export function duplicateFootnoteDefinitionNames(
  *
  * Anything inside protected text is never a definition. Where a duplicate is
  * cut out, the lines close up through removeLineRanges, the same as any
- * other definition block deletion.
+ * other definition block deletion. A name whose duplicates cannot be cut
+ * out without changing how Obsidian reads the lines around them (one
+ * sitting between two lists, whose cut would join the lists) is left as
+ * written too, the promise every rule that cuts definitions makes
+ * (linesReadDifferently; hunt 2026-10-05 round 2, pin
+ * bug-merge-between-lists-joins-them).
  */
 export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
     if (!markdown.includes("[^")) return markdown;
-    return rewriteDocument(markdown, (text, { lines, definitions }) => {
+    return rewriteDocument(markdown, (text, { lines, definitions, blocks }) => {
         const groups = new Map<string, Definition[]>();
         for (const block of definitions) {
             const folded = block.name.toLowerCase();
@@ -98,9 +105,9 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
         // keyed by the LAST line of the block they are joining, and the
         // ranges of lines the duplicates occupy, to be cut out.
         const appendAfter = new Map<number, string[]>();
-        const doomed: { start: number; end: number }[] = [];
+        let doomed: { start: number; end: number }[] = [];
         for (const group of groups.values()) {
-            if (group.length < 2 || group.some((block) => !block.movable)) continue;
+            if (group.length < 2 || group.some((block) => !blocks.includes(block))) continue;
             // A copy whose table starts on its label line ("[^1]: | a | b |"
             // with the delimiter row under it) cannot be folded into
             // indented continuation lines: the header would become body
@@ -119,15 +126,30 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
             // (a table copy that comes FIRST stays the survivor and takes the
             // others' prose under its rows, as before)
             if (group.slice(1).some(holdsTable)) continue;
+            // Cutting this name's duplicates, together with the ones already
+            // taken, must leave every other line reading as it did.
+            const cuts = group.slice(1).map((duplicate) => ({ start: duplicate.start, end: duplicate.end }));
+            const trial = [...doomed, ...cuts].sort((a, b) => a.start - b.start);
+            if (linesReadDifferently(lines, { lines, ranges: trial }, removeLineRanges(lines, trial))) continue;
+            doomed = trial;
             const base = group[0];
-            const appended = appendAfter.get(base.end) ?? [];
+            const appended: string[] = [];
             for (const duplicate of group.slice(1)) {
                 const body = lines[duplicate.start].slice(duplicate.labelEnd).trim();
                 if (body !== "") appended.push(`    ${body}`);
                 for (let i = duplicate.start + 1; i <= duplicate.end; i++) {
                     appended.push(lines[i]);
                 }
-                doomed.push({ start: duplicate.start, end: duplicate.end });
+            }
+            // When the first copy ends with a definition held inside it (an
+            // indented "[^b]: inner" on its last lines), a line straight
+            // under that would continue the held definition's text, and b
+            // would read "inner two". A blank line first makes the merged
+            // text a paragraph of the first copy's own, after the held
+            // definition (hunt 2026-10-05 round 2, pin
+            // bug-merge-into-held-definition).
+            if (appended.length > 0 && appended[0] !== "" && definitionsHeldBy(definitions, base).some((held) => held.end === base.end)) {
+                appended.unshift("");
             }
             if (appended.length > 0) appendAfter.set(base.end, appended);
         }

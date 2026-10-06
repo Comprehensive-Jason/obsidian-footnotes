@@ -36,7 +36,7 @@ function rendered(text: string, name: string): string {
 }
 
 describe("merge with a held definition at the end of the first copy", () => {
-    it.fails("the merged text stays a's, and b's text is unchanged", () => {
+    it("the merged text stays a's, and b's text is unchanged", () => {
         const note = ["Text[^a] and[^b].", "", "[^a]: one", "", "    [^b]: inner", "", "[^a]: two"].join("\n");
         const out = mergeDuplicateFootnoteDefinitions(note);
         // Today: "[^a]: one", "", "    [^b]: inner", "    two", and b reads "inner two".

@@ -34,7 +34,7 @@ function blocksAt(text: string, line: string): string {
 }
 
 describe("merge between two lists", () => {
-    it.fails("merging away a duplicate that sits between two lists keeps them apart", () => {
+    it("merging away a duplicate that sits between two lists keeps them apart", () => {
         const note = "x[^a]\n\n[^a]: first\n\n- one\n\n[^a]: second\n\n- two";
         const out = mergeDuplicateFootnoteDefinitions(note);
         // Today: "list ^listItem ^paragraph", "- two" continues the first list instead of starting one ("^list").
