@@ -26,14 +26,17 @@ import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after
 // the generic branch judges an emphasis run ("**", "==", "~~", "__") as a
 // whole. So "。**重点**" reads as "punctuation, then a real closer", the
 // walk steps over the "。" and stops in front of the bold opener.
+//
+// Fix (2026-10-06): both branches judge the mark with one function,
+// markRunEnd in src/parsing/landing.ts, which takes an emphasis run whole.
 
 describe("before: punctuation glued to an emphasis opener", () => {
-    it.fails("lint under before leaves 这是句子[^1]。**重点**内容 as it is", () => {
+    it("lint under before leaves 这是句子[^1]。**重点**内容 as it is", () => {
         // Today: "这是句子。[^1]**重点**内容".
         expect(footnoteAfterPunctuation("这是句子[^1]。**重点**内容", "before")).toBe("这是句子[^1]。**重点**内容");
     });
 
-    it.fails("the landing walk stops in front of the 。 when a bold opener follows", () => {
+    it("the landing walk stops in front of the 。 when a bold opener follows", () => {
         expect(endOfWordOffset("这是句子。**重点**内容", 2, "before")).toBe(4);
         expect(endOfWordOffset("word.**bold** x", 2, "before")).toBe(4);
     });

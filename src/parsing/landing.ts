@@ -131,35 +131,68 @@ export function referenceLandingAfter(text: string, end: number, placement: Foot
         if (placement === "before" && punctuationAt(text, at)) {
             // "before": the run of punctuation from here is stepped over
             // only when a closing mark follows it (the period inside
-            // "quoted." or 「句子。」), and that mark must be a real closer,
-            // not glued to the next word; otherwise the reference stops in
-            // front of the punctuation
+            // "quoted." or 「句子。」), and that mark must be a real closer
+            // (markRunEnd); otherwise the reference stops in front of the
+            // punctuation. The mark is judged the way the walk judges it
+            // below, a run of emphasis markers as one, so "。**重点**" is
+            // punctuation and then a bold OPENER, and the reference stays
+            // in front of the "。" (hunt 2026-10-02, pin
+            // bug-placement-before-punctuation-before-emphasis: one
+            // character after the mark was looked at, the second "*", so
+            // the press landed after the "。" and every lint flipped the
+            // reference from one side to the other).
             let runEnd = at;
             while (punctuationAt(text, runEnd)) runEnd++;
             if (
                 runEnd >= text.length ||
                 !ClosingMarkChars.includes(text[runEnd]) ||
-                isWordCharAt(text, runEnd + 1)
+                markRunEnd(text, runEnd) === -1
             ) {
                 return at;
             }
             at = runEnd;
             continue;
         }
-        // A mark or punctuation character glued to a word character on its
-        // far side is not a closer: an emphasis OPENER ("[^1]*important*"),
-        // an opening quote, or punctuation inside a word ("Marx's",
-        // "U.S."). Walking past it would put the reference inside the next
-        // word or break the emphasis (Kimi and Claude sweeps 2026-09-13;
-        // Jason's landing rulings 2026-09-15). Emphasis markers come in
-        // runs ("**"), so the run is judged as one.
-        let runEnd = at + 1;
-        if ("*_~=".includes(c)) {
-            while (runEnd < text.length && text[runEnd] === c) runEnd++;
-        }
-        if (isWordCharAt(text, runEnd)) return at;
-        at = runEnd;
+        const next = markRunEnd(text, at);
+        if (next === -1) return at;
+        at = next;
     }
+}
+
+/**
+ * The closing marks that only ever close: the closing brackets of every
+ * kind and the CJK closing quotes. A straight or curly quote can also open
+ * or sit inside a word ("Marx's"), and an emphasis marker can also open
+ * ("*important*"), but one of these closes whatever comes after it. So a
+ * word glued to its far side does not make it an opener: Chinese and
+ * Japanese have no spaces, and the "）" of "他说（来源）然后" touches the
+ * next word (hunt 2026-10-02, pin bug-placement-cjk-glued-closing-bracket:
+ * the press landed inside the bracket, and the lint left a reference
+ * inside "「来源[^1]」然后").
+ */
+const OnlyClosingChars = ")]}」』）】〕》〉｣］｝｠〗〙〛〞〟";
+
+/**
+ * Where the walk goes on after the closing mark or punctuation character
+ * at `at`, or -1 when it is no closer and the walk stops in front of it.
+ *
+ * A mark or punctuation character glued to a word character on its far
+ * side is not a closer: an emphasis OPENER ("[^1]*important*"), an
+ * opening quote, or punctuation inside a word ("Marx's", "U.S."). Walking
+ * past it would put the reference inside the next word or break the
+ * emphasis (Kimi and Claude sweeps 2026-09-13; Jason's landing rulings
+ * 2026-09-15). Emphasis markers come in runs ("**"), so the run is judged
+ * as one. A mark that only ever closes (OnlyClosingChars) is a closer
+ * whatever follows it.
+ */
+function markRunEnd(text: string, at: number): number {
+    const c = text[at];
+    if (OnlyClosingChars.includes(c)) return at + 1;
+    let runEnd = at + 1;
+    if ("*_~=".includes(c)) {
+        while (runEnd < text.length && text[runEnd] === c) runEnd++;
+    }
+    return isWordCharAt(text, runEnd) ? -1 : runEnd;
 }
 
 /** Whether the code point at `i` is a letter, digit, or mark. */

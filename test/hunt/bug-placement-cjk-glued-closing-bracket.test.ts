@@ -29,6 +29,11 @@ import { FootnotePlacement } from "../../src/parsing/landing";
 // its far side" as an opener, not a closer (b32cbd5, written for
 // "[^1]*important*" and "Marx's"). That test also fires on "」", "）",
 // "』", "】" and "》", which can only ever close.
+//
+// Fix (2026-10-06): the walk judges every mark with markRunEnd in
+// src/parsing/landing.ts, and a mark that only ever closes
+// (OnlyClosingChars: the closing brackets and the CJK closing quotes) is
+// stepped over whatever follows it.
 
 // Presses the numbered-footnote key with the caret at `ch` on a one-line note.
 async function press(line: string, ch: number, placement: FootnotePlacement) {
@@ -49,11 +54,11 @@ async function press(line: string, ch: number, placement: FootnotePlacement) {
 }
 
 describe("CJK closing brackets glued to the next character are still closers", () => {
-    it.fails("lint after: a reference inside a glued 」 moves out", () => {
+    it("lint after: a reference inside a glued 」 moves out", () => {
         expect(footnoteAfterPunctuation("他说「来源[^1]」然后", "after")).toBe("他说「来源」[^1]然后");
     });
 
-    it.fails("after: 他说（来源）然后, caret in 来源, lands after the ）", async () => {
+    it("after: 他说（来源）然后, caret in 来源, lands after the ）", async () => {
         expect(await press("他说（来源）然后", 3, "after")).toBe("他说（来源）[^1]然后");
     });
 });
