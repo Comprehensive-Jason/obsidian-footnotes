@@ -39,6 +39,17 @@ describe("mapFoldLines carries fold line numbers through the lint's edits", () =
         expect(mapped).toEqual([{ from: 0, to: 3 }]);
     });
 
+    it("a folded list item that loses a reference and the space before it, right under a definition moved away, keeps its fold", () => {
+        // Delete orphaned references takes out "[^9]" with the space
+        // before it, so the item's text without references reads
+        // "- item  more" before and "- item more" after. Lines are lined up
+        // with each run of spaces counted as one, so the item is still
+        // the same line (hunt 2026-10-05 round 2, cluster D5).
+        const before = "Intro[^1]\n\n[^1]: alpha\n\n- item [^9] more\n  - child\n\ntail";
+        const after = "Intro[^1]\n\n- item more\n  - child\n\ntail\n\n[^1]: alpha";
+        expect(mapFoldLines([{ from: 4, to: 5 }], lineDiffChanges(before, after), before)).toEqual([{ from: 2, to: 3 }]);
+    });
+
     it("a fold whose heading line is deleted is dropped", () => {
         const before = "# A\n\nbody\n\n# B\n\ntail";
         const after = "# B\n\ntail";

@@ -70,8 +70,8 @@ describe("folds through the default lint", () => {
     });
 });
 
-// BUG (annoyance), still open: the conversion still drops the fold when
-// the heading's own definition holds a link or a wikilink.
+// BUG (annoyance): the conversion still dropped the fold when the
+// heading's own definition held a link or a wikilink.
 //
 // What the user would see: the same layout as the first test, but the
 // definition of "## Part two[^2]" cites a source with a link,
@@ -88,8 +88,12 @@ describe("folds through the default lint", () => {
 // "]" after "Smith", so the rest of the link and the page number stay in
 // the key. The old and new heading keys differ, the heading is not
 // paired, and the fold is dropped as in the first test.
+//
+// Fix: every line, a heading included, is now lined up by its text with
+// each "[^...]" and each inline footnote taken out whole, up to the "]"
+// that balances its "[" (lineKey and withoutFootnotes in document-diff.ts).
 describe("folds through the normal-to-inline conversion, with a link in the heading's definition", () => {
-    it.fails("the U1 shape with a link in the heading's definition keeps the fold", () => {
+    it("the U1 shape with a link in the heading's definition keeps the fold", () => {
         const before = [
             "# Part one",
             "Text[^1].",
@@ -110,11 +114,11 @@ describe("folds through the normal-to-inline conversion, with a link in the head
             "Body of part two.",
             "More of it.",
         ]);
-        // Today: [] (the fold is dropped).
+        // Before the fix: [] (the fold was dropped).
         expect(mapFoldLines([{ from: 4, to: 7 }], lineDiffChanges(before, result.markdown), before)).toEqual([{ from: 3, to: 5 }]);
     });
 
-    it.fails("the same with a wikilink and a page number", () => {
+    it("the same with a wikilink and a page number", () => {
         const before = [
             "# Part one",
             "Text[^1].",
@@ -127,7 +131,7 @@ describe("folds through the normal-to-inline conversion, with a link in the head
         ].join("\n");
         const result = convertNormalFootnotesToInline(before);
         expect(result.markdown.split("\n")[3]).toBe("## Part two^[[[Smith 2020]], p. 5]");
-        // Today: [] (the fold is dropped).
+        // Before the fix: [] (the fold was dropped).
         expect(mapFoldLines([{ from: 4, to: 6 }], lineDiffChanges(before, result.markdown), before)).toEqual([{ from: 3, to: 4 }]);
     });
 });

@@ -59,8 +59,8 @@ export function lineDiffChanges(before: string, after: string): OffsetChange[] {
     }
     const middleA = a.slice(head, aTail);
     const middleB = b.slice(head, bTail);
-    // Lines are lined up by their text without footnote references, and a
-    // pair lined up that way whose references differ is then rewritten in
+    // Lines are lined up by their text without footnotes (lineKey), and a
+    // pair lined up that way whose footnotes differ is then rewritten in
     // place. A lint that renumbers rewrites every reference below the
     // first one it changes: compared as they stand, each such line counted
     // as one line deleted and one inserted, so on a long note the
@@ -69,7 +69,7 @@ export function lineDiffChanges(before: string, after: string): OffsetChange[] {
     // their references, they cost nothing, and only the lines the lint
     // really moved, added, or removed are left to find. The prose lines
     // are lined up before the rest (proseFirstRuns).
-    const runs = proseFirstRuns(middleA.map(withoutReferences), middleB.map(withoutReferences), proseLines(a).slice(head, aTail), proseLines(b).slice(head, bTail));
+    const runs = proseFirstRuns(middleA.map(lineKey), middleB.map(lineKey), proseLines(a).slice(head, aTail), proseLines(b).slice(head, bTail));
     const hunks = withRewrittenLines(runs, middleA, middleB);
 
     // where each line of `before` starts
@@ -235,10 +235,70 @@ function unmatchedRuns(a: readonly string[], b: readonly string[]): Run[] {
     return runs;
 }
 
-/** `line` with every "[^...]" taken out, footnote references and labels alike. */
-function withoutReferences(line: string): string {
-    // most lines hold none, and a search for "[^" is quicker than the pattern
-    return line.includes("[^") ? line.replace(/\[\^[^\]]*\]/g, "") : line;
+/**
+ * The key a line is lined up by: the line as the lint leaves it alone. The
+ * lint only changes the footnotes on a line, never its other text: it
+ * renumbers references, turns a reference into an inline footnote and
+ * back, moves a footnote past the punctuation next to it, and takes out a
+ * reference with the space before it. So every "[^...]" (references and
+ * labels alike) and every inline footnote "^[...]" is taken out, and each
+ * run of spaces becomes one space, with none at the end. A line the lint
+ * rewrote in place then has the same key before and after, and is lined
+ * up with itself. (An inline footnote used to be left in the key, so
+ * "- item^[note]." and the "- item.^[note]" the punctuation rule makes of
+ * it did not match, and a fold on that item was dropped: hunt 2026-10-05
+ * round 2, cluster D5, pin bug-fold-list-item-rewritten-in-place.)
+ */
+function lineKey(line: string): string {
+    // most lines hold no footnote, and two searches are quicker than the scan
+    const plain = line.includes("[^") || line.includes("^[") ? withoutFootnotes(line) : line;
+    return plain.replace(/\s+/g, " ").trimEnd();
+}
+
+/**
+ * `line` with every "[^...]" and every inline footnote "^[...]" taken
+ * out. An inline footnote ends at the "]" that balances its "[", so one
+ * that holds a link ("^[see [Smith](https://example.com) p. 5]") or a
+ * wikilink ("^[[[Smith 2020]], p. 5]") is taken out whole; a pattern that
+ * stopped at the first "]" left the rest of it behind, and a heading
+ * converted to hold such a footnote lost its fold (hunt 2026-10-05 round
+ * 2, cluster D4, pin bug-convert-fold-dropped-under-converted-definitions).
+ * An inline footnote whose "]" is on a later line is left as it is: the
+ * lint does not change it.
+ */
+function withoutFootnotes(line: string): string {
+    let out = "";
+    let i = 0;
+    while (i < line.length) {
+        if (line.startsWith("[^", i)) {
+            const close = line.indexOf("]", i + 2);
+            if (close !== -1) {
+                i = close + 1;
+                continue;
+            }
+        } else if (line.startsWith("^[", i)) {
+            const close = balancedClose(line, i + 1);
+            if (close !== -1) {
+                i = close + 1;
+                continue;
+            }
+        }
+        out += line[i];
+        i++;
+    }
+    return out;
+}
+
+/** Where the "]" that balances the "[" at `open` in `line` is, or -1 when the line has none. A character after a backslash does not count. */
+function balancedClose(line: string, open: number): number {
+    let depth = 0;
+    for (let i = open; i < line.length; i++) {
+        const char = line[i];
+        if (char === "\\") i++;
+        else if (char === "[") depth++;
+        else if (char === "]" && --depth === 0) return i;
+    }
+    return -1;
 }
 
 /**
@@ -494,8 +554,8 @@ export function positionAfterRewrite(before: string, after: string, pos: { line:
  * Headings are lined up first, and the lines between two paired headings
  * are then lined up with each other only (alignRun). The lint never turns
  * a heading into anything else or a line into a heading: it only moves
- * footnotes on one, so a heading is matched by its level and its words,
- * with every reference, inline footnote, and punctuation mark left out.
+ * footnotes on one, so a heading is matched by its level and its text
+ * without footnotes (lineKey).
  * Lined up with the rest, a heading could lose out to look-alike lines: in
  * a note whose definitions all read "Ibid.", the blank lines and the
  * ": Ibid." lines left after the names are stripped matched better than
@@ -528,19 +588,15 @@ function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
     return map;
 }
 
-/** The heading lines of `lines`, in order, and for each a key of its level and words, without references, inline footnotes, or punctuation. */
+/** The heading lines of `lines`, in order, and for each a key of its level and its text without footnotes (lineKey). */
 function headingKeys(lines: string[]): { lines: number[]; keys: string[] } {
     const levelOf = headingLevels(lines);
     const out: { lines: number[]; keys: string[] } = { lines: [], keys: [] };
     for (let i = 0; i < lines.length; i++) {
         const level = levelOf(i);
         if (level === 0) continue;
-        const words = lines[i]
-            .replace(/\^?\[\^?[^\]]*\]/g, " ")
-            .replace(/[^\p{L}\p{N}]+/gu, " ")
-            .trim();
         out.lines.push(i);
-        out.keys.push(`${String(level)} ${words}`);
+        out.keys.push(`${String(level)} ${lineKey(lines[i])}`);
     }
     return out;
 }
@@ -549,10 +605,11 @@ function headingKeys(lines: string[]): { lines: number[]; keys: string[] } {
  * alignLines for a stretch of lines with no heading paired in it: the
  * same answer, for `a` and `b` on their own.
  *
- * Lines are matched with their footnote references stripped out, because
- * that is what a lint changes: a renumbered line is the same line, and
- * matching on the raw text paired up look-alike lines across each other
- * instead. Prose lines are lined up first, as lineDiffChanges does
+ * Lines are matched by their text without footnotes (lineKey), because
+ * the footnotes are what a lint changes: a renumbered line, or one whose
+ * inline footnote moved past a full stop, is the same line, and matching
+ * on the raw text paired up look-alike lines across each other instead.
+ * Prose lines are lined up first, as lineDiffChanges does
  * (proseFirstRuns), so a line of prose the lint moved definitions past
  * stays the same line. Inside a run of lines that do not match, old lines and new
  * lines pair up by position; old lines left over past the new count are
@@ -561,8 +618,8 @@ function headingKeys(lines: string[]): { lines: number[]; keys: string[] } {
  * line that was deleted outright ends on the line before the deletion.
  */
 function alignRun(a: string[], b: string[], proseA: boolean[], proseB: boolean[]): { from: number; to: number }[] {
-    const na = a.map(withoutReferences);
-    const nb = b.map(withoutReferences);
+    const na = a.map(lineKey);
+    const nb = b.map(lineKey);
     // The lines that match at the end are taken first, then those at the
     // start. The lint adds lines at the bottom of the note, so a stretch
     // that only grew grew at its end: its last line, often the note's

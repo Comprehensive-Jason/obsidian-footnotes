@@ -29,10 +29,15 @@ import { lintFootnotes } from "../../src/linting/linter";
 // itself counts as removed, which drops its fold. The fix for the same
 // shape under a heading (bug-convert-fold-dropped-under-converted-
 // definitions) lines up headings first; a list item is no heading, so it
-// gets no such help.
+// got no such help.
+//
+// Fix: every line is now lined up by its text with its footnotes taken
+// out, inline footnotes included (lineKey in document-diff.ts), so
+// "- item^[note]." and "- item.^[note]" are the same line, and the item is
+// lined up with itself instead of with the removed definition.
 
 describe("default lint: a folded list item rewritten in place right under a definition the lint moves away", () => {
-    it.fails("the list fold stays on its item", () => {
+    it("the list fold stays on its item", () => {
         const before = [
             "Intro[^1]", // 0
             "",
@@ -47,7 +52,7 @@ describe("default lint: a folded list item rewritten in place right under a defi
         const after = lintFootnotes(before, {});
         const item = after.split("\n").indexOf("- item.^[note]");
         expect(item).toBe(2);
-        // Today: [] (the fold is dropped).
+        // Before the fix: [] (the fold was dropped).
         expect(mapFoldLines([{ from: 4, to: 6 }], lineDiffChanges(before, after), before)).toEqual([{ from: item, to: item + 2 }]);
     });
 });
