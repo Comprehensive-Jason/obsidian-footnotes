@@ -92,7 +92,7 @@ beforeEach(() => {
 });
 
 describe("bug: the plugin's own copy of a selection ending in definitions spaced by two blank lines", () => {
-    it.fails("pasted mid-line, it keeps the line whole", () => {
+    it("pasted mid-line, it keeps the line whole", () => {
         const note = ["See[^1] and[^2].", "", "[^1]: one", "", "", "[^2]: two", "", "dest abc def"];
         // the selection ends right after "two", with no line break
         const clip = copy(note, { line: 0, ch: 0 }, { line: 5, ch: 9 });

@@ -646,8 +646,17 @@ export function carriedLines(carried: readonly CarriedDefinition[]): string[] {
  * where a paste of the plugin's own copy in the same window kept it on its
  * own line (hunt 2026-10-06 cycle 3, cluster K3, pin
  * bug-carry-line-wise-break-before-outside-definition).
+ *
+ * That reading holds only for a text withCarriedText wrote. The copy's own
+ * register splits the selection itself, before anything is appended
+ * (`selection` true), and there the blank lines between two definitions
+ * are the note's own spacing, never a line break of the selection's: read
+ * as one, a selection ending right after "[^2]: two", in a note that
+ * spaces its definitions by two blank lines, pasted mid-line split the
+ * line it landed in (hunt 2026-10-06 cycle 4, cluster K2, pin
+ * bug-own-copy-double-blank-definitions-split-line).
  */
-export function splitCarriedText(text: string): { body: string; carried: CarriedDefinition[] } {
+export function splitCarriedText(text: string, selection = false): { body: string; carried: CarriedDefinition[] } {
     const lines = normalizeEol(text).text.split("\n");
     // the definitions at the top level of the text, the ones withCarriedText
     // appends, lifted as every carried block is (liftedBlocks), which takes
@@ -667,7 +676,7 @@ export function splitCarriedText(text: string): { body: string; carried: Carried
         while (end > 0 && lines[end - 1].trim() === "") end--;
         const block = byEnd.get(end - 1);
         if (!block) break;
-        if (cut < lines.length) breaks.push(...lines.slice(end + 1, below));
+        if (cut < lines.length && !selection) breaks.push(...lines.slice(end + 1, below));
         cut = end = block.start;
     }
     if (cut === lines.length) return { body: text, carried: [] };
