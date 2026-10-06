@@ -160,6 +160,24 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
                 appended.push(...piece);
                 above = duplicate;
             }
+            // A line right under the first copy that is not part of it,
+            // such as a paragraph under an empty label "[^a]:" (which takes
+            // no lazy text), would carry on the indented text added under
+            // the label and join the footnote (live Obsidian 1.14.4,
+            // 2026-10-06). A blank line after the added text keeps it out
+            // (hunt 2026-10-06, cycle 5, pin bug-merge-under-empty-label).
+            // Where that line starts a block of its own, such as a heading,
+            // the blank line changes nothing; under a label right under the
+            // first copy, none goes in, so definitions stay packed.
+            if (
+                appended.length > 0 &&
+                appended[appended.length - 1].trim() !== "" &&
+                base.end + 1 < lines.length &&
+                lines[base.end + 1].trim() !== "" &&
+                !definitions.some((definition) => definition.start === base.end + 1)
+            ) {
+                appended.push("");
+            }
             const appends = new Map(appendAfter);
             if (appended.length > 0) appends.set(base.end, appended);
             // The merged note must protect the same text as before. A copy
