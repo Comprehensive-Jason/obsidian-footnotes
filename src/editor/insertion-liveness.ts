@@ -3,6 +3,7 @@ import { NoFootnoteCreated } from "./notice";
 
 import { contextOfLines, DocContext, docLines, insideDefinition } from "./doc-context";
 import { escapedAt } from "../parsing/footnote-grammar";
+import { drawnAsLink } from "../parsing/landing";
 import type { NoteReading } from "../parsing/note-reading";
 
 // The born-dead safety kit. One question: once the text lands, will it
@@ -391,7 +392,12 @@ export function deadInsertionVerdict(after: NoteReading, at: EditorPosition): "d
  * A reference written in one's label or after its address turns the line
  * into a paragraph, and every link that used it stops being one (hunt
  * 2026-10-05, Jason's pick of the triage's Q5, pin
- * spec-press-on-link-reference-definition).
+ * spec-press-on-link-reference-definition). Or the press leaves fewer links
+ * drawn than there were: a selection inside a defined "[some text]" turned
+ * into a footnote changes the link's label, "[[^1] text]", which no
+ * definition carries, so the link is gone (hunt 2026-10-05, round 2, pin
+ * bug-selection-kills-defined-shortcut-link). A link the selection takes
+ * whole moves into the footnote and is still drawn there.
  */
 export function pressLineVerdict(
     before: NoteReading,
@@ -400,7 +406,13 @@ export function pressLineVerdict(
     text: string,
 ): "label" | "link" | null {
     if (text.startsWith("[^") && anchors.some((anchor) => startsLabel(after, anchor, text.length))) return "label";
-    return linkDefinitionCount(after.reading()) < linkDefinitionCount(before) ? "link" : null;
+    const lost = linkDefinitionCount(after.reading()) < linkDefinitionCount(before) || drawnLinkCount(after.reading()) < drawnLinkCount(before);
+    return lost ? "link" : null;
+}
+
+/** How many links `reading` draws (drawnAsLink). */
+function drawnLinkCount(reading: NoteReading): number {
+    return reading.links.filter((link) => drawnAsLink(link, reading.linkLabels)).length;
 }
 
 /**

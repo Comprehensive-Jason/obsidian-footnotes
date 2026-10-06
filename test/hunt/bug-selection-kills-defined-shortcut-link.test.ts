@@ -33,6 +33,11 @@ import { readNote } from "../../src/parsing/note-reading";
 // note's links whole. Their "link" verdict (pressLineVerdict in
 // src/editor/insertion-liveness.ts) counts link reference definitions,
 // which the edit does not change, not the links that use them.
+//
+// Fixed 2026-10-05: the "link" verdict also counts the links the note
+// draws, before the edit and after it, so a conversion that leaves fewer
+// is refused with the link notice. A link the selection takes whole moves
+// into the footnote and is still drawn there.
 
 const Settings = {
     insertAtEndOfWord: false,
@@ -65,7 +70,7 @@ function links(lines: string[]): number {
 }
 
 describe("selection inside a defined reference link", () => {
-    it.fails("numbered: converting 'some' of a defined [some text] never kills the link silently", async () => {
+    it("numbered: converting 'some' of a defined [some text] never kills the link silently", async () => {
         const lines = ["I said [some text] here", "", "[some text]: http://u"];
         const doc = await convert(lines, 0, 8, 12);
         // Either the note is unchanged, or the link survives the edit.
@@ -74,10 +79,10 @@ describe("selection inside a defined reference link", () => {
         }
     });
 
-    it.fails("inline: wrapping 'text' of a defined [some text] never kills the link silently", async () => {
+    it("inline: wrapping 'text' of a defined [some text] never kills the link silently", async () => {
         const lines = ["I said [some text] here", "", "[some text]: http://u"];
         const doc = await convert(lines, 0, 13, 17, insertInlineFootnote);
-        // Today: "I said [some^[text]] here".
+        // Before the fix: "I said [some^[text]] here".
         if (doc.lines.join("\n") !== lines.join("\n")) {
             expect(links(doc.lines), JSON.stringify({ lines: doc.lines, messages: messages() })).toBe(1);
         }

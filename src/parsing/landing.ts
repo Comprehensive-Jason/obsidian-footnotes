@@ -240,6 +240,21 @@ function unescapedIndex(text: string, mark: string, from: number): number {
     return -1;
 }
 
+/** A link-like construct as the note reading finds it (NoteReading.links). */
+type LinkLike = NoteReading["links"][number];
+
+/**
+ * Whether the note draws `link` as a link. Every kind is drawn but a
+ * reference link or image whose label no "[label]: url" line carries: the
+ * reader takes any "[...]" for a reference link, but one with no such line
+ * is bracketed text that Obsidian shows as it is written (CommonMark
+ * 0.31.2, section 6.3; 6d37374). `linkLabels` are the labels the note's
+ * link reference definitions carry (NoteReading.linkLabels).
+ */
+export function drawnAsLink(link: LinkLike, linkLabels: ReadonlySet<string>): boolean {
+    return link.lookup === undefined || linkLabels.has(link.lookup);
+}
+
 /**
  * The end of the link-like construct that holds column `ch` of `line`, as
  * `reading` reads the note, or null when it sits in none: an inline link
@@ -261,11 +276,9 @@ function unescapedIndex(text: string, mark: string, from: number): number {
  * round 2, pin bug-press-in-two-line-link: the press used to land inside
  * the link's text).
  *
- * A reference link or image counts only when the note defines its label.
- * The reader takes any "[...]" for a reference link, but one with no
- * "[label]: url" line is bracketed text that Obsidian shows as it is
- * written, and a reference may sit inside it: a caret in "some" of
- * "[some text]" lands at the end of the word,
+ * A reference link or image counts only when the note draws it
+ * (drawnAsLink). Bracketed text that is no link may hold a reference: a
+ * caret in "some" of "[some text]" lands at the end of the word,
  * "[some[^1] text]", under every placement (Jason, 2026-10-05; pin
  * bug-dont-move-bracketed-text). Taking the end of such text sent the
  * press past the "]", where "[some text][^1]" reads as a reference link
@@ -274,7 +287,7 @@ function unescapedIndex(text: string, mark: string, from: number): number {
 export function linkLikeEndAt(reading: NoteReading, line: number, ch: number): { line: number; ch: number } | null {
     const link = reading.links.find(
         (candidate) =>
-            (candidate.lookup === undefined || reading.linkLabels.has(candidate.lookup)) &&
+            drawnAsLink(candidate, reading.linkLabels) &&
             (candidate.startLine < line || (candidate.startLine === line && candidate.start <= ch)) &&
             (candidate.endLine > line || (candidate.endLine === line && ch < candidate.end)),
     );
