@@ -32,6 +32,11 @@ import { fakePlugin } from "../helpers/fake-plugin";
 // pretend cell in two, and no wikilink is found. A regression from
 // c6ee2fa: before it, linkLikeEndAt's wikilink pattern matched
 // "[[Page|alias]]" whole.
+//
+// Fixed 2026-10-05: the cell's text is written back the way the table
+// editor writes it ("|" as "\|", a line break as "<br>") before it is read
+// (readCell in src/parsing/cell-reading.ts), and every position is mapped
+// between the two forms.
 
 function cell(text: string, head: number) {
     const dispatched: { changes?: { from: number; to?: number; insert: string } }[] = [];
@@ -49,21 +54,21 @@ const Plugin = () => fakePlugin({ insertAtEndOfWord: true, footnotePlacement: "a
 beforeEach(resetNotices);
 
 describe("a wikilink with an alias inside a table cell's editor", () => {
-    it.fails("cellLinkLikeEndAt finds the end of '[[Page|alias text]]' as the cell editor shows it", () => {
+    it("cellLinkLikeEndAt finds the end of '[[Page|alias text]]' as the cell editor shows it", () => {
         const shown = "see [[Page|alias text]]";
-        // Today: -1, no link found.
+        // Before the fix: -1, no link found.
         expect(cellLinkLikeEndAt(shown, shown.indexOf("alias") + 2)).toBe(shown.length);
     });
 
-    it.fails("the numbered press lands after the wikilink, not inside its alias", () => {
+    it("the numbered press lands after the wikilink, not inside its alias", () => {
         const shown = "see [[Page|alias text]] now";
         const { editor, dispatched } = cell(shown, shown.indexOf("alias") + 2);
         insertInTableCell(editor, Plugin(), "[^1]", 4);
-        // Today: inserted at the end of "alias", inside the wikilink.
+        // Before the fix: inserted at the end of "alias", inside the wikilink.
         expect(dispatched[0]?.changes?.from).toBe("see [[Page|alias text]]".length);
     });
 
-    it.fails("an embed with a size: the press lands after it", () => {
+    it("an embed with a size: the press lands after it", () => {
         const shown = "![[img.png|200]] caption";
         const { editor, dispatched } = cell(shown, 4);
         insertInTableCell(editor, Plugin(), "[^1]", 4);

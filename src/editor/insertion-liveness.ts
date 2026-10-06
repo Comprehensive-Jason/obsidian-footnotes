@@ -410,9 +410,9 @@ export function pressLineVerdict(
     return lost ? "link" : null;
 }
 
-/** How many links `reading` draws (drawnAsLink). */
-function drawnLinkCount(reading: NoteReading): number {
-    return reading.links.filter((link) => drawnAsLink(link, reading.linkLabels)).length;
+/** How many links `reading` draws (drawnAsLink), judged with the link labels `linkLabels`: the note's own unless a caller hands in others. */
+export function drawnLinkCount(reading: NoteReading, linkLabels: ReadonlySet<string> = reading.linkLabels): number {
+    return reading.links.filter((link) => drawnAsLink(link, linkLabels)).length;
 }
 
 /**

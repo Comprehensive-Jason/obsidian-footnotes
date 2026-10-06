@@ -30,6 +30,7 @@ import {
 } from "../editor/doc-context";
 import { bareInsertionVerdict, landingVerdict } from "./inline-footnotes";
 import {
+    drawnLinkCount,
     InsertionVerdict,
     ProtectedCreationNotice,
     safeInsertionCh,
@@ -38,7 +39,7 @@ import {
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
 import { lintAfterFootnoteCreation } from "../linting/linter";
-import { cellReading, CellTextColumn, maskInlineRegions } from "../parsing/cell-reading";
+import { maskInlineRegions, readCell } from "../parsing/cell-reading";
 import { warnDefinitionCaretIfInside, warnTableEdgeCaretIfOutside, warnProtectedCaretIfInside } from "./press-guards";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
@@ -83,11 +84,18 @@ export function refusedCreation(verdict: InsertionVerdict, deadNotice: string): 
 // born-dead, meaning it would not be a real footnote the moment it landed
 // (see the liveness check). Nothing at all is written in that case, so
 // code that pairs this with a definition append must skip the append too.
+//
+// `linkLabels` are the labels of the note's link reference definitions
+// ("[ref]: http://u"). The cell editor holds the cell's text only, and a
+// "[some text]" in it is a link when the note defines its label, so the
+// press needs them to step over such a link instead of splitting it
+// (hunt 2026-10-05, round 2, pin bug-cell-defined-reference-link-press).
 export function insertInTableCell(
     cell: TableCellEditor,
     plugin: FootnotePlugin,
     text: string,
     caretOffsetInText: number,
+    linkLabels: ReadonlySet<string> = new Set(),
 ): boolean {
     const cellText = cell.state.doc.toString();
     const head = cellCaret(cell);
@@ -98,33 +106,37 @@ export function insertInTableCell(
     const at = safeInsertionCh(
         cellText,
         plugin.settings.insertAtEndOfWord
-            ? endOfWordOffset(cellText, head, plugin.settings.footnotePlacement, cellLinkLikeEndAt(cellText, head))
+            ? endOfWordOffset(cellText, head, plugin.settings.footnotePlacement, cellLinkLikeEndAt(cellText, head, linkLabels))
             : head,
     );
-    return dispatchCellEditIfLive(cell, text, at, at, caretOffsetInText);
+    return dispatchCellEditIfLive(cell, text, at, at, caretOffsetInText, linkLabels);
 }
 
-/** Replaces the range `from` up to `to` inside a table cell you are actively editing with `text`. This is how a conversion writes into a cell (issue #35). It refuses a born-dead result just as insertInTableCell does. The range being replaced is the cell's own selection, so the end-of-word adjustment does not apply here. */
+/** Replaces the range `from` up to `to` inside a table cell you are actively editing with `text`. This is how a conversion writes into a cell (issue #35). It refuses a born-dead result, or one that loses a link, just as insertInTableCell does (`linkLabels` are the note's link labels, as there). The range being replaced is the cell's own selection, so the end-of-word adjustment does not apply here. */
 export function replaceInTableCell(
     cell: TableCellEditor,
     text: string,
     from: number,
     to: number,
     caretOffsetInText: number,
+    linkLabels: ReadonlySet<string> = new Set(),
 ): boolean {
-    return dispatchCellEditIfLive(cell, text, from, to, caretOffsetInText);
+    return dispatchCellEditIfLive(cell, text, from, to, caretOffsetInText, linkLabels);
 }
 
-// The one place cell writes happen. It refuses born-dead text, and
-// otherwise writes through the cell's own editor, leaving the caret inside
-// what it just wrote. Never the main editor: a main-editor write races the
-// cell's own write-back and corrupts the table.
+// The one place cell writes happen. It refuses born-dead text, and an
+// edit that leaves fewer links drawn than there were (the cell's twin of
+// pressLineVerdict's "link" verdict, judged with the note's link labels),
+// and otherwise writes through the cell's own editor, leaving the caret
+// inside what it just wrote. Never the main editor: a main-editor write
+// races the cell's own write-back and corrupts the table.
 function dispatchCellEditIfLive(
     cell: TableCellEditor,
     text: string,
     from: number,
     to: number,
     caretOffsetInText: number,
+    linkLabels: ReadonlySet<string>,
 ): boolean {
     const cellText = cell.state.doc.toString();
     // The edit can finish off a construct that was sitting around it, and
@@ -135,10 +147,15 @@ function dispatchCellEditIfLive(
     // a range from a stale selection is clamped the same way the caret is
     from = Math.max(0, Math.min(from, cellText.length));
     to = Math.max(from, Math.min(to, cellText.length));
-    const simulatedCell = cellText.slice(0, from) + text + cellText.slice(to);
-    if (refusedCreation(landingVerdict(cellReading(simulatedCell), 0, from + CellTextColumn, text), ProtectedCreationNotice)) {
-        return false;
-    }
+    // The cell is read as the note holds it (readCell), where a "|" in the
+    // text is written "\|", so the text is judged in its written form.
+    const after = readCell(cellText.slice(0, from) + text + cellText.slice(to));
+    const start = after.column(from);
+    const verdict =
+        drawnLinkCount(after.reading, linkLabels) < drawnLinkCount(readCell(cellText).reading, linkLabels)
+            ? "link"
+            : landingVerdict(after.reading, 0, start, after.line.slice(start, after.column(from + text.length)));
+    if (refusedCreation(verdict, ProtectedCreationNotice)) return false;
     cell.dispatch({
         changes: { from, to, insert: text },
         selection: { anchor: from + caretOffsetInText },
@@ -466,7 +483,7 @@ export function createAutonumFootnote(
         // safe. If the born-dead check refuses the cell insertion, no
         // orphaned definition may be left behind.
         if (
-            !insertInTableCell(cell, plugin, footnoteReference, footnoteReference.length)
+            !insertInTableCell(cell, plugin, footnoteReference, footnoteReference.length, ctx.reading().linkLabels)
         ) {
             return true;
         }
@@ -679,7 +696,7 @@ export function createFootnoteReference(
         // because a main-editor write races the cell's write-back and
         // corrupts the table. The caret lands inside the brackets and
         // focus stays in the cell, ready for you to type the name.
-        insertInTableCell(cell, plugin, referenceText(prefix), 2 + prefix.length);
+        insertInTableCell(cell, plugin, referenceText(prefix), 2 + prefix.length, ctx.reading().linkLabels);
         return true;
     }
 

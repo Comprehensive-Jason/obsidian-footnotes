@@ -6,6 +6,7 @@ import type { FootnotePlacement } from "../../src/parsing/landing";
 import { resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
+import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (wrong output): in a table cell, a press inside a link the note
 // defines writes the footnote inside the link.
@@ -27,9 +28,15 @@ import { fakePlugin } from "../helpers/fake-plugin";
 // Cause: the cell editor's press reads only the cell's own text
 // (insertInTableCell and cellLinkLikeEndAt in src/parsing/landing.ts),
 // so it never sees the note's link reference definitions, which 6d37374
-// made the test for whether "[some text]" is a link. The test hands the
-// plugin the whole note as its active editor, so a fix that reads the
-// note's link labels from there can see them.
+// made the test for whether "[some text]" is a link.
+//
+// Fixed 2026-10-05: the cell's press takes the note's link labels
+// (insertInTableCell's last argument; every caller hands in the labels of
+// the note it is pressed in), steps over a link the note defines, and
+// refuses an edit that leaves fewer links drawn. The test used to call
+// insertInTableCell without them, relying on a fix that would look the
+// note up through the plugin's active view; it now hands them in as the
+// callers do.
 
 const Settings = (footnotePlacement: FootnotePlacement) => ({
     insertAtEndOfWord: true,
@@ -56,12 +63,12 @@ function fakeCell(text: string, head: number) {
 beforeEach(resetNotices);
 
 describe("table cell and a reference link the note defines", () => {
-    it.fails("cell editor: a press inside a link the note defines never splits it", () => {
+    it("cell editor: a press inside a link the note defines never splits it", () => {
         const note = ["| a | I said [some text] here |", "| --- | --- |", "", "[some text]: http://u"];
         const cellText = "I said [some text] here";
         const { cell, dispatched } = fakeCell(cellText, "I said [so".length);
         const doc = fakeEditor(note, { cursor: { line: 0, ch: "| a | I said [so".length }, wholeDoc: true });
-        insertInTableCell(cell, fakePlugin(Settings("none"), doc), "[^1]", 4);
+        insertInTableCell(cell, fakePlugin(Settings("none"), doc), "[^1]", 4, readNote(note).linkLabels);
         const change = dispatched[0]?.changes;
         // Whatever is written must not land between the brackets of the link.
         const inside = change !== undefined && change.from > "I said ".length && change.from <= "I said [some text".length;

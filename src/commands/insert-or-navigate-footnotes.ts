@@ -246,7 +246,7 @@ function insertInlineText(
 
     const cell = activeTableCellEditor(doc);
     if (cell) {
-        insertInTableCell(cell, plugin, text, caretOffsetInText);
+        insertInTableCell(cell, plugin, text, caretOffsetInText, docContext(doc).reading().linkLabels);
         return;
     }
     runOutsideTableCell(doc, (cursorPosition) => {

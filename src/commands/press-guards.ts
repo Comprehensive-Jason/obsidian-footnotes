@@ -100,7 +100,10 @@ export function warnProtectedCaretIfInside(
         // inside is caught by the born-dead check afterwards. The masked
         // twin blots link destinations and addresses since 2026-09-16
         // (Kimi hunt cycle 1), which is why this is spelled out here.
-        if (cellLinkLikeEndAt(cellText, cellCaret(cell)) !== -1) return false;
+        // A reference link in the cell is a link when the note defines
+        // its label, so the note's labels go along (hunt 2026-10-05,
+        // round 2, pin bug-cell-defined-reference-link-press).
+        if (cellLinkLikeEndAt(cellText, cellCaret(cell), ctx.reading().linkLabels) !== -1) return false;
         inside = caretInsideMaskedSpan(
             maskInlineRegions(cellText),
             cellCaret(cell),

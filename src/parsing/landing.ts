@@ -7,7 +7,7 @@
 // markdown-scan.ts in step 4 of the runtime swap, 2026-10-03, when the rest
 // of that file went).
 
-import { cellReading, CellTextColumn } from "./cell-reading";
+import { readCell } from "./cell-reading";
 import { escapedAt } from "./footnote-grammar";
 import { NoteReading, readNote } from "./note-reading";
 
@@ -282,12 +282,19 @@ export function drawnAsLink(link: LinkLike, linkLabels: ReadonlySet<string>): bo
  * "[some[^1] text]", under every placement (Jason, 2026-10-05; pin
  * bug-dont-move-bracketed-text). Taking the end of such text sent the
  * press past the "]", where "[some text][^1]" reads as a reference link
- * and the press was refused.
+ * and the press was refused. `linkLabels` are the labels the note's link
+ * reference definitions carry; a table cell's reading has none of its
+ * own, so a press in a cell hands in the note's.
  */
-export function linkLikeEndAt(reading: NoteReading, line: number, ch: number): { line: number; ch: number } | null {
+export function linkLikeEndAt(
+    reading: NoteReading,
+    line: number,
+    ch: number,
+    linkLabels: ReadonlySet<string> = reading.linkLabels,
+): { line: number; ch: number } | null {
     const link = reading.links.find(
         (candidate) =>
-            drawnAsLink(candidate, reading.linkLabels) &&
+            drawnAsLink(candidate, linkLabels) &&
             (candidate.startLine < line || (candidate.startLine === line && candidate.start <= ch)) &&
             (candidate.endLine > line || (candidate.endLine === line && ch < candidate.end)),
     );
@@ -299,8 +306,17 @@ export function lineLinkLikeEndAt(text: string, offset: number): number {
     return linkLikeEndAt(readNote([text]), 0, offset)?.ch ?? -1;
 }
 
-/** linkLikeEndAt for a table cell's own text, read as the one cell of a one-row table (cellReading): the end of the construct holding `offset`, as an offset into `text`, or -1. */
-export function cellLinkLikeEndAt(text: string, offset: number): number {
-    const end = linkLikeEndAt(cellReading(text), 0, offset + CellTextColumn);
-    return end === null ? -1 : end.ch - CellTextColumn;
+/**
+ * linkLikeEndAt for a table cell's own text, read as the note holds it
+ * (readCell): the end of the construct holding `offset`, as an offset into
+ * `text`, or -1. `linkLabels` are the labels of the note's link reference
+ * definitions, which give a reference link in the cell its address:
+ * Reading view draws "[some text]" in a cell as a link when the note has a
+ * "[some text]: http://u" line (Obsidian 1.14.4, asked live on 2026-10-05;
+ * hunt 2026-10-05, round 2, pin bug-cell-defined-reference-link-press).
+ */
+export function cellLinkLikeEndAt(text: string, offset: number, linkLabels: ReadonlySet<string> = new Set()): number {
+    const cell = readCell(text);
+    const end = linkLikeEndAt(cell.reading, 0, cell.column(offset), linkLabels);
+    return end === null ? -1 : cell.offset(end.ch);
 }

@@ -24,7 +24,7 @@ import {
     pressLineVerdict,
     verifyLiveFootnoteInsertion,
 } from "../editor/insertion-liveness";
-import { cellReading, CellTextColumn, maskInlineRegions } from "../parsing/cell-reading";
+import { maskInlineRegions, readCell } from "../parsing/cell-reading";
 import { linesReadAlike, NoteReading, readNote } from "../parsing/note-reading";
 import {
     autonumFootnoteId,
@@ -235,7 +235,8 @@ export function selectionPressHandled(
         // same plugin-wide ruling (2026-08-24). The cell's text is read as
         // the one cell of a one-row table, where a label-shaped "[^x]:" is
         // a reference, as it is in the note.
-        if (spanTouchesFootnote(cellReading(cellText), 0, from + CellTextColumn, to + CellTextColumn)) {
+        const cellRead = readCell(cellText);
+        if (spanTouchesFootnote(cellRead.reading, 0, cellRead.column(from), cellRead.column(to))) {
             showNotice(NestedFootnoteNotice, 8000);
             return true;
         }
@@ -251,7 +252,7 @@ export function selectionPressHandled(
             const wrapped = `^[${sanitizeInlineFootnoteContent(text)}]`;
             // If the result would not be a live footnote, the refusal and
             // its notice happen inside replaceInTableCell.
-            replaceInTableCell(cell, wrapped, replaceFrom, to, wrapped.length);
+            replaceInTableCell(cell, wrapped, replaceFrom, to, wrapped.length, docContext(doc).reading().linkLabels);
             return true;
         }
         if (command === "named") {
@@ -1026,7 +1027,7 @@ function convertCellSelection(
     if (footnoteId === null) return;
     const footnoteReference = referenceText(footnoteId);
     if (
-        !replaceInTableCell(cell, footnoteReference, selection.from, selection.to, footnoteReference.length)
+        !replaceInTableCell(cell, footnoteReference, selection.from, selection.to, footnoteReference.length, docContext(doc).reading().linkLabels)
     ) {
         return;
     }
