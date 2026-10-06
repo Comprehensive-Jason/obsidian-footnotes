@@ -281,27 +281,55 @@ function placedOnce(markdown: string, placement: "after" | "before"): string {
         // lint's next rule reads the same note, so the check reads nothing
         // the lint would not read anyway.
         //
-        // The two kinds are counted apart, since a move can also turn one
-        // into the other and keep the total: under "before", "mc^.[^1]"
-        // became "mc^[^1].", an inline footnote "^[^1]" in place of the
-        // reference, and "[.^[note]" became "[^[note].", a reference named
-        // "[note" in place of the inline footnote (hunt 2026-10-06, cycle 3,
-        // pin bug-placement-before-changes-footnote-kind).
-        const keepsFootnotes = (of: NoteReading, i: number) =>
-            of.referencesOn(i).length >= reading.referencesOn(i).length && of.inlineNotesOn(i).length >= reading.inlineNotesOn(i).length;
+        // Each footnote is checked for by what it is, not counted: every
+        // reference by its name, every inline footnote by its whole
+        // "^[...]" text. A move can turn one kind into the other, and two
+        // such moves on one line, in opposite directions, kept both counts
+        // the same: under "before", "mc^.[^1]" became "mc^[^1].", an inline
+        // footnote "^[^1]" in place of the reference, and "[.^[note]"
+        // became "[^[note].", a reference named "[note" in place of the
+        // inline footnote (hunt 2026-10-06, cycle 3, pin
+        // bug-placement-before-changes-footnote-kind, which counted the
+        // kinds apart; cycle 4, pin bug-placement-before-two-kind-changes).
+        const keepsFootnotes = (of: NoteReading, ofLines: readonly string[], i: number) =>
+            within(footnotesOn(reading, lines, i), footnotesOn(of, ofLines, i));
         if (result.some((line, i) => line !== lines[i])) {
             const after = readNote(result);
             for (let i = 0; i < result.length; i++) {
-                if (result[i] === lines[i] || keepsFootnotes(after, i)) continue;
+                if (result[i] === lines[i] || keepsFootnotes(after, result, i)) continue;
                 result[i] = rewriteLine(i, (line) => {
                     const trial = [...result];
                     trial[i] = line;
-                    return keepsFootnotes(readNote(trial), i);
+                    return keepsFootnotes(readNote(trial), trial, i);
                 });
             }
         }
         return result.join("\n");
     });
+}
+
+/**
+ * The footnotes on line `i` of `lines` as `reading` reads them, each as
+ * what it is: a reference by its name ("[^1]"), an inline footnote by its
+ * whole text ("^[note]").
+ */
+function footnotesOn(reading: NoteReading, lines: readonly string[], i: number): string[] {
+    return [
+        ...reading.referencesOn(i).map((reference) => `[^${reference.name}]`),
+        ...reading.inlineNotesOn(i).map((note) => lines[i].slice(note.open, note.close + 1)),
+    ];
+}
+
+/** Whether every entry of `part` is in `whole`, as many times. */
+function within(part: readonly string[], whole: readonly string[]): boolean {
+    const left = new Map<string, number>();
+    for (const item of whole) left.set(item, (left.get(item) ?? 0) + 1);
+    for (const item of part) {
+        const n = left.get(item) ?? 0;
+        if (n === 0) return false;
+        left.set(item, n - 1);
+    }
+    return true;
 }
 
 /** This rule's catalogue entry. The id matches obsidian-linter's file name; the option is the placement setting. */

@@ -46,14 +46,14 @@ function live(lines: string[], line = 0) {
 
 describe("two kind changes on one line pass the count check", () => {
     // Now: refs ["[note"] and the inline footnote "^[^1]".
-    it.fails("before: 'mc^.[^1] and [.^[note]' keeps [^1] a reference and ^[note] an inline footnote", () => {
+    it("before: 'mc^.[^1] and [.^[note]' keeps [^1] a reference and ^[note] an inline footnote", () => {
         const doc = "e = mc^.[^1] and [.^[note]\n\n[^1]: a";
         const out = footnoteAfterPunctuation(doc, "before");
         expect(live(out.split("\n"))).toEqual(live(doc.split("\n")));
     });
 
     // Now: "e = mc^[^1]. and [^[note]." with the definition deleted.
-    it.fails("two lints (before, delete orphaned definitions on), as on two saves, keep footnote 1's text", () => {
+    it("two lints (before, delete orphaned definitions on), as on two saves, keep footnote 1's text", () => {
         const doc = "e = mc^.[^1] and [.^[note]\n\n[^1]: the source";
         const opts: LintOptions = { placement: "before", removeOrphanedDefinitions: true };
         const out = lintFootnotes(lintFootnotes(doc, opts), opts);
@@ -61,7 +61,7 @@ describe("two kind changes on one line pass the count check", () => {
     });
 
     // Now: "e = mc^[^1]. and ." with "note" deleted.
-    it.fails("one lint (before, delete orphaned references on) keeps the inline footnote's text", () => {
+    it("one lint (before, delete orphaned references on) keeps the inline footnote's text", () => {
         const doc = "e = mc^.[^1] and [.^[note]\n\n[^1]: the source";
         const out = lintFootnotes(doc, { placement: "before", removeOrphanedReferences: true });
         expect(out.split("\n")[0]).toContain("note");
