@@ -574,6 +574,17 @@ export function carriedLines(carried: readonly CarriedDefinition[]): string[] {
  * lines at a time, and pasted at the start of a line it must still end
  * its own line, with the definitions lifted out of it (hunt 2026-10-02,
  * pin bug-carry-line-wise-body-loses-line-break).
+ *
+ * So do the blank lines between two definitions of the run past the first
+ * one. withCarriedText puts one blank line in front of the definitions it
+ * appends, and the definitions sit right under one another; a second blank
+ * line there is the line break that ended the selection, when the selection
+ * itself ended with a definition of its own. The selection was then taken
+ * whole lines at a time too, and its body must end its own line. Dropping
+ * that line break glued the pasted body onto the text after the caret,
+ * where a paste of the plugin's own copy in the same window kept it on its
+ * own line (hunt 2026-10-06 cycle 3, cluster K3, pin
+ * bug-carry-line-wise-break-before-outside-definition).
  */
 export function splitCarriedText(text: string): { body: string; carried: CarriedDefinition[] } {
     const lines = normalizeEol(text).text.split("\n");
@@ -588,16 +599,20 @@ export function splitCarriedText(text: string): { body: string; carried: Carried
     let end = lines.length;
     while (end > 0 && lines[end - 1].trim() === "") end--;
     const after = lines.slice(end);
+    // the blank lines past the first between two definitions of the run
+    const breaks: string[] = [];
     for (;;) {
+        const below = end;
         while (end > 0 && lines[end - 1].trim() === "") end--;
         const block = byEnd.get(end - 1);
         if (!block) break;
+        if (cut < lines.length) breaks.push(...lines.slice(end + 1, below));
         cut = end = block.start;
     }
     if (cut === lines.length) return { body: text, carried: [] };
     const carried = liftedBlocks(lines, blocks.filter((block) => block.start >= cut));
     const bodyEnd = cut > 0 && lines[cut - 1].trim() === "" ? cut - 1 : cut;
-    return { body: [...lines.slice(0, bodyEnd), ...after].join("\n"), carried };
+    return { body: [...lines.slice(0, bodyEnd), ...breaks, ...after].join("\n"), carried };
 }
 
 /** What a cut does to the note and to the clipboard (planCut). */

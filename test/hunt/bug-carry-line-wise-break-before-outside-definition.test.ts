@@ -102,7 +102,7 @@ beforeEach(() => {
 });
 
 describe("bug: a line-wise selection's line break before a carried outside definition", () => {
-    it.fails("the line-wise selection keeps its line break on the foreign route (the text after the caret stays on its own line)", () => {
+    it("the line-wise selection keeps its line break on the foreign route (the text after the caret stays on its own line)", () => {
         // lines 0 to 2 selected line-wise (Shift+Down to the start of line 3)
         const source = ["a[^1] b[^2]", "", "[^1]: one", "", "[^2]: two"];
         const r = threeRoutes(source, { line: 0, ch: 0 }, { line: 3, ch: 0 }, ["Intro.", "Next."], { line: 1, ch: 0 });
