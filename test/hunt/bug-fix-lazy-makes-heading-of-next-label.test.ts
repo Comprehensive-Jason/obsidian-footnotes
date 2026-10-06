@@ -53,7 +53,7 @@ describe("two lazy labels in one paragraph, a '===' under the second", () => {
 
     // Now the result is "Text[^1]", "", "[^1]: a", "[^2]: b", "===", "",
     // "x[^2]", and "[^2]: b" / "===" is a level 1 heading.
-    it.fails("fixing the first label does not turn the second into a setext heading", () => {
+    it("fixing the first label does not turn the second into a setext heading", () => {
         const out = fixLazyDefinitions(Lines.join("\n")).split("\n");
         expect(headingLines(out)).toBe(0);
     });
