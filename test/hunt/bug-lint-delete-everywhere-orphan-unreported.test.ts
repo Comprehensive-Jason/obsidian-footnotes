@@ -35,9 +35,8 @@ import { messages, resetNotices } from "../helpers/notices";
 // Fix (2026-10-06): noticeLintAlerts takes afterLint, false from the
 // commands that run no lint (Delete footnote everywhere, both conversions,
 // the creation lint's other-note branch); then the orphan alerts speak as
-// with their toggles off. The carried paste's call (carry-footnotes-
-// hooks.ts, lintAfterPaste) still passes nothing, so a paste with Lint on
-// footnote creation off is not covered yet.
+// with their toggles off. The carried paste passes false too when Lint on
+// footnote creation is off (ee2ee13, pin bug-paste-orphan-unreported).
 
 const LINES = ["a[^n] b", "", "[^n]: see[^m]", "[^m]: cited only by n"];
 
