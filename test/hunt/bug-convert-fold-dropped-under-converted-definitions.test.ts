@@ -69,3 +69,65 @@ describe("folds through the default lint", () => {
         expect(mapFoldLines([{ from: 4, to: 5 }], lineDiffChanges(before, after), before)).toEqual([{ from: 2, to: 3 }]);
     });
 });
+
+// BUG (annoyance), still open: the conversion still drops the fold when
+// the heading's own definition holds a link or a wikilink.
+//
+// What the user would see: the same layout as the first test, but the
+// definition of "## Part two[^2]" cites a source with a link,
+// "[Smith](https://example.com) p. 5", or a wikilink, "[[Smith 2020]], p. 5".
+// After the conversion the heading reads "## Part two^[see [Smith](...) p. 5]",
+// and its section is open again.
+//
+// Hunt 2026-10-05, round 2, lens diff. Cluster D4 (what is left of U1).
+//
+// Cause: the fix above lines up headings by a key of their level and
+// words, with every reference and inline footnote taken out. headingKeys
+// takes them out with the pattern /\^?\[\^?[^\]]*\]/, which stops at the
+// first "]". In "^[see [Smith](https://example.com) p. 5]" that is the
+// "]" after "Smith", so the rest of the link and the page number stay in
+// the key. The old and new heading keys differ, the heading is not
+// paired, and the fold is dropped as in the first test.
+describe("folds through the normal-to-inline conversion, with a link in the heading's definition", () => {
+    it.fails("the U1 shape with a link in the heading's definition keeps the fold", () => {
+        const before = [
+            "# Part one",
+            "Text[^1].",
+            "",
+            "[^1]: one",
+            "## Part two[^2]",
+            "Body of part two.",
+            "More of it.",
+            "",
+            "[^2]: see [Smith](https://example.com) p. 5",
+        ].join("\n");
+        const result = convertNormalFootnotesToInline(before);
+        expect(result.markdown.split("\n")).toEqual([
+            "# Part one",
+            "Text^[one].",
+            "",
+            "## Part two^[see [Smith](https://example.com) p. 5]",
+            "Body of part two.",
+            "More of it.",
+        ]);
+        // Today: [] (the fold is dropped).
+        expect(mapFoldLines([{ from: 4, to: 7 }], lineDiffChanges(before, result.markdown), before)).toEqual([{ from: 3, to: 5 }]);
+    });
+
+    it.fails("the same with a wikilink and a page number", () => {
+        const before = [
+            "# Part one",
+            "Text[^1].",
+            "",
+            "[^1]: one",
+            "## Part two[^2]",
+            "Body of part two.",
+            "",
+            "[^2]: [[Smith 2020]], p. 5",
+        ].join("\n");
+        const result = convertNormalFootnotesToInline(before);
+        expect(result.markdown.split("\n")[3]).toBe("## Part two^[[[Smith 2020]], p. 5]");
+        // Today: [] (the fold is dropped).
+        expect(mapFoldLines([{ from: 4, to: 6 }], lineDiffChanges(before, result.markdown), before)).toEqual([{ from: 3, to: 4 }]);
+    });
+});

@@ -62,3 +62,28 @@ describe("a caret at column 0 of an untouched line, with lines inserted right ab
         expect(caretAfterLint(before, options, 2, 0)).toEqual({ line: 2, ch: 0, text: "%% c %%" });
     });
 });
+
+// BUG (annoyance), still open: the same jump at column 0 of the note's
+// FIRST line, when the lint inserts lines above it.
+//
+// What the user would see: the note starts with "[^1]: alpha" and the
+// caret sits at its start. The lint (with a section heading set) adds
+// "# Footnotes" and a blank line above it. Afterwards the caret is on
+// "# Footnotes", not on "[^1]: alpha", though that line did not change.
+//
+// Hunt 2026-10-05, round 2, lens diff. Cluster D2.
+//
+// Cause: the fix above writes inserted lines at the END of the line
+// above them, but the first line has no line above it. That case (the
+// s === 0 branch of lineDiffChanges) still writes the inserted lines at
+// offset 0, the very start of the note, where the caret sits, and the
+// editor carries the caret to the front of the inserted text.
+describe("a caret at column 0 of the note's first line, with lines inserted above it", () => {
+    it.fails("a note that starts with its definition: the caret stays on the definition line", () => {
+        const before = "[^1]: alpha";
+        const options: LintOptions = { sectionHeading: "# Footnotes" };
+        expect(lintFootnotes(before, options)).toBe("# Footnotes\n\n[^1]: alpha");
+        // Today: { line: 0, ch: 0, text: "# Footnotes" }.
+        expect(caretAfterLint(before, options, 0, 0)).toEqual({ line: 2, ch: 0, text: "[^1]: alpha" });
+    });
+});
