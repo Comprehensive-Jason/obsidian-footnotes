@@ -31,11 +31,15 @@ import { messages, resetNotices } from "../helpers/notices";
 //
 // Cause: createFootnoteReference checks for "[^]]" on the raw line, before
 // the protected-caret guard runs, so the invalid-name toast wins.
+//
+// Fix (2026-10-06): the check reads the masked twin, as the "[^]" hop
+// after it does, so "[^]]" inside code is no name and the press reaches
+// the protected-text guard.
 
 beforeEach(resetNotices);
 
 describe("the '[^]]' check reads the raw line only", () => {
-    it.fails("a named press between '[^]' and ']' inside inline code gets the protected-text toast", async () => {
+    it("a named press between '[^]' and ']' inside inline code gets the protected-text toast", async () => {
         const text = "Type `[^]]` to see.";
         const ch = text.indexOf("[^]") + 3;
         const doc = fakeEditor([text], { cursor: { line: 0, ch }, edits: true, wholeDoc: true, words: true });

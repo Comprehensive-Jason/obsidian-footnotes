@@ -705,10 +705,15 @@ export function createFootnoteReference(
     // name that can't be, not an empty placeholder to hop out of, and
     // every other guard looks past it, so a second press used to plant a
     // second "[^]" right there (Kimi sweep 2026-09-13). Say what is wrong
-    // with the name instead, and leave the line alone.
+    // with the name instead, and leave the line alone. The shape is looked
+    // for on the masked twin, as the hop below does: "[^]]" inside inline
+    // code is plain text, no name at all, and a press there gets the
+    // protected-text notice like any other press in code (hunt 2026-10-02,
+    // pin bug-press-named-inline-code-wrong-toast).
+    const maskedText = ctx.maskedLine(cursorPosition.line);
     if (
-        lineText.slice(0, cursorPosition.ch).endsWith("[^]") &&
-        lineText[cursorPosition.ch] === "]"
+        maskedText.slice(0, cursorPosition.ch).endsWith("[^]") &&
+        maskedText[cursorPosition.ch] === "]"
     ) {
         showNotice(InvalidNameCharacters, 8000);
         return true;
