@@ -80,7 +80,7 @@ beforeEach(() => {
 });
 
 describe("bug: a pasted text's own definition in the middle of it", () => {
-    it.fails("a whole note copied with Ctrl+A, its definition followed by a closing line, pasted into a note using the same name, leaves one definition per name", () => {
+    it("a whole note copied with Ctrl+A, its definition followed by a closing line, pasted into a note using the same name, leaves one definition per name", () => {
         const source = ["Text[^1].", "", "[^1]: mine", "", "Tags: #a"];
         const src = ed(source, { line: 0, ch: 0 }, { line: 4, ch: 8 });
         const ev = clip();

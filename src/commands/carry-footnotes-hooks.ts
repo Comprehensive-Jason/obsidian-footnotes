@@ -12,6 +12,7 @@ import { noticeLintAlerts } from "../linting/lint-alerts";
 import { lintAfterFootnoteCreation, lintBlockedByPrefix, lintRulesAllDisabled, withEmptySectionHeadingRemoved } from "../linting/linter";
 import { quotedReference } from "../parsing/footnote-grammar";
 import { normalizeEol, restoreEol } from "../parsing/line-edits";
+import { readNote } from "../parsing/note-reading";
 import {
     CarriedDefinition,
     CarriedDefinitions,
@@ -279,9 +280,12 @@ export function handlePaste(plugin: FootnotePlugin, event: ClipboardEvent, doc: 
 /**
  * Lands pasted `text` with the definitions it carries in place of `doc`'s
  * selection, when it carries any: the plugin's own copy (matched against
- * the register) or text from anywhere that ends in definition lines.
- * Returns false, having changed nothing, when there is nothing to carry,
- * the editor holds more than one selection, or the text lands in
+ * the register) or text from anywhere that ends in definition lines. A
+ * text that carries none but defines a footnote of its own somewhere in
+ * the middle is landed too when the note already uses that name, so the
+ * pasted definition is renamed (see definesFootnotes).
+ * Returns false, having changed nothing, when there is nothing to carry or
+ * rename, the editor holds more than one selection, or the text lands in
  * protected text, such as a code block (see landCarriedText); the paste
  * is then the editor's own. `beforeWrite` runs right before the note is
  * changed (see wrapCommand).
@@ -300,19 +304,34 @@ function landPastedText(plugin: FootnotePlugin, doc: Editor, text: string, befor
         ({ body, carried } = splitCarriedText(text));
         missing = [];
     }
-    if (carried.length === 0) {
-        // nothing to land, so the editor pastes as usual; a reference that
-        // travelled without a definition is still worth a word
-        if (missing.length > 0) {
-            showNotice(`${missing.map(quotedReference).join(", ")} ${missing.length === 1 ? "has" : "have"} no definition to carry.`, 8000);
-        }
-        return false;
-    }
     const selections = doc.listSelections();
-    if (selections.length !== 1) return false;
-    const [a, b] = [selections[0].anchor, selections[0].head];
-    const [from, to] = a.line < b.line || (a.line === b.line && a.ch <= b.ch) ? [a, b] : [b, a];
-    return landCarriedText(plugin, doc, from, to, text, body, carried, missing, beforeWrite);
+    const landed = () => {
+        if (carried.length === 0 && !definesFootnotes(body)) return false;
+        if (selections.length !== 1) return false;
+        const [a, b] = [selections[0].anchor, selections[0].head];
+        const [from, to] = a.line < b.line || (a.line === b.line && a.ch <= b.ch) ? [a, b] : [b, a];
+        return landCarriedText(plugin, doc, from, to, text, body, carried, missing, beforeWrite);
+    };
+    if (landed()) return true;
+    // nothing landed, so the editor pastes as usual; a reference that
+    // travelled without a definition is still worth a word
+    if (carried.length === 0 && missing.length > 0) {
+        showNotice(`${missing.map(quotedReference).join(", ")} ${missing.length === 1 ? "has" : "have"} no definition to carry.`, 8000);
+    }
+    return false;
+}
+
+/**
+ * Whether the pasted `body` holds a definition of its own: a text copied
+ * whole, such as a note copied with Ctrl+A, whose definition is followed by
+ * more text ("Tags: #a"), so it is not lifted off the end as a carried one.
+ * Pasted into a note that already uses the name, the editor's own paste left
+ * the note defining that name twice; the plugin lands such a text so that
+ * the pasted definition is renamed, as one at the end of the text is (hunt
+ * 2026-10-06 cycle 3, cluster K6, pin bug-paste-body-defines-name-mid-text).
+ */
+function definesFootnotes(body: string): boolean {
+    return body.includes("[^") && readNote(normalizeEol(body).text.split("\n")).definitions.length > 0;
 }
 
 /**
@@ -337,7 +356,7 @@ export function carriedInputHandler(
     return (view, from, to, text) => {
         if (!plugin.settings.carryFootnotesOnCopy || !text.includes("\n")) return false;
         const { body, carried } = splitCarriedText(text);
-        if (carried.length === 0) return false;
+        if (carried.length === 0 && !definesFootnotes(body)) return false;
         const doc = editorFor(view);
         if (!doc || nestedSubEditorOwnsFocus(doc)) return false;
         return landCarriedText(plugin, doc, doc.offsetToPos(from), doc.offsetToPos(to), text, body, carried, []);
@@ -437,6 +456,9 @@ function landCarriedText(
     // same before and after them).
     const landing = asOwnParagraph(cleared, noteFrom, inNote(body));
     const plan = planCarriedPaste(cleared.join("\n"), landing.text, carried, noteFrom);
+    // a text that carries nothing is only landed to rename a definition of
+    // its own; with nothing to rename, the paste is the editor's own
+    if (carried.length === 0 && plan.renamed === 0) return false;
     // the pasted text as the editor gets it, and as the note reads it
     const text = fromNote(plan.body);
     const after = landing.after;
@@ -511,7 +533,10 @@ function landCarriedText(
     // A, 2026-09-25). "Matched" is a carried definition whose text the
     // note already had under another name, so the reference took that
     // name and nothing was added.
-    const total = plan.added + plan.reused;
+    // A text that carries nothing brings only the definitions in its own
+    // text, and is landed only when some of them were renamed: those are
+    // the ones it counts.
+    const total = carried.length > 0 ? plan.added + plan.reused : plan.renamed;
     const matched = plan.repointed;
     const counts: [number, string][] = [
         [plan.added, "added"],
