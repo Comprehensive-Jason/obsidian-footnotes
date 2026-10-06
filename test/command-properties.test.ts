@@ -703,7 +703,8 @@ describe("creation-command invariants over random documents", () => {
      * Rule: a reference attaches to the text before it, so the spaces
      * between that text and the selection go with the replacement - unless
      * what precedes them is a list, task, or heading marker, a quote
-     * marker, a table pipe, or nothing at all.
+     * marker, a callout's "[!type]" marker after its quote markers, a
+     * table pipe, or nothing at all.
      */
     function attachStart(line: string, ch: number): number {
         let start = ch;
@@ -715,6 +716,12 @@ describe("creation-command invariants over random documents", () => {
         const marker = before.trim().replace(/^(?:>\s*)+/, "");
         if (/^(?:[-*+]|\d+[.)])(?: \[[ xX]\])?$/.test(marker)) return ch;
         if (/^#{1,6}$/.test(marker)) return ch;
+        // A callout's "[!note]" (with an optional "+" or "-" that sets it
+        // folded or open) is a marker too, so the space after it stays on
+        // the line: the README lists a callout's marker among the spots a
+        // footnote is never written into (hunt 2026-10-06, cycle 3,
+        // cluster M7, seed 33364060).
+        if (/^\s*>/.test(before) && /^\[![^\]\s]+\][+-]?$/.test(marker)) return ch;
         return start;
     }
 
