@@ -749,8 +749,19 @@ export function lintAfterFootnoteCreation(
     const doc = target.doc;
     const before = doc.getValue();
     // Say nothing when a bad prefix blocks the lint. The insert that just
-    // happened has already told the user about it.
-    if (lintBlockedByPrefix(before, plugin.settings.enableFootnotePrefix) ?? lintBlockedBySectionHeading(plugin)) return null;
+    // happened has already told the user about it (a paste, which needs no
+    // prefix, says it itself: lintAfterPaste).
+    if (lintBlockedByPrefix(before, plugin.settings.enableFootnotePrefix)) return null;
+    // Nothing a press or a paste does reads the section heading setting,
+    // so nothing has said that the lint cannot use it: the reason is
+    // shown, as a save shows it, rather than leaving the lint silent (ADR
+    // 0002; hunt 2026-10-02, round 2, cluster I4, pin
+    // bug-creation-lint-heading-blocked-silent).
+    const headingProblem = lintBlockedBySectionHeading(plugin);
+    if (headingProblem) {
+        showNotice(headingProblem, 8000);
+        return null;
+    }
     const after = lintNote(plugin, before, configuredSectionHeading(plugin));
     if (after === before) {
         noticeLintAlerts(plugin, after);
