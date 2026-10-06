@@ -3,7 +3,7 @@ import { EditorPosition } from "obsidian";
 import { positionAfterRewrite } from "../editor/document-diff";
 import { definitionsToCut, orphanedDefinitionBlocks } from "../linting/rules/remove-orphaned-definitions";
 import { normalizeEol } from "../parsing/line-edits";
-import { Definition, readNote } from "../parsing/note-reading";
+import { Definition, readNote, ReferenceOccurrence } from "../parsing/note-reading";
 
 // Carrying footnote definitions along on copy, cut, and paste (issue #59;
 // Jason's rulings 2026-09-21 and 2026-09-22).
@@ -258,67 +258,150 @@ export interface CarriedPastePlan {
     repointed: number;
     /** incoming names the destination already used for a different body, given a new name */
     renamed: number;
+    /**
+     * True when the pasted body holds footnote syntax ("[^") and every bit
+     * of it lands in protected text, as in a paste inside a code block,
+     * where no reference is live. There is then no footnote for the carried
+     * definitions to serve, so the paste is left to the editor, which puts
+     * the text in as it is (hunt 2026-10-02, pin
+     * bug-carry-paste-in-protected-text).
+     */
+    landsInProtectedText: boolean;
 }
 
 /**
  * Decide how `carried` definitions and the pasted `body` fit into the
  * `destination` note (T6's merge rule applied on paste; Jason,
- * 2026-09-21). In carried order: a definition whose body, whitespace
- * collapsed, equals an existing definition's is merged into it whatever
- * its label, and the references to it are pointed at the existing name; a
- * name the destination does not use (as a definition or a reference) is
- * kept; a name the destination uses for a different body is renamed, a
- * number to the smallest free number, a name to name-2, name-3, and so on.
- * A definition held inside a carried block's body has its name kept or
- * renamed the same way, right after the block's own.
+ * 2026-09-21). `at` is where the body lands in the destination; without
+ * it, the body is read on its own.
+ *
+ * One planner sees every name the paste brings: the carried blocks' own
+ * names, the names defined inside a carried block (a footnote held in
+ * another footnote's definition), the names the pasted body defines
+ * itself, and the names the body and the blocks only cite. Each pasted
+ * definition is then merged, kept, or renamed:
+ *
+ * - Merged: a carried block whose text, whitespace collapsed and with the
+ *   paste's own merges made, equals the text of a definition the
+ *   destination shows. Its references are pointed at the existing name,
+ *   whatever its label, and the block is not added.
+ * - Kept: a name nothing in the destination uses, as a definition or a
+ *   reference, and that no name settled before it has taken.
+ * - Renamed: any other, a number to the smallest free number, a name to
+ *   name-2, name-3, and so on.
+ *
  * The renames are made in the body and inside the carried blocks (labels
  * and references alike), so a carried definition that cites another keeps
  * citing it. Protected text in the body is left as it is.
  */
-export function planCarriedPaste(destination: string, body: string, carried: CarriedDefinition[]): CarriedPastePlan {
+export function planCarriedPaste(destination: string, body: string, carried: CarriedDefinition[], at?: EditorPosition): CarriedPastePlan {
     const lines = normalizeEol(destination).text.split("\n");
     const reading = readNote(lines);
 
-    // what the destination holds: every name in use (definitions and
-    // references, folded), and every definition body by its normalised
-    // text, wherever the definition sits (a list item's included: hunt
-    // 2026-10-02, pin spec-carry-paste-reuse-in-item-definition), the last
-    // definition of a name winning as it does in Obsidian
+    // What the destination holds: every name in use (definitions and
+    // references, folded), and the text of every definition it shows,
+    // wherever the definition sits (a list item's included: hunt
+    // 2026-10-02, pin spec-carry-paste-reuse-in-item-definition). Of two
+    // definitions of one name only the last is shown, as in Obsidian, so
+    // only the last is offered for a merge; offering the first, hidden one
+    // pointed the pasted reference at the text Obsidian shows instead
+    // (hunt 2026-10-02, pin bug-carry-merge-into-shadowed-duplicate).
     const taken = new Set<string>();
-    const bodies = new Map<string, string>();
+    const shown = new Map<string, Definition>();
     for (const block of reading.definitions) {
         taken.add(block.name.toLowerCase());
+        shown.set(block.name.toLowerCase(), block);
+    }
+    const bodies = new Map<string, string>();
+    for (const block of reading.definitions) {
+        if (shown.get(block.name.toLowerCase()) !== block) continue;
         bodies.set(normalisedBody(lines.slice(block.start, block.end + 1), block.labelEnd), block.name);
     }
     for (let i = 0; i < lines.length; i++) {
         for (const occurrence of reading.referencesOn(i)) taken.add(occurrence.name.toLowerCase());
     }
 
-    // The names defined inside each carried block's body: a footnote held
-    // in another footnote's definition travels inside that block, and it
-    // lands in the destination as a definition like any other. So its name
-    // is checked against the destination's and renamed when taken, with
-    // the references to it; it used to keep its name, and where the
-    // destination already had that name for another footnote, the pasted
-    // copy came last and the destination's own references showed its text
-    // (hunt 2026-10-05 round 2, cluster C6, pin
-    // bug-paste-held-definition-name-collision). A held definition cannot
-    // be merged into an existing one, since its lines are part of the block
-    // that holds it; nor can another copy of its name, or the held copy
-    // would be the one that comes last.
-    const heldIn = (definition: CarriedDefinition) =>
-        readNote(definition.lines)
-            .definitions.filter((held) => held.start > 0)
-            .map((held) => held.name);
-    const heldNames = new Set(carried.flatMap(heldIn).map((name) => name.toLowerCase()));
+    // The pasted body, read where it lands. Read on its own, a body whose
+    // first line is indented 4 columns is a code block, so the references
+    // in it were not renamed while the definition they cite was; where it
+    // lands, after other text on the line or under a list item, it is
+    // ordinary text (hunt 2026-10-02, pin
+    // bug-carry-indented-body-not-renamed).
+    const bodyLines = normalizeEol(body).text.split("\n");
+    const landed = landedFootnoteSyntax(lines, bodyLines, at);
+    const bodyDefines = landed.lines.flatMap((line) => line.labels.map((occurrence) => occurrence.name));
+    const bodyCites = landed.lines.flatMap((line) => line.references.map((occurrence) => occurrence.name));
 
-    // the final name of every incoming name, folded
-    const finalName = new Map<string, string>();
+    // Each carried block read on its own, the way it lands: at the top
+    // level, among the definitions.
+    const blockReadings = carried.map((definition) => readNote(definition.lines));
+    const blockSyntax = (i: number) => (line: number) => [...blockReadings[i].labelsOn(line), ...blockReadings[i].referencesOn(line)];
+    const citedIn = (i: number) => carried[i].lines.flatMap((_, line) => blockReadings[i].referencesOn(line).map((occurrence) => occurrence.name));
+    // The names defined inside a carried block's body: a footnote held in
+    // another footnote's definition travels inside that block, and lands
+    // in the destination as a definition like any other, so its name is
+    // kept or renamed like the block's own (hunt 2026-10-05 round 2,
+    // cluster C6, pin bug-paste-held-definition-name-collision).
+    const heldIn = (i: number) =>
+        blockReadings[i].definitions.filter((held) => held.start > 0).map((held) => held.name);
+
+    // How many definitions the paste brings for each name, folded.
+    const defined = new Map<string, number>();
+    const define = (name: string) => defined.set(name.toLowerCase(), (defined.get(name.toLowerCase()) ?? 0) + 1);
+    bodyDefines.forEach(define);
+    carried.forEach((definition, i) => {
+        define(definition.name);
+        heldIn(i).forEach(define);
+    });
+    // A name the paste cites without defining it keeps its spelling, and
+    // whatever the destination means by it, so no rename may land on it.
+    // Renaming onto one made two pasted footnotes into one (hunt
+    // 2026-10-02, pin bug-carry-rename-ignores-body-names).
+    for (const name of [...bodyCites, ...carried.flatMap((_, i) => citedIn(i))]) {
+        if (!defined.has(name.toLowerCase())) taken.add(name.toLowerCase());
+    }
+
+    // Merges first, each block after the blocks it cites, since a block's
+    // text is compared as it reads once the paste's own merges are made:
+    // "see [^b]" is the destination's "see [^b]" only if the pasted [^b]
+    // is merged into the destination's [^b]. A name the paste brings and
+    // does not merge lands under a name the destination does not use at
+    // all, so a block citing one, or holding a definition (which is never
+    // merged), matches nothing there and is not merged either. Comparing
+    // before the renames merged a citing block into one citing a different
+    // footnote (hunt 2026-10-02, pin bug-carry-merge-before-renames).
+    //
+    // Only a name the paste defines once can be merged. A held definition
+    // cannot, since its lines are part of the block that holds it, and nor
+    // can a name defined twice: merging one copy would leave the other to
+    // stand alone, and dropping both lost the footnote (hunt 2026-10-02,
+    // pin bug-carry-duplicate-clipboard-name-dropped). Both copies then
+    // land under one name, the last still the one shown.
+    const merged = new Map<string, string>();
+    const blockOf = new Map(carried.map((definition, i) => [definition.name.toLowerCase(), i]));
+    const decided = new Set<string>();
+    const decide = (i: number) => {
+        const folded = carried[i].name.toLowerCase();
+        if (decided.has(folded)) return;
+        decided.add(folded);
+        const inside = [...citedIn(i), ...heldIn(i)];
+        for (const name of inside) {
+            const j = blockOf.get(name.toLowerCase());
+            if (j !== undefined) decide(j);
+        }
+        if (defined.get(folded) !== 1) return;
+        if (inside.some((name) => defined.has(name.toLowerCase()) && !merged.has(name.toLowerCase()))) return;
+        const existing = bodies.get(normalisedBody(renamedLines(carried[i].lines, blockSyntax(i), merged)));
+        if (existing !== undefined) merged.set(folded, existing);
+    };
+    for (let i = 0; i < carried.length; i++) decide(i);
+
+    // Then every other name is kept or renamed, in the order the pasted
+    // text meets them: the body's own definitions, then each carried block
+    // and the definitions it holds. The final name of every incoming name,
+    // folded:
+    const finalName = new Map(merged);
     const assigned = new Set<string>();
-    const reusedNames = new Set<string>();
-    let added = 0;
-    let reused = 0;
-    let repointed = 0;
     let renamed = 0;
     const occupied = (folded: string) => taken.has(folded) || assigned.has(folded);
     // an incoming name keeps its spelling when the destination and the
@@ -342,46 +425,88 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
         finalName.set(folded, name);
         assigned.add(name.toLowerCase());
     };
-    for (const definition of carried) {
-        const folded = definition.name.toLowerCase();
-        const existing = finalName.has(folded) || heldNames.has(folded) ? undefined : bodies.get(normalisedBody(definition.lines));
-        if (existing !== undefined) {
-            finalName.set(folded, existing);
-            reusedNames.add(folded);
-            reused++;
-            if (existing.toLowerCase() !== folded) repointed++;
-            continue;
-        }
+    bodyDefines.forEach(settle);
+    const definitions: CarriedDefinition[] = [];
+    carried.forEach((definition, i) => {
+        if (merged.has(definition.name.toLowerCase())) return;
         settle(definition.name);
-        added++;
-        for (const held of heldIn(definition)) settle(held);
-    }
+        heldIn(i).forEach(settle);
+    });
+    carried.forEach((definition, i) => {
+        if (merged.has(definition.name.toLowerCase())) return;
+        definitions.push({ name: finalName.get(definition.name.toLowerCase()) as string, lines: renamedLines(definition.lines, blockSyntax(i), finalName) });
+    });
 
-    // the renames, made right to left on each line so that one keeps the
-    // offsets of the ones before it; a line's own label is renamed too
-    const rename = (text: string[]): string[] => {
-        const textReading = readNote(text);
-        return text.map((line, i) => {
-            const edits = [...textReading.labelsOn(i), ...textReading.referencesOn(i)].map(({ start, end, name }) => ({ start: start + 2, end: end - 1, name }));
-            return edits
-                .filter((edit) => {
-                    const target = finalName.get(edit.name.toLowerCase());
-                    return target !== undefined && target !== edit.name;
-                })
-                .sort((a, b) => b.start - a.start)
-                .reduce(
-                    (kept, edit) => kept.slice(0, edit.start) + (finalName.get(edit.name.toLowerCase()) as string) + kept.slice(edit.end),
-                    line,
-                );
-        });
+    const repointed = [...merged].filter(([incoming, existing]) => existing.toLowerCase() !== incoming).length;
+    return {
+        body: renamedLines(bodyLines, (line) => [...landed.lines[line].labels, ...landed.lines[line].references], finalName).join("\n"),
+        definitions,
+        added: definitions.length,
+        reused: merged.size,
+        repointed,
+        renamed,
+        landsInProtectedText: landed.inProtectedText,
     };
-    const definitions = carried
-        .filter((definition) => !reusedNames.has(definition.name.toLowerCase()))
-        .map((definition) => ({
-            name: finalName.get(definition.name.toLowerCase()) as string,
-            lines: rename(definition.lines),
-        }));
-    return { body: rename(normalizeEol(body).text.split("\n")).join("\n"), definitions, added, reused, repointed, renamed };
+}
+
+/**
+ * The footnote syntax of the pasted `body` as it reads once it lands in
+ * `lines` at `at`: for each line of the body, the live references and the
+ * definition labels on it, with columns counted from the start of that
+ * line of the body; and whether the body holds a "[^" and every one of
+ * them lands in protected text (code, math, frontmatter, and the like).
+ * Without `at` the body is read on its own.
+ */
+function landedFootnoteSyntax(
+    lines: readonly string[],
+    body: readonly string[],
+    at: EditorPosition | undefined,
+): { lines: { references: ReferenceOccurrence[]; labels: ReferenceOccurrence[] }[]; inProtectedText: boolean } {
+    const origin = at ?? { line: 0, ch: 0 };
+    let note = [...body];
+    if (at) {
+        // the body written into the line at `at`, between what came before
+        // the caret on that line and what came after it
+        const host = lines[at.line] ?? "";
+        note[0] = host.slice(0, at.ch) + note[0];
+        note[note.length - 1] += host.slice(at.ch);
+        note = [...lines.slice(0, at.line), ...note, ...lines.slice(at.line + 1)];
+    }
+    const reading = readNote(note);
+    // the body's own stretch of each line: the first line of the body
+    // starts at the caret, every later one at the start of its line
+    const shift = (i: number) => (i === 0 ? origin.ch : 0);
+    // The masked twin blots out protected text, but keeps a "%%" comment's
+    // text, since a reference inside one is live (Jason's ruling A1).
+    const opens = body.flatMap((text, i) => [...text.matchAll(/\[\^/g)].map((match) => reading.maskedLine(origin.line + i)[shift(i) + match.index]));
+    return {
+        lines: body.map((text, i) => {
+            const own = (occurrences: readonly ReferenceOccurrence[]) =>
+                occurrences
+                    .filter((occurrence) => occurrence.start >= shift(i) && occurrence.end <= shift(i) + text.length)
+                    .map((occurrence) => ({ ...occurrence, start: occurrence.start - shift(i), end: occurrence.end - shift(i) }));
+            return { references: own(reading.referencesOn(origin.line + i)), labels: own(reading.labelsOn(origin.line + i)) };
+        }),
+        inProtectedText: opens.length > 0 && opens.every((character) => character === "\0"),
+    };
+}
+
+/**
+ * `text` with every name in `names` (keyed by folded name) written in its
+ * place: the "[^name]" labels and references that `syntaxOn` lists for each
+ * line. The renames are made right to left on each line, so that one keeps
+ * the columns of the ones before it.
+ */
+function renamedLines(text: readonly string[], syntaxOn: (line: number) => readonly ReferenceOccurrence[], names: ReadonlyMap<string, string>): string[] {
+    return text.map((line, i) =>
+        syntaxOn(i)
+            .filter(({ name }) => {
+                const target = names.get(name.toLowerCase());
+                return target !== undefined && target !== name;
+            })
+            .sort((a, b) => b.start - a.start)
+            .reduce((kept, { start, end, name }) => kept.slice(0, start + 2) + (names.get(name.toLowerCase()) as string) + kept.slice(end - 1), line),
+    );
 }
 
 /**

@@ -32,7 +32,7 @@ import { planCarriedPaste } from "../../src/commands/carry-footnotes";
 const one = (name: string, ...lines: string[]) => ({ name, lines });
 
 describe("two clipboard definitions of one name, the first matching an existing body", () => {
-    it.fails("keeps a definition for the pasted reference", () => {
+    it("keeps a definition for the pasted reference", () => {
         // The source renders [^1] as "two" (the last wins); "one" already
         // exists in the destination as [^z].
         const plan = planCarriedPaste("z[^z]\n\n[^z]: one", "a[^1]", [one("1", "[^1]: one"), one("1", "[^1]: two")]);

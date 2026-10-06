@@ -84,7 +84,7 @@ beforeEach(() => {
 });
 
 describe("a pasted body that starts indented is renamed like any other", () => {
-    it.fails("a definition's continuation line pasted mid-line keeps pointing at its own footnote", () => {
+    it("a definition's continuation line pasted mid-line keeps pointing at its own footnote", () => {
         const text = copy(["Text[^2] here", "", "[^2]: two", "    see[^1] more", "", "[^1]: one"], { line: 3, ch: 0 }, { line: 3, ch: 16 });
         expect(text).toBe("    see[^1] more\n\n[^1]: one");
         const lines = pasteRegister(["dest[^1] word", "", "[^1]: uno"], { line: 0, ch: 8 }, text);
@@ -92,7 +92,7 @@ describe("a pasted body that starts indented is renamed like any other", () => {
         expect(lines).toEqual(["dest[^1]    see[^2] more word", "", "[^1]: uno", "[^2]: one"]);
     });
 
-    it.fails("a nested list item copied with its tab and pasted under another list item keeps its footnote", () => {
+    it("a nested list item copied with its tab and pasted under another list item keeps its footnote", () => {
         const text = copy(["- top[^2]", "\t- nested[^1] point", "", "[^1]: one", "[^2]: two"], { line: 1, ch: 0 }, { line: 1, ch: 19 });
         expect(text).toBe("\t- nested[^1] point\n\n[^1]: one");
         const lines = pasteRegister(["- mine[^1]", "", "", "[^1]: uno"], { line: 1, ch: 0 }, text);

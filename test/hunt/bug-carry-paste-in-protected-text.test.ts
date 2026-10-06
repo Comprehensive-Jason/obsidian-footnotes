@@ -70,7 +70,7 @@ describe("a paste with the caret inside a code fence", () => {
     // handlePaste returning false hands the paste back to the editor,
     // which drops the text in as it is. The fake editor does not do that
     // part, so the note stays as it was.
-    it.fails("2e: a paste inside a code fence is literal: nothing is pulled out of the code", () => {
+    it("2e: a paste inside a code fence is literal: nothing is pulled out of the code", () => {
         const doc = editor(["```md", "", "```", "", "after"], { line: 1, ch: 0 });
         // Today the paste is taken over and the note becomes "```md",
         // "a[^1]", "```", "", "after", "", "[^1]: one".
@@ -82,7 +82,7 @@ describe("a paste with the caret inside a code fence", () => {
     // through the input method (the system that turns key presses into
     // text) instead of firing a paste event, so carriedInputHandler sees
     // it instead of handlePaste.
-    it.fails("3c: text committed inside a code fence through a phone keyboard is left to the editor", () => {
+    it("3c: text committed inside a code fence through a phone keyboard is left to the editor", () => {
         const doc = editor(["```", "", "```"], { line: 1, ch: 0 });
         const handle = carriedInputHandler(fakePlugin(on, doc), () => doc);
         const at = doc.posToOffset({ line: 1, ch: 0 });

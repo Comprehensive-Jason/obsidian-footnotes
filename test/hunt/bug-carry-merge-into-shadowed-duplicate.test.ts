@@ -24,7 +24,7 @@ import { planCarriedPaste } from "../../src/commands/carry-footnotes";
 // merge, so the paste is merged into text Obsidian never shows.
 
 describe("merge into a shadowed duplicate definition", () => {
-    it.fails("a body equal to a SHADOWED duplicate (not the one Obsidian renders) is not reused", () => {
+    it("a body equal to a SHADOWED duplicate (not the one Obsidian renders) is not reused", () => {
         const plan = planCarriedPaste(["x[^1]", "", "[^1]: one", "[^1]: uno"].join("\n"), "a[^5]", [{ name: "5", lines: ["[^5]: one"] }]);
         // Today the body comes back "a[^1]" with one reuse, so the pasted
         // reference shows "uno".

@@ -30,7 +30,7 @@ import { planCarriedPaste } from "../../src/commands/carry-footnotes";
 const one = (name: string, ...lines: string[]) => ({ name, lines });
 
 describe("a carried rename lands on a name the pasted body already uses", () => {
-    it.fails("a carried number is not renamed onto the number of a body reference that has no carried definition", () => {
+    it("a carried number is not renamed onto the number of a body reference that has no carried definition", () => {
         // The source is "a[^1] b[^2]" with [^1]: uno. Nothing defines [^2]
         // in the source, so nothing carries it.
         const plan = planCarriedPaste("x[^1]\n\n[^1]: one", "a[^1] b[^2]", [one("1", "[^1]: uno")]);
@@ -38,7 +38,7 @@ describe("a carried rename lands on a name the pasted body already uses", () => 
         expect(plan.body).toBe("a[^3] b[^2]");
     });
 
-    it.fails("a carried number is not renamed onto a name the body defines itself", () => {
+    it("a carried number is not renamed onto a name the body defines itself", () => {
         // The selection included "[^2]: two", so that definition travels in
         // the body and is not carried.
         const plan = planCarriedPaste("x[^1]\n\n[^1]: other", "a[^1] b[^2]\n\n[^2]: two", [one("1", "[^1]: uno")]);

@@ -71,7 +71,7 @@ beforeEach(() => {
 });
 
 describe("merge compares bodies before the paste's renames", () => {
-    it.fails("does not merge a body whose inner reference is renamed by the same paste", () => {
+    it("does not merge a body whose inner reference is renamed by the same paste", () => {
         const plan = planCarriedPaste("a[^x] c[^b]\n\n[^x]: see [^b]\n[^b]: dest bee", "p[^a]", [
             one("a", "[^a]: see [^b]"),
             one("b", "[^b]: src bee"),
@@ -80,7 +80,7 @@ describe("merge compares bodies before the paste's renames", () => {
         expect(plan.definitions).toEqual([one("a", "[^a]: see [^b-2]"), one("b-2", "[^b-2]: src bee")]);
     });
 
-    it.fails("the citing definition is reused the second time, not added as a-2", () => {
+    it("the citing definition is reused the second time, not added as a-2", () => {
         const sourceLines = ["x[^a] y", "", "[^a]: see[^b]", "[^b]: bee"];
         const source = editor(sourceLines, { line: 0, ch: 0 }, { line: 0, ch: 7 });
         handleCopy(fakePlugin({ carryFootnotesOnCopy: true }, source), clipboardEvent() as never);

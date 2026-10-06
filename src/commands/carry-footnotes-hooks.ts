@@ -259,10 +259,11 @@ export function handlePaste(plugin: FootnotePlugin, event: ClipboardEvent, doc: 
  * Lands pasted `text` with the definitions it carries in place of `doc`'s
  * selection, when it carries any: the plugin's own copy (matched against
  * the register) or text from anywhere that ends in definition lines.
- * Returns false, having changed nothing, when there is nothing to carry or
- * the editor holds more than one selection; the paste is then the
- * editor's own. `beforeWrite` runs right before the note is changed (see
- * wrapCommand).
+ * Returns false, having changed nothing, when there is nothing to carry,
+ * the editor holds more than one selection, or the text lands in
+ * protected text, such as a code block (see landCarriedText); the paste
+ * is then the editor's own. `beforeWrite` runs right before the note is
+ * changed (see wrapCommand).
  */
 function landPastedText(plugin: FootnotePlugin, doc: Editor, text: string, beforeWrite: () => void = () => undefined): boolean {
     if (!text) return false;
@@ -290,8 +291,7 @@ function landPastedText(plugin: FootnotePlugin, doc: Editor, text: string, befor
     if (selections.length !== 1) return false;
     const [a, b] = [selections[0].anchor, selections[0].head];
     const [from, to] = a.line < b.line || (a.line === b.line && a.ch <= b.ch) ? [a, b] : [b, a];
-    landCarriedText(plugin, doc, from, to, body, carried, missing, beforeWrite);
-    return true;
+    return landCarriedText(plugin, doc, from, to, body, carried, missing, beforeWrite);
 }
 
 /**
@@ -319,8 +319,7 @@ export function carriedInputHandler(
         if (carried.length === 0) return false;
         const doc = editorFor(view);
         if (!doc || nestedSubEditorOwnsFocus(doc)) return false;
-        landCarriedText(plugin, doc, doc.offsetToPos(from), doc.offsetToPos(to), body, carried, []);
-        return true;
+        return landCarriedText(plugin, doc, doc.offsetToPos(from), doc.offsetToPos(to), body, carried, []);
     };
 }
 
@@ -342,6 +341,16 @@ function editorOwning(plugin: FootnotePlugin, view: EditorView): Editor | null {
  * toast with the counts, and the lint or its alerts. `missing` names the
  * references whose definitions could not be found at copy time.
  * `beforeWrite` runs right before the transaction that changes the note.
+ *
+ * Returns false, having changed nothing, when the body holds footnote
+ * syntax and all of it lands in protected text: a paste inside a code
+ * block, a math block, or the frontmatter. Nothing there needs a
+ * definition, so the editor pastes the text as it is, definition lines
+ * and all, as plain text inside the block. Taking such a paste over pulled
+ * the definitions out of the code and landed them as live footnotes that
+ * nothing referenced (hunt 2026-10-02, pin
+ * bug-carry-paste-in-protected-text). A "%%" comment is no such place,
+ * since a reference inside one is live (Jason's ruling A1).
  */
 function landCarriedText(
     plugin: FootnotePlugin,
@@ -352,7 +361,7 @@ function landCarriedText(
     carried: CarriedDefinition[],
     missing: string[],
     beforeWrite: () => void = () => undefined,
-): void {
+): boolean {
     const lines = docLines(doc);
     // The paste is planned against the note as it reads once the selection
     // is gone. A definition the paste deletes is then not one the note
@@ -361,8 +370,15 @@ function landCarriedText(
     // bug-carry-paste-over-selection-holding-definitions: Ctrl+A and paste
     // pointed the pasted reference at the definition it was deleting).
     const cleared = simulateChanges(lines, [{ from, to, text: "" }]);
-    const plan = planCarriedPaste(cleared.join("\n"), body, carried);
-    const { text, after } = asOwnParagraph(cleared, from, plan.body);
+    // The body is planned where it lands, with any blank line in front of
+    // it already there: the planner reads its footnotes in place (renames
+    // only change names, so the blank lines asOwnParagraph wants are the
+    // same before and after them).
+    const landing = asOwnParagraph(cleared, from, body);
+    const plan = planCarriedPaste(cleared.join("\n"), landing.text, carried, from);
+    if (plan.landsInProtectedText) return false;
+    const { after } = landing;
+    const text = plan.body;
     // a blank line after the text goes in as an edit of its own, so the
     // caret can land at the end of the text, before it
     const edits: EditorChange[] = after ? [{ from, to, text }, { from: to, text: after }] : [{ from, to, text }];
@@ -423,6 +439,7 @@ function landCarriedText(
     if (lintAfterFootnoteCreation(plugin, doc, false) === null && !plugin.settings.lintOnFootnoteCreation) {
         noticeLintAlerts(plugin, doc.getValue());
     }
+    return true;
 }
 
 /**
