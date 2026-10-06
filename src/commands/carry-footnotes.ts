@@ -34,7 +34,7 @@ export interface CarriedDefinition {
 }
 
 export interface CarriedDefinitions {
-    /** the blocks the selection needs, in the order their references are first met */
+    /** the blocks the selection needs, in the order their references are first met, except that blocks holding copies of one name keep the note's order (copiesInNoteOrder) */
     carried: CarriedDefinition[];
     /** the names referenced inside the selection (or inside a carried body) that have no definition to carry: an orphan or a lazy label; spelled as first seen, each once */
     missing: string[];
@@ -212,7 +212,38 @@ function carriedBlocks(lines: string[], from: EditorPosition, to: EditorPosition
     // so it is not carried a second time, whichever of the two the copy met
     // first (hunt 2026-10-05, pin bug-nested-definition-carried-twice)
     const outermost = carried.filter((block) => !carried.some((other) => other !== block && other.start <= block.start && block.end <= other.end));
-    return { blocks: outermost, missing };
+    return { blocks: copiesInNoteOrder(outermost, reading.definitions), missing };
+}
+
+/**
+ * The carried `blocks`, in the order the copy met them, except that blocks
+ * holding copies of the same name keep the order they have in the note.
+ *
+ * A name can be defined twice, once inside another footnote's definition
+ * (a held copy, indented under "[^a]: outer") and once on its own.
+ * Obsidian draws the last copy in the note, and a held copy counts (live
+ * Obsidian 1.14.4, 2026-10-05). The copy carries the last copy of a name
+ * on its own, and a held copy travels inside the block that holds it, so
+ * the carried blocks can put the two copies the other way round: text
+ * citing [^b] and then [^a] used to land "[^b]: last" first and [^a] with
+ * its held [^b] after it, and the pasted [^b] showed the held text (hunt
+ * 2026-10-05 round 2, cluster C3, pin bug-carry-reorders-held-duplicate).
+ *
+ * So a block waits until every block that holds an earlier copy of one of
+ * its names has gone first; nothing else moves. A block holding an
+ * earlier copy always starts earlier in the note, so one can always go.
+ * `definitions` is the note reading's list, which has every definition,
+ * held ones included.
+ */
+function copiesInNoteOrder(blocks: readonly Definition[], definitions: readonly Definition[]): Definition[] {
+    // the names each block defines: its own, and those held in its body
+    const names = blocks.map((block) => new Set(definitions.filter((other) => block.start <= other.start && other.start <= block.end).map((other) => other.name.toLowerCase())));
+    const earlier = (i: number, j: number) => blocks[i].start < blocks[j].start && [...names[i]].some((name) => names[j].has(name));
+    const order: number[] = [];
+    while (order.length < blocks.length) {
+        order.push(blocks.findIndex((_, j) => !order.includes(j) && blocks.every((_, i) => order.includes(i) || !earlier(i, j))));
+    }
+    return order.map((i) => blocks[i]);
 }
 
 /** How carried definitions land in a destination note: the pasted body and the blocks to append, both with the collision renames made, and the counts for the toast. */

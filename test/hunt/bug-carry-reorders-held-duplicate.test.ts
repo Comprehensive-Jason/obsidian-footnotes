@@ -129,7 +129,7 @@ const cases: [string, string[]][] = [
 
 describe("duplicate definitions, one held, keep the copy Obsidian draws", () => {
     for (const [name, source] of cases) {
-        it.fails(name, () => {
+        it(name, () => {
             const want = defContents(source);
             const text = copyText(source, { line: 0, ch: 0 }, { line: 0, ch: source[0].length });
             expect(text).not.toBeNull();
