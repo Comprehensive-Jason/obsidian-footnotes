@@ -48,7 +48,7 @@ const labelLine = (text: string, name: string) => text.split("\n").findIndex((l)
 describe("twins whose renames the lint made are visible only on citation lines", () => {
     // Now: the fold on [^2]'s definition (lines 9 and 10) comes back on
     // lines 10 and 11, the other twin.
-    it.fails("the fold on the first-cited twin follows it to its new name", () => {
+    it("the fold on the first-cited twin follows it to its new name", () => {
         const before = ["Para.", "[^2]", "", "Para.", "[^1]", "", "[^1]: Ibid.", "    p. 4", "", "[^2]: Ibid.", "    p. 4", "", "Tail."].join("\n");
         const after = lintFootnotes(before, {});
         expect(after.split("\n")).toEqual(["Para.", "[^1]", "", "Para.", "[^2]", "", "Tail.", "", "[^1]: Ibid.", "    p. 4", "[^2]: Ibid.", "    p. 4"]);

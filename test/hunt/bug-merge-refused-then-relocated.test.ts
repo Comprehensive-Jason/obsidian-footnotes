@@ -51,14 +51,14 @@ describe("merge refused between two lists, then reindex moves the copies", () =>
 
     // Now: once = "x[^1]\n\n[^1]: nine\n\n- x\n\n[^a]: one\n\n- y\n\n[^a]: two",
     // twice = "x[^1]\n\n[^1]: nine\n\n- x\n\n[^a]: one\n    two\n\n- y".
-    it.fails("the lint with Merge duplicate definitions on is idempotent", () => {
+    it("the lint with Merge duplicate definitions on is idempotent", () => {
         const once = lintFootnotes(doc, options);
         expect(lintFootnotes(once, options)).toBe(once);
     });
 
     // Now: no alert at all after the first lint, though [^a] is still
     // defined twice.
-    it.fails("the duplicate alert after one lint names [^a] (never silent)", () => {
+    it("the duplicate alert after one lint names [^a] (never silent)", () => {
         resetNotices();
         const once = lintFootnotes(doc, options);
         noticeLintAlerts(fakePlugin({ lintMergeDuplicateDefinitions: true }), once);
@@ -70,8 +70,10 @@ describe("merge refused between two lists, then reindex moves the copies", () =>
     // The same shape with named footnotes only, so reindex swaps the slots
     // without renumbering anything.
     // Now: once = "Text[^b]\n\n[^b]: three\n\n- x\n\n[^a]: one\n\n- y\n\n[^a]: two",
-    // and the second lint merges the copies.
-    it.fails("named footnotes: a copy between two lists, swapped to the end by reindex, is merged by the first lint", () => {
+    // and the second lint merges the copies. (Fixed by leaving both copies
+    // in their slots, so the test name says what it checks: one lint
+    // settles the note.)
+    it("named footnotes: a copy between two lists, which reindex used to swap to the end, is settled by the first lint", () => {
         const note = "Text[^b]\n\n[^a]: one\n\n- x\n\n[^a]: two\n\n- y\n\n[^b]: three";
         const once = lintFootnotes(note, options);
         expect(lintFootnotes(once, options)).toBe(once);

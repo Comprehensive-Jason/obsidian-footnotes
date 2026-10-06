@@ -394,14 +394,14 @@ export function deadInsertionVerdict(after: NoteReading, at: EditorPosition): "d
  * A reference written in one's label or after its address turns the line
  * into a paragraph, and every link that used it stops being one (hunt
  * 2026-10-05, Jason's pick of the triage's Q5, pin
- * spec-press-on-link-reference-definition). Or the press leaves fewer links
- * drawn than there were: a selection inside a defined "[some text]" turned
- * into a footnote changes the link's label, "[[^1] text]", which no
- * definition carries, so the link is gone (hunt 2026-10-05, round 2, pin
- * bug-selection-kills-defined-shortcut-link). A link the selection takes
- * whole moves into the footnote and is still drawn there. Images and embeds
- * are counted apart from the other links (fewerLinksDrawn), since a press
- * between an embed's "!" and its "[[" leaves a plain link in its place.
+ * spec-press-on-link-reference-definition). Or some link drawn before the
+ * press is not drawn the same after it (fewerLinksDrawn): a selection
+ * inside a defined "[some text]" turned into a footnote changes the link's
+ * label, "[[^1] text]", which no definition carries, so the link is gone
+ * (hunt 2026-10-05, round 2, pin bug-selection-kills-defined-shortcut-link);
+ * a press between an embed's "!" and its "[[" leaves a plain link in its
+ * place; a press inside a bare address cuts it short. A link the selection
+ * takes whole moves into the footnote and is still drawn there.
  */
 export function pressLineVerdict(
     before: NoteReading,
@@ -415,33 +415,52 @@ export function pressLineVerdict(
 }
 
 /**
- * Whether `after` draws fewer links than `before` (drawnAsLink), counting
- * images and embeds apart from the other links. A "!" right in front of a
- * link is what makes it an image ("![alt](pic.png)") or an embed
- * ("![[file]]"), so a press with the caret between the two writes
- * "![^1][[file]]": a stray "!", a footnote, and a plain link where the
- * picture was. Counted together, one link drawn before and one after
- * looked like nothing lost, and the press went through while every other
- * caret inside the embed was refused (hunt 2026-10-06, cycle 4, cluster
- * P2, pin bug-press-between-image-bang-and-bracket). Each reading is
- * judged with its own link labels unless a caller hands in `linkLabels`
- * (a table cell, whose reading has none of its own, hands in the note's).
+ * Whether some link `before` draws (drawnAsLink) is no longer drawn the
+ * same in `after`. Each link is compared by its shape: its text in the
+ * masked twin (the copy of the note where protected text, link addresses,
+ * and bare web and email addresses are blotted out, every column kept), so
+ * its "!", its brackets, and its length.
+ *
+ * Counting links was not enough. A press inside a bare address cuts it
+ * short and still leaves one link drawn: "contact b[^1]ob@example.com"
+ * links "ob@example.com", a different address, and in
+ * "see ht[^1]tps://e.com/[t](u)" the address is gone and "[t](u)" is drawn
+ * alone (hunt 2026-10-06, cycle 5, cluster X3, pin
+ * bug-press-cuts-bare-address). And a press between an embed's "!" and its
+ * "[[" writes "![^1][[file]]", a plain link where the picture was (hunt
+ * 2026-10-06, cycle 4, cluster P2, pin
+ * bug-press-between-image-bang-and-bracket). Compared by shape, both are a
+ * link lost. A link a selection moves whole into a footnote keeps its
+ * shape there.
+ *
+ * Each reading is judged with its own link labels unless a caller hands
+ * in `linkLabels` (a table cell, whose reading has none of its own, hands
+ * in the note's).
  */
 export function fewerLinksDrawn(before: NoteReading, after: NoteReading, linkLabels?: ReadonlySet<string>): boolean {
-    const was = drawnLinkCounts(before, linkLabels ?? before.linkLabels);
-    const now = drawnLinkCounts(after, linkLabels ?? after.linkLabels);
-    return now.images < was.images || now.links < was.links;
+    const now = new Map<string, number>();
+    for (const shape of drawnLinkShapes(after, linkLabels ?? after.linkLabels)) now.set(shape, (now.get(shape) ?? 0) + 1);
+    for (const shape of drawnLinkShapes(before, linkLabels ?? before.linkLabels)) {
+        const left = now.get(shape) ?? 0;
+        if (left === 0) return true;
+        now.set(shape, left - 1);
+    }
+    return false;
 }
 
-/** How many images and embeds, and how many other links, `reading` draws (drawnAsLink), judged with the link labels `linkLabels`. An image or embed is a link whose first character is its "!". */
-function drawnLinkCounts(reading: NoteReading, linkLabels: ReadonlySet<string>): { images: number; links: number } {
-    const counts = { images: 0, links: 0 };
+/** The shape of every link `reading` draws (drawnAsLink), judged with the link labels `linkLabels`: its text in the masked twin, its lines joined by line breaks. */
+function drawnLinkShapes(reading: NoteReading, linkLabels: ReadonlySet<string>): string[] {
+    const shapes: string[] = [];
     for (const link of reading.links) {
         if (!drawnAsLink(link, linkLabels)) continue;
-        if (reading.maskedLine(link.startLine)[link.start] === "!") counts.images++;
-        else counts.links++;
+        const lines: string[] = [];
+        for (let line = link.startLine; line <= link.endLine; line++) {
+            const text = reading.maskedLine(line);
+            lines.push(text.slice(line === link.startLine ? link.start : 0, line === link.endLine ? link.end : text.length));
+        }
+        shapes.push(lines.join("\n"));
     }
-    return counts;
+    return shapes;
 }
 
 /**

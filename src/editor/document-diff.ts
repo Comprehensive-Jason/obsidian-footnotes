@@ -43,6 +43,8 @@ interface Run {
     aEnd: number;
     bStart: number;
     bEnd: number;
+    /** Set on a line the lint rewrote in place (withRewrittenLines), one line for one line. */
+    rewritten?: true;
 }
 
 export function lineDiffChanges(before: string, after: string): OffsetChange[] {
@@ -81,7 +83,11 @@ export function lineDiffChanges(before: string, after: string): OffsetChange[] {
         const s = head + hunk.aStart;
         const e = head + hunk.aEnd;
         const inserted = b.slice(head + hunk.bStart, head + hunk.bEnd);
-        if (e < a.length) {
+        if (hunk.rewritten) {
+            // a line rewritten in place: an edit for each stretch of it that
+            // changed (rewrittenLineChanges)
+            changes.push(...rewrittenLineChanges(starts[s], a[s], inserted[0]));
+        } else if (e < a.length) {
             if (s === e && s > 0) {
                 // lines inserted between line s - 1 and line s go in at the
                 // END of line s - 1, each after a newline of its own. The
@@ -122,6 +128,63 @@ export function lineDiffChanges(before: string, after: string): OffsetChange[] {
     // line then keeps its column, since only the differing characters are
     // rewritten (Jason's report: the caret went to the line's start).
     return changes.map((change) => trimCommonEdges(before, change));
+}
+
+/**
+ * The edits that turn line `before`, which starts at offset `start` of the
+ * note, into `after`, the same line rewritten in place by the lint: one for
+ * each stretch that changed. The two lines are compared as runs of tokens,
+ * each footnote ("[^...]" or "^[...]") one token and every other character
+ * one of its own, with Myers' diff (unmatchedRuns). Two stretches with no
+ * letter or digit between them are one edit, so a footnote the punctuation
+ * rule moved past a full stop ("[^1]." to ".[^1]") is one edit, as a
+ * renamed footnote is.
+ *
+ * Written as one edit, from the first changed character to the last, a
+ * line with two references the lint renumbered ("A[^1] new[^3] Bravo[^2]
+ * end." to "A[^1] new[^2] Bravo[^3] end.") was replaced from the first
+ * changed digit to the second, and the editor put a caret anywhere in
+ * between, such as right after the reference just pressed, at the start of
+ * that edit, inside the first reference (hunt 2026-10-06, cycle 5, cluster
+ * X20, pin bug-caret-two-renumbers-one-line).
+ */
+function rewrittenLineChanges(start: number, before: string, after: string): OffsetChange[] {
+    const tokensA = lineTokens(before);
+    const tokensB = lineTokens(after);
+    // where each token of `before` starts in the line
+    const at: number[] = [0];
+    for (const token of tokensA) at.push(at[at.length - 1] + token.length);
+    const runs: Run[] = [];
+    for (const run of unmatchedRuns(tokensA, tokensB)) {
+        const last = runs.at(-1);
+        if (last !== undefined && !/[\p{L}\p{N}]/u.test(tokensA.slice(last.aEnd, run.aStart).join(""))) {
+            last.aEnd = run.aEnd;
+            last.bEnd = run.bEnd;
+        } else {
+            runs.push({ ...run });
+        }
+    }
+    return runs.map((run) => ({
+        from: start + at[run.aStart],
+        to: start + at[run.aEnd],
+        text: tokensB.slice(run.bStart, run.bEnd).join(""),
+    }));
+}
+
+/** `line` as tokens for rewrittenLineChanges: every "[^...]" and every inline footnote "^[...]" (as withoutFootnotes finds them) one token, and every other character one token. */
+function lineTokens(line: string): string[] {
+    const tokens: string[] = [];
+    let i = 0;
+    while (i < line.length) {
+        let close = -1;
+        if (line.startsWith("[^", i)) close = line.indexOf("]", i + 2);
+        else if (line.startsWith("^[", i)) close = balancedClose(line, i + 1);
+        // a character outside the basic plane is two code units, kept together
+        const next = close !== -1 ? close + 1 : i + String.fromCodePoint(line.codePointAt(i) ?? 0).length;
+        tokens.push(line.slice(i, next));
+        i = next;
+    }
+    return tokens;
 }
 
 /** `change` with the characters it shares with the text it replaces removed from both ends. */
@@ -240,11 +303,16 @@ function unmatchedRuns(a: readonly string[], b: readonly string[]): Run[] {
  * lint only changes the footnotes on a line, never its other text: it
  * renumbers references, turns a reference into an inline footnote and
  * back, moves a footnote past the punctuation next to it, and takes out a
- * reference with the space before it. So every "[^...]" (references and
+ * reference with the space next to it. So every "[^...]" (references and
  * labels alike) and every inline footnote "^[...]" is taken out, and each
- * run of spaces becomes one space, with none at the end. A line the lint
+ * run of spaces becomes one space, with none at either end. A line the lint
  * rewrote in place then has the same key before and after, and is lined
- * up with itself. (An inline footnote used to be left in the key, so
+ * up with itself. (A space was left at the front: "[^2] alpha[^1] bravo."
+ * keyed as " alpha bravo.", and once Delete orphaned references took out
+ * "[^2] " the line keyed as "alpha bravo.", so it was taken as deleted and
+ * written again, and the caret at its end went to a definition the lint
+ * moved past it: hunt 2026-10-06, cycle 5, cluster X21, pin
+ * bug-linekey-leading-space.) (An inline footnote used to be left in the key, so
  * "- item^[note]." and the "- item.^[note]" the punctuation rule makes of
  * it did not match, and a fold on that item was dropped: hunt 2026-10-05
  * round 2, cluster D5, pin bug-fold-list-item-rewritten-in-place.)
@@ -261,8 +329,8 @@ function unmatchedRuns(a: readonly string[], b: readonly string[]): Run[] {
 function lineKey(line: string): string {
     // most lines hold no footnote, and two searches are quicker than the scan
     const plain = line.includes("[^") || line.includes("^[") ? withoutFootnotes(line) : line;
-    const key = plain.replace(/\s+/g, " ").trimEnd();
-    return key === "" ? line.replace(/\s+/g, " ").trimEnd() : key;
+    const key = plain.replace(/\s+/g, " ").trim();
+    return key === "" ? line.replace(/\s+/g, " ").trim() : key;
 }
 
 /**
@@ -335,7 +403,7 @@ function withRewrittenLines(runs: readonly Run[], a: readonly string[], b: reado
     for (const run of [...runs, { aStart: a.length, aEnd: a.length, bStart: b.length, bEnd: b.length }]) {
         // the matched lines before this run, which pair up one for one
         for (; i < run.aStart; i++, j++) {
-            if (a[i] !== b[j]) out.push({ aStart: i, aEnd: i + 1, bStart: j, bEnd: j + 1 });
+            if (a[i] !== b[j]) out.push({ aStart: i, aEnd: i + 1, bStart: j, bEnd: j + 1, rewritten: true });
         }
         if (run.aEnd > run.aStart || run.bEnd > run.bStart) out.push(run);
         i = run.aEnd;
@@ -403,16 +471,19 @@ function proseFirstRuns(a: readonly string[], b: readonly string[], kindsA: read
         linesB.map((i) => b[i]),
     );
     // the citation lines of each stretch between two paired prose lines,
-    // paired up, with the prose pairs in order
+    // paired up, with the prose pairs in order; the blank lines of `b` go
+    // along, since a citation line the lint emptied is blank there
     const pairs: [number, number][] = [];
     let aCitation = 0;
     let bCitation = 0;
     for (const [aLine, bLine] of [...prosePairs, [a.length, b.length] as [number, number]]) {
         const citationsA: number[] = [];
         const citationsB: number[] = [];
+        // how far the stretch of `b` starts, and ends, below that of `a`
+        const shifts = { start: bCitation - aCitation, end: bLine - aLine };
         for (; aCitation < aLine; aCitation++) if (kindsA[aCitation] === "citation") citationsA.push(aCitation);
-        for (; bCitation < bLine; bCitation++) if (kindsB[bCitation] === "citation") citationsB.push(bCitation);
-        pairs.push(...citationPairs(citationsA, citationsA.map((i) => a[i]), citationsB, citationsB.map((i) => b[i])));
+        for (; bCitation < bLine; bCitation++) if (kindsB[bCitation] === "citation" || b[bCitation] === "") citationsB.push(bCitation);
+        pairs.push(...citationPairs(citationsA, citationsA.map((i) => a[i]), citationsB, citationsB.map((i) => b[i]), shifts));
         if (aLine < a.length) pairs.push([aLine, bLine]);
         aCitation = aLine + 1;
         bCitation = bLine + 1;
@@ -441,43 +512,89 @@ const MaxCitationComparisons = 1_000_000;
 /**
  * The citation lines of one stretch between two paired prose lines, each
  * given by its line number (`linesA`, `linesB`) and its key (`keysA`,
- * `keysB`): the pairs that line them up, in order. As many are paired as
- * the two counts allow, and of the ways to do that, the one that pairs the
- * most lines with the same text is taken.
+ * `keysB`; a blank line of `b` keys as ""): the pairs that line them up,
+ * in order.
  *
  * The lint never moves a citation line and never adds one; it rewrites the
  * names on it, or empties it when it takes out an orphaned reference. So
- * with as many citation lines after as before, each is the one in the same
- * place: two neighbouring lines "[^2]" and "[^1]" whose names the lint
- * swapped are each rewritten in place, and the caret at the end of the
- * first stays there (hunt 2026-10-06 cycle 4, cluster D2, pin
- * bug-diff-swapped-reference-only-lines; paired by text, the one was
- * deleted and written again below the other). With fewer after, the one
- * the lint emptied is the one left out, and the text says which: when the
- * orphaned "[^9]" is taken out above an untouched "[^1]", the "[^1]" lines
- * pair up, not the "[^9]" line with the "[^1]" line (hunt 2026-10-06 cycle
- * 3, cluster D1, pin bug-caret-reference-only-line).
+ * each citation line is still the line in its own place afterwards, citing
+ * something or blank. Its place is its distance from the stretch's start
+ * or from its end (`shifts` says how much further down the stretch of `b`
+ * starts and ends). Neither is sure: a definition the lint moved out of
+ * the stretch, or into it at the bottom of the note, shifts the lines on
+ * one side of it. Its text is not sure either: a lint that renumbers gives
+ * a line the text another line had. So each pair is weighed by how much
+ * agrees with it.
+ *
+ * Of the ways to pair them, the one taken pairs the most citation lines
+ * with citation lines; then the most pairs that agree with something, the
+ * same text or the same place; then the most pairs with the same text;
+ * then the most in the same place (counted from the start and from the
+ * end, each); then the most emptied lines with a blank line in their place.
+ *
+ * When the lint empties an orphaned "[^9]" line and renames the "[^2]" and
+ * "[^1]" lines below it to "[^1]" and "[^2]", the old "[^2]" line has the
+ * text of the new line below it, but two lines in their own place outweigh
+ * that one. Paired by text alone (or, with no text matching, by the first
+ * pair the table met), the emptied line was paired with a renumbered one,
+ * and a caret at the end of a renumbered line went to the next citation
+ * line or the next paragraph (hunt 2026-10-06, cycle 5, cluster X16, pin
+ * bug-citation-tie-break-position). When a definition above them moves to
+ * the bottom, the untouched "[^1]" line below an emptied "[^9]" line comes
+ * up into the emptied line's place, and its text says which line it is
+ * (hunt 2026-10-06 cycle 3, cluster D1, pin bug-caret-reference-only-line).
+ * Two neighbouring lines whose names the lint swapped are each rewritten in
+ * place (hunt 2026-10-06 cycle 4, cluster D2, pin
+ * bug-diff-swapped-reference-only-lines). An emptied line paired with the
+ * blank line in its place is rewritten in place too, so another pane's
+ * caret on it stays on it.
  *
  * The answer is worked out on a table of the best pairing of each start of
  * the one list with each start of the other (a longest-common-subsequence
- * table that scores a pair of lines with the same text a little higher than
- * any other pair).
+ * table with a score for each kind of pair).
  */
-function citationPairs(linesA: readonly number[], keysA: readonly string[], linesB: readonly number[], keysB: readonly string[]): [number, number][] {
+function citationPairs(
+    linesA: readonly number[],
+    keysA: readonly string[],
+    linesB: readonly number[],
+    keysB: readonly string[],
+    shifts: { start: number; end: number },
+): [number, number][] {
     const n = keysA.length;
     const m = keysB.length;
     if (n === 0 || m === 0) return [];
     if (n * m > MaxCitationComparisons) return matchedPairs(linesA, keysA, linesB, keysB);
-    // A pair is worth more than every same-text bonus together, so the
-    // count of pairs comes first and the same text breaks ties.
-    const pairWorth = Math.min(n, m) + 1;
+    // The scores, each worth more than every score below it together, in
+    // the order above: a pair of two citation lines; a pair that agrees with
+    // its text or its place; the same text; the same place, counted from
+    // the start and from the end; a citation line paired with a blank line
+    // in its place.
+    const most = Math.min(n, m);
+    const emptied = 1;
+    const place = most * emptied + 1;
+    const text = most * (2 * place + emptied) + 1;
+    const agrees = most * (text + 2 * place + emptied) + 1;
+    const cited = most * (agrees + text + 2 * place + emptied) + 1;
+    // what pairing line i of A with line j of B scores, or -1 when the two
+    // may not be paired: a blank line only takes the line in its own place
+    const worth = (i: number, j: number) => {
+        const shift = linesB[j] - linesA[i];
+        const places = (shift === shifts.start ? 1 : 0) + (shift === shifts.end ? 1 : 0);
+        if (keysB[j] === "") return places > 0 ? emptied : -1;
+        const sameText = keysA[i] === keysB[j];
+        return cited + (sameText || places > 0 ? agrees : 0) + (sameText ? text : 0) + place * places;
+    };
     // best[i * (m + 1) + j]: the best score for lines i.. of A and j.. of B
-    const best = new Int32Array((n + 1) * (m + 1));
+    // (a score can pass what 32 bits hold, so the table holds doubles)
+    const best = new Float64Array((n + 1) * (m + 1));
     const at = (i: number, j: number) => i * (m + 1) + j;
+    const pairedScore = (i: number, j: number) => {
+        const score = worth(i, j);
+        return score === -1 ? -1 : best[at(i + 1, j + 1)] + score;
+    };
     for (let i = n - 1; i >= 0; i--) {
         for (let j = m - 1; j >= 0; j--) {
-            const paired = best[at(i + 1, j + 1)] + pairWorth + (keysA[i] === keysB[j] ? 1 : 0);
-            best[at(i, j)] = Math.max(paired, best[at(i + 1, j)], best[at(i, j + 1)]);
+            best[at(i, j)] = Math.max(pairedScore(i, j), best[at(i + 1, j)], best[at(i, j + 1)]);
         }
     }
     // walk the table from the start, taking a pair wherever it is part of the best score
@@ -485,7 +602,7 @@ function citationPairs(linesA: readonly number[], keysA: readonly string[], line
     let i = 0;
     let j = 0;
     while (i < n && j < m) {
-        if (best[at(i, j)] === best[at(i + 1, j + 1)] + pairWorth + (keysA[i] === keysB[j] ? 1 : 0)) {
+        if (best[at(i, j)] === pairedScore(i, j)) {
             pairs.push([linesA[i], linesB[j]]);
             i++;
             j++;
@@ -702,7 +819,7 @@ function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
         aFrom = aLine + 1;
         bFrom = bLine + 1;
     }
-    findMovedDefinitions(map, a, b);
+    findMovedDefinitions(map, a, b, kindsA, kindsB);
     return map;
 }
 
@@ -730,14 +847,24 @@ function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
  * used one, whose fold was dropped (hunt 2026-10-06 cycle 4, cluster D3,
  * pin bug-fold-follows-wrong-twin).
  *
+ * A definition whose name no line renames, but that some other footnote
+ * was renamed to, is not looked for under its name: that name now belongs
+ * to the other footnote. An orphaned twin "[^1]" above a used twin "[^3]"
+ * that the lint renamed to "[^1]" took the used twin's place, and the used
+ * twin's fold was dropped (hunt 2026-10-06, cycle 5, cluster X18, pin
+ * bug-orphan-twin-takes-renamed-name).
+ *
  * A definition not found that way that the line-up already put on a line
  * with its own key stays where it was put, and the definition there is
  * taken. Each other definition the lint can move takes the first
  * definition of `b` with the same text that no other has taken.
+ * `kindsA` and `kindsB` say what each line of `a` and `b` is (lineKinds).
  */
-function findMovedDefinitions(map: { from: number; to: number }[], a: string[], b: string[]): void {
+function findMovedDefinitions(map: { from: number; to: number }[], a: string[], b: string[], kindsA: readonly LineKind[], kindsB: readonly LineKind[]): void {
     const textOf = (lines: string[], start: number, end: number) => lines.slice(start, end + 1).map(lineKey).join("\n");
-    const renamed = renamesOf(map, a, b);
+    const renamed = renamesOf(map, a, b, kindsA, kindsB);
+    // the names some footnote was renamed to
+    const taken = new Set(renamed.values());
     // the movable definitions of `b` not taken yet, by their text: the
     // line each starts on, in order; and by their name, folded to lower
     // case as Obsidian compares names
@@ -764,7 +891,8 @@ function findMovedDefinitions(map: { from: number; to: number }[], a: string[], 
         if (!definition.movable) continue;
         const text = textOf(a, definition.start, definition.end);
         const name = definition.name.toLowerCase();
-        const twin = named.get(renamed.get(name) ?? name);
+        const now = renamed.get(name) ?? (taken.has(name) ? undefined : name);
+        const twin = now === undefined ? undefined : named.get(now);
         if (twin !== undefined && twin.text === text && free.get(text)?.includes(twin.start)) {
             take(text, twin.start);
             takenByName.add(twin.start);
@@ -791,19 +919,32 @@ function findMovedDefinitions(map: { from: number; to: number }[], a: string[], 
 /**
  * The names the lint gave the footnotes, read off the lines it rewrote in
  * place: for each line of `a` that `map` (alignLines) puts on a line of
- * `b` with the same text without footnotes, the references on the two
- * lines pair up in order, so a "[^3]" that became "[^1]" maps "3" to "1".
- * Names are folded to lower case, as Obsidian compares them. A name the
- * lines say nothing about is missing from the map; the first pairing seen
- * for a name wins.
+ * `b` with the same text without footnotes, or on a citation line (one
+ * that holds nothing but footnotes) when it is one itself, the references
+ * on the two lines pair up in order, so a "[^3]" that became "[^1]" maps
+ * "3" to "1". Names are folded to lower case, as Obsidian compares them. A
+ * name the lines say nothing about is missing from the map; the first
+ * pairing seen for a name wins.
+ *
+ * A citation line keeps its footnotes in its key (lineKey), so a renamed
+ * one never has the same key as its new self, and its renames went unread:
+ * twins cited only from citation lines were then looked for under their
+ * old names, and a fold on one came back on the other (hunt 2026-10-06,
+ * cycle 5, cluster X17, pin bug-twin-renames-on-citation-lines). The
+ * line-up pairs citation lines with each other in their own places
+ * (citationPairs), so a citation line put on a citation line is the same
+ * line, rewritten. `kindsA` and `kindsB` say what each line is
+ * (lineKinds).
  */
-function renamesOf(map: readonly { from: number; to: number }[], a: string[], b: string[]): Map<string, string> {
+function renamesOf(map: readonly { from: number; to: number }[], a: string[], b: string[], kindsA: readonly LineKind[], kindsB: readonly LineKind[]): Map<string, string> {
     const readingA = readNote(a);
     const readingB = readNote(b);
     const renamed = new Map<string, string>();
     for (let line = 0; line < map.length; line++) {
         const now = map[line].from;
-        if (now === -1 || !a[line].includes("[^") || lineKey(a[line]) !== lineKey(b[now])) continue;
+        if (now === -1 || !a[line].includes("[^")) continue;
+        const sameLine = lineKey(a[line]) === lineKey(b[now]) || (kindsA[line] === "citation" && kindsB[now] === "citation");
+        if (!sameLine) continue;
         const before = readingA.referencesOn(line);
         const after = readingB.referencesOn(now);
         if (before.length !== after.length) continue;

@@ -270,26 +270,30 @@ export function startOfWordOffset(text: string, offset: number): number {
  * word, and never where an escape or an inline-footnote opener would
  * swallow it (safeInsertionCh in insertion-liveness). `reading` is the
  * note as it reads before the press, which says where a link around the
- * caret ends. */
+ * caret ends; `lineText` is the caret's line and `lines` the whole note,
+ * as written, for a link that ends on a later line. */
 export function adjustFootnotePosition(
     cursorPosition: EditorPosition,
     reading: NoteReading,
     lineText: string,
     plugin: FootnotePlugin,
+    lines: readonly string[],
 ) {
     if (plugin.settings.insertAtEndOfWord) {
         // A link whose text runs on past a line break ends on a later line,
         // and the reference lands after it there, as it does after a link
         // on one line (Jason's triage decision Q1, 2026-10-05; hunt
         // 2026-10-05, round 2, pin bug-press-in-two-line-link). The walk
-        // past the link's end reads that line's masked twin, the only copy
-        // of it at hand: it keeps every closing mark, punctuation
-        // character, and backslash where it is, and protected text, which
-        // none of those is, ends the walk there as it would on the line
-        // itself.
+        // past the link's end reads that line as written, as the walk on
+        // one line does. Its masked twin (the copy with protected text and
+        // addresses blotted out) has a bare address glued after a closing
+        // mark blotted out too, so the mark looked like the end of the text
+        // and the press landed after it, where a press from the link's
+        // last line lands in front of it (hunt 2026-10-06, cycle 5,
+        // cluster X4, pin bug-two-line-link-glued-url-masked).
         const link = linkLikeEndAt(reading, cursorPosition.line, cursorPosition.ch);
         if (link !== null && link.line !== cursorPosition.line) {
-            const endText = reading.maskedLine(link.line);
+            const endText = lines[link.line];
             const landing = referenceLandingAfter(endText, link.ch, plugin.settings.footnotePlacement, imageStartsOn(reading, link.line));
             return { line: link.line, ch: safeInsertionCh(endText, landing) };
         }

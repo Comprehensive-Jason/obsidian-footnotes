@@ -131,8 +131,8 @@ export function replaceInTableCell(
 }
 
 // The one place cell writes happen. It refuses born-dead text, and an
-// edit that leaves fewer links drawn than there were, images and embeds
-// counted apart (the cell's twin of pressLineVerdict's "link" verdict,
+// edit after which some link is not drawn as it was, a bare address cut
+// short included (the cell's twin of pressLineVerdict's "link" verdict,
 // judged with the note's link labels; fewerLinksDrawn),
 // and otherwise writes through the cell's own editor, leaving the caret
 // inside what it just wrote. Never the main editor: a main-editor write
@@ -518,7 +518,7 @@ export function createAutonumFootnote(
         return true;
     }
 
-    cursorPosition = adjustFootnotePosition(cursorPosition, ctx.reading(), lineText, plugin);
+    cursorPosition = adjustFootnotePosition(cursorPosition, ctx.reading(), lineText, plugin, ctx.lines);
     // The definition is planned against the note as it reads with the
     // reference already in (see planDefinitionAppend), and the two go out
     // as one transaction.
@@ -758,7 +758,7 @@ export function createFootnoteReference(
     const prefix = resolvePrefix();
     if (prefix === null) return true;
     const emptyReference = referenceText(prefix);
-    cursorPosition = adjustFootnotePosition(cursorPosition, ctx.reading(), lineText, plugin);
+    cursorPosition = adjustFootnotePosition(cursorPosition, ctx.reading(), lineText, plugin, ctx.lines);
     // The born-dead check (see bareInsertionVerdict). If the placeholder
     // landed inside protected text, it would not be a real footnote, and
     // you would be left typing a name into something that can never

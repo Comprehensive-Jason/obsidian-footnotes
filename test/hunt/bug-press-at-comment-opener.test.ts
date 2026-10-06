@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
+import { insertAutonumFootnote, insertInlineFootnote, insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { readNote } from "../../src/parsing/note-reading";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
@@ -79,7 +79,7 @@ describe("a press at a '%%' block comment's opener undoes the comment", () => {
     // Now: "Text[^1] here", "", "[^10]%%", "hidden prose",
     // "[^9]: hidden definition", "", "[^10]: ", "", "%%", "", "[^1]: one":
     // the last "%%" opens a comment that hides [^1]'s definition.
-    it.fails("[^1]'s definition is still a definition after the press", async () => {
+    it("[^1]'s definition is still a definition after the press", async () => {
         const lines = ["Text[^1] here", "", "%%", "hidden prose", "[^9]: hidden definition", "%%", "", "[^1]: one"];
         const doc = fakeEditor(lines, { cursor: { line: 2, ch: 0 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(Settings, doc));
@@ -88,7 +88,7 @@ describe("a press at a '%%' block comment's opener undoes the comment", () => {
 
     // Now: "text", "", "[^1]%%", "hidden draft", "", "[^1]: ", "", "%%",
     // "", "shown after": "hidden draft" shows and "shown after" is hidden.
-    it.fails('autonum: ch 0 of "%%" leaves the comment as it was (or refuses)', async () => {
+    it('autonum: ch 0 of "%%" leaves the comment as it was (or refuses)', async () => {
         const lines = ["text", "", "%%", "hidden draft", "%%", "", "shown after"];
         const doc = fakeEditor(lines, { cursor: { line: 2, ch: 0 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(Settings, doc));
@@ -99,7 +99,7 @@ describe("a press at a '%%' block comment's opener undoes the comment", () => {
 
 describe("a press between the two '%' of an inline comment's mark splits the comment", () => {
     // Now: "a %[^1]%hidden%% b": no comment left, "hidden" shows.
-    it.fails('autonum: between the two "%" of the opener refuses or keeps the comment', async () => {
+    it('autonum: between the two "%" of the opener refuses or keeps the comment', async () => {
         const lines = ["a %%hidden%% b"];
         const doc = fakeEditor(lines, { cursor: { line: 0, ch: 3 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(Settings, doc));
@@ -107,10 +107,60 @@ describe("a press between the two '%' of an inline comment's mark splits the com
     });
 
     // Now: "a %%hidden%[^1]% b": no comment left.
-    it.fails('autonum: between the two "%" of the closer refuses or keeps the comment', async () => {
+    it('autonum: between the two "%" of the closer refuses or keeps the comment', async () => {
         const lines = ["a %%hidden%% b"];
         const doc = fakeEditor(lines, { cursor: { line: 0, ch: 11 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(Settings, doc));
         expect(readNote(doc.lines).comments.length, JSON.stringify({ lines: doc.lines, notices: messages() })).toBe(1);
+    });
+});
+
+// The other keys, the other spots in front of a block comment's opener, and
+// a multi-caret press, which runs the same caret guard for every caret
+// (added with the fix, 2026-10-06).
+describe("every route refuses at a block comment's opener", () => {
+    const note = ["text", "", "%%", "hidden draft", "%%", "", "shown after"];
+    const cases: [string, string[], { line: number; ch: number }][] = [
+        ["named key at ch 0", note, { line: 2, ch: 0 }],
+        ["between the two % of the opener", note, { line: 2, ch: 1 }],
+        ["after the indentation of '  %%'", ["text", "", "  %%", "hidden draft", "%%", "", "shown after"], { line: 2, ch: 2 }],
+        ["after '> ' of a quoted '> %%'", ["text", "", "> %%", "> hidden draft", "> %%", "", "shown after"], { line: 2, ch: 2 }],
+    ];
+    for (const [name, lines, cursor] of cases) {
+        it(`${name}: the note is left as it was, with the protected-text notice`, async () => {
+            const doc = fakeEditor([...lines], { cursor, edits: true, wholeDoc: true, words: true });
+            await (name.startsWith("named") ? insertNamedFootnote : insertAutonumFootnote)(fakePlugin(Settings, doc));
+            expect(doc.lines).toEqual(lines);
+            expect(messages().join(" ")).toContain("protected text");
+        });
+    }
+
+    it("inline key at ch 0: the note is left as it was", async () => {
+        const doc = fakeEditor([...note], { cursor: { line: 2, ch: 0 }, edits: true, wholeDoc: true, words: true });
+        await insertInlineFootnote(fakePlugin(Settings, doc));
+        expect(doc.lines).toEqual(note);
+    });
+
+    it("multi-caret: one caret at ch 0 of the opener refuses the whole press", async () => {
+        const lines = ["text", "", "%%", "hidden draft", "%%", "", "shown after"];
+        const doc = fakeEditor([...lines], {
+            carets: [
+                { line: 0, ch: 4 },
+                { line: 2, ch: 0 },
+            ],
+            edits: true,
+            wholeDoc: true,
+            words: true,
+        });
+        await insertAutonumFootnote(fakePlugin(Settings, doc));
+        expect(doc.lines).toEqual(lines);
+    });
+
+    // Writing in front of a comment inside a line leaves it a comment.
+    it("control: a press in front of an inline comment still writes the footnote", async () => {
+        const doc = fakeEditor(["a %%hidden%% b"], { cursor: { line: 0, ch: 2 }, edits: true, wholeDoc: true, words: true });
+        await insertAutonumFootnote(fakePlugin(Settings, doc));
+        expect(doc.lines[0]).toBe("a [^1]%%hidden%% b");
+        expect(readNote(doc.lines).comments.length).toBe(1);
     });
 });

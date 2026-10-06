@@ -157,7 +157,7 @@ describe("the caret adjustment reads the setting", () => {
     function adjusted(placement: FootnotePlacement, line = "word. next") {
         const doc = fakeEditor([line], { cursor: { line: 0, ch: 2 } });
         const plugin = fakePlugin({ insertAtEndOfWord: true, footnotePlacement: placement }, doc);
-        return adjustFootnotePosition({ line: 0, ch: 2 }, readNote(doc.lines), line, plugin).ch;
+        return adjustFootnotePosition({ line: 0, ch: 2 }, readNote(doc.lines), line, plugin, doc.lines).ch;
     }
 
     it("lands after the punctuation under 'after' and before it under 'before' and 'none'", () => {

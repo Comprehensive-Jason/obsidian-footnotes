@@ -218,9 +218,20 @@ function carriedBlocks(lines: string[], from: EditorPosition, to: EditorPosition
     // A block whose lines lie inside another carried block (a footnote
     // defined in another footnote's body) already travels with that block,
     // so it is not carried a second time, whichever of the two the copy met
-    // first (hunt 2026-10-05, pin bug-nested-definition-carried-twice)
-    const outermost = carried.filter((block) => !carried.some((other) => other !== block && other.start <= block.start && block.end <= other.end));
+    // first (hunt 2026-10-05, pin bug-nested-definition-carried-twice).
+    // Two definitions can share their lines, as in "[^1]: [^2]: x", where
+    // [^2] is held in [^1]'s text (rule E2). Comparing lines alone, each
+    // then lay inside the other, and both were dropped, so the copy carried
+    // neither; the holder is the one whose label comes first (hunt
+    // 2026-10-06 cycle 5, cluster X6, pin bug-carry-equal-extent-definitions).
+    const outermost = carried.filter((block) => !carried.some((other) => other !== block && holds(other, block)));
     return { blocks: copiesInNoteOrder(outermost, reading.definitions), missing };
+}
+
+/** Whether the definition `outer` holds `inner` in its body: `inner` starts after `outer`'s label and ends by `outer`'s last line. */
+function holds(outer: Definition, inner: Definition): boolean {
+    const startsAfter = outer.start < inner.start || (outer.start === inner.start && outer.labelStart < inner.labelStart);
+    return startsAfter && inner.end <= outer.end;
 }
 
 /**
@@ -355,9 +366,14 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     // another footnote's definition travels inside that block, and lands
     // in the destination as a definition like any other, so its name is
     // kept or renamed like the block's own (hunt 2026-10-05 round 2,
-    // cluster C6, pin bug-paste-held-definition-name-collision).
-    const heldIn = (i: number) =>
-        blockReadings[i].definitions.filter((held) => held.start > 0).map((held) => held.name);
+    // cluster C6, pin bug-paste-held-definition-name-collision). Every
+    // definition in the block but the block's own counts, a held one on
+    // the label's line too ("[^1]: [^2]: x"; hunt 2026-10-06 cycle 5,
+    // cluster X6, pin bug-carry-equal-extent-definitions).
+    const heldIn = (i: number) => {
+        const ownLabel = blockReadings[i].labelOn(0)?.labelStart ?? 0;
+        return blockReadings[i].definitions.filter((held) => held.start > 0 || held.labelStart > ownLabel).map((held) => held.name);
+    };
 
     // How many definitions the paste brings for each name, folded.
     const defined = new Map<string, number>();
@@ -649,19 +665,44 @@ export function carriedLines(carried: readonly CarriedDefinition[]): string[] {
  *
  * That reading holds only for a text withCarriedText wrote. The copy's own
  * register splits the selection itself, before anything is appended
- * (`selection` true), and there the blank lines between two definitions
- * are the note's own spacing, never a line break of the selection's: read
- * as one, a selection ending right after "[^2]: two", in a note that
- * spaces its definitions by two blank lines, pasted mid-line split the
- * line it landed in (hunt 2026-10-06 cycle 4, cluster K2, pin
- * bug-own-copy-double-blank-definitions-split-line).
+ * (`selection`, the note it was selected in), and there the blank lines
+ * between two definitions are the note's own spacing, never a line break
+ * of the selection's: read as one, a selection ending right after "[^2]:
+ * two", in a note that spaces its definitions by two blank lines, pasted
+ * mid-line split the line it landed in (hunt 2026-10-06 cycle 4, cluster
+ * K2, pin bug-own-copy-double-blank-definitions-split-line).
+ *
+ * A selection is read in its note in two more ways (hunt 2026-10-06 cycle
+ * 5). Only a line the note reads as a definition label is one. Read on its
+ * own, a selection makes a definition of a lazy label, a label inside a
+ * "%%" comment, or "[^1]: to define" out of the middle of a sentence, and
+ * the register carried it off to the bottom of the note it was pasted in,
+ * leaving a comment unclosed or a sentence gutted (clusters X7 and X14,
+ * pins bug-register-reads-selection-alone and
+ * bug-lazy-label-toast-contradiction). And the blank lines in front of the
+ * first definition are the note's spacing too, every one of them, as
+ * between two definitions: the selection's text ended before them, so
+ * kept, they split the line a paste landed in (cluster X12, pin
+ * bug-register-double-blank-before-definitions). A selection's first line
+ * that is empty only because the selection starts at the end of a line is
+ * no blank line of the note but the selection's own line break, and stays
+ * in the body: dropped, a copy from the end of a definition pasted back
+ * over itself joined the next paragraph onto that definition (cluster
+ * X26, pin bug-register-drops-leading-line-break).
  */
-export function splitCarriedText(text: string, selection = false): { body: string; carried: CarriedDefinition[] } {
+export function splitCarriedText(text: string, selection?: SelectedIn): { body: string; carried: CarriedDefinition[] } {
     const lines = normalizeEol(text).text.split("\n");
     // the definitions at the top level of the text, the ones withCarriedText
     // appends, lifted as every carried block is (liftedBlocks), which takes
-    // off any indentation in front of a label
-    const blocks = readNote(lines).blocks;
+    // off any indentation in front of a label; of a selection, only those
+    // the note reads as definitions where they sit
+    const inNote = (block: Definition) => {
+        if (!selection) return true;
+        const line = selection.from.line + block.start;
+        const labelStart = block.labelStart + (block.start === 0 ? selection.from.ch : 0);
+        return selection.reading.definitions.some((definition) => definition.start === line && definition.labelStart === labelStart);
+    };
+    const blocks = readNote(lines).blocks.filter(inNote);
     const byEnd = new Map(blocks.map((block) => [block.end, block]));
     // `cut` is the first line of the trailing run of definitions, and
     // `end` the line the search for the next block up has reached
@@ -681,32 +722,56 @@ export function splitCarriedText(text: string, selection = false): { body: strin
     }
     if (cut === lines.length) return { body: text, carried: [] };
     const carried = liftedBlocks(lines, blocks.filter((block) => block.start >= cut));
-    const bodyEnd = cut > 0 && lines[cut - 1].trim() === "" ? cut - 1 : cut;
+    // the blank lines in front of the definitions that come off the body:
+    // the one withCarriedText put there, or, of a selection, every blank
+    // line of the note there; a selection's first line is a blank line of
+    // the note only when the selection starts at the start of that line
+    let bodyEnd = cut;
+    const blank = (i: number) => lines[i].trim() === "" && (i > 0 || selection === undefined || selection.from.ch === 0);
+    if (selection) while (bodyEnd > 0 && blank(bodyEnd - 1)) bodyEnd--;
+    else if (bodyEnd > 0 && blank(bodyEnd - 1)) bodyEnd--;
     return { body: [...lines.slice(0, bodyEnd), ...breaks, ...after].join("\n"), carried };
 }
 
+/** Where a selection split by splitCarriedText was made: the note's reading, and where the selection starts in it. */
+export interface SelectedIn {
+    reading: NoteReading;
+    from: EditorPosition;
+}
+
 /**
- * The names a pasted `text` from anywhere cites with no definition of its
- * own: the live references in it, read on its own, whose name nothing in
- * the text defines; spelled as first seen, each once. This is the
- * `missing` list the plugin's own copy keeps (CarriedDefinitions), read
- * off the clipboard text instead of the note it came from, since the paste
- * has nothing else to read. A clipboard from another app was pasted with
- * an empty list, so its toast never named a reference that travelled
- * without a definition, as the README promises (hunt 2026-10-06 cycle 4,
- * cluster K5, pin bug-foreign-paste-toast-missing-definition).
+ * The names a pasted text cites with no definition of its own: the live
+ * references in its `body`, read where it lands in `lines` at `at`, and in
+ * its `carried` blocks, whose name neither the body as it lands nor a
+ * carried block defines; spelled as first seen, each once. A text from
+ * another app has only this for the `missing` list the plugin's own copy
+ * keeps (CarriedDefinitions), since the paste has nothing else to read. A
+ * clipboard from another app was pasted with an empty list, so its toast
+ * never named a reference that travelled without a definition, as the
+ * README promises (hunt 2026-10-06 cycle 4, cluster K5, pin
+ * bug-foreign-paste-toast-missing-definition).
+ *
+ * The body is read where it lands, as planCarriedPaste reads it, not on
+ * its own. Read on its own, a body indented 4 columns is code, so a
+ * reference in it went unnamed though it landed as prose (hunt 2026-10-06
+ * cycle 5, cluster X8, pin bug-foreign-indented-body-missing-names); and a
+ * body pasted into code or math was named though "[^1]" is no reference
+ * there (cluster X11, pin bug-missing-notice-in-protected-text).
  */
-export function uncarriedNames(text: string): string[] {
+export function uncarriedNames(lines: readonly string[], at: EditorPosition, body: string, carried: readonly CarriedDefinition[]): string[] {
     // a text with no "[^" cites nothing, so it is not read
-    if (!text.includes("[^")) return [];
-    const lines = normalizeEol(text).text.split("\n");
-    const reading = readNote(lines);
-    const defined = new Set(reading.definitions.map((definition) => definition.name.toLowerCase()));
+    if (!body.includes("[^") && carried.length === 0) return [];
+    const bodyLines = normalizeEol(body).text.split("\n");
+    const landed = landedFootnoteSyntax(landedText(lines, bodyLines, at), bodyLines);
+    const blockReadings = carried.map((block) => readNote(block.lines));
+    const defined = new Set([...landed.flatMap((line) => line.labels), ...blockReadings.flatMap((reading) => reading.definitions)].map(({ name }) => name.toLowerCase()));
+    const cited = [
+        ...landed.flatMap((line) => line.references),
+        ...carried.flatMap((block, i) => block.lines.flatMap((_, line) => blockReadings[i].referencesOn(line))),
+    ];
     const missing = new Map<string, string>();
-    for (let line = 0; line < lines.length; line++) {
-        for (const { name } of reading.referencesOn(line)) {
-            if (!defined.has(name.toLowerCase()) && !missing.has(name.toLowerCase())) missing.set(name.toLowerCase(), name);
-        }
+    for (const { name } of cited) {
+        if (!defined.has(name.toLowerCase()) && !missing.has(name.toLowerCase())) missing.set(name.toLowerCase(), name);
     }
     return [...missing.values()];
 }

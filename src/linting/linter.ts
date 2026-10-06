@@ -42,7 +42,8 @@ import { invalidPrefixMessage, LintingCanceled, showNotice } from "../editor/not
 // user's settings into the options the rules take, and running the lint
 // automatically when a trigger fires (on save, and on footnote creation).
 
-function configuredSectionHeading(plugin: FootnotePlugin): string {
+/** The section heading setting as the lint takes it: trimmed, or "" while the setting is off. */
+export function configuredSectionHeading(plugin: FootnotePlugin): string {
     return plugin.settings.enableFootnoteSectionHeading
         ? trimmedSectionHeading(plugin.settings.footnoteSectionHeading)
         : "";
@@ -204,10 +205,10 @@ export function lintFootnotes(
         const sectionHeading = trimmedSectionHeading(options.sectionHeading);
         options = { ...options, sectionHeading: sectionHeadingProblem(sectionHeading) === null ? sectionHeading : "" };
     }
-    // Notes can use any line endings. rewriteDocument converts them to plain
-    // LF once here, so every step below sees the same thing, and puts the
-    // note's original endings back once on the way out.
-    return rewriteDocument(markdown, (text) => {
+    // One run of every enabled rule, in order. The lint below runs it,
+    // and runs it again while it leaves definitions the move could still
+    // gather.
+    const lintOnce = (text: string): string => {
         let result = text;
         // Hidden definitions come FIRST of all. A "[^x]:" line directly
         // under a line of prose is not a definition to Obsidian; it is more
@@ -368,12 +369,42 @@ export function lintFootnotes(
                 // it where the next lint would cut it (hunt 2026-10-05
                 // round 2, cluster L4).
                 leaveOrphansInPlace: options.removeOrphanedDefinitions ?? false,
+                // And a name still defined twice is one the merge refused
+                // to fold, so its copies stay in their slots too, where the
+                // merge's reason still holds (hunt 2026-10-06, cycle 5, pin
+                // bug-merge-refused-then-relocated).
+                leaveDuplicatesInPlace: options.mergeDuplicateDefinitions ?? false,
             });
         }
         // Last of all, once every rule has had its say about what stays:
         // a heading with nothing left under it goes, when asked
         if (options.removeEmptySectionHeading && options.sectionHeading) {
             result = removeEmptySectionHeading(result, options.sectionHeading);
+        }
+        return result;
+    };
+    // Notes can use any line endings. rewriteDocument converts them to plain
+    // LF once here, so every step below sees the same thing, and puts the
+    // note's original endings back once on the way out.
+    return rewriteDocument(markdown, (text) => {
+        let result = lintOnce(text);
+        // Reindex can take away the reason the move left the definitions
+        // where they were. Gathered in the order written, a label indented
+        // two spaces came first under the list item that ends the note and
+        // joined it, so the move refused; reindex then put a label at the
+        // margin first, under which the indented one stays a definition of
+        // its own. The next lint gathered them, so a lint was not
+        // idempotent, and the move alert after the first lint named nothing
+        // (hunt 2026-10-06, cycle 5, pin
+        // bug-move-refused-then-reindex-reorders). So when the move would
+        // still change the linted note, the whole lint runs again on the
+        // moved note, every rule judging the new layout, until the move
+        // changes nothing. A note the lint settled costs one more look by
+        // the move; the cap is a safety net.
+        for (let round = 0; round < 10 && (options.moveDefinitionsToBottom ?? true); round++) {
+            const moved = moveFootnotesToTheBottomRule.apply(result, options.sectionHeading ?? "");
+            if (moved === result) break;
+            result = lintOnce(moved);
         }
         return result;
     });

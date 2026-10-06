@@ -65,6 +65,9 @@ describe("the lint pipeline order", () => {
         if (!moveRule) throw new Error("move-to-bottom is missing from the catalogue");
         const move = vi.spyOn(moveRule, "apply");
         lintFootnotes(messy, { removeOrphanedReferences: true });
-        expect(move).toHaveBeenCalledTimes(2);
+        // the third call is the lint's last look, after reindex, at whether
+        // the move would still change the note (hunt 2026-10-06, cycle 5,
+        // pin bug-move-refused-then-reindex-reorders); here it would not
+        expect(move).toHaveBeenCalledTimes(3);
     });
 });

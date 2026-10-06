@@ -72,7 +72,7 @@ describe("a lazy label over a '---' that is a horizontal rule of its own", () =>
 
         // Now the "---" is gone from the result. Keeping it, or refusing
         // the deletion, would both be acceptable.
-        it.fails(`${what}: Delete footnote everywhere keeps the horizontal rule (or refuses)`, () => {
+        it(`${what}: Delete footnote everywhere keeps the horizontal rule (or refuses)`, () => {
             const plan = deleteFootnoteEverywhere(lines.join("\n"), "1") as { kind: string; markdown?: string };
             expect(plan.kind === "refused" || (plan.markdown ?? "").split("\n").includes(lines[label + 1])).toBe(true);
         });
@@ -152,7 +152,7 @@ describe("properties over container-heavy label shapes", () => {
     // own line or holds the footnote. An underline that is only paragraph
     // text (no block starts on it) may go with its label, so this check
     // leaves such lines out.
-    it.fails("Delete footnote everywhere keeps every line that starts a block of its own, other than the label's line and lines holding the footnote", { timeout: 600_000 }, () => {
+    it("Delete footnote everywhere keeps every line that starts a block of its own, other than the label's line and lines holding the footnote", { timeout: 600_000 }, () => {
         fc.assert(
             fc.property(shapeArb, ({ lines, name }) => {
                 const reading = readNote(lines);

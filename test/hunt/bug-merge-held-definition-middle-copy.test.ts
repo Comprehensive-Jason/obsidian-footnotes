@@ -59,7 +59,7 @@ function citedAfter(markdown: string, word: string): string {
 
 describe("merging past a middle copy that holds a definition", () => {
     // Now: "w2 w5".
-    it.fails("the merge leaves the held [^1]'s text as it was", () => {
+    it("the merge leaves the held [^1]'s text as it was", () => {
         expect(textOf(note, "1")).toBe("w2");
         expect(textOf(mergeDuplicateFootnoteDefinitions(note), "1")).toBe("w2");
     });
@@ -69,7 +69,7 @@ describe("merging past a middle copy that holds a definition", () => {
     // reference after "w4".
     // Now: "Para w3[^1] and w4.[^2]\n\n[^1]: w0\n    w1\n\n    [^2]: w2\n    w5",
     // so the held footnote, renamed [^2], reads "w2 w5".
-    it.fails("the lint with Merge duplicate definitions on leaves the held footnote reading w2", () => {
+    it("the lint with Merge duplicate definitions on leaves the held footnote reading w2", () => {
         const out = lintFootnotes(note, { mergeDuplicateDefinitions: true });
         expect(textOf(out, citedAfter(out, "w4"))).toBe("w2");
     });

@@ -139,7 +139,7 @@ beforeEach(() => {
 });
 
 describe("a span copied out of a sentence or a comment is carried as a definition", () => {
-    it.fails("'[^1]: to define' cut out of a sentence and pasted back into its own line gives the sentence back", () => {
+    it("'[^1]: to define' cut out of a sentence and pasted back into its own line gives the sentence back", () => {
         const source = ["Use [^1]: to define, see[^1].", "", "[^1]: one"];
         const c = cut(source, { line: 0, ch: 4 }, { line: 0, ch: 19 });
         const back = paste(c.lines, { line: 0, ch: 4 }, c.clip);
@@ -147,7 +147,7 @@ describe("a span copied out of a sentence or a comment is carried as a definitio
         expect(back.lines, JSON.stringify({ c, register: carryRegister(), back, toasts: messages() })).toEqual(source);
     });
 
-    it.fails("'[^1]: to define' copied out of a sentence, pasted mid-line elsewhere, stays at the caret as text; only [^1]'s real definition travels", () => {
+    it("'[^1]: to define' copied out of a sentence, pasted mid-line elsewhere, stays at the caret as text; only [^1]'s real definition travels", () => {
         const source = ["Use [^1]: to define, see[^1].", "", "[^1]: one"];
         const clip = copy(source, { line: 0, ch: 4 }, { line: 0, ch: 19 });
         const back = paste(["dest abc def"], { line: 0, ch: 8 }, clip);
@@ -157,7 +157,7 @@ describe("a span copied out of a sentence or a comment is carried as a definitio
         expect(back.lines, ctx).toEqual(["dest abc[^1]: to define def", "", "[^1]: one"]);
     });
 
-    it.fails("' [^98]:' copied from inside a %% comment and pasted after 'Host line ' lands at the caret, adds no definition", () => {
+    it("' [^98]:' copied from inside a %% comment and pasted after 'Host line ' lands at the caret, adds no definition", () => {
         const source = ["%% [^98]: inline comment label %%"];
         // the comment line defines nothing
         expect(readNote(source).definitions).toEqual([]);
@@ -173,7 +173,7 @@ describe("a span copied out of a sentence or a comment is carried as a definitio
 });
 
 describe("a line that is no definition in the note, cut and pasted back at the same spot", () => {
-    it.fails("a label inside a %% block comment stays inside the comment, as it was", () => {
+    it("a label inside a %% block comment stays inside the comment, as it was", () => {
         const note = ["Text[^1].", "", "%%", "[^1]: commented out", "%%", "", "End."];
         // ruling A1: a label inside a comment defines nothing; [^1] is a live reference
         expect(readNote(note).definitions).toEqual([]);
@@ -186,7 +186,7 @@ describe("a line that is no definition in the note, cut and pasted back at the s
         expect(back.lines, JSON.stringify({ c, back, toasts: messages() })).toEqual(note);
     });
 
-    it.fails("a label on the comment's closer line ('[^1]: text %%'), cut and pasted back: the closer comes back where it was", () => {
+    it("a label on the comment's closer line ('[^1]: text %%'), cut and pasted back: the closer comes back where it was", () => {
         const note = ["Text[^1]. Other[^2].", "", "%%", "[^1]: before the closer %%", "", "[^2]: two"];
         // the label sits inside the comment, before its closer: no definition; [^2] is defined
         expect(readNote(note).definitions.map((d) => d.name)).toEqual(["2"]);
@@ -202,7 +202,7 @@ describe("a line that is no definition in the note, cut and pasted back at the s
         expect(back.lines, ctx).toEqual(note);
     });
 
-    it.fails("a lazy label (plain text under a paragraph), cut and pasted back, stays the text it was", () => {
+    it("a lazy label (plain text under a paragraph), cut and pasted back, stays the text it was", () => {
         const note = ["Para one.", "[^1]: lazy label text", "", "Para two."];
         // a label right under a paragraph line is lazy text: no definition, a live [^1] reference
         expect(readNote(note).definitions).toEqual([]);
@@ -215,24 +215,24 @@ describe("a line that is no definition in the note, cut and pasted back at the s
 });
 
 describe("a line that is no definition in the note, copied and pasted over itself", () => {
-    it.fails("a lazy label under a paragraph", () => {
+    it("a lazy label under a paragraph", () => {
         const note = ["Para.", "[^x]: lazy text"];
         // Today: ["Para.", "", "", "[^x]: lazy text"]
         expect(copyOverItself(note, { line: 1, ch: 0 }, { line: 1, ch: 15 })).toEqual(note);
     });
 
-    it.fails("a lazy label under a list item's text, copied in part", () => {
+    it("a lazy label under a list item's text, copied in part", () => {
         const note = ["- item[^91]", "  [^91]: lazy under a list item"];
         // Today: ["- item[^91]", "azy under a list item", "", "[^1]: l"]
         expect(copyOverItself(note, { line: 1, ch: 0 }, { line: 1, ch: 10 })).toEqual(note);
     });
 
-    it.fails("a lazy label under a paragraph the table under '<3' belongs to", () => {
+    it("a lazy label under a paragraph the table under '<3' belongs to", () => {
         const note = ["Text[^n].", "", "<3", "| a | b |", "| --- | --- |", "[^120]: d", "", "[^n]: en"];
         expect(copyOverItself(note, { line: 5, ch: 0 }, { line: 5, ch: 9 })).toEqual(note);
     });
 
-    it.fails("the closer line of a %% block, copied from the end of the opener through the closer line, stays in its comment", () => {
+    it("the closer line of a %% block, copied from the end of the opener through the closer line, stays in its comment", () => {
         const note = ["%%", "[^114]: before closer %%", "", "Text[^n].", "", "[^n]: en"];
         expect(copyOverItself(note, { line: 0, ch: 2 }, { line: 2, ch: 0 })).toEqual(note);
     });

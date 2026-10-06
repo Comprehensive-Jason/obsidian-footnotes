@@ -256,7 +256,7 @@ function insertInlineText(
         // the numbered and named keys run)
         const ctx = docContext(doc);
         if (lineText.includes("|") && warnTableEdgeCaretIfOutside(null, cursorPosition, ctx)) return;
-        const at = adjustFootnotePosition(cursorPosition, ctx.reading(), lineText, plugin);
+        const at = adjustFootnotePosition(cursorPosition, ctx.reading(), lineText, plugin, ctx.lines);
         // born-dead check (see bareInsertionVerdict). "Born-dead" means an
         // insertion that would not be a live footnote the moment it lands.
         // The "^[…]" must still read as an inline footnote on the masked

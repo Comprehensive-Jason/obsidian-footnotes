@@ -48,7 +48,7 @@ describe("a label-shaped last row of a pipeless table over a '===' paragraph", (
 
     // Now the "===" line is gone from the result. Keeping it, or refusing
     // the deletion, would both be acceptable.
-    it.fails("Delete footnote everywhere keeps the '===' line (or refuses)", () => {
+    it("Delete footnote everywhere keeps the '===' line (or refuses)", () => {
         const plan = deleteFootnoteEverywhere(Lines.join("\n"), "1") as { kind: string; markdown?: string };
         expect(plan.kind === "refused" || (plan.markdown ?? "").split("\n").includes("===")).toBe(true);
     });

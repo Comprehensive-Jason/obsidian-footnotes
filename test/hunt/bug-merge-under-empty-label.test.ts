@@ -46,7 +46,7 @@ describe("the merge appends under an empty first copy with a paragraph straight 
     });
 
     // Now: "[^a]:\n    alpha\nlazy tail", and [^a] runs over lines 0 to 2.
-    it.fails("after the merge, 'lazy tail' is still outside every definition", () => {
+    it("after the merge, 'lazy tail' is still outside every definition", () => {
         const merged = mergeDuplicateFootnoteDefinitions(doc);
         const lines = merged.split("\n");
         const at = lines.indexOf("lazy tail");

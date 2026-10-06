@@ -76,13 +76,13 @@ describe("an orphaned reference at a line's start, taken out while a definition 
 
     // Now: the caret at the end of the line being typed lands at the end of
     // "[^1]: one" (line 2).
-    it.fails("the caret at the end of the line being typed stays on it", () => {
+    it("the caret at the end of the line being typed stays on it", () => {
         const after = lintFootnotes(before, options);
         expect(mapCaret(before, after, 2, before.split("\n")[2].length)).toEqual({ line: 0, ch: "alpha[^1] bravo.".length });
     });
 
     // Now: line 2 maps to line 2 (the moved definition).
-    it.fails("a second pane's caret on the line stays on it", () => {
+    it("a second pane's caret on the line stays on it", () => {
         const after = lintFootnotes(before, options);
         expect(lineMapper(lineDiffChanges(before, after), before)(2)).toBe(0);
     });

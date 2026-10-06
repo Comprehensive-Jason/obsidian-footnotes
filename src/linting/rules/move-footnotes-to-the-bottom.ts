@@ -88,13 +88,13 @@ export function moveFootnoteDefinitionsToBottom(
 
 /**
  * The definitions the move would read differently in their new place
- * (the rule's check above), with no section heading: the definitions
- * gathered at the end of the note. Empty when the move changes nothing.
+ * (the rule's check above), gathered under `sectionHeading` as the rule
+ * gathers them. Empty when the move changes nothing.
  */
-function misreadByGathering(markdown: string): readonly Definition[] {
+function misreadByGathering(markdown: string, sectionHeading: string): readonly Definition[] {
     let misread: readonly Definition[] = [];
     rewriteDocument(markdown, (text, view) => {
-        const moved = gathered(text, view, "");
+        const moved = gathered(text, view, sectionHeading);
         if (moved !== text) misread = definitionsReadDifferently(view.lines, moved.split("\n"));
         return text;
     });
@@ -284,8 +284,11 @@ function bodyWithout(lines: string[], blocks: readonly Definition[]): string[] {
  * never silent about what it leaves). When no single definition does it
  * but the whole set does, every movable definition is named. Empty when
  * the move is not held back this way.
+ *
+ * `sectionHeading` is the heading the lint gathered under, as the rule
+ * takes it; empty means no heading, the definitions gathered at the end.
  */
-export function definitionsHoldingTheMoveBack(markdown: string): string[] {
+export function definitionsHoldingTheMoveBack(markdown: string, sectionHeading = ""): string[] {
     if (!markdown.includes("[^")) return [];
     // the note as the rule sees it: plain line endings, no blank lines at
     // the end
@@ -305,15 +308,17 @@ export function definitionsHoldingTheMoveBack(markdown: string): string[] {
     // as they did, the gathered note may still read a definition
     // differently in its new place, the rule's own check; then the
     // definitions it reads differently are named (hunt 2026-10-06, cycle
-    // 4, pin bug-moved-definition-joins-list-item). That gathering is
-    // worked out with no section heading, at the end of the note, since
-    // this function is not told the heading.
+    // 4, pin bug-moved-definition-joins-list-item). That gathering goes
+    // under the lint's section heading, as the rule's does. Worked out at
+    // the end of the note instead, it named a definition the lint had just
+    // gathered under the heading, above a list it would join only at the
+    // end (hunt 2026-10-06, cycle 5, pin bug-move-alert-ignores-heading).
     let holding: readonly Definition[];
     if (holdsBack(blocks)) {
         const one = blocks.filter((block) => holdsBack([block]));
         holding = one.length > 0 ? one : blocks;
     } else {
-        holding = misreadByGathering(lines.join("\n"));
+        holding = misreadByGathering(lines.join("\n"), sectionHeading);
     }
     const names: string[] = [];
     for (const block of holding) {

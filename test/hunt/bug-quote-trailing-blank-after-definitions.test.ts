@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { lintFootnotes } from "../../src/linting/linter";
+import { removeLineRanges } from "../../src/parsing/line-edits";
 
 // BUG (annoyance): a note ending in a quote whose last line is a bare ">"
 // takes two lints to settle, and a note whose definitions already sit
@@ -33,14 +34,22 @@ describe("a quote's trailing blank line after the definitions", () => {
     const doc = "a[^1]\n\n[^1]: def\n\n> q\n>";
 
     // Now: once = "a[^1]\n\n> q\n>\n\n[^1]: def", twice = "a[^1]\n\n> q\n\n[^1]: def".
-    it.fails("the default lint is idempotent", () => {
+    it("the default lint is idempotent", () => {
         const once = lintFootnotes(doc);
         expect(lintFootnotes(once, {})).toBe(once);
     });
 
     // Now: "a[^1]\n\n> q\n\n[^1]: def".
-    it.fails("a note with its definitions already at the bottom under such a quote is left alone", () => {
+    it("a note with its definitions already at the bottom under such a quote is left alone", () => {
         const gathered = "a[^1]\n\n> q\n>\n\n[^1]: def";
         expect(lintFootnotes(gathered)).toBe(gathered);
+    });
+
+    // Added with the fix, to keep what the old code did right: blank quote
+    // lines that sit right above a cut at the end of the note are left
+    // there by the cut, so they still go, a run of two included.
+    it("blank quote lines right above a quoted definition cut from the end still go", () => {
+        expect(removeLineRanges(["> q", ">", "> [^1]: d"], [{ start: 2, end: 2 }])).toEqual(["> q"]);
+        expect(removeLineRanges(["> q", ">", ">", "> [^1]: d"], [{ start: 3, end: 3 }])).toEqual(["> q"]);
     });
 });

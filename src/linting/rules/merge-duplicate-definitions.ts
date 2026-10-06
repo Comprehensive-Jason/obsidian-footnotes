@@ -133,22 +133,50 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
             if (linesReadDifferently(lines, { lines, ranges: trial }, removeLineRanges(lines, trial))) continue;
             const base = group[0];
             const appended: string[] = [];
+            // the copy whose lines the next copy's text lands under: the
+            // first copy, then each copy that added lines
+            let above = base;
             for (const duplicate of group.slice(1)) {
+                const piece: string[] = [];
                 const body = lines[duplicate.start].slice(duplicate.labelEnd).trim();
-                if (body !== "") appended.push(`    ${body}`);
+                if (body !== "") piece.push(`    ${body}`);
                 for (let i = duplicate.start + 1; i <= duplicate.end; i++) {
-                    appended.push(lines[i]);
+                    piece.push(lines[i]);
                 }
+                if (piece.length === 0) continue;
+                // When the copy above ends with a definition held inside it
+                // (an indented "[^b]: inner" on its last lines), a line
+                // straight under that would continue the held definition's
+                // text, and b would read "inner two". A blank line first
+                // makes the merged text a paragraph of the first copy's
+                // own, after the held definition (hunt 2026-10-05 round 2,
+                // pin bug-merge-into-held-definition). That goes for every
+                // copy the text lands under, not only the first: a middle
+                // copy ending in a held definition took the third copy's
+                // text the same way (hunt 2026-10-06, cycle 5, pin
+                // bug-merge-held-definition-middle-copy).
+                const heldAtEnd = above;
+                if (piece[0] !== "" && definitionsHeldBy(definitions, heldAtEnd).some((held) => held.end === heldAtEnd.end)) piece.unshift("");
+                appended.push(...piece);
+                above = duplicate;
             }
-            // When the first copy ends with a definition held inside it (an
-            // indented "[^b]: inner" on its last lines), a line straight
-            // under that would continue the held definition's text, and b
-            // would read "inner two". A blank line first makes the merged
-            // text a paragraph of the first copy's own, after the held
-            // definition (hunt 2026-10-05 round 2, pin
-            // bug-merge-into-held-definition).
-            if (appended.length > 0 && appended[0] !== "" && definitionsHeldBy(definitions, base).some((held) => held.end === base.end)) {
-                appended.unshift("");
+            // A line right under the first copy that is not part of it,
+            // such as a paragraph under an empty label "[^a]:" (which takes
+            // no lazy text), would carry on the indented text added under
+            // the label and join the footnote (live Obsidian 1.14.4,
+            // 2026-10-06). A blank line after the added text keeps it out
+            // (hunt 2026-10-06, cycle 5, pin bug-merge-under-empty-label).
+            // Where that line starts a block of its own, such as a heading,
+            // the blank line changes nothing; under a label right under the
+            // first copy, none goes in, so definitions stay packed.
+            if (
+                appended.length > 0 &&
+                appended[appended.length - 1].trim() !== "" &&
+                base.end + 1 < lines.length &&
+                lines[base.end + 1].trim() !== "" &&
+                !definitions.some((definition) => definition.start === base.end + 1)
+            ) {
+                appended.push("");
             }
             const appends = new Map(appendAfter);
             if (appended.length > 0) appends.set(base.end, appended);

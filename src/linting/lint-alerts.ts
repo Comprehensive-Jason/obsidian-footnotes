@@ -12,6 +12,7 @@ import {
     referenceShapes,
     referenceText,
 } from "../parsing/footnote-grammar";
+import { configuredSectionHeading, sectionHeadingProblem } from "./linter";
 import { labelInsideTable } from "./rewrite-document";
 import { duplicateFootnoteDefinitionNames, mergeDuplicateFootnoteDefinitions } from "./rules/merge-duplicate-definitions";
 import { definitionsHoldingTheMoveBack } from "./rules/move-footnotes-to-the-bottom";
@@ -316,10 +317,14 @@ function noticeOrphanedDefinitions(
 // the lint is never silent). Now the definitions that held the move back
 // are named, with the general "left in place" reason, so the user can
 // move them by hand and let the next lint gather the rest (Jason's triage
-// decision Q5, 2026-10-05). Only while the rule is on.
+// decision Q5, 2026-10-05). Only while the rule is on. The gathering is
+// worked out under the section heading the lint uses, which it drops when
+// the heading holds a reference (hunt 2026-10-06, cycle 5, pin
+// bug-move-alert-ignores-heading).
 function noticeUngatheredDefinitions(plugin: FootnotePlugin, markdown: string) {
     if (!plugin.settings.lintMoveToBottom) return;
-    const names = definitionsHoldingTheMoveBack(markdown);
+    const heading = configuredSectionHeading(plugin);
+    const names = definitionsHoldingTheMoveBack(markdown, sectionHeadingProblem(heading) === null ? heading : "");
     if (names.length === 0) return;
     showNotice(
         names.length === 1

@@ -41,7 +41,7 @@ import { readNote } from "../../src/parsing/note-reading";
 function pressAt(line: string, ch: number, placement: FootnotePlacement): string {
     const doc = fakeEditor([line], { cursor: { line: 0, ch } });
     const plugin = fakePlugin({ insertAtEndOfWord: true, footnotePlacement: placement }, doc);
-    const at = adjustFootnotePosition({ line: 0, ch }, readNote(doc.lines), line, plugin).ch;
+    const at = adjustFootnotePosition({ line: 0, ch }, readNote(doc.lines), line, plugin, doc.lines).ch;
     return line.slice(0, at) + "[^1]" + line.slice(at);
 }
 

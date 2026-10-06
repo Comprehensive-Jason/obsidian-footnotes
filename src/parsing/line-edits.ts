@@ -81,6 +81,9 @@ export function removeLineRanges(
     const rangeAtLine = new Map(ranges.map((range) => [range.start, range]));
     const out: string[] = [];
     let mergeBlanks = false;
+    // how long `out` was when the last cut was made: the line at
+    // out[cutAfter - 1] sat right above that cut
+    let cutAfter = -1;
     // whether a cut reaches the last line: the blank line that separated
     // that last block from the text above it would otherwise be left
     // dangling at the end of the note (Kimi and Claude sweeps 2026-09-13)
@@ -90,6 +93,7 @@ export function removeLineRanges(
         if (range) {
             i = range.end;
             mergeBlanks = true;
+            cutAfter = out.length;
             continue;
         }
         if (
@@ -144,8 +148,25 @@ export function removeLineRanges(
         mergeBlanks = false;
         out.push(lines[i]);
     }
+    // A blank quote line at the end goes only when the cut is what left it
+    // at the end of its quote: it sat right above the cut, or right above
+    // another such line. One that already ended its quote, with a blank
+    // line between it and the definitions below, stays. It went when the
+    // definitions under it were cut from the end of the note, so the first
+    // lint moved the definitions below a quote ending in ">", and the
+    // second took the ">" (hunt 2026-10-06, cycle 5, pin
+    // bug-quote-trailing-blank-after-definitions).
     if (cutReachesEnd) {
-        while (out.length > 0 && (out[out.length - 1] === "" || endsInQuoteBlankLine(out))) out.pop();
+        while (out.length > 0) {
+            if (out[out.length - 1] === "") {
+                out.pop();
+            } else if (out.length === cutAfter && endsInQuoteBlankLine(out)) {
+                out.pop();
+                cutAfter--;
+            } else {
+                break;
+            }
+        }
     }
     return out;
 }

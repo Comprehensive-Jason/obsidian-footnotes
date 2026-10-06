@@ -45,13 +45,13 @@ describe("the move refuses an indented label, reindex reorders, the next lint ga
 
     // Now: once = "Text.[^a]\n\n[^a]: a\n  [^1]: one\n\n- item",
     // twice = "Text.[^a]\n\n- item\n\n[^a]: a\n  [^1]: one".
-    it.fails("shrunk: lint(lint(note)) equals lint(note)", () => {
+    it("shrunk: lint(lint(note)) equals lint(note)", () => {
         const once = lintFootnotes(shrunk);
         expect(lintFootnotes(once)).toBe(once);
     });
 
     // Now: the definitions are not gathered, and definitionsHoldingTheMoveBack gives [].
-    it.fails("shrunk: after one lint, either the definitions are gathered or the move alert names one (never silent)", () => {
+    it("shrunk: after one lint, either the definitions are gathered or the move alert names one (never silent)", () => {
         const once = lintFootnotes(shrunk);
         if (/- item[\s\S]*\n\[\^a\]: [^\n]*\n {2}\[\^1\]:/.test(once)) return;
         expect(definitionsHoldingTheMoveBack(once)).not.toEqual([]);
@@ -74,13 +74,13 @@ describe("the same with numbered footnotes cited in the other order", () => {
 
     // Now: once = "y[^1] x[^2]\n\n [^1]: one\n\n   [^2]: two\n\n- item",
     // twice = "y[^1] x[^2]\n\n- item\n\n [^1]: one\n   [^2]: two".
-    it.fails("the default lint (minus punctuation) is idempotent", () => {
+    it("the default lint (minus punctuation) is idempotent", () => {
         const once = lintFootnotes(doc, options);
         expect(lintFootnotes(once, options)).toBe(once);
     });
 
     // Now: the definitions are not gathered, and definitionsHoldingTheMoveBack gives [].
-    it.fails("after one lint, either the definitions are gathered or the move alert names one", () => {
+    it("after one lint, either the definitions are gathered or the move alert names one", () => {
         const once = lintFootnotes(doc, options);
         if (once.endsWith("[^1]: one\n   [^2]: two")) return;
         expect(definitionsHoldingTheMoveBack(once)).not.toEqual([]);

@@ -132,7 +132,16 @@ function linesAfterReadDifferently(before: string[], after: string[], at: number
     let i = at + 1;
     // the rest of the label's paragraph; a "^" in a line's blocks marks a
     // block starting on it
-    while (i < before.length && before[i].trim() !== "" && !(readingBefore.lineBlocks[i] ?? "").includes("^")) i++;
+    while (i < before.length && before[i].trim() !== "" && !(readingBefore.lineBlocks[i] ?? "").includes("^")) {
+        // None of those lines may start a heading. Two lazy labels in one
+        // paragraph with a "===" under the second: the blank line made the
+        // first a definition, and the second, over its "===", a level 1
+        // heading the note never had (hunt 2026-10-06, cycle 5, pin
+        // bug-fix-lazy-makes-heading-of-next-label). Such a label is left
+        // lazy and the lazy-label alert names it.
+        if (/(?:^| )\^heading\d$/.test(readingAfter.lineBlocks[i + 1] ?? "")) return true;
+        i++;
+    }
     // line i of `before` is line i + 1 of `after`, below the inserted line
     for (; i < before.length; i++) {
         if (!linesReadAlike(readingBefore, i, readingAfter, i + 1, "none")) return true;
