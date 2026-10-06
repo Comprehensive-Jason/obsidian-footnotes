@@ -1,9 +1,9 @@
 import { EditorPosition } from "obsidian";
 
 import { positionAfterRewrite } from "../editor/document-diff";
-import { cutDefinitionsIfClean, orphanedDefinitionBlocks } from "../linting/rules/remove-orphaned-definitions";
+import { definitionsToCut, orphanedDefinitionBlocks } from "../linting/rules/remove-orphaned-definitions";
 import { normalizeEol } from "../parsing/line-edits";
-import { Definition, NoteReading, readNote } from "../parsing/note-reading";
+import { Definition, readNote } from "../parsing/note-reading";
 
 // Carrying footnote definitions along on copy, cut, and paste (issue #59;
 // Jason's rulings 2026-09-21 and 2026-09-22).
@@ -471,7 +471,7 @@ export interface CutPlan extends CarriedDefinitions {
  * a definition staying in the note still cites. Deleting the selection
  * left its lines whole (leftWhole). And taking it out changes how no
  * other line of the note reads, the guard the orphan rule uses
- * (blocksToCut).
+ * (definitionsToCut).
  *
  * Every other block stays where it is. That is how the cut used to lose
  * text, wherever the two halves disagreed (hunt 2026-10-02): a selection
@@ -523,70 +523,13 @@ export function planCut(
     const candidates = blocks
         .filter((block) => leftWhole(lines, from, to, block) && orphanedAt.has(moved(block.start)) && block.removable)
         .map((block) => ({ ...block, start: moved(block.start), end: moved(block.end) }));
-    const { removed, kept } = blocksToCut(joined, candidates);
+    // A definition the cut leaves in place, such as one between two lists,
+    // still travels on the clipboard, so pasting the text back reuses it
+    // (Jason, 2026-10-05, triage decision Q2; pin
+    // bug-cut-definition-between-lists-joins-them).
+    const { removed, kept } = definitionsToCut(joined, candidates);
     const text = tidy(kept.join("\n"));
     return { carried, missing, text, caret: positionAfterRewrite(joinedText, text, from), removed: removed.length };
-}
-
-/**
- * Which of the `candidates` a cut takes out of `lines` (the note with the
- * selection already deleted), and the note once they are gone.
- *
- * A candidate stays when taking it out would change how Obsidian reads a
- * line that stays, the guard the orphan rule uses (cutDefinitionsIfClean):
- * a definition between two lists keeps them apart, and with it gone the
- * lists join into one, a second numbered list running on from the first
- * one's numbers. Such a definition stays in the note, where the lint's
- * alert names it as an orphan, and the clipboard still carries it (Jason,
- * 2026-10-05, triage decision Q2; hunt 2026-10-05 round 2, cluster C2,
- * pin bug-cut-definition-between-lists-joins-them).
- *
- * The candidates go all at once when that is clean. Otherwise they are
- * taken one at a time, as many as can go cleanly, the way the orphan rule
- * falls back. Whatever stays keeps alive the footnotes its text cites
- * (stillUnused), so a definition cited only by one that stays is never
- * cut from under it.
- */
-function blocksToCut(lines: string[], candidates: readonly Definition[]): { removed: Definition[]; kept: string[] } {
-    const reading = readNote(lines);
-    const all = stillUnused(reading, candidates);
-    const whole = cutDefinitionsIfClean(lines, all);
-    if (whole !== null) return { removed: all, kept: whole };
-    let removed: Definition[] = [];
-    let kept = lines;
-    for (let grew = true; grew; ) {
-        grew = false;
-        for (const block of candidates) {
-            if (removed.includes(block)) continue;
-            const trial = stillUnused(reading, [...removed, block]);
-            if (trial.length === removed.length) continue;
-            const out = cutDefinitionsIfClean(lines, trial);
-            if (out === null) continue;
-            removed = trial;
-            kept = out;
-            grew = true;
-        }
-    }
-    return { removed, kept };
-}
-
-/**
- * The blocks of `blocks` that nothing outside them cites: going round,
- * each block whose name a live reference on a line outside every block
- * still in the set uses is taken out of the set, until a round takes out
- * nothing. What is left can go together without leaving a reference
- * behind that has no definition.
- */
-function stillUnused(reading: NoteReading, blocks: readonly Definition[]): Definition[] {
-    let unused = [...blocks];
-    for (;;) {
-        const inside = (line: number) => unused.some((block) => block.start <= line && line <= block.end);
-        const cited = new Set<string>();
-        for (const { line, name, live } of reading.references) if (live && !inside(line)) cited.add(name.toLowerCase());
-        const next = unused.filter((block) => !cited.has(block.name.toLowerCase()));
-        if (next.length === unused.length) return unused;
-        unused = next;
-    }
 }
 
 /**

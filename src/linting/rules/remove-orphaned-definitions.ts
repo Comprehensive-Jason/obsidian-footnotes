@@ -1,5 +1,5 @@
 import { definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../../parsing/line-edits";
-import { Definition, linesReadAlike, readNote } from "../../parsing/note-reading";
+import { Definition, linesReadAlike, NoteReading, readNote } from "../../parsing/note-reading";
 import { FootnoteRule } from "../rule";
 
 // Deleting orphaned definitions, as a rule of its own (2026-08-10).
@@ -208,14 +208,78 @@ export function orphanedDefinitionBlocks(lines: string[]): Definition[] {
 /**
  * `lines` with `dead` cut out (definitionCuts, removeLineRanges), or null
  * when the cut would change how Obsidian reads a line it keeps
- * (linesReadDifferently). Shared with the cut that carries definitions
- * (planCut in carry-footnotes.ts), so a cut leaves a definition in place
- * wherever this rule would (Jason, 2026-10-05, triage decision Q2).
+ * (linesReadDifferently). The cut that carries definitions (planCut in
+ * carry-footnotes.ts) reaches it through definitionsToCut, so a cut leaves
+ * a definition in place wherever this rule would (Jason, 2026-10-05,
+ * triage decision Q2).
  */
-export function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[]): string[] | null {
+function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[]): string[] | null {
     const cut = definitionCuts(lines, dead);
     const out = removeLineRanges(cut.lines, cut.ranges);
     return linesReadDifferently(lines, cut, out) ? null : out;
+}
+
+/**
+ * Which of the `candidates` can be taken out of `lines`, and the note once
+ * they are gone. Shared by the orphan rule and the cut that carries
+ * definitions (planCut in carry-footnotes.ts), so both leave the same
+ * definitions in place (hunt 2026-10-05 round 2, cluster C2, and the pin
+ * bug-orphan-rule-cuts-footnote-cited-by-kept-orphan).
+ *
+ * A candidate stays when taking it out would change how Obsidian reads a
+ * line that stays (cutDefinitionsIfClean): a definition between two lists
+ * keeps them apart, and with it gone the lists join into one, a second
+ * numbered list running on from the first one's numbers. Such a definition
+ * stays in the note, where the lint's alert names it as an orphan (Jason,
+ * 2026-10-05, triage decision Q2).
+ *
+ * The candidates go all at once when that is clean. Otherwise they are
+ * taken one at a time, as many as can go cleanly. Whatever stays keeps
+ * alive the footnotes its text cites (stillUnused), so a definition cited
+ * only by one that stays is never cut from under it: that would leave the
+ * one that stays citing a footnote with no definition.
+ */
+export function definitionsToCut(lines: string[], candidates: readonly Definition[]): { removed: Definition[]; kept: string[] } {
+    const reading = readNote(lines);
+    const all = stillUnused(reading, candidates);
+    const whole = cutDefinitionsIfClean(lines, all);
+    if (whole !== null) return { removed: all, kept: whole };
+    let removed: Definition[] = [];
+    let kept = lines;
+    for (let grew = true; grew; ) {
+        grew = false;
+        for (const block of candidates) {
+            if (removed.includes(block)) continue;
+            const trial = stillUnused(reading, [...removed, block]);
+            if (trial.length === removed.length) continue;
+            const out = cutDefinitionsIfClean(lines, trial);
+            if (out === null) continue;
+            removed = trial;
+            kept = out;
+            grew = true;
+        }
+    }
+    return { removed, kept };
+}
+
+/**
+ * The definitions of `blocks` that nothing outside them cites: going
+ * round, each definition whose name a live reference on a line outside
+ * every definition still in the set uses is taken out of the set, until a
+ * round takes out nothing. What is left can go together without leaving
+ * a reference behind that has no definition. (The carry group's rule,
+ * 3145b1e, moved here to be shared.)
+ */
+function stillUnused(reading: NoteReading, blocks: readonly Definition[]): Definition[] {
+    let unused = [...blocks];
+    for (;;) {
+        const inside = (line: number) => unused.some((block) => block.start <= line && line <= block.end);
+        const cited = new Set<string>();
+        for (const { line, name, live } of reading.references) if (live && !inside(line)) cited.add(name.toLowerCase());
+        const next = unused.filter((block) => !cited.has(block.name.toLowerCase()));
+        if (next.length === unused.length) return unused;
+        unused = next;
+    }
 }
 
 /**
@@ -236,22 +300,21 @@ export function removeOrphanedFootnoteDefinitions(markdown: string): string {
     // twice was not lint once (Kimi hunt cycle 2, 2026-09-16).
     //
     // The whole set of orphans goes in one cut when that cut changes
-    // nothing else. When it would, each block is tried on its own, in
-    // order, and the note is read again after every cut so a chain still
-    // dies all the way down: one refused block used to veto every safe
-    // deletion in the note, and the alert then blamed the safe ones too
-    // (Kimi hunt cycle 4, 2026-09-16).
+    // nothing else. When it would, as many as can go cleanly go
+    // (definitionsToCut), and the note is read again after every cut so a
+    // chain still dies all the way down: one refused block used to veto
+    // every safe deletion in the note, and the alert then blamed the safe
+    // ones too (Kimi hunt cycle 4, 2026-09-16). An orphan that stays keeps
+    // the footnotes its text cites: cutting one of them left the orphan
+    // citing a footnote with no definition (pin
+    // bug-orphan-rule-cuts-footnote-cited-by-kept-orphan).
     let current = lines;
     for (;;) {
         const dead = orphanedDefinitionBlocks(current);
         if (dead.length === 0) break;
-        let next = cutDefinitionsIfClean(current, dead);
-        for (const block of dead) {
-            if (next !== null) break;
-            next = cutDefinitionsIfClean(current, [block]);
-        }
-        if (next === null) break;
-        current = next;
+        const { removed, kept } = definitionsToCut(current, dead);
+        if (removed.length === 0) break;
+        current = kept;
     }
     if (current === lines) return markdown;
     return restoreEol(current.join("\n"), eol);
