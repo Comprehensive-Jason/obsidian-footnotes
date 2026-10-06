@@ -29,6 +29,9 @@ import { NoteReading, readNote } from "./note-reading";
  */
 export const TrailingPunctuationChars = ".,;:!?\u2026。，、；：！？．｡､⋯‥‼⁇⁈⁉";
 
+/** No column holds an image: the images a walk takes when it is handed none. */
+const NoImages: ReadonlySet<number> = new Set();
+
 /**
  * Whether the character at `i` is punctuation in the sense every walk
  * uses: one of TrailingPunctuationChars, and not escaped by a backslash.
@@ -52,12 +55,13 @@ export const TrailingPunctuationChars = ".,;:!?\u2026。，、；：！？．｡
  * exclamation mark and bracketed text, so in "Wow![x] more" a reference
  * still lands after the "!" (hunt 2026-10-06, cycle 4, cluster P1, pin
  * bug-bang-before-undefined-brackets: every "!" right in front of a "["
- * was taken for an image's). A caller with no reading at hand leaves
- * `images` out, and then every "!" right in front of a "[" that does not
- * start "[^" (the next footnote's reference) counts as an image's.
+ * was taken for an image's). Every caller in the plugin hands its images
+ * in, the lint's punctuation rule included; left out, no "!" opens an
+ * image (the guess from the text alone, every "!" in front of a "[" that
+ * does not start "[^", went once the lint asked the reading too).
  */
-export function punctuationAt(text: string, i: number, images?: ReadonlySet<number>): boolean {
-    if (images !== undefined ? images.has(i) : text[i] === "!" && text[i + 1] === "[" && text[i + 2] !== "^") return false;
+export function punctuationAt(text: string, i: number, images: ReadonlySet<number> = NoImages): boolean {
+    if (images.has(i)) return false;
     return i >= 0 && i < text.length && TrailingPunctuationChars.includes(text[i]) && !escapedAt(text, i);
 }
 

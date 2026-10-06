@@ -50,7 +50,7 @@ const After = {
 
 describe("lint vs press before a glued bare web address", () => {
     // Now: the lint gives "word==[^1]https://e.com".
-    it.fails("lint (after) leaves 'word[^1]==https://e.com' as the press wrote it", async () => {
+    it("lint (after) leaves 'word[^1]==https://e.com' as the press wrote it", async () => {
         const doc = fakeEditor(["word==https://e.com"], { cursor: { line: 0, ch: 2 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(After, doc));
         const pressed = doc.lines.join("\n");

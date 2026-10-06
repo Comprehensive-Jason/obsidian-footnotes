@@ -1,5 +1,5 @@
 import { definitionLabelIn } from "../../parsing/label-shapes";
-import { ClosingMarkChars, FootnotePlacement, punctuationAt, referenceLandingAfter } from "../../parsing/landing";
+import { ClosingMarkChars, FootnotePlacement, imageStartsOn, punctuationAt, referenceLandingAfter } from "../../parsing/landing";
 import { NoteReading, readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
@@ -56,9 +56,24 @@ function movableUnits(reading: NoteReading, i: number, from: number): MovableUni
 // Swap each run of `units` (see movableUnits) with the run of punctuation
 // after it, within one stretch of a line.
 //
-// The punctuation is looked for on the masked twin, but the text handed
-// back is built from the original line. Otherwise a footnote name could
-// come out with the blanking characters in it.
+// The punctuation before a run is looked for on the masked twin, and the
+// text handed back is built from the original line, so a footnote name
+// never comes out with the blanking characters in it. The walk forward
+// over the punctuation and closing marks after a run reads the original
+// line, as the press does, since the masked twin blanks a bare web address
+// or email, and a closing mark glued to one then read as the end of the
+// text: the lint moved "word[^1]==https://e.com", as the press writes it,
+// to "word==[^1]https://e.com" (hunt 2026-10-06, cycle 4, pin
+// bug-lint-press-disagree-glued-url). Code, math, and comments never start
+// with punctuation or a closing mark, so the walk still stops in front of
+// them.
+//
+// `images` are the columns of the stretch where the line draws an image
+// or an embed (imageStartsOn, counted from the stretch's start): only
+// there is a "!" in front of a "[" an image's and not punctuation, so in
+// "Wow[^1]![x] more" with no "[x]:" line the reference still moves past
+// the "!", as the press puts it (hunt 2026-10-06, cycle 4, pin
+// bug-bang-before-undefined-brackets).
 //
 // `keeps` is asked about each move before it is made, with the stretch as
 // the move would leave it, and a move it turns down is not made. The
@@ -72,6 +87,7 @@ function swapInSegment(
     mayBeLabel = true,
     placement: FootnotePlacement = "after",
     keeps: (segment: string) => boolean = () => true,
+    images: ReadonlySet<number> = new Set(),
 ): string {
     let out = "";
     let copied = 0;
@@ -132,7 +148,7 @@ function swapInSegment(
             // the walk stops in front of punctuation and steps over it only
             // together with a closing mark that follows, so the forward
             // move then carries the run out of a quote and no further.
-            const punctuationEnd = referenceLandingAfter(masked, end, placement);
+            const punctuationEnd = referenceLandingAfter(original, end, placement, images);
             if (punctuationEnd === end) {
                 // Under "before", a run that sits right AFTER punctuation
                 // moves back in front of it: "word.[^1]" becomes
@@ -140,9 +156,9 @@ function swapInSegment(
                 // 2026-09-21). A run after a closing mark stays: the marker
                 // belongs outside the quote in every convention found,
                 // punctuation inside the quote or not.
-                if (placement !== "before" || !punctuationAt(masked, start - 1)) return null;
+                if (placement !== "before" || !punctuationAt(masked, start - 1, images)) return null;
                 let punctuationStart = start;
-                while (punctuationAt(masked, punctuationStart - 1)) punctuationStart--;
+                while (punctuationAt(masked, punctuationStart - 1, images)) punctuationStart--;
                 // A reference moved in front of a line-initial colon would
                 // become a label: ":[^1] text" would turn into "[^1]: text",
                 // a second definition of footnote 1 (hunt 2026-10-02, pin
@@ -163,7 +179,7 @@ function swapInSegment(
             // would walk them further and further from the words they belong
             // to. Under "before" the forward move only ever carries a run
             // out of a quote, which is right wherever the run started.
-            if (placement === "after" && start > 0 && (punctuationAt(masked, start - 1) || ClosingMarkChars.includes(masked[start - 1]))) return null;
+            if (placement === "after" && start > 0 && (punctuationAt(masked, start - 1, images) || ClosingMarkChars.includes(masked[start - 1]))) return null;
             return { before: original.slice(copied, start) + original.slice(end, punctuationEnd), after: "", to: punctuationEnd };
         })();
         if (move === null || !keeps(out + move.before + run + move.after + original.slice(move.to))) {
@@ -262,6 +278,7 @@ function placedOnce(markdown: string, placement: "after" | "before"): string {
                     i === 0 || lines[i - 1].trim() === "",
                     placement,
                     (segment) => keeps(line.slice(0, prefixLength) + segment),
+                    new Set([...imageStartsOn(reading, i)].map((column) => column - prefixLength)),
                 )
             );
         };

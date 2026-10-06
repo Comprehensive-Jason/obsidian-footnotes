@@ -77,13 +77,13 @@ describe("'!' before bracketed text that is no image", () => {
     // file this round) does not hand the reading's answer to the walk yet,
     // so the lint still takes every "!" before a "[" for an image's.
     // Now: the line stays "Wow[^1]![x] more".
-    it.fails("lint (after): 'Wow[^1]![x] more' moves the reference past the '!'", () => {
+    it("lint (after): 'Wow[^1]![x] more' moves the reference past the '!'", () => {
         const out = footnoteAfterPunctuation("Wow[^1]![x] more\n\n[^1]: a", "after");
         expect(out.split("\n")[0]).toBe("Wow![^1][x] more");
     });
 
     // Now: "Wow![^1]![citation needed] more".
-    it.fails("lint (after): 'Wow[^1]!![citation needed] more' does not split the '!!'", () => {
+    it("lint (after): 'Wow[^1]!![citation needed] more' does not split the '!!'", () => {
         const out = footnoteAfterPunctuation("Wow[^1]!![citation needed] more\n\n[^1]: a", "after");
         expect(out.split("\n")[0]).toBe("Wow!![^1][citation needed] more");
     });
