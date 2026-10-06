@@ -98,7 +98,7 @@ beforeEach(() => {
 describe("two blank lines between a copied text and its own definition", () => {
     const source = ["See[^1].", "", "", "[^1]: one"];
 
-    it.fails("a selection ending right after 'one' (no line break) pasted mid-line keeps the text inside the line", () => {
+    it("a selection ending right after 'one' (no line break) pasted mid-line keeps the text inside the line", () => {
         const clip = copy(source, { line: 0, ch: 0 }, { line: 3, ch: 9 });
         const back = paste(["dest abc def"], { line: 0, ch: 8 }, clip);
         expect(back.taken).toBe(true);
@@ -106,13 +106,13 @@ describe("two blank lines between a copied text and its own definition", () => {
         expect(back.lines, JSON.stringify({ clip, register: carryRegister() })).toEqual(["dest abcSee[^1]. def", "", "[^1]: one"]);
     });
 
-    it.fails("the register's text for that selection holds no line break", () => {
+    it("the register's text for that selection holds no line break", () => {
         copy(source, { line: 0, ch: 0 }, { line: 3, ch: 9 });
         // Today: "See[^1].\n"
         expect(carryRegister()?.body).toBe("See[^1].");
     });
 
-    it.fails("a line-wise selection ending at the start of the line after the definition, pasted at a line start, ends its own line once", () => {
+    it("a line-wise selection ending at the start of the line after the definition, pasted at a line start, ends its own line once", () => {
         const withTail = [...source, "tail"];
         const clip = copy(withTail, { line: 0, ch: 0 }, { line: 4, ch: 0 });
         const back = paste(["dest", "x"], { line: 1, ch: 0 }, clip);

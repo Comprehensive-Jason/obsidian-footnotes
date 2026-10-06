@@ -76,7 +76,7 @@ beforeEach(() => {
 });
 
 describe("the toast after pasting a copied lazy label", () => {
-    it.fails("copying a lazy label line and pasting it: the toast does not say the footnote it just added has no definition", () => {
+    it("copying a lazy label line and pasting it: the toast does not say the footnote it just added has no definition", () => {
         const source = editor(["Para.", "[^1]: one"], { line: 1, ch: 0 }, { line: 1, ch: 9 });
         const copied = clipboardEvent();
         handleCopy(fakePlugin(settings, source), copied as never);

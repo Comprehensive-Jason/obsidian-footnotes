@@ -90,7 +90,7 @@ beforeEach(() => {
 });
 
 describe("a selection starting at the end of a line keeps its leading line break", () => {
-    it.fails("copy a line break, '[^d]: two', and a line break from the end of '[^a]: one' and paste it over itself: 'Next para.' stays its own paragraph", () => {
+    it("copy a line break, '[^d]: two', and a line break from the end of '[^a]: one' and paste it over itself: 'Next para.' stays its own paragraph", () => {
         const note = ["Intro[^a].", "", "[^a]: one", "[^d]: two", "", "Next para."];
         const final = copyOverItself(note, { line: 2, ch: 9 }, { line: 4, ch: 0 });
         // Today: ["Intro[^a].", "", "[^a]: one", "Next para.", "", "[^d]: two"]

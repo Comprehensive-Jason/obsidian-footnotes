@@ -665,19 +665,44 @@ export function carriedLines(carried: readonly CarriedDefinition[]): string[] {
  *
  * That reading holds only for a text withCarriedText wrote. The copy's own
  * register splits the selection itself, before anything is appended
- * (`selection` true), and there the blank lines between two definitions
- * are the note's own spacing, never a line break of the selection's: read
- * as one, a selection ending right after "[^2]: two", in a note that
- * spaces its definitions by two blank lines, pasted mid-line split the
- * line it landed in (hunt 2026-10-06 cycle 4, cluster K2, pin
- * bug-own-copy-double-blank-definitions-split-line).
+ * (`selection`, the note it was selected in), and there the blank lines
+ * between two definitions are the note's own spacing, never a line break
+ * of the selection's: read as one, a selection ending right after "[^2]:
+ * two", in a note that spaces its definitions by two blank lines, pasted
+ * mid-line split the line it landed in (hunt 2026-10-06 cycle 4, cluster
+ * K2, pin bug-own-copy-double-blank-definitions-split-line).
+ *
+ * A selection is read in its note in two more ways (hunt 2026-10-06 cycle
+ * 5). Only a line the note reads as a definition label is one. Read on its
+ * own, a selection makes a definition of a lazy label, a label inside a
+ * "%%" comment, or "[^1]: to define" out of the middle of a sentence, and
+ * the register carried it off to the bottom of the note it was pasted in,
+ * leaving a comment unclosed or a sentence gutted (clusters X7 and X14,
+ * pins bug-register-reads-selection-alone and
+ * bug-lazy-label-toast-contradiction). And the blank lines in front of the
+ * first definition are the note's spacing too, every one of them, as
+ * between two definitions: the selection's text ended before them, so
+ * kept, they split the line a paste landed in (cluster X12, pin
+ * bug-register-double-blank-before-definitions). A selection's first line
+ * that is empty only because the selection starts at the end of a line is
+ * no blank line of the note but the selection's own line break, and stays
+ * in the body: dropped, a copy from the end of a definition pasted back
+ * over itself joined the next paragraph onto that definition (cluster
+ * X26, pin bug-register-drops-leading-line-break).
  */
-export function splitCarriedText(text: string, selection = false): { body: string; carried: CarriedDefinition[] } {
+export function splitCarriedText(text: string, selection?: SelectedIn): { body: string; carried: CarriedDefinition[] } {
     const lines = normalizeEol(text).text.split("\n");
     // the definitions at the top level of the text, the ones withCarriedText
     // appends, lifted as every carried block is (liftedBlocks), which takes
-    // off any indentation in front of a label
-    const blocks = readNote(lines).blocks;
+    // off any indentation in front of a label; of a selection, only those
+    // the note reads as definitions where they sit
+    const inNote = (block: Definition) => {
+        if (!selection) return true;
+        const line = selection.from.line + block.start;
+        const labelStart = block.labelStart + (block.start === 0 ? selection.from.ch : 0);
+        return selection.reading.definitions.some((definition) => definition.start === line && definition.labelStart === labelStart);
+    };
+    const blocks = readNote(lines).blocks.filter(inNote);
     const byEnd = new Map(blocks.map((block) => [block.end, block]));
     // `cut` is the first line of the trailing run of definitions, and
     // `end` the line the search for the next block up has reached
@@ -697,8 +722,21 @@ export function splitCarriedText(text: string, selection = false): { body: strin
     }
     if (cut === lines.length) return { body: text, carried: [] };
     const carried = liftedBlocks(lines, blocks.filter((block) => block.start >= cut));
-    const bodyEnd = cut > 0 && lines[cut - 1].trim() === "" ? cut - 1 : cut;
+    // the blank lines in front of the definitions that come off the body:
+    // the one withCarriedText put there, or, of a selection, every blank
+    // line of the note there; a selection's first line is a blank line of
+    // the note only when the selection starts at the start of that line
+    let bodyEnd = cut;
+    const blank = (i: number) => lines[i].trim() === "" && (i > 0 || selection === undefined || selection.from.ch === 0);
+    if (selection) while (bodyEnd > 0 && blank(bodyEnd - 1)) bodyEnd--;
+    else if (bodyEnd > 0 && blank(bodyEnd - 1)) bodyEnd--;
     return { body: [...lines.slice(0, bodyEnd), ...breaks, ...after].join("\n"), carried };
+}
+
+/** Where a selection split by splitCarriedText was made: the note's reading, and where the selection starts in it. */
+export interface SelectedIn {
+    reading: NoteReading;
+    from: EditorPosition;
 }
 
 /**

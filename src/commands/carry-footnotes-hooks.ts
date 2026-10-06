@@ -190,9 +190,11 @@ function remember(doc: Editor, from: EditorPosition, to: EditorPosition, { carri
     const selected = textBetween(doc, from, to);
     // a selection with no "[^" in it holds no definition, so it is not read
     // (a copy of plain prose stays cheap; pin bug-carry-plain-copy-scans-note);
-    // it is split as a selection, not as a clipboard text, so its blank lines
-    // between definitions stay the note's spacing (see splitCarriedText)
-    const own = selected.includes("[^") ? splitCarriedText(selected, true) : { body: selected, carried: [] };
+    // it is split as a selection of its note, not as a clipboard text, so
+    // only the lines the note reads as definitions are carried, and its
+    // blank lines in front of them stay the note's spacing (see
+    // splitCarriedText)
+    const own = selected.includes("[^") ? splitCarriedText(selected, { reading: readNote(docLines(doc)), from }) : { body: selected, carried: [] };
     register = { text: withCarriedText(selected, carried), body: own.body, carried: [...own.carried, ...carried], missing };
     return register;
 }
