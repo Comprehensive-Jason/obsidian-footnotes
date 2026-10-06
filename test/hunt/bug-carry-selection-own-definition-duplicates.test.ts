@@ -68,7 +68,7 @@ beforeEach(() => {
 });
 
 describe("copy a selection that holds its own definition, paste where the name clashes", () => {
-    it.fails("copy the whole note, paste into a note that already uses [^1]: the pasted footnote is renamed, not a duplicate [^1] definition", () => {
+    it("copy the whole note, paste into a note that already uses [^1]: the pasted footnote is renamed, not a duplicate [^1] definition", () => {
         const source = editor(["a[^1]", "", "[^1]: one"], { line: 0, ch: 0 }, { line: 2, ch: 9 });
         const copy = clipboardEvent();
         handleCopy(fakePlugin(on, source), copy as never);

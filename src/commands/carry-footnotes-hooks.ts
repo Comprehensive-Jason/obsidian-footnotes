@@ -61,8 +61,9 @@ import { planDefinitionAppend } from "./definition-append";
 export interface CarryRegister {
     /** the clipboard text as written: the body, then the carried blocks */
     text: string;
-    /** the selection alone */
+    /** the selection, less the definitions at its end, which are carried */
     body: string;
+    /** the definitions at the end of the selection, then the ones its references need from outside it */
     carried: CarriedDefinition[];
     missing: string[];
 }
@@ -166,10 +167,27 @@ function textBetween(doc: Editor, from: EditorPosition, to: EditorPosition): str
     return parts.join("\n");
 }
 
-/** Remember what the selection between `from` and `to` carries, as the register for the paste that follows. */
+/**
+ * Remember what the selection between `from` and `to` carries, as the
+ * register for the paste that follows.
+ *
+ * The register reads the selection the way a paste of its clipboard text
+ * from anywhere else is read (splitCarriedText): definitions at the end of
+ * the selection itself are carried too, merged and renamed to fit the
+ * destination like the ones the selection needs from outside it. The
+ * clipboard text is the same either way; only the paste reads it. A
+ * selection that held its own definition, such as a whole note copied
+ * with Ctrl+A, used to be pasted as it was, and where the destination
+ * already used the name, the note got a second definition of it, while
+ * the same text from another app was renamed (hunt 2026-10-02, pin
+ * bug-carry-selection-own-definition-duplicates).
+ */
 function remember(doc: Editor, from: EditorPosition, to: EditorPosition, { carried, missing }: CarriedDefinitions): CarryRegister {
-    const body = textBetween(doc, from, to);
-    register = { text: withCarriedText(body, carried), body, carried, missing };
+    const selected = textBetween(doc, from, to);
+    // a selection with no "[^" in it holds no definition, so it is not read
+    // (a copy of plain prose stays cheap; pin bug-carry-plain-copy-scans-note)
+    const own = selected.includes("[^") ? splitCarriedText(selected) : { body: selected, carried: [] };
+    register = { text: withCarriedText(selected, carried), body: own.body, carried: [...own.carried, ...carried], missing };
     return register;
 }
 
@@ -189,8 +207,9 @@ export function handleCopy(plugin: FootnotePlugin, event: ClipboardEvent): void 
 
 /** What a copy of the text between `from` and `to` puts in the clipboard, remembered for the paste that follows; null when the text needs no definition, and the editor's own copy is right. */
 function carriedCopyText(doc: Editor, from: EditorPosition, to: EditorPosition): string | null {
-    const entry = remember(doc, from, to, carriedDefinitions(doc.getValue(), from, to));
-    return entry.carried.length === 0 ? null : entry.text;
+    const needed = carriedDefinitions(doc.getValue(), from, to);
+    const entry = remember(doc, from, to, needed);
+    return needed.carried.length === 0 ? null : entry.text;
 }
 
 /**
@@ -226,7 +245,7 @@ function plannedCut(plugin: FootnotePlugin, doc: Editor, from: EditorPosition, t
     // 2026-09-25)
     const plan = planCut(before, from, to, (text) => withEmptySectionHeadingRemoved(plugin, text));
     const entry = remember(doc, from, to, plan);
-    if (entry.carried.length === 0) return null;
+    if (plan.carried.length === 0) return null;
     const make = () => {
         // the note as the plan reads it, written back as the smallest set of
         // edits in one transaction, and the caret where the selection was
