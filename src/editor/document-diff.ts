@@ -11,11 +11,11 @@
 // untouched text unchanged.
 //
 // How it works: lines that match at the start and at the end are skipped
-// first. What is left in the middle goes through a longest-common-
-// subsequence comparison on whole lines, and each run of lines that does
-// not match becomes one edit. A very large middle (millions of line pairs
-// to compare) falls back to one edit for the whole middle, so a giant note
-// never stalls the app.
+// first. What is left in the middle is compared line by line with Myers'
+// diff (unmatchedRuns), which keeps as many lines as it can, and each run
+// of lines that does not match becomes one edit. Two versions that differ
+// in thousands of lines fall back to one edit for the whole middle, so a
+// rewrite of a giant note never stalls the app.
 
 import { readNote } from "../parsing/note-reading";
 
@@ -26,8 +26,23 @@ export interface OffsetChange {
     text: string;
 }
 
-/** Above this many line pairs the middle is replaced as one edit instead of compared line by line. */
-const MaxComparedPairs = 4_000_000;
+/**
+ * Above this many differing lines (lines deleted plus lines inserted) a
+ * comparison stops and replaces its stretch as one edit, so two notes that
+ * share almost nothing never stall the app. At the cap a comparison of the
+ * 22,400-line speed-test note took about a tenth of a second (the speed
+ * brief, 2026-10-05). A lint changes far fewer lines than this: it rewrites
+ * the lines a renumbering touches and moves the definitions it gathers.
+ */
+const MaxDifferences = 2_000;
+
+/** A run of lines that do not match: lines [aStart, aEnd) of the one side stand where lines [bStart, bEnd) of the other do. */
+interface Run {
+    aStart: number;
+    aEnd: number;
+    bStart: number;
+    bEnd: number;
+}
 
 export function lineDiffChanges(before: string, after: string): OffsetChange[] {
     if (before === after) return [];
@@ -43,10 +58,16 @@ export function lineDiffChanges(before: string, after: string): OffsetChange[] {
     }
     const middleA = a.slice(head, aTail);
     const middleB = b.slice(head, bTail);
-    const hunks =
-        middleA.length * middleB.length <= MaxComparedPairs
-            ? unmatchedRuns(middleA, middleB)
-            : [{ aStart: 0, aEnd: middleA.length, bStart: 0, bEnd: middleB.length }];
+    // Lines are lined up by their text without footnote references, and a
+    // pair lined up that way whose references differ is then rewritten in
+    // place. A lint that renumbers rewrites every reference below the
+    // first one it changes: compared as they stand, each such line counted
+    // as one line deleted and one inserted, so on a long note the
+    // comparison had thousands of differences to find and took as long as
+    // the rest of the lint (the speed brief, 2026-10-05). Lined up without
+    // their references, they cost nothing, and only the lines the lint
+    // really moved, added, or removed are left to find.
+    const hunks = withRewrittenLines(unmatchedRuns(middleA.map(withoutReferences), middleB.map(withoutReferences)), middleA, middleB);
 
     // where each line of `before` starts
     const starts: number[] = [0];
@@ -116,52 +137,136 @@ function trimCommonEdges(before: string, change: OffsetChange): OffsetChange {
     };
 }
 
-/** The runs of lines in `a` and `b` that do not match, from a longest-common-subsequence comparison; each run is one edit. */
-function unmatchedRuns(
-    a: string[],
-    b: string[],
-): { aStart: number; aEnd: number; bStart: number; bEnd: number }[] {
+/**
+ * The runs of lines in `a` and `b` that do not match; each run is one
+ * edit. They come from Myers' diff (Eugene Myers, "An O(ND) Difference
+ * Algorithm and Its Variations", 1986), which finds the fewest lines to
+ * delete and insert, and so the most lines kept, as the table it replaced
+ * did. Its cost grows with the length of the stretch times the number of
+ * differing lines, where the table's grew with the length of one side
+ * times the other: on a 5,600-line note the line diff after a press took
+ * 71 ms and takes 6, and on long notes the table hit its size cap and
+ * gave up (the speed brief, 2026-10-05; hunt 2026-10-05, cluster D3, pin
+ * bug-long-note-diff-cap). Past MaxDifferences the whole stretch is one
+ * run.
+ *
+ * How it works, in short: picture a grid with the lines of `a` down one
+ * side and those of `b` along the other. A path from the top corner to the
+ * bottom one steps right (delete a line of `a`), down (insert a line of
+ * `b`), or diagonally where the two lines match, for free. Round d finds,
+ * for every diagonal the path can have reached with d paid steps, how far
+ * along it the path gets, always sliding down free diagonal steps as far as
+ * they go. The first round that reaches the far corner has the fewest paid
+ * steps. Each round's answers are kept, so the path can then be walked
+ * back from the corner to read off which lines matched.
+ */
+function unmatchedRuns(a: readonly string[], b: readonly string[]): Run[] {
     const n = a.length;
     const m = b.length;
-    if (n === 0 || m === 0) return n === 0 && m === 0 ? [] : [{ aStart: 0, aEnd: n, bStart: 0, bEnd: m }];
-    // lcs[i][j] = length of the longest common subsequence of a[i..] and b[j..]
-    const width = m + 1;
-    const lcs = new Int32Array((n + 1) * width);
-    for (let i = n - 1; i >= 0; i--) {
-        for (let j = m - 1; j >= 0; j--) {
-            lcs[i * width + j] =
-                a[i] === b[j]
-                    ? lcs[(i + 1) * width + j + 1] + 1
-                    : Math.max(lcs[(i + 1) * width + j], lcs[i * width + j + 1]);
+    const whole: Run[] = n === 0 && m === 0 ? [] : [{ aStart: 0, aEnd: n, bStart: 0, bEnd: m }];
+    if (n === 0 || m === 0) return whole;
+    const most = Math.min(n + m, MaxDifferences);
+    // furthest[shift + k] is how far down `a` the path on diagonal k
+    // (lines of `a` taken minus lines of `b` taken) has got; shift keeps
+    // the index from going below zero
+    const shift = most + 1;
+    const furthest = new Int32Array(2 * most + 3);
+    // rounds[d] holds furthest as it stood before round d, for the
+    // diagonals -d - 1 to d + 1, the only ones round d reads
+    const rounds: Int32Array[] = [];
+    let cost = -1;
+    for (let d = 0; d <= most && cost === -1; d++) {
+        rounds.push(furthest.slice(shift - d - 1, shift + d + 2));
+        for (let k = -d; k <= d; k += 2) {
+            // arrive by inserting a line of `b` (from diagonal k + 1) or by
+            // deleting a line of `a` (from diagonal k - 1), whichever got
+            // further down `a`
+            let x = k === -d || (k !== d && furthest[shift + k - 1] < furthest[shift + k + 1]) ? furthest[shift + k + 1] : furthest[shift + k - 1] + 1;
+            let y = x - k;
+            while (x < n && y < m && a[x] === b[y]) {
+                x++;
+                y++;
+            }
+            furthest[shift + k] = x;
+            if (x >= n && y >= m) {
+                cost = d;
+                break;
+            }
         }
     }
-    const runs: { aStart: number; aEnd: number; bStart: number; bEnd: number }[] = [];
+    if (cost === -1) return whole;
+    // walk back from the far corner, noting each matched pair of lines
+    const matched: [number, number][] = [];
+    let x = n;
+    let y = m;
+    for (let d = cost; d > 0; d--) {
+        const before = rounds[d];
+        const at = (diagonal: number) => before[diagonal + d + 1];
+        const k = x - y;
+        const fromK = k === -d || (k !== d && at(k - 1) < at(k + 1)) ? k + 1 : k - 1;
+        const fromX = at(fromK);
+        // the free diagonal steps of this round start just past its paid step
+        const startX = fromK === k + 1 ? fromX : fromX + 1;
+        while (x > startX) {
+            x--;
+            y--;
+            matched.push([x, y]);
+        }
+        x = fromX;
+        y = fromX - fromK;
+    }
+    while (x > 0 && y > 0) {
+        x--;
+        y--;
+        matched.push([x, y]);
+    }
+    matched.reverse();
+    const runs: Run[] = [];
     let i = 0;
     let j = 0;
-    let open: { aStart: number; aEnd: number; bStart: number; bEnd: number } | null = null;
-    const closeRun = () => {
-        if (open) runs.push(open);
-        open = null;
-    };
-    while (i < n || j < m) {
-        if (i < n && j < m && a[i] === b[j]) {
-            closeRun();
-            i++;
-            j++;
-            continue;
-        }
-        if (!open) open = { aStart: i, aEnd: i, bStart: j, bEnd: j };
-        // take from whichever side keeps the longer common subsequence ahead
-        if (j >= m || (i < n && lcs[(i + 1) * width + j] >= lcs[i * width + j + 1])) {
-            i++;
-            open.aEnd = i;
-        } else {
-            j++;
-            open.bEnd = j;
-        }
+    for (const [mi, mj] of [...matched, [n, m] as [number, number]]) {
+        if (mi > i || mj > j) runs.push({ aStart: i, aEnd: mi, bStart: j, bEnd: mj });
+        i = mi + 1;
+        j = mj + 1;
     }
-    closeRun();
     return runs;
+}
+
+/** `line` with every "[^...]" taken out, footnote references and labels alike. */
+function withoutReferences(line: string): string {
+    // most lines hold none, and a search for "[^" is quicker than the pattern
+    return line.includes("[^") ? line.replace(/\[\^[^\]]*\]/g, "") : line;
+}
+
+/**
+ * `runs` (from lines `a` and `b` compared without their references) with
+ * every pair of lines they leave matched whose full text differs added as
+ * a run of its own, one line for one line, and runs that touch merged
+ * into one, so each run is still one edit.
+ */
+function withRewrittenLines(runs: readonly Run[], a: readonly string[], b: readonly string[]): Run[] {
+    const out: Run[] = [];
+    const add = (run: Run) => {
+        const last = out.at(-1);
+        if (last !== undefined && last.aEnd === run.aStart && last.bEnd === run.bStart) {
+            last.aEnd = run.aEnd;
+            last.bEnd = run.bEnd;
+        } else {
+            out.push({ ...run });
+        }
+    };
+    let i = 0;
+    let j = 0;
+    for (const run of [...runs, { aStart: a.length, aEnd: a.length, bStart: b.length, bEnd: b.length }]) {
+        // the matched lines before this run, which pair up one for one
+        for (; i < run.aStart; i++, j++) {
+            if (a[i] !== b[j]) add({ aStart: i, aEnd: i + 1, bStart: j, bEnd: j + 1 });
+        }
+        if (run.aEnd > run.aStart || run.bEnd > run.bStart) add(run);
+        i = run.aEnd;
+        j = run.bEnd;
+    }
+    return out;
 }
 
 /** A fold as Obsidian's view reports it: the heading (or list item) line and the last folded line, both 0-based. */
@@ -336,12 +441,7 @@ function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
     const pairs: [number, number][] = [];
     let ai = 0;
     let bi = 0;
-    // a note with thousands of headings on both sides is lined up without
-    // them, as a very large middle is compared as one edit
-    const runs =
-        anchorsA.keys.length * anchorsB.keys.length <= MaxComparedPairs
-            ? unmatchedRuns(anchorsA.keys, anchorsB.keys)
-            : [{ aStart: 0, aEnd: anchorsA.keys.length, bStart: 0, bEnd: anchorsB.keys.length }];
+    const runs = unmatchedRuns(anchorsA.keys, anchorsB.keys);
     for (const run of [...runs, { aStart: anchorsA.keys.length, bStart: anchorsB.keys.length, aEnd: 0, bEnd: 0 }]) {
         // the headings between one unmatched run and the next match
         while (ai < run.aStart && bi < run.bStart) pairs.push([anchorsA.lines[ai++], anchorsB.lines[bi++]]);
@@ -393,9 +493,8 @@ function headingKeys(lines: string[]): { lines: number[]; keys: string[] } {
  * line that was deleted outright ends on the line before the deletion.
  */
 function alignRun(a: string[], b: string[]): { from: number; to: number }[] {
-    const strip = (line: string) => line.replace(/\[\^[^\]]*\]/g, "");
-    const na = a.map(strip);
-    const nb = b.map(strip);
+    const na = a.map(withoutReferences);
+    const nb = b.map(withoutReferences);
     // The lines that match at the end are taken first, then those at the
     // start. The lint adds lines at the bottom of the note, so a stretch
     // that only grew grew at its end: its last line, often the note's
@@ -409,12 +508,7 @@ function alignRun(a: string[], b: string[]): { from: number; to: number }[] {
     }
     let head = 0;
     while (head < aTail && head < bTail && na[head] === nb[head]) head++;
-    const middleA = na.slice(head, aTail);
-    const middleB = nb.slice(head, bTail);
-    const hunks =
-        middleA.length * middleB.length <= MaxComparedPairs
-            ? unmatchedRuns(middleA, middleB)
-            : [{ aStart: 0, aEnd: middleA.length, bStart: 0, bEnd: middleB.length }];
+    const hunks = unmatchedRuns(na.slice(head, aTail), nb.slice(head, bTail));
     const map: { from: number; to: number }[] = [];
     let bi = 0;
     const matchedUpTo = (aEnd: number) => {

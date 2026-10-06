@@ -46,18 +46,18 @@ function caretAfter(before: string, after: string, line: number, ch: number) {
 }
 
 describe("a long note: the size cap turns the whole middle into one edit (lineDiffChanges)", () => {
-    it.fails("a reindex at the top and the definitions at the bottom of a 2,100-line note leave a caret in the middle alone", () => {
+    it("a reindex at the top and the definitions at the bottom of a 2,100-line note leave a caret in the middle alone", () => {
         const body = Array.from({ length: 2100 }, (_, i) => `Paragraph line ${String(i)} of a long draft.`);
         const before = ["Second[^2] then first.[^1]", "", ...body, "", "[^1]: one", "[^2]: two"].join("\n");
         const after = lintFootnotes(before, {});
         expect(after.split("\n")[0]).toBe("Second[^1] then first.[^2]");
-        // Today: { line: 0, ch: 8, text: "Second[^1] then first.[^2]" }.
+        // Before the fix: { line: 0, ch: 8, text: "Second[^1] then first.[^2]" }.
         expect(caretAfter(before, after, 1000, 10)).toEqual({ line: 1000, ch: 10, text: body[998] });
     });
 });
 
 describe("a long section: the size cap pairs its lines by position (alignRun)", () => {
-    it.fails("a folded list item 1,000 lines into a 2,100-line section keeps its fold after the default lint", () => {
+    it("a folded list item 1,000 lines into a 2,100-line section keeps its fold after the default lint", () => {
         const body: string[] = [];
         for (let i = 0; i < 1050; i++) body.push(`- item ${String(i)}`, `  - child ${String(i)}`);
         const before = ["# Big", "Text.[^1]", "", "[^1]: one", "", ...body, "", "tail"].join("\n");
@@ -67,13 +67,13 @@ describe("a long section: the size cap pairs its lines by position (alignRun)", 
         const item = 5 + 2 * 500; // "- item 500", folded over its child
         expect(before.split("\n")[item]).toBe("- item 500");
         const want = afterLines.indexOf("- item 500");
-        // Today: [{ from: 1005, to: 1006 }], two lines below the item.
+        // Before the fix: [{ from: 1005, to: 1006 }], two lines below the item.
         expect(mapFoldLines([{ from: item, to: item + 1 }], lineDiffChanges(before, after), before)).toEqual([{ from: want, to: want + 1 }]);
     });
 });
 
 describe("a note with very many headings: the heading alignment is skipped (alignLines)", () => {
-    it.fails("2,100 sections, a definition moved out of the first one: the last section's fold stays on its heading", () => {
+    it("2,100 sections, a definition moved out of the first one: the last section's fold stays on its heading", () => {
         const lines = ["# S0", "Text.[^1]", "", "[^1]: one", ""];
         for (let k = 1; k <= 2100; k++) lines.push(`# S${String(k)}`, `Body ${String(k)}.`, "");
         const before = lines.join("\n");
@@ -82,7 +82,7 @@ describe("a note with very many headings: the heading alignment is skipped (alig
         const from = lines.indexOf("# S2100");
         const want = afterLines.indexOf("# S2100");
         expect(want).toBe(from - 2);
-        // Today: [{ from: 6302, to: 6303 }], two lines below the heading.
+        // Before the fix: [{ from: 6302, to: 6303 }], two lines below the heading.
         expect(mapFoldLines([{ from, to: from + 1 }], lineDiffChanges(before, after), before)).toEqual([{ from: want, to: want + 1 }]);
     }, 60_000);
 });
