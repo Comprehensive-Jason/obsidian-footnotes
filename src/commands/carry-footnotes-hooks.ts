@@ -482,7 +482,11 @@ function landCarriedText(
 function lintAfterPaste(plugin: FootnotePlugin, doc: Editor): void {
     if (lintAfterFootnoteCreation(plugin, doc, false) !== null) return;
     if (!plugin.settings.lintOnFootnoteCreation) {
-        noticeLintAlerts(plugin, doc.getValue());
+        // no lint ran, so the orphan alerts speak even while their delete
+        // toggles are on: a paste over the only reference to a footnote
+        // leaves its definition behind, and nothing else would say so
+        // (found while fixing, 2026-10-06, pin bug-paste-orphan-unreported)
+        noticeLintAlerts(plugin, doc.getValue(), false);
         return;
     }
     if (lintRulesAllDisabled(plugin)) return;
