@@ -71,7 +71,8 @@ export function findLineRunEnd(
  * two of the same depth left next to each other become one, and one left
  * at the end of its quote goes (hunt 2026-10-02, round 2, cluster D13, pin
  * bug-delete-quoted-definition-separator). Neither changes how the quote
- * reads.
+ * reads. A line holding only ">" with no quote line above it is no blank
+ * line of a quote: it is a whole quote of its own, empty, and it stays.
  */
 export function removeLineRanges(
     lines: string[],
@@ -105,7 +106,7 @@ export function removeLineRanges(
         }
         // a blank quote line the cut left at the end of its quote, with
         // the quote ending in a blank line or the end of the note, goes
-        if (mergeBlanks && lines[i] === "" && out.length > 0 && blankQuoteLine(out[out.length - 1])) {
+        if (mergeBlanks && lines[i] === "" && endsInQuoteBlankLine(out)) {
             out.pop();
         }
         // A cut must not drop a paragraph straight onto a "---" or "==="
@@ -144,7 +145,7 @@ export function removeLineRanges(
         out.push(lines[i]);
     }
     if (cutReachesEnd) {
-        while (out.length > 0 && (out[out.length - 1] === "" || blankQuoteLine(out[out.length - 1]))) out.pop();
+        while (out.length > 0 && (out[out.length - 1] === "" || endsInQuoteBlankLine(out))) out.pop();
     }
     return out;
 }
@@ -152,6 +153,20 @@ export function removeLineRanges(
 /** Whether `line` is a blank line of a quote: quote markers (">") and spaces, nothing else. */
 export function blankQuoteLine(line: string): boolean {
     return /^ {0,3}>[ >]*$/.test(line) && line.trimEnd().endsWith(">");
+}
+
+/**
+ * Whether `lines` ends in a blank line of a quote that has more lines above
+ * it: a blank quote line right under another quote line. A lone ">" under
+ * a blank line, or at the top of the note, is a whole empty quote, which
+ * Obsidian draws as an empty quote box, so a cut never takes it. It was
+ * taken when a cut reached the end of the note, and a note ending in ">"
+ * after its definitions lost the ">" on the second lint, after the first
+ * had moved the definitions below it (hunt 2026-10-06, cycle 4, pin
+ * bug-lone-quote-marker-deleted).
+ */
+function endsInQuoteBlankLine(lines: readonly string[]): boolean {
+    return lines.length > 1 && blankQuoteLine(lines[lines.length - 1]) && /^ {0,3}>/.test(lines[lines.length - 2]);
 }
 
 /** Whether two blank quote lines are of the same quote depth (the same number of ">"). */

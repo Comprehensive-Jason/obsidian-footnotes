@@ -32,14 +32,14 @@ import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-fo
 describe("a lone '>' line next to the definitions", () => {
     // Now: the first lint gives "Text[^1]", "", ">", "", "[^1]: def"; the
     // second deletes the ">".
-    it.fails("the default lint is idempotent on a note ending in a lone '>'", () => {
+    it("the default lint is idempotent on a note ending in a lone '>'", () => {
         const doc = "Text[^1]\n\n[^1]: def\n\n>";
         const once = lintFootnotes(doc, {});
         expect(lintFootnotes(once, {})).toBe(once);
     });
 
     // Now: "Text[^1]", "", "[^1]: def", the ">" gone.
-    it.fails("move-to-bottom keeps a lone '>' line when the definitions are already at the bottom", () => {
+    it("move-to-bottom keeps a lone '>' line when the definitions are already at the bottom", () => {
         const doc = "Text[^1]\n\n>\n\n[^1]: def";
         expect(moveFootnoteDefinitionsToBottom(doc, "").split("\n")).toContain(">");
     });
