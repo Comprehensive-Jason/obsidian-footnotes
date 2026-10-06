@@ -43,6 +43,8 @@ interface Run {
     aEnd: number;
     bStart: number;
     bEnd: number;
+    /** Set on a line the lint rewrote in place (withRewrittenLines), one line for one line. */
+    rewritten?: true;
 }
 
 export function lineDiffChanges(before: string, after: string): OffsetChange[] {
@@ -81,7 +83,11 @@ export function lineDiffChanges(before: string, after: string): OffsetChange[] {
         const s = head + hunk.aStart;
         const e = head + hunk.aEnd;
         const inserted = b.slice(head + hunk.bStart, head + hunk.bEnd);
-        if (e < a.length) {
+        if (hunk.rewritten) {
+            // a line rewritten in place: an edit for each stretch of it that
+            // changed (rewrittenLineChanges)
+            changes.push(...rewrittenLineChanges(starts[s], a[s], inserted[0]));
+        } else if (e < a.length) {
             if (s === e && s > 0) {
                 // lines inserted between line s - 1 and line s go in at the
                 // END of line s - 1, each after a newline of its own. The
@@ -122,6 +128,63 @@ export function lineDiffChanges(before: string, after: string): OffsetChange[] {
     // line then keeps its column, since only the differing characters are
     // rewritten (Jason's report: the caret went to the line's start).
     return changes.map((change) => trimCommonEdges(before, change));
+}
+
+/**
+ * The edits that turn line `before`, which starts at offset `start` of the
+ * note, into `after`, the same line rewritten in place by the lint: one for
+ * each stretch that changed. The two lines are compared as runs of tokens,
+ * each footnote ("[^...]" or "^[...]") one token and every other character
+ * one of its own, with Myers' diff (unmatchedRuns). Two stretches with no
+ * letter or digit between them are one edit, so a footnote the punctuation
+ * rule moved past a full stop ("[^1]." to ".[^1]") is one edit, as a
+ * renamed footnote is.
+ *
+ * Written as one edit, from the first changed character to the last, a
+ * line with two references the lint renumbered ("A[^1] new[^3] Bravo[^2]
+ * end." to "A[^1] new[^2] Bravo[^3] end.") was replaced from the first
+ * changed digit to the second, and the editor put a caret anywhere in
+ * between, such as right after the reference just pressed, at the start of
+ * that edit, inside the first reference (hunt 2026-10-06, cycle 5, cluster
+ * X20, pin bug-caret-two-renumbers-one-line).
+ */
+function rewrittenLineChanges(start: number, before: string, after: string): OffsetChange[] {
+    const tokensA = lineTokens(before);
+    const tokensB = lineTokens(after);
+    // where each token of `before` starts in the line
+    const at: number[] = [0];
+    for (const token of tokensA) at.push(at[at.length - 1] + token.length);
+    const runs: Run[] = [];
+    for (const run of unmatchedRuns(tokensA, tokensB)) {
+        const last = runs.at(-1);
+        if (last !== undefined && !/[\p{L}\p{N}]/u.test(tokensA.slice(last.aEnd, run.aStart).join(""))) {
+            last.aEnd = run.aEnd;
+            last.bEnd = run.bEnd;
+        } else {
+            runs.push({ ...run });
+        }
+    }
+    return runs.map((run) => ({
+        from: start + at[run.aStart],
+        to: start + at[run.aEnd],
+        text: tokensB.slice(run.bStart, run.bEnd).join(""),
+    }));
+}
+
+/** `line` as tokens for rewrittenLineChanges: every "[^...]" and every inline footnote "^[...]" (as withoutFootnotes finds them) one token, and every other character one token. */
+function lineTokens(line: string): string[] {
+    const tokens: string[] = [];
+    let i = 0;
+    while (i < line.length) {
+        let close = -1;
+        if (line.startsWith("[^", i)) close = line.indexOf("]", i + 2);
+        else if (line.startsWith("^[", i)) close = balancedClose(line, i + 1);
+        // a character outside the basic plane is two code units, kept together
+        const next = close !== -1 ? close + 1 : i + String.fromCodePoint(line.codePointAt(i) ?? 0).length;
+        tokens.push(line.slice(i, next));
+        i = next;
+    }
+    return tokens;
 }
 
 /** `change` with the characters it shares with the text it replaces removed from both ends. */
@@ -340,7 +403,7 @@ function withRewrittenLines(runs: readonly Run[], a: readonly string[], b: reado
     for (const run of [...runs, { aStart: a.length, aEnd: a.length, bStart: b.length, bEnd: b.length }]) {
         // the matched lines before this run, which pair up one for one
         for (; i < run.aStart; i++, j++) {
-            if (a[i] !== b[j]) out.push({ aStart: i, aEnd: i + 1, bStart: j, bEnd: j + 1 });
+            if (a[i] !== b[j]) out.push({ aStart: i, aEnd: i + 1, bStart: j, bEnd: j + 1, rewritten: true });
         }
         if (run.aEnd > run.aStart || run.bEnd > run.bStart) out.push(run);
         i = run.aEnd;

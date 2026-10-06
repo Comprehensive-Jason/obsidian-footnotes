@@ -67,14 +67,14 @@ describe("a caret between two references the lint renumbers on one line", () => 
     });
 
     // Now: the caret goes to column 11, inside the reference just pressed.
-    it.fails("a caret right after the reference just pressed stays after it", () => {
+    it("a caret right after the reference just pressed stays after it", () => {
         const after = lintFootnotes(before, {});
         expect(mapCaret(before, after, 0, "A[^1] new[^3]".length)).toEqual({ line: 0, ch: "A[^1] new[^2]".length });
     });
 
     // Now: the caret goes to column 11, inside the first reference
     // ("new[^|2]").
-    it.fails("a caret inside the word between the two stays inside that word", () => {
+    it("a caret inside the word between the two stays inside that word", () => {
         const after = lintFootnotes(before, {});
         expect(mapCaret(before, after, 0, "A[^1] new[^3] Bra".length)).toEqual({ line: 0, ch: "A[^1] new[^2] Bra".length });
     });
