@@ -49,13 +49,19 @@ describe("a parenthesised run that is not a link destination", () => {
         expect(liveReferences("see [t](a b[^1])\n\n[^1]: one")).toEqual(["0:1"]);
     });
 
-    it.fails("a non-link '[t](a b[^1])' keeps its reference bound to the same text after the default lint", () => {
+    it("a non-link '[t](a b[^1])' keeps its reference bound to the same text after the default lint", () => {
         const doc = "see [t](a b[^1]) and x[^2]\n\n[^2]: two\n\n[^1]: one";
         const out = lintFootnotes(doc);
-        // Today: "see [t](a b[^1]) and x[^1]\n\n[^1]: two\n[^2]: one".
-        // Whatever the numbering, the reference inside "(a b...)" must still
-        // name the definition whose text is "one".
-        const ref = /\(a b\[\^([^\]]+)\]\)/.exec(out)?.[1];
+        // Once: "see [t](a b[^1]) and x[^1]\n\n[^1]: two\n[^2]: one".
+        // Whatever the numbering, the reference after "a b" must still name
+        // the definition whose text is "one". Today the default lint also
+        // moves it past the ")" (footnotes go after punctuation), giving
+        // "see [t](a b)[^1] and x[^2]", so the search allows the ")"
+        // before it; it used to look only inside the parentheses, found
+        // nothing, and kept the test failing after the bug was gone (Group
+        // L, 2026-10-06).
+        const ref = /\(a b\)?\[\^([^\]]+)\]/.exec(out)?.[1];
+        expect(ref).toBeDefined();
         expect(out).toContain(`[^${ref}]: one`);
     });
 });
