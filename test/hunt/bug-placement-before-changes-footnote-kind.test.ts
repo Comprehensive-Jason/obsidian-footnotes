@@ -38,14 +38,14 @@ function kinds(text: string): { references: string[]; inline: number } {
 
 describe("before: a move never changes a footnote's kind", () => {
     // Before the fix: "e = mc^[^1]. next", an inline footnote "^[^1]".
-    it.fails("e = mc^.[^1] keeps [^1] a reference", () => {
+    it("e = mc^.[^1] keeps [^1] a reference", () => {
         const doc = "e = mc^.[^1] next\n\n[^1]: a";
         const out = footnoteAfterPunctuation(doc, "before");
         expect(kinds(out)).toEqual({ references: ["1"], inline: 0 });
     });
 
     // Before the fix: "a [^[note]. b", a reference named "[note".
-    it.fails("a [.^[note] b keeps the inline footnote", () => {
+    it("a [.^[note] b keeps the inline footnote", () => {
         const out = footnoteAfterPunctuation("a [.^[note] b", "before");
         expect(kinds(out)).toEqual({ references: [], inline: 1 });
     });

@@ -260,15 +260,23 @@ export function footnoteAfterPunctuation(markdown: string, placement: FootnotePl
         // on it made only if the line still holds them all after it. The
         // lint's next rule reads the same note, so the check reads nothing
         // the lint would not read anyway.
-        const footnotesOn = (of: NoteReading, i: number) => of.referencesOn(i).length + of.inlineNotesOn(i).length;
+        //
+        // The two kinds are counted apart, since a move can also turn one
+        // into the other and keep the total: under "before", "mc^.[^1]"
+        // became "mc^[^1].", an inline footnote "^[^1]" in place of the
+        // reference, and "[.^[note]" became "[^[note].", a reference named
+        // "[note" in place of the inline footnote (hunt 2026-10-06, cycle 3,
+        // pin bug-placement-before-changes-footnote-kind).
+        const keepsFootnotes = (of: NoteReading, i: number) =>
+            of.referencesOn(i).length >= reading.referencesOn(i).length && of.inlineNotesOn(i).length >= reading.inlineNotesOn(i).length;
         if (result.some((line, i) => line !== lines[i])) {
             const after = readNote(result);
             for (let i = 0; i < result.length; i++) {
-                if (result[i] === lines[i] || footnotesOn(after, i) >= footnotesOn(reading, i)) continue;
+                if (result[i] === lines[i] || keepsFootnotes(after, i)) continue;
                 result[i] = rewriteLine(i, (line) => {
                     const trial = [...result];
                     trial[i] = line;
-                    return footnotesOn(readNote(trial), i) >= footnotesOn(reading, i);
+                    return keepsFootnotes(readNote(trial), i);
                 });
             }
         }
