@@ -422,6 +422,11 @@ function linkDefinitionCount(reading: NoteReading): number {
     return reading.lineBlocks.filter((blocks) => /(?:^| )\^definition(?: |$)/.test(blocks)).length;
 }
 
+/** Whether `line` belongs to a link reference definition "[ref]: http://u": its label's line, or a line its address or title runs on to, as the reading marks its blocks. */
+export function onLinkDefinition(reading: NoteReading, line: number): boolean {
+    return /(?:^| )\^?definition(?: |$)/.test(reading.lineBlocks[line] ?? "");
+}
+
 /**
  * The shared born-dead verdict for any insertion that comes with a
  * definition: the single-caret insert, the multi-caret press, and the

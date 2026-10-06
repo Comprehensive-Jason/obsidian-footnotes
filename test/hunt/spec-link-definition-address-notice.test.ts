@@ -6,6 +6,14 @@ import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 
+// Settled 2026-10-05 (Jason's triage decision Q4): a press inside a link
+// reference definition's address or title, or right after its label when
+// the address is on the next line, refuses with the link notice. The
+// protected-caret guard now names the link when the protected text at the
+// caret belongs to a link reference definition (warnProtectedCaretIfInside
+// in src/commands/press-guards.ts). What follows is the question as the
+// hunt put it.
+//
 // spec question: which notice should a press inside a link reference
 // definition's address or title give?
 //
@@ -53,11 +61,11 @@ describe("a press inside a link reference definition's address or title", () => 
         ["numbered key in the title", ["see [x][ref] now", "", '[ref]: http://u "Title here"'], 18, insertAutonumFootnote],
         ["numbered key after the label of one whose address is on the next line", ["see [x][ref] now", "", "[ref]:", "http://u"], 6, insertAutonumFootnote],
     ] as [string, string[], number, typeof insertAutonumFootnote][]) {
-        it.fails(`${where}: refuses with the link notice`, async () => {
+        it(`${where}: refuses with the link notice`, async () => {
             const doc = fakeEditor([...lines], { cursor: { line: 2, ch }, edits: true, wholeDoc: true, words: true });
             await key(fakePlugin(Settings, doc));
             expect(doc.lines).toEqual(lines);
-            // Today: the protected-text notice.
+            // Before the fix: the protected-text notice.
             expect(messages()).toEqual([InsideLinkNotice]);
         });
     }

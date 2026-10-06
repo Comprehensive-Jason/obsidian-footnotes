@@ -9,6 +9,7 @@ import {
 } from "./inline-footnotes";
 import {
     caretInsideMaskedSpan,
+    onLinkDefinition,
     ProtectedCreationNotice,
 } from "../editor/insertion-liveness";
 import { DocContext, docLines, insideDefinition } from "../editor/doc-context";
@@ -22,7 +23,7 @@ import {
     tableRowCellSpans,
 } from "../editor/table-cursor";
 
-import { BlockSyntaxNotice, NestedFootnoteNotice, NoFootnoteCreated, showNotice } from "../editor/notice";
+import { BlockSyntaxNotice, InsideLinkNotice, NestedFootnoteNotice, NoFootnoteCreated, showNotice } from "../editor/notice";
 // The press guards. A footnote key has been pressed: does anything OTHER
 // than creation own this press? An empty placeholder gets a warning, a
 // filled inline footnote hops the caret out of itself, and protected text,
@@ -138,7 +139,15 @@ export function warnProtectedCaretIfInside(
             );
     }
     if (!inside) return false;
-    showNotice(ProtectedCreationNotice, 8000);
+    // The address and title of a link reference definition ("[ref]:
+    // http://u "Title"") are protected text too, but what a press there
+    // would break is a link, so it gets the link notice, as a press on the
+    // definition's label does through the "link" verdict
+    // (pressLineVerdict). A caret after the label of one whose address is
+    // on the next line is inside it as well (Jason's triage decision Q4,
+    // 2026-10-05; hunt 2026-10-05, round 2, pin
+    // spec-link-definition-address-notice).
+    showNotice(!cell && onLinkDefinition(ctx.reading(), cursorPosition.line) ? InsideLinkNotice : ProtectedCreationNotice, 8000);
     return true;
 }
 
