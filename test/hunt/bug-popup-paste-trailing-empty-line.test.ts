@@ -3,108 +3,46 @@ import { MarkdownView } from "obsidian";
 import type { EditorPosition } from "obsidian";
 
 import type FootnotePlugin from "../../src/main";
-import { fakeEditor, type FakeEditor } from "../helpers/fake-editor";
-import { fakePlugin } from "../helpers/fake-plugin";
-import { resetNotices } from "../helpers/notices";
 import { handlePaste, resetCarryRegister } from "../../src/commands/carry-footnotes-hooks";
 import { dismissFootnotePopup, openFootnotePopup, settleFootnotePopupWithFeedback, toggleCloseFootnotePopup } from "../../src/commands/footnote-popup";
+import { fakeEditor, type FakeEditor } from "../helpers/fake-editor";
+import { resetNotices } from "../helpers/notices";
 
-// spec question: should a paste that carries footnotes be allowed to land
-// inside another footnote, with the caret in a definition's body or
-// inside an inline footnote?
+// BUG (wrong output): a carried paste into the footnote popup whose text
+// ends in an empty line is left to the editor, and the pasted definition
+// goes into the footnote's own text.
 //
-// What it does now: the paste is taken over as anywhere else. The pasted
-// reference lands inside the other footnote, so one footnote is nested in
-// another, and its definition is added at the bottom as usual. Inside an
-// inline footnote ("^[inline ]") this happens with no word at all.
-// What a user might expect: the plugin prevents nesting everywhere else
-// (ADR 0001), so either the paste is refused with a toast, or the text
-// lands without the footnote machinery, or it lands and lint flags it.
-// Why it is a question and not a bug: ADR 0001 covers what the plugin
-// creates, and a paste is the user's own text arriving. The ADR also says
-// hand-typed nesting is "surfaced by lint, never" destroyed, so landing it
-// and leaving lint to speak is one defensible reading. Which way pastes go
-// is Jason's call.
+// What the user would see: the note reads "Mine[^1] and more[^2]." with
+// "[^1]: my own source", and [^2]'s definition is "first" with an empty
+// line under it (the user pressed Enter at the end of it in the popup).
+// With the popup open on [^2] and the caret back at the end of "first",
+// they paste " see x[^1]" copied from another note with its own
+// "[^1]: their source". The plugin does not take the paste over, so the
+// editor pastes the raw clipboard: the definition line lands inside
+// [^2]'s text, and the note now defines [^1] twice. Obsidian shows only
+// the last definition of a name, so the user's own source is hidden.
+// This is the bug the pin bug-carry-paste-into-popup-ignores-note fixed,
+// back again for this shape of popup.
 //
-// Hunt 2026-10-02, round 1, lens carry-hook. Cluster C20.
+// Hunt 2026-10-06, cycle 3, lens carry. Cluster K4.
 //
-// Source of truth: docs/adr/0001-no-nested-footnotes.md ("We refuse to
-// create nesting anywhere") and CONTEXT.md's Nested footnote entry
-// ("Prevented plugin-wide").
+// Origin: pre-existing (a new face of the popup paste path 1c6a871 added).
 //
-// Added 2026-10-06 (hunt 2026-10-06, cycle 3, lens carry, cluster K7):
-// two more cases of the same question, where the pasted footnote is
-// merged into the very definition the paste lands in, so that definition
-// ends up citing itself. See the last describe block. Origin: the
-// main-editor case is pre-existing; the popup case is new since cec4352,
-// from 1c6a871, which plans a paste in the popup against the whole note
-// (before it, the popup's paste saw no definition to merge into).
-
-// A stand-in for the browser's clipboard event: it reads `text` and
-// records what the plugin writes back.
-function clipboardEvent(text = "") {
-    const event = {
-        written: {} as Record<string, string>,
-        defaultPrevented: false,
-        clipboardData: {
-            types: ["text/plain"],
-            getData: (type: string) => (type === "text/plain" ? text : ""),
-            setData: (type: string, value: string) => {
-                event.written[type] = value;
-            },
-        },
-        preventDefault() {
-            event.defaultPrevented = true;
-        },
-        stopPropagation() {},
-    };
-    return event;
-}
-
-// A fake editor holding `lines`, with the selection running from `from`
-// to `to` (the same place when nothing is selected).
-function editor(lines: string[], from: { line: number; ch: number }, to = from) {
-    return fakeEditor(lines, { wholeDoc: true, edits: true, cursor: from, selection: { anchor: from, head: to } });
-}
-
-const on = { carryFootnotesOnCopy: true };
-
-beforeEach(() => {
-    resetNotices();
-    resetCarryRegister();
-});
-
-describe("spec question: a paste that carries footnotes, with the caret inside another footnote", () => {
-    it.fails("a paste with the caret on a definition line does not nest a footnote inside that definition", () => {
-        const dest = editor(["a[^1]", "", "[^1]: one "], { line: 2, ch: 10 });
-        handlePaste(fakePlugin(on, dest), clipboardEvent("c[^7]\n\n[^7]: seven") as never, dest);
-        // Today line 2 becomes "[^1]: one c[^7]".
-        expect(dest.lines[2]).not.toContain("[^7]");
-    });
-
-    it.fails("a paste inside an inline footnote does not nest a footnote", () => {
-        const dest = editor(["a^[inline ] b"], { line: 0, ch: 10 });
-        handlePaste(fakePlugin(on, dest), clipboardEvent("c[^7]\n\n[^7]: seven") as never, dest);
-        // Today line 0 becomes "a^[inline c[^7]] b".
-        expect(dest.lines[0]).not.toMatch(/\^\[inline c\[\^7\]/);
-    });
-});
-
-// The cases added 2026-10-06 (hunt 2026-10-06, cycle 3, lens carry,
-// cluster K7). The pasted footnote's definition has the same text as the
-// definition the paste lands in, so the paste reuses that very
-// definition: the pasted reference takes its name, and the definition
-// ends up citing itself ("[^1]: the source see[^1]"). It happens with the
-// caret at the end of a definition line in the note, and in the footnote
-// popup open on that footnote. The same question as above: should a
-// paste be allowed to nest a footnote inside another, here inside itself?
+// Source of truth: the pin bug-carry-paste-into-popup-ignores-note (a
+// carried paste in the popup is planned against the whole note, and its
+// definitions go into the note where a creation press would put them),
+// and the carry docstring in src/commands/carry-footnotes-hooks.ts.
 //
-// The popup case opens the popup over a modelled embed, the same model as
-// the pin bug-carry-paste-into-popup-ignores-note: the embed holds one
-// definition's text in the popup's editor and joins it back into the note
-// on every change, with a tab after each line break. The popup reaches
-// for `window` and MutationObserver, which the test environment lacks;
-// stand-ins go in for the run and come out after.
+// Cause: landCarriedText plans the definitions against the whole note,
+// and the append (planDefinitionAppend) puts the new definition between
+// the popup's two lines, after "first" and before the empty last line.
+// PopupSection.around in src/commands/footnote-popup.ts then finds the
+// popup's new text neither right after the text before it nor right
+// before the text after it, returns null, and landCarriedText gives the
+// paste back to the editor.
+
+// The popup reaches for `window` and MutationObserver, which the test
+// environment lacks; stand-ins go in for the run and come out after.
 const g = globalThis as unknown as Record<string, unknown>;
 let hadWindow = false;
 let hadMO = false;
@@ -121,6 +59,10 @@ beforeAll(() => {
 afterAll(() => {
     dismissFootnotePopup();
     if (!hadMO) delete g.MutationObserver;
+});
+beforeEach(() => {
+    resetNotices();
+    resetCarryRegister();
 });
 afterEach(async () => {
     dismissFootnotePopup();
@@ -190,6 +132,19 @@ function fakeEl(): Record<string, unknown> {
     return el;
 }
 
+/** A stand-in for the browser's paste event, holding `text` on the clipboard. */
+function clipboardEvent(text: string) {
+    const event = {
+        defaultPrevented: false,
+        clipboardData: { types: ["text/plain"], getData: (t: string) => (t === "text/plain" ? text : ""), setData() {} },
+        preventDefault() {
+            event.defaultPrevented = true;
+        },
+        stopPropagation() {},
+    };
+    return event;
+}
+
 type Opts = { selection?: { anchor: EditorPosition; head: EditorPosition }; settings?: Record<string, unknown> };
 
 /**
@@ -202,7 +157,7 @@ type Opts = { selection?: { anchor: EditorPosition; head: EditorPosition }; sett
  */
 
 async function openPopup(note: string, name: string, opts: Opts = {}) {
-    const mainEditor = valueEditor(note);
+    const editor = valueEditor(note);
     const win = {
         setTimeout: (f: () => void, ms?: number) => window.setTimeout(f, ms),
         clearTimeout: (t: ReturnType<typeof setTimeout>) => {
@@ -235,7 +190,7 @@ async function openPopup(note: string, name: string, opts: Opts = {}) {
         },
         keymap: { pushScope() {}, popScope() {} },
         scope: {},
-        vault: { cachedRead: () => Promise.resolve(mainEditor.getValue()) },
+        vault: { cachedRead: () => Promise.resolve(editor.getValue()) },
         metadataCache: { on: () => ({}), offref() {} },
         embedRegistry: {
             embedByExtension: {
@@ -257,10 +212,10 @@ async function openPopup(note: string, name: string, opts: Opts = {}) {
                     };
                     const join = (text: string) => {
                         e.data = `${e.before ?? ""}${text.replace(/\n/g, `\n${e.indent}`)}${e.after ?? ""}`;
-                        mainEditor.setValue(e.data as string);
+                        editor.setValue(e.data as string);
                     };
                     e.loadFile = () => {
-                        const text = mainEditor.getValue();
+                        const text = editor.getValue();
                         const lines = text.split("\n");
                         let off = 0;
                         for (let i = 0; i < lines.length; i++) {
@@ -314,10 +269,10 @@ async function openPopup(note: string, name: string, opts: Opts = {}) {
     const mdView = Object.assign(Object.create(MarkdownView.prototype) as MarkdownView, {
         app,
         file,
-        editor: mainEditor,
+        editor,
         containerEl: { ownerDocument: doc, contains: () => false },
         get data() {
-            return mainEditor.getValue();
+            return editor.getValue();
         },
         save: () => Promise.resolve(),
         getMode: () => "source",
@@ -329,7 +284,7 @@ async function openPopup(note: string, name: string, opts: Opts = {}) {
     for (let i = 0; i < 20; i++) await Promise.resolve();
     const shown = popup as FakeEditor | null;
     if (!shown) throw new Error("the popup showed no editor");
-    return { editor: mainEditor, popup: shown, plugin };
+    return { editor, popup: shown, plugin };
 }
 
 async function closePopup() {
@@ -337,21 +292,18 @@ async function closePopup() {
     await settleFootnotePopupWithFeedback();
 }
 
-describe("spec question: a paste merged into the very definition it lands in", () => {
-    it.fails("a paste inside a definition's own text is not merged into that same definition (no self-citing definition)", () => {
-        const dest = editor(["Mine[^1].", "", "[^1]: the source"], { line: 2, ch: "[^1]: the source".length });
-        handlePaste(fakePlugin(on, dest), clipboardEvent(" see[^7]\n\n[^7]: the source") as never, dest);
-        const def = dest.lines.find((l) => l.startsWith("[^1]:")) ?? "";
-        // Today the line reads "[^1]: the source see[^1]".
-        expect(def.slice(5)).not.toContain("[^1]");
-    });
-
-    it.fails("a pasted footnote is not merged into the very footnote the popup is editing (no self-citing definition)", async () => {
-        const { editor: main, popup, plugin } = await openPopup("Mine[^1].\n\n[^1]: the source", "1");
-        handlePaste(plugin, clipboardEvent(" see[^7]\n\n[^7]: the source") as never, popup);
+describe("bug: a carried paste in a popup whose text ends in an empty line", () => {
+    it.fails("a paste in a popup whose text ends in an empty line still takes the paste over and lands the definition in the note", async () => {
+        // the popup holds "first" and an empty second line (Enter pressed at its end); the caret is back at the end of "first"
+        const at = { line: 0, ch: "first".length };
+        const { editor, popup, plugin } = await openPopup("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: first\n\t", "2", { selection: { anchor: at, head: at } });
+        expect(popup.getValue()).toBe("first\n");
+        const took = handlePaste(plugin, clipboardEvent(" see x[^1]\n\n[^1]: their source") as never, popup);
+        // When the plugin declines, the editor pastes the raw clipboard, and
+        // the definition line goes into the popup. Today `took` is false.
+        expect(took).toBe(true);
         await closePopup();
-        // [^1]'s own definition does not cite [^1]; today it reads "[^1]: the source see[^1]"
-        const def = main.getValue().split("\n").find((l) => l.startsWith("[^1]:")) ?? "";
-        expect(def.slice(5)).not.toContain("[^1]");
+        const note = editor.getValue();
+        expect(note.split("\n").filter((l) => /^\s*\[\^1\]:/.test(l))).toEqual(["[^1]: my own source"]);
     });
 });
