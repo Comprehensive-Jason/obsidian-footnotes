@@ -35,7 +35,16 @@ describe("an unclosed region opened on a list item's marker line", () => {
         expect(facts("- <!--\n  hidden[^99]\nplain[^1]").live).toEqual([]);
     });
 
-    it.fails("'- $$' unclosed runs on: the line under it is protected and plain[^1] is hidden", () => {
-        expect(facts("- $$\n  x = 1\nplain[^1]").reading.protectedLines).toEqual([false, true, true]);
+    it("'- $$' unclosed runs on: the line under it is protected and plain[^1] is hidden", () => {
+        // Obsidian reads no reference in this note (saved answer
+        // pin:bug-scan-list-marker-unclosed-region#2), and neither does the
+        // reading. The opener's own line counts as protected too, as a
+        // fence line and a top-level "$$" line do ("- ```" and "$$" both
+        // read true); this test used to want it false, the old scanner's
+        // habit, which kept it failing after the bug was gone (Group L,
+        // 2026-10-06).
+        const { reading, live } = facts("- $$\n  x = 1\nplain[^1]");
+        expect(live).toEqual([]);
+        expect(reading.protectedLines).toEqual([true, true, true]);
     });
 });
