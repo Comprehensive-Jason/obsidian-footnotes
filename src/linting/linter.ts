@@ -319,6 +319,44 @@ export function lintFootnotes(
 }
 
 /**
+ * The lint's last result, and the options it ran with (written out as
+ * text, so two sets of options compare by what they say). See lintNote.
+ */
+let lastLint: { options: string; text: string } | null = null;
+
+/**
+ * The lint as the plugin runs it on a note: lintFootnotes with the user's
+ * settings. The commands and both triggers (on save, on footnote creation)
+ * go through here.
+ *
+ * A lint whose input is exactly the text the last lint produced, with the
+ * same options, is skipped, and the text comes back as it is (the speed
+ * brief, item 5, Jason's pick, 2026-10-05). The lint is meant to settle a
+ * note in one run, so running it on its own result changes nothing; the
+ * usual case is a second Ctrl+S with nothing typed in between, which on
+ * a 22,000-line note relinted for a quarter of a second. Any change to the
+ * text, and any change to a lint setting, means the lint runs, because
+ * the options are worked out from the settings (and from the note's
+ * prefix) every time and compared whole.
+ *
+ * What the user sees is unchanged: the callers still say "No linting
+ * needed." and still show the lint alerts after a skipped lint, so the
+ * lint is never silent about what it left in place (ADR 0002). Only the
+ * rules' work is saved, never the alerts'. Worth knowing: where the lint
+ * does not yet settle a note in one run (a known bug, such as hunt
+ * 2026-10-05's pin bug-reindex-moves-refused-orphan), the change a second
+ * run would make now waits for the next edit to the note.
+ */
+export function lintNote(plugin: FootnotePlugin, markdown: string, sectionHeading: string): string {
+    const options = lintOptionsFromSettings(plugin, sectionHeading, markdown);
+    const written = JSON.stringify(options);
+    if (lastLint !== null && lastLint.options === written && lastLint.text === markdown) return markdown;
+    const after = lintFootnotes(markdown, options);
+    lastLint = { options: written, text: after };
+    return after;
+}
+
+/**
  * True when the user has turned every lint rule off.
  *
  * With nothing enabled the lint cannot change anything, so the command says
@@ -466,10 +504,7 @@ function lintActiveNoteIfSafe(plugin: FootnotePlugin) {
         showNotice(blocked, 8000);
         return;
     }
-    const after = lintFootnotes(
-        before,
-        lintOptionsFromSettings(plugin, configuredSectionHeading(plugin), before),
-    );
+    const after = lintNote(plugin, before, configuredSectionHeading(plugin));
     // A manual save (Ctrl+S, or vim's ":w") is something you asked for, so
     // it tells you the outcome either way, just like the Lint footnotes
     // command does. (Jason's call, 2026-08-08, reversing an earlier change
@@ -692,10 +727,7 @@ export function lintAfterFootnoteCreation(
     // Say nothing when a bad prefix blocks the lint. The insert that just
     // happened has already told the user about it.
     if (lintBlockedByPrefix(before, plugin.settings.enableFootnotePrefix) ?? lintBlockedBySectionHeading(plugin)) return null;
-    const after = lintFootnotes(
-        before,
-        lintOptionsFromSettings(plugin, configuredSectionHeading(plugin), before),
-    );
+    const after = lintNote(plugin, before, configuredSectionHeading(plugin));
     if (after === before) {
         noticeLintAlerts(plugin, after);
         return null;

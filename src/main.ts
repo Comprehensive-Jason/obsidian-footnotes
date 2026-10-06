@@ -30,8 +30,7 @@ import {
   installVimWriteHook,
   lintRulesAllDisabled,
   runFootnoteTransformCommand,
-  lintFootnotes,
-  lintOptionsFromSettings,
+  lintNote,
 } from "./linting/linter";
 
 import { showNotice } from "./editor/notice";
@@ -249,7 +248,7 @@ export default class FootnotePlugin extends Plugin {
         void runFootnoteTransformCommand(
           this,
           (markdown, sectionHeading) =>
-            lintFootnotes(markdown, lintOptionsFromSettings(this, sectionHeading, markdown)),
+            lintNote(this, markdown, sectionHeading),
           {
             done: "Footnotes linted.",
             noop: "No linting needed.",
