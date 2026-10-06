@@ -58,28 +58,28 @@ describe("the '!' of an image or embed split from its '['", () => {
     const Off = { ...After, insertAtEndOfWord: false };
 
     // Now: "see chart![^1][[f.png]] more".
-    it.fails("numbered press, end-of-word off, caret between '!' and '[[': refused like any caret inside the embed", async () => {
+    it("numbered press, end-of-word off, caret between '!' and '[[': refused like any caret inside the embed", async () => {
         const doc = fakeEditor(["see chart![[f.png]] more"], { cursor: { line: 0, ch: 10 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(Off, doc));
         expect(doc.lines[0]).toContain("![[f.png]]");
     });
 
     // Now: "see chart![^1][alt](p.png) more".
-    it.fails("numbered press, end-of-word off, caret between '!' and '[alt](p.png)' keeps the image", async () => {
+    it("numbered press, end-of-word off, caret between '!' and '[alt](p.png)' keeps the image", async () => {
         const doc = fakeEditor(["see chart![alt](p.png) more"], { cursor: { line: 0, ch: 10 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(Off, doc));
         expect(doc.lines[0]).toContain("![alt](p.png)");
     });
 
     // Now: "see chart![^][[f.png]] more".
-    it.fails("named key between '!' and '[[' keeps the embed", async () => {
+    it("named key between '!' and '[[' keeps the embed", async () => {
         const doc = fakeEditor(["see chart![[f.png]] more"], { cursor: { line: 0, ch: 10 }, edits: true, wholeDoc: true, words: true });
         await insertNamedFootnote(fakePlugin(Off, doc));
         expect(doc.lines[0]).toContain("![[f.png]]");
     });
 
     // Now: "see[^1][[f.png]] more", the "!" gone into the footnote's text.
-    it.fails("selection 'chart!' of 'see chart![[f.png]] more' keeps the embed", async () => {
+    it("selection 'chart!' of 'see chart![[f.png]] more' keeps the embed", async () => {
         const doc = fakeEditor(["see chart![[f.png]] more"], {
             cursor: { line: 0, ch: 10 },
             selection: { anchor: { line: 0, ch: 4 }, head: { line: 0, ch: 10 } },
@@ -92,7 +92,7 @@ describe("the '!' of an image or embed split from its '['", () => {
     });
 
     // Now: "see^[chart!][[f.png]] more".
-    it.fails("inline key on the selection 'chart!' keeps the embed", async () => {
+    it("inline key on the selection 'chart!' keeps the embed", async () => {
         const doc = fakeEditor(["see chart![[f.png]] more"], {
             cursor: { line: 0, ch: 10 },
             selection: { anchor: { line: 0, ch: 4 }, head: { line: 0, ch: 10 } },
@@ -107,7 +107,7 @@ describe("the '!' of an image or embed split from its '['", () => {
     // A table cell is edited in its own small editor; this stands in for
     // it and records what the press writes. Now: one write, between the
     // "!" and the "[[".
-    it.fails("cell press between '!' and '[[' writes nothing", () => {
+    it("cell press between '!' and '[[' writes nothing", () => {
         const dispatched: unknown[] = [];
         const cell = {
             state: { doc: { toString: () => "see chart![[f.png]] more" }, selection: { main: { head: 10, anchor: 10 } } },

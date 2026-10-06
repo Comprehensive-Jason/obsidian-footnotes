@@ -399,7 +399,9 @@ export function deadInsertionVerdict(after: NoteReading, at: EditorPosition): "d
  * into a footnote changes the link's label, "[[^1] text]", which no
  * definition carries, so the link is gone (hunt 2026-10-05, round 2, pin
  * bug-selection-kills-defined-shortcut-link). A link the selection takes
- * whole moves into the footnote and is still drawn there.
+ * whole moves into the footnote and is still drawn there. Images and embeds
+ * are counted apart from the other links (fewerLinksDrawn), since a press
+ * between an embed's "!" and its "[[" leaves a plain link in its place.
  */
 export function pressLineVerdict(
     before: NoteReading,
@@ -408,13 +410,38 @@ export function pressLineVerdict(
     text: string,
 ): "label" | "link" | null {
     if (text.startsWith("[^") && anchors.some((anchor) => startsLabel(after, anchor, text))) return "label";
-    const lost = linkDefinitionCount(after.reading()) < linkDefinitionCount(before) || drawnLinkCount(after.reading()) < drawnLinkCount(before);
+    const lost = linkDefinitionCount(after.reading()) < linkDefinitionCount(before) || fewerLinksDrawn(before, after.reading());
     return lost ? "link" : null;
 }
 
-/** How many links `reading` draws (drawnAsLink), judged with the link labels `linkLabels`: the note's own unless a caller hands in others. */
-export function drawnLinkCount(reading: NoteReading, linkLabels: ReadonlySet<string> = reading.linkLabels): number {
-    return reading.links.filter((link) => drawnAsLink(link, linkLabels)).length;
+/**
+ * Whether `after` draws fewer links than `before` (drawnAsLink), counting
+ * images and embeds apart from the other links. A "!" right in front of a
+ * link is what makes it an image ("![alt](pic.png)") or an embed
+ * ("![[file]]"), so a press with the caret between the two writes
+ * "![^1][[file]]": a stray "!", a footnote, and a plain link where the
+ * picture was. Counted together, one link drawn before and one after
+ * looked like nothing lost, and the press went through while every other
+ * caret inside the embed was refused (hunt 2026-10-06, cycle 4, cluster
+ * P2, pin bug-press-between-image-bang-and-bracket). Each reading is
+ * judged with its own link labels unless a caller hands in `linkLabels`
+ * (a table cell, whose reading has none of its own, hands in the note's).
+ */
+export function fewerLinksDrawn(before: NoteReading, after: NoteReading, linkLabels?: ReadonlySet<string>): boolean {
+    const was = drawnLinkCounts(before, linkLabels ?? before.linkLabels);
+    const now = drawnLinkCounts(after, linkLabels ?? after.linkLabels);
+    return now.images < was.images || now.links < was.links;
+}
+
+/** How many images and embeds, and how many other links, `reading` draws (drawnAsLink), judged with the link labels `linkLabels`. An image or embed is a link whose first character is its "!". */
+function drawnLinkCounts(reading: NoteReading, linkLabels: ReadonlySet<string>): { images: number; links: number } {
+    const counts = { images: 0, links: 0 };
+    for (const link of reading.links) {
+        if (!drawnAsLink(link, linkLabels)) continue;
+        if (reading.maskedLine(link.startLine)[link.start] === "!") counts.images++;
+        else counts.links++;
+    }
+    return counts;
 }
 
 /**
