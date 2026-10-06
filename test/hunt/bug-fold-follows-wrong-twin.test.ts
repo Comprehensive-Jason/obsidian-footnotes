@@ -39,7 +39,7 @@ const labelLine = (text: string, name: string) => text.split("\n").findIndex((l)
 
 describe("equal-text definitions keep their own folds", () => {
     // Now: the fold lands on [^1]'s definition (lines 4-5), not [^2]'s (6-7).
-    it.fails("two Ibid. definitions, both moved, listed out of order: the fold on [^2] stays on [^2]", () => {
+    it("two Ibid. definitions, both moved, listed out of order: the fold on [^2] stays on [^2]", () => {
         const before = ["See[^1] and[^2].", "", "[^2]: Ibid.", "    p. 4", "", "[^1]: Ibid.", "    p. 4", "", "Para."].join("\n");
         const after = lintFootnotes(before, {});
         const to = labelLine(after, "2");
@@ -47,7 +47,7 @@ describe("equal-text definitions keep their own folds", () => {
     });
 
     // Now: the fold lands on [^y]'s definition (lines 4-5), not [^x]'s (6-7).
-    it.fails("named twins listed out of reference order: the fold on [^x] stays on [^x]", () => {
+    it("named twins listed out of reference order: the fold on [^x] stays on [^x]", () => {
         const before = ["Text[^y] then[^x]", "", "[^x]: same", "    cont", "[^y]: same", "    cont", "", "Para."].join("\n");
         const after = lintFootnotes(before, {});
         const to = labelLine(after, "x");
@@ -55,7 +55,7 @@ describe("equal-text definitions keep their own folds", () => {
     });
 
     // Now: the fold is dropped (an empty list).
-    it.fails("an orphaned Ibid. definition the lint deletes, above a used Ibid. twin it moves: the fold on the used one follows it", () => {
+    it("an orphaned Ibid. definition the lint deletes, above a used Ibid. twin it moves: the fold on the used one follows it", () => {
         const before = ["Intro[^1]", "", "[^9]: Ibid.", "    p. 4", "", "[^1]: Ibid.", "    p. 4", "", "Para."].join("\n");
         const after = lintFootnotes(before, { removeOrphanedDefinitions: true });
         expect(after.split("\n")).toEqual(["Intro[^1]", "", "Para.", "", "[^1]: Ibid.", "    p. 4"]);

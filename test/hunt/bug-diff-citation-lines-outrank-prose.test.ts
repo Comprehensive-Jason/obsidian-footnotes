@@ -107,14 +107,14 @@ const fourParagraphs = [
 describe("citation lines renumbered by the lint keep the paragraphs around them in place", () => {
     // Now: the caret at the end of "[^4]" on line 4 is the first to miss,
     // and the one on "Fourth paragraph." ends on "Third paragraph.".
-    it.fails("a citation line under each paragraph, one added in the middle: every unchanged paragraph line keeps the caret", () => {
+    it("a citation line under each paragraph, one added in the middle: every unchanged paragraph line keeps the caret", () => {
         const after = lintFootnotes(fourParagraphs, {});
         expect(after.split("\n").slice(0, 11)).toEqual(["First paragraph.", "[^1]", "", "Second paragraph.", "[^2]", "", "Third paragraph.", "[^3]", "", "Fourth paragraph.", "[^4]"]);
         expect(caretMiss(fourParagraphs, after)).toBeNull();
     });
 
     // Now: lines 0, 3, 6, 9 map to 0, 3, 3, 6.
-    it.fails("a citation line under each paragraph, one added in the middle: another pane's caret on each paragraph stays on it", () => {
+    it("a citation line under each paragraph, one added in the middle: another pane's caret on each paragraph stays on it", () => {
         const after = lintFootnotes(fourParagraphs, {});
         const map = lineMapper(lineDiffChanges(fourParagraphs, after), fourParagraphs);
         // The lint moves no prose line, so each paragraph line keeps its line number.
@@ -123,7 +123,7 @@ describe("citation lines renumbered by the lint keep the paragraphs around them 
 
     // Now: one edit deletes the stretch from "[^3]" through the second
     // "Para line" and writes it back further down.
-    it.fails("two paragraphs ending in renumbered reference-only lines: the unchanged prose line between keeps the caret", () => {
+    it("two paragraphs ending in renumbered reference-only lines: the unchanged prose line between keeps the caret", () => {
         const before = ["Para line", "[^1]", "", "[^3]", "", "Para line", "[^2]"].join("\n");
         const after = lintFootnotes(before, {});
         expect(after.split("\n")).toEqual(["Para line", "[^1]", "", "[^2]", "", "Para line", "[^3]"]);

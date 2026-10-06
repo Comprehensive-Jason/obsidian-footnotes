@@ -69,7 +69,7 @@ export function lineDiffChanges(before: string, after: string): OffsetChange[] {
     // their references, they cost nothing, and only the lines the lint
     // really moved, added, or removed are left to find. The prose lines
     // are lined up before the rest (proseFirstRuns).
-    const runs = proseFirstRuns(middleA.map(lineKey), middleB.map(lineKey), proseLines(a).slice(head, aTail), proseLines(b).slice(head, bTail));
+    const runs = proseFirstRuns(middleA.map(lineKey), middleB.map(lineKey), lineKinds(a).slice(head, aTail), lineKinds(b).slice(head, bTail));
     const hunks = withRewrittenLines(runs, middleA, middleB);
 
     // where each line of `before` starts
@@ -345,20 +345,30 @@ function withRewrittenLines(runs: readonly Run[], a: readonly string[], b: reado
 }
 
 /**
- * For each line of `lines`, whether it is prose: a line with text on it
- * that is no part of a footnote definition, read the way Obsidian reads the
- * note (so a "[^1]: x" line inside a code block is prose).
+ * What a line is, for lining up two versions of a note: "prose" is a line
+ * with text on it that is no part of a footnote definition, read the way
+ * Obsidian reads the note (so a "[^1]: x" line inside a code block is
+ * prose); "citation" is such a line that holds nothing but footnotes, such
+ * as "[^4]" under a paragraph; "other" is everything else (blank lines and
+ * the lines of definitions).
  */
-function proseLines(lines: readonly string[]): boolean[] {
-    const prose = lines.map((line) => line.trim() !== "");
+type LineKind = "prose" | "citation" | "other";
+
+/** For each line of `lines`, what it is (LineKind). */
+function lineKinds(lines: readonly string[]): LineKind[] {
+    const kinds = lines.map((line): LineKind => {
+        if (line.trim() === "") return "other";
+        return (line.includes("[^") || line.includes("^[")) && withoutFootnotes(line).trim() === "" ? "citation" : "prose";
+    });
     for (const definition of readNote(lines).definitions) {
-        for (let line = definition.start; line <= definition.end; line++) prose[line] = false;
+        for (let line = definition.start; line <= definition.end; line++) kinds[line] = "other";
     }
-    return prose;
+    return kinds;
 }
 
 /**
- * unmatchedRuns, with the prose lines lined up before the rest.
+ * unmatchedRuns, with the prose lines lined up before the rest, and then
+ * the citation lines.
  *
  * Myers' diff keeps the most lines it can, and a lint that gathers a block
  * of definitions at the bottom moves more lines than the prose it moves
@@ -371,18 +381,42 @@ function proseLines(lines: readonly string[]): boolean[] {
  * (it only rewrites the footnotes on a line), so the prose lines are lined
  * up first, on their own, and only the stretches between two paired prose
  * lines are then compared line by line, definitions, blank lines, and all.
- * `proseA` and `proseB` say which lines of `a` and `b` are prose
- * (proseLines).
+ * `kindsA` and `kindsB` say what each line of `a` and `b` is (lineKinds).
+ *
+ * A citation line is lined up only after the prose, inside the stretch
+ * between two paired prose lines (citationPairs). Its key is its own text,
+ * names and all, since without them it has nothing to be told apart by;
+ * but a lint that renumbers rewrites those names, so in the prose line-up
+ * the old "[^4]" under one paragraph matched the new "[^4]" under another,
+ * and to make the rest fit, unchanged paragraph lines were rewritten into
+ * their neighbours' text: the caret on "Fourth paragraph." ended on "Third
+ * paragraph." (hunt 2026-10-06 cycle 4, cluster D1, pin
+ * bug-diff-citation-lines-outrank-prose).
  */
-function proseFirstRuns(a: readonly string[], b: readonly string[], proseA: readonly boolean[], proseB: readonly boolean[]): Run[] {
-    const linesA = a.flatMap((_, i) => (proseA[i] ? [i] : []));
-    const linesB = b.flatMap((_, i) => (proseB[i] ? [i] : []));
-    const pairs = matchedPairs(
+function proseFirstRuns(a: readonly string[], b: readonly string[], kindsA: readonly LineKind[], kindsB: readonly LineKind[]): Run[] {
+    const linesA = a.flatMap((_, i) => (kindsA[i] === "prose" ? [i] : []));
+    const linesB = b.flatMap((_, i) => (kindsB[i] === "prose" ? [i] : []));
+    const prosePairs = matchedPairs(
         linesA,
         linesA.map((i) => a[i]),
         linesB,
         linesB.map((i) => b[i]),
     );
+    // the citation lines of each stretch between two paired prose lines,
+    // paired up, with the prose pairs in order
+    const pairs: [number, number][] = [];
+    let aCitation = 0;
+    let bCitation = 0;
+    for (const [aLine, bLine] of [...prosePairs, [a.length, b.length] as [number, number]]) {
+        const citationsA: number[] = [];
+        const citationsB: number[] = [];
+        for (; aCitation < aLine; aCitation++) if (kindsA[aCitation] === "citation") citationsA.push(aCitation);
+        for (; bCitation < bLine; bCitation++) if (kindsB[bCitation] === "citation") citationsB.push(bCitation);
+        pairs.push(...citationPairs(citationsA, citationsA.map((i) => a[i]), citationsB, citationsB.map((i) => b[i])));
+        if (aLine < a.length) pairs.push([aLine, bLine]);
+        aCitation = aLine + 1;
+        bCitation = bLine + 1;
+    }
     const runs: Run[] = [];
     let aFrom = 0;
     let bFrom = 0;
@@ -394,6 +428,74 @@ function proseFirstRuns(a: readonly string[], b: readonly string[], proseA: read
         bFrom = bLine + 1;
     }
     return runs;
+}
+
+/**
+ * Above this many comparisons (citation lines of the one side times those
+ * of the other, in one stretch) citationPairs pairs by text alone, so a
+ * note of thousands of citation lines with no prose between them never
+ * stalls the app.
+ */
+const MaxCitationComparisons = 1_000_000;
+
+/**
+ * The citation lines of one stretch between two paired prose lines, each
+ * given by its line number (`linesA`, `linesB`) and its key (`keysA`,
+ * `keysB`): the pairs that line them up, in order. As many are paired as
+ * the two counts allow, and of the ways to do that, the one that pairs the
+ * most lines with the same text is taken.
+ *
+ * The lint never moves a citation line and never adds one; it rewrites the
+ * names on it, or empties it when it takes out an orphaned reference. So
+ * with as many citation lines after as before, each is the one in the same
+ * place: two neighbouring lines "[^2]" and "[^1]" whose names the lint
+ * swapped are each rewritten in place, and the caret at the end of the
+ * first stays there (hunt 2026-10-06 cycle 4, cluster D2, pin
+ * bug-diff-swapped-reference-only-lines; paired by text, the one was
+ * deleted and written again below the other). With fewer after, the one
+ * the lint emptied is the one left out, and the text says which: when the
+ * orphaned "[^9]" is taken out above an untouched "[^1]", the "[^1]" lines
+ * pair up, not the "[^9]" line with the "[^1]" line (hunt 2026-10-06 cycle
+ * 3, cluster D1, pin bug-caret-reference-only-line).
+ *
+ * The answer is worked out on a table of the best pairing of each start of
+ * the one list with each start of the other (a longest-common-subsequence
+ * table that scores a pair of lines with the same text a little higher than
+ * any other pair).
+ */
+function citationPairs(linesA: readonly number[], keysA: readonly string[], linesB: readonly number[], keysB: readonly string[]): [number, number][] {
+    const n = keysA.length;
+    const m = keysB.length;
+    if (n === 0 || m === 0) return [];
+    if (n * m > MaxCitationComparisons) return matchedPairs(linesA, keysA, linesB, keysB);
+    // A pair is worth more than every same-text bonus together, so the
+    // count of pairs comes first and the same text breaks ties.
+    const pairWorth = Math.min(n, m) + 1;
+    // best[i * (m + 1) + j]: the best score for lines i.. of A and j.. of B
+    const best = new Int32Array((n + 1) * (m + 1));
+    const at = (i: number, j: number) => i * (m + 1) + j;
+    for (let i = n - 1; i >= 0; i--) {
+        for (let j = m - 1; j >= 0; j--) {
+            const paired = best[at(i + 1, j + 1)] + pairWorth + (keysA[i] === keysB[j] ? 1 : 0);
+            best[at(i, j)] = Math.max(paired, best[at(i + 1, j)], best[at(i, j + 1)]);
+        }
+    }
+    // walk the table from the start, taking a pair wherever it is part of the best score
+    const pairs: [number, number][] = [];
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+        if (best[at(i, j)] === best[at(i + 1, j + 1)] + pairWorth + (keysA[i] === keysB[j] ? 1 : 0)) {
+            pairs.push([linesA[i], linesB[j]]);
+            i++;
+            j++;
+        } else if (best[at(i, j)] === best[at(i + 1, j)]) {
+            i++;
+        } else {
+            j++;
+        }
+    }
+    return pairs;
 }
 
 /**
@@ -587,13 +689,13 @@ function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
     const anchorsA = headingKeys(a);
     const anchorsB = headingKeys(b);
     const pairs = matchedPairs(anchorsA.lines, anchorsA.keys, anchorsB.lines, anchorsB.keys);
-    const proseA = proseLines(a);
-    const proseB = proseLines(b);
+    const kindsA = lineKinds(a);
+    const kindsB = lineKinds(b);
     const map: { from: number; to: number }[] = [];
     let aFrom = 0;
     let bFrom = 0;
     for (const [aLine, bLine] of [...pairs, [a.length, b.length] as [number, number]]) {
-        for (const { from, to } of alignRun(a.slice(aFrom, aLine), b.slice(bFrom, bLine), proseA.slice(aFrom, aLine), proseB.slice(bFrom, bLine))) {
+        for (const { from, to } of alignRun(a.slice(aFrom, aLine), b.slice(bFrom, bLine), kindsA.slice(aFrom, aLine), kindsB.slice(bFrom, bLine))) {
             map.push({ from: from === -1 ? -1 : from + bFrom, to: to + bFrom });
         }
         if (aLine < a.length) map.push({ from: bLine, to: bLine });
@@ -619,38 +721,98 @@ function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
  * (lineDiffChanges) are left as they are, so the caret on the line being
  * typed still stays put (pin bug-caret-below-moved-definitions).
  *
- * A definition of `a` that the line-up already put on a line with its own
- * key stays where it was put, and the definition there is taken. Each
- * other definition the lint can move takes the first definition of `b`
- * with the same text that no other has taken.
+ * A definition of `a` is first looked for under its own name, as the lint
+ * renamed it (renamesOf), with the same text: two definitions with the
+ * same text ("twins", such as two "Ibid." footnotes) are told apart only
+ * by their names. Found by text alone, the first one moved took the first
+ * twin below whatever its name, so a fold on [^2]'s definition came back
+ * on [^1]'s, and an orphaned twin the lint deleted took the place of the
+ * used one, whose fold was dropped (hunt 2026-10-06 cycle 4, cluster D3,
+ * pin bug-fold-follows-wrong-twin).
+ *
+ * A definition not found that way that the line-up already put on a line
+ * with its own key stays where it was put, and the definition there is
+ * taken. Each other definition the lint can move takes the first
+ * definition of `b` with the same text that no other has taken.
  */
 function findMovedDefinitions(map: { from: number; to: number }[], a: string[], b: string[]): void {
     const textOf = (lines: string[], start: number, end: number) => lines.slice(start, end + 1).map(lineKey).join("\n");
+    const renamed = renamesOf(map, a, b);
     // the movable definitions of `b` not taken yet, by their text: the
-    // line each starts on, in order
+    // line each starts on, in order; and by their name, folded to lower
+    // case as Obsidian compares names
     const free = new Map<string, number[]>();
+    const named = new Map<string, { start: number; text: string }>();
     for (const definition of readNote(b).definitions) {
         if (!definition.movable) continue;
         const text = textOf(b, definition.start, definition.end);
         free.set(text, [...(free.get(text) ?? []), definition.start]);
+        const name = definition.name.toLowerCase();
+        if (!named.has(name)) named.set(name, { start: definition.start, text });
     }
-    const lost: { start: number; end: number; text: string }[] = [];
+    const take = (text: string, start: number) => {
+        const starts = free.get(text);
+        if (starts?.includes(start)) starts.splice(starts.indexOf(start), 1);
+    };
+    const place = (start: number, end: number, now: number) => {
+        for (let line = start; line <= end; line++) map[line] = { from: now + line - start, to: now + line - start };
+    };
+    // the lines of `b` where a definition found by its name starts
+    const takenByName = new Set<number>();
+    const unnamed: { start: number; end: number; text: string }[] = [];
     for (const definition of readNote(a).definitions) {
         if (!definition.movable) continue;
         const text = textOf(a, definition.start, definition.end);
-        const now = map[definition.start].from;
-        if (now !== -1 && lineKey(b[now]) === lineKey(a[definition.start])) {
-            const starts = free.get(text);
-            if (starts?.includes(now)) starts.splice(starts.indexOf(now), 1);
+        const name = definition.name.toLowerCase();
+        const twin = named.get(renamed.get(name) ?? name);
+        if (twin !== undefined && twin.text === text && free.get(text)?.includes(twin.start)) {
+            take(text, twin.start);
+            takenByName.add(twin.start);
+            place(definition.start, definition.end, twin.start);
         } else {
-            lost.push({ start: definition.start, end: definition.end, text });
+            unnamed.push({ start: definition.start, end: definition.end, text });
+        }
+    }
+    const lost: { start: number; end: number; text: string }[] = [];
+    for (const definition of unnamed) {
+        const now = map[definition.start].from;
+        if (now !== -1 && !takenByName.has(now) && lineKey(b[now]) === lineKey(a[definition.start])) {
+            take(definition.text, now);
+        } else {
+            lost.push(definition);
         }
     }
     for (const { start, end, text } of lost) {
         const now = free.get(text)?.shift();
-        if (now === undefined) continue;
-        for (let line = start; line <= end; line++) map[line] = { from: now + line - start, to: now + line - start };
+        if (now !== undefined) place(start, end, now);
     }
+}
+
+/**
+ * The names the lint gave the footnotes, read off the lines it rewrote in
+ * place: for each line of `a` that `map` (alignLines) puts on a line of
+ * `b` with the same text without footnotes, the references on the two
+ * lines pair up in order, so a "[^3]" that became "[^1]" maps "3" to "1".
+ * Names are folded to lower case, as Obsidian compares them. A name the
+ * lines say nothing about is missing from the map; the first pairing seen
+ * for a name wins.
+ */
+function renamesOf(map: readonly { from: number; to: number }[], a: string[], b: string[]): Map<string, string> {
+    const readingA = readNote(a);
+    const readingB = readNote(b);
+    const renamed = new Map<string, string>();
+    for (let line = 0; line < map.length; line++) {
+        const now = map[line].from;
+        if (now === -1 || !a[line].includes("[^") || lineKey(a[line]) !== lineKey(b[now])) continue;
+        const before = readingA.referencesOn(line);
+        const after = readingB.referencesOn(now);
+        if (before.length !== after.length) continue;
+        before.forEach((reference, k) => {
+            const name = reference.name.toLowerCase();
+            if (!renamed.has(name)) renamed.set(name, after[k].name.toLowerCase());
+        });
+    }
+    return renamed;
 }
 
 /** The heading lines of `lines`, in order, and for each a key of its level and its text without footnotes (lineKey). */
@@ -682,7 +844,7 @@ function headingKeys(lines: string[]): { lines: number[]; keys: string[] } {
  * new line, so it grows or shrinks with the run; and a fold ending on a
  * line that was deleted outright ends on the line before the deletion.
  */
-function alignRun(a: string[], b: string[], proseA: boolean[], proseB: boolean[]): { from: number; to: number }[] {
+function alignRun(a: string[], b: string[], kindsA: LineKind[], kindsB: LineKind[]): { from: number; to: number }[] {
     const na = a.map(lineKey);
     const nb = b.map(lineKey);
     // The lines that match at the end are taken first, then those at the
@@ -698,7 +860,7 @@ function alignRun(a: string[], b: string[], proseA: boolean[], proseB: boolean[]
     }
     let head = 0;
     while (head < aTail && head < bTail && na[head] === nb[head]) head++;
-    const hunks = proseFirstRuns(na.slice(head, aTail), nb.slice(head, bTail), proseA.slice(head, aTail), proseB.slice(head, bTail));
+    const hunks = proseFirstRuns(na.slice(head, aTail), nb.slice(head, bTail), kindsA.slice(head, aTail), kindsB.slice(head, bTail));
     const map: { from: number; to: number }[] = [];
     let bi = 0;
     const matchedUpTo = (aEnd: number) => {

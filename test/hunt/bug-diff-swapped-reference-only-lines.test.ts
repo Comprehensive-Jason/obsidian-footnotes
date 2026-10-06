@@ -97,14 +97,14 @@ const before = ["Text", "[^2]", "[^1]", "", "[^1]: one", "[^2]: two"].join("\n")
 
 describe("two swapped reference-only lines", () => {
     // Now: the caret at the end of "[^2]" on line 1 lands at ch 0.
-    it.fails("the caret at the end of the first stays on the first", () => {
+    it("the caret at the end of the first stays on the first", () => {
         const after = lintFootnotes(before, {});
         expect(after.split("\n").slice(0, 3)).toEqual(["Text", "[^1]", "[^2]"]);
         expect(caretMiss(before, after)).toBeNull();
     });
 
     // Now: lines 1 and 2 map to 0 and 1.
-    it.fails("another pane's caret on each of the two lines stays on its line", () => {
+    it("another pane's caret on each of the two lines stays on its line", () => {
         const after = lintFootnotes(before, {});
         const map = lineMapper(lineDiffChanges(before, after), before);
         expect([1, 2].map(map)).toEqual([1, 2]);
