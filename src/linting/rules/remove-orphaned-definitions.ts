@@ -210,9 +210,11 @@ export function orphanedDefinitionBlocks(lines: string[]): Definition[] {
 /**
  * `lines` with `dead` cut out (definitionCuts, removeLineRanges), or null
  * when the cut would change how Obsidian reads a line it keeps
- * (linesReadDifferently).
+ * (linesReadDifferently). Shared with the cut that carries definitions
+ * (planCut in carry-footnotes.ts), so a cut leaves a definition in place
+ * wherever this rule would (Jason, 2026-10-05, triage decision Q2).
  */
-function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[]): string[] | null {
+export function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[]): string[] | null {
     const cut = definitionCuts(lines, dead);
     const out = removeLineRanges(cut.lines, cut.ranges);
     return linesReadDifferently(lines, cut, out) ? null : out;

@@ -38,6 +38,11 @@ import { readNote } from "../../src/parsing/note-reading";
 // the same, the check cutDefinitionsIfClean and linesReadDifferently in
 // src/linting/rules/remove-orphaned-definitions.ts make for the orphan
 // rule.
+//
+// Decided (Jason, 2026-10-05, triage decision Q2, the recommended pick):
+// the cut leaves such a definition in the note, as the orphan rule does,
+// and the lint's alert then names it; the clipboard still carries it, so
+// pasting the text back reuses it. The tests pin that answer.
 
 beforeEach(() => {
     resetNotices();
@@ -146,7 +151,7 @@ const cases: [string, string[]][] = [
 
 describe("cut then paste back", () => {
     for (const [name, source] of cases) {
-        it.fails(name, () => {
+        it(name, () => {
             const wantDefs = defContents(source);
             const wantRest = skeleton(source.slice(1));
             const c = cut(source, { line: 0, ch: 0 }, { line: 0, ch: source[0].length });
@@ -164,7 +169,7 @@ describe("cut then paste back", () => {
 });
 
 describe("cut and list joining, the planned text", () => {
-    it.fails("cutting the only reference of a definition between a list and an indented paragraph", () => {
+    it("cutting the only reference of a definition between a list and an indented paragraph", () => {
         const note = "x[^a] here\n\n- one\n\n[^a]: def\n\n  indented";
         const plan = planCut(note, { line: 0, ch: 0 }, { line: 0, ch: 5 });
         const before = readNote(note.split("\n"));
@@ -173,5 +178,25 @@ describe("cut and list joining, the planned text", () => {
         const iBefore = before.lineBlocks[note.split("\n").indexOf("  indented")];
         const iAfter = after.lineBlocks[plan.text.split("\n").indexOf("  indented")];
         expect(iAfter).toBe(iBefore);
+    });
+});
+
+describe("a definition the cut leaves keeps what it cites", () => {
+    // Not from the hunt: the cut's guard leaves a definition in the note, so
+    // a footnote only that definition cites must stay too, or its reference
+    // would be left with no definition (blocksToCut, 2026-10-05).
+    it("the definition left between two lists keeps the footnote its text cites", () => {
+        const note = ["See[^a].", "", "1. one", "", "[^a]: first[^b]", "", "1. again", "", "[^b]: bee"];
+        const plan = planCut(note.join("\n"), { line: 0, ch: 0 }, { line: 0, ch: 8 });
+        expect(plan.text.split("\n")).toEqual(["", "", "1. one", "", "[^a]: first[^b]", "", "1. again", "", "[^b]: bee"]);
+        expect(plan.removed).toBe(0);
+        expect(plan.carried.map((block) => block.name)).toEqual(["a", "b"]);
+    });
+
+    it("a definition that was an orphan before the cut keeps the footnote it cites", () => {
+        const note = ["x[^b] here", "", "[^old]: cites[^b]", "", "[^b]: bee"];
+        const plan = planCut(note.join("\n"), { line: 0, ch: 0 }, { line: 0, ch: 5 });
+        expect(plan.text.split("\n")).toEqual([" here", "", "[^old]: cites[^b]", "", "[^b]: bee"]);
+        expect(plan.removed).toBe(0);
     });
 });
