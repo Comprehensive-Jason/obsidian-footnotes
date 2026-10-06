@@ -73,6 +73,11 @@ export function countEmptyFootnoteReferences(markdown: string, prefix = ""): num
             // syntax, not an abandoned placeholder (Kimi hunt cycle 1,
             // 2026-09-16; renders literally in Reading view)
             if (escapedAt(masked, at)) continue;
+            // "[^](https://x.y)" is a link whose text is a caret, and
+            // Obsidian renders it as a link; a "[^]" that any link takes in
+            // is that link's text, not a placeholder (hunt 2026-10-02, pin
+            // bug-lint-caret-link-counted-unnamed)
+            if (reading.insideLink(i, at)) continue;
             // "^[^]" is an inline footnote whose body is a caret, and a
             // "[^]" inside a longer inline footnote's body is that body's
             // literal text: Reading view renders both as inline footnotes

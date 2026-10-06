@@ -21,10 +21,13 @@ import { countEmptyFootnoteReferences } from "../../src/linting/lint-alerts";
 //
 // Cause: the count matches every "[^]" in the masked text without looking
 // at what follows it.
+//
+// Fix (2026-10-06): countEmptyFootnoteReferences skips a "[^]" that the
+// note reading says sits inside a link (insideLink).
 
 describe("a link whose text is a caret", () => {
-    it.fails("is not an unnamed footnote reference", () => {
-        // Today: 1.
+    it("is not an unnamed footnote reference", () => {
+        // Before the fix: 1.
         expect(countEmptyFootnoteReferences("see [^](https://x.y) here")).toBe(0);
     });
 });
