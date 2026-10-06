@@ -579,6 +579,9 @@ export function positionAfterRewrite(before: string, after: string, pos: { line:
  * bug-convert-fold-dropped-under-converted-definitions). Obsidian refolds
  * a heading over its own section from the line a fold starts on, so
  * finding the heading again is what keeps the fold.
+ *
+ * A definition the lint moved is then found again by its text
+ * (findMovedDefinitions), so a fold on it follows it.
  */
 function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
     const anchorsA = headingKeys(a);
@@ -597,7 +600,57 @@ function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
         aFrom = aLine + 1;
         bFrom = bLine + 1;
     }
+    findMovedDefinitions(map, a, b);
     return map;
+}
+
+/**
+ * `map` (alignLines of `a` to `b`) with each definition the lint moved
+ * mapped to where it now is, found by its text without footnotes
+ * (lineKey), its lines one for one.
+ *
+ * The line-up keeps the prose in place and takes a definition the lint
+ * moved to the bottom as lines deleted in one place and inserted in
+ * another, so a fold on the definition (Obsidian folds a line followed by
+ * more indented lines, such as a definition with an indented second line)
+ * had no line to start on and was dropped (hunt 2026-10-06 cycle 3,
+ * cluster D2, pin bug-fold-moved-definition). Only the folds and the
+ * other panes' carets read this map; the edits themselves
+ * (lineDiffChanges) are left as they are, so the caret on the line being
+ * typed still stays put (pin bug-caret-below-moved-definitions).
+ *
+ * A definition of `a` that the line-up already put on a line with its own
+ * key stays where it was put, and the definition there is taken. Each
+ * other definition the lint can move takes the first definition of `b`
+ * with the same text that no other has taken.
+ */
+function findMovedDefinitions(map: { from: number; to: number }[], a: string[], b: string[]): void {
+    const textOf = (lines: string[], start: number, end: number) => lines.slice(start, end + 1).map(lineKey).join("\n");
+    // the movable definitions of `b` not taken yet, by their text: the
+    // line each starts on, in order
+    const free = new Map<string, number[]>();
+    for (const definition of readNote(b).definitions) {
+        if (!definition.movable) continue;
+        const text = textOf(b, definition.start, definition.end);
+        free.set(text, [...(free.get(text) ?? []), definition.start]);
+    }
+    const lost: { start: number; end: number; text: string }[] = [];
+    for (const definition of readNote(a).definitions) {
+        if (!definition.movable) continue;
+        const text = textOf(a, definition.start, definition.end);
+        const now = map[definition.start].from;
+        if (now !== -1 && lineKey(b[now]) === lineKey(a[definition.start])) {
+            const starts = free.get(text);
+            if (starts?.includes(now)) starts.splice(starts.indexOf(now), 1);
+        } else {
+            lost.push({ start: definition.start, end: definition.end, text });
+        }
+    }
+    for (const { start, end, text } of lost) {
+        const now = free.get(text)?.shift();
+        if (now === undefined) continue;
+        for (let line = start; line <= end; line++) map[line] = { from: now + line - start, to: now + line - start };
+    }
 }
 
 /** The heading lines of `lines`, in order, and for each a key of its level and its text without footnotes (lineKey). */

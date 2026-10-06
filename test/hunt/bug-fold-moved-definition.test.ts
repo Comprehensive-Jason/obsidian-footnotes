@@ -35,14 +35,14 @@ import { lintFootnotes } from "../../src/linting/linter";
 
 describe("a folded definition the lint moves to the bottom keeps its fold", () => {
     // Before the fix: [].
-    it.fails("renamed on the way: the fold follows it to the bottom", () => {
+    it("renamed on the way: the fold follows it to the bottom", () => {
         const before = ["Intro[^2]", "", "[^2]: alpha", "    continued alpha", "", "Lorem ipsum[^2]."].join("\n");
         const after = lintFootnotes(before, {});
         expect(after.split("\n")).toEqual(["Intro[^1]", "", "Lorem ipsum.[^1]", "", "[^1]: alpha", "    continued alpha"]);
         expect(mapFoldLines([{ from: 2, to: 3 }], lineDiffChanges(before, after), before)).toEqual([{ from: 4, to: 5 }]);
     });
 
-    it.fails("not renamed: the fold follows it to the bottom", () => {
+    it("not renamed: the fold follows it to the bottom", () => {
         const before = ["Intro[^1]", "", "[^1]: alpha", "    continued alpha", "", "Lorem ipsum."].join("\n");
         const after = lintFootnotes(before, {});
         expect(after.split("\n")).toEqual(["Intro[^1]", "", "Lorem ipsum.", "", "[^1]: alpha", "    continued alpha"]);
@@ -52,7 +52,7 @@ describe("a folded definition the lint moves to the bottom keeps its fold", () =
     // The general face (the skeptic's): the definition moves past three
     // paragraphs. The expected fold is read off the lint's own output.
     // Pre-existing: the cec4352 diff dropped this fold too.
-    it.fails("moved past several paragraphs: the fold follows it to the bottom", () => {
+    it("moved past several paragraphs: the fold follows it to the bottom", () => {
         const before = ["Intro[^1]", "", "[^1]: alpha", "    continued alpha", "", "Lorem.", "", "Ipsum.", "", "Dolor."].join("\n");
         const after = lintFootnotes(before, {});
         const lines = after.split("\n");
