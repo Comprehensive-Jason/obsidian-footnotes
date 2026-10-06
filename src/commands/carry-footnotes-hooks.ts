@@ -22,6 +22,7 @@ import {
     planCarriedPaste,
     planCut,
     splitCarriedText,
+    uncarriedNames,
     withCarriedText,
 } from "./carry-footnotes";
 import { planDefinitionAppend } from "./definition-append";
@@ -302,9 +303,10 @@ function landPastedText(plugin: FootnotePlugin, doc: Editor, text: string, befor
         // names it could not find
         ({ body, carried, missing } = register);
     } else {
-        // a clipboard from anywhere that ends in definition lines
+        // a clipboard from anywhere that ends in definition lines, and the
+        // names it cites without carrying a definition for them
         ({ body, carried } = splitCarriedText(text));
-        missing = [];
+        missing = uncarriedNames(text);
     }
     const selections = doc.listSelections();
     const landed = () => {
@@ -361,7 +363,7 @@ export function carriedInputHandler(
         if (carried.length === 0 && !definesFootnotes(body)) return false;
         const doc = editorFor(view);
         if (!doc || nestedSubEditorOwnsFocus(doc)) return false;
-        return landCarriedText(plugin, doc, doc.offsetToPos(from), doc.offsetToPos(to), text, body, carried, []);
+        return landCarriedText(plugin, doc, doc.offsetToPos(from), doc.offsetToPos(to), text, body, carried, uncarriedNames(text));
     };
 }
 

@@ -67,7 +67,7 @@ beforeEach(() => {
 });
 
 describe("bug: a foreign clipboard citing a footnote it carries no definition for", () => {
-    it.fails("the paste's toast names [^9]", () => {
+    it("the paste's toast names [^9]", () => {
         const back = paste(["Dest."], { line: 0, ch: 5 }, [" a[^9] b[^1]", "", "[^1]: one"].join("\n"));
         expect(back.taken).toBe(true);
         const toast = messages().find((m) => m.startsWith("Pasted with"));

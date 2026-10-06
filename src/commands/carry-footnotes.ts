@@ -685,6 +685,32 @@ export function splitCarriedText(text: string, selection = false): { body: strin
     return { body: [...lines.slice(0, bodyEnd), ...breaks, ...after].join("\n"), carried };
 }
 
+/**
+ * The names a pasted `text` from anywhere cites with no definition of its
+ * own: the live references in it, read on its own, whose name nothing in
+ * the text defines; spelled as first seen, each once. This is the
+ * `missing` list the plugin's own copy keeps (CarriedDefinitions), read
+ * off the clipboard text instead of the note it came from, since the paste
+ * has nothing else to read. A clipboard from another app was pasted with
+ * an empty list, so its toast never named a reference that travelled
+ * without a definition, as the README promises (hunt 2026-10-06 cycle 4,
+ * cluster K5, pin bug-foreign-paste-toast-missing-definition).
+ */
+export function uncarriedNames(text: string): string[] {
+    // a text with no "[^" cites nothing, so it is not read
+    if (!text.includes("[^")) return [];
+    const lines = normalizeEol(text).text.split("\n");
+    const reading = readNote(lines);
+    const defined = new Set(reading.definitions.map((definition) => definition.name.toLowerCase()));
+    const missing = new Map<string, string>();
+    for (let line = 0; line < lines.length; line++) {
+        for (const { name } of reading.referencesOn(line)) {
+            if (!defined.has(name.toLowerCase()) && !missing.has(name.toLowerCase())) missing.set(name.toLowerCase(), name);
+        }
+    }
+    return [...missing.values()];
+}
+
 /** What a cut does to the note and to the clipboard (planCut). */
 export interface CutPlan extends CarriedDefinitions {
     /** the note as it reads after the cut, its lines joined with "\n" */
