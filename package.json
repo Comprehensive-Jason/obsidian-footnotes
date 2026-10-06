@@ -13,6 +13,8 @@
     "test": "vitest",
     "coverage": "vitest run --coverage",
     "test:smoke": "node scripts/smoke-test.mjs",
+    "tests:stop": "node scripts/stop-test-runs.mjs",
+    "tests:resume": "node scripts/stop-test-runs.mjs --resume",
     "oracle": "node scripts/oracle/run-oracle.mjs",
     "version": "node scripts/version-bump.mjs && git add manifest.json manifest-beta.json versions.json"
   },
@@ -65,7 +67,8 @@
     ],
     "ignoreBinaries": [
       "Obsidian.com",
-      "ffmpeg"
+      "ffmpeg",
+      "pkill"
     ],
     "ignoreDependencies": [
       "electron"

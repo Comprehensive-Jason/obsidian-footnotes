@@ -17,6 +17,13 @@ definitions only, so `vitest.config.mts` aliases it to the runtime stub in
 `test/mocks/obsidian.ts` — extend the stub (empty classes / no-ops) if a
 new import breaks test startup.
 
+Outside watch mode, CI, and Stryker, every run goes through a guard
+(`scripts/test-run-guard.mjs`): at most two runs at once on the machine
+(`FOOTNOTES_TEST_SLOTS`), each ended after 30 minutes
+(`FOOTNOTES_TEST_MAX_MINUTES`), and `npm run tests:stop` ends them all and
+refuses new runs for five minutes (`npm run tests:resume` lifts it). A run
+uses half the cores unless `--maxWorkers` says otherwise.
+
 Specs build editor state with the shared fakes in `test/helpers/`
 (`fakeEditor`, `fakePlugin`) instead of hand-rolling doubles. Editor
 capabilities are opt-in (`cursor`, `carets`, `selection`, `edits`,
