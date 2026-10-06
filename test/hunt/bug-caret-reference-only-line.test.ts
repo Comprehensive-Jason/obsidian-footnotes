@@ -62,19 +62,19 @@ describe("a line holding only a reference keeps the caret when the lint empties 
     });
 
     // Before the fix: { line: 6, ch: 0, text: "End" }; the cec4352 diff kept it on "[^1]".
-    it.fails("a caret at the end of the unchanged [^1] line stays there", () => {
+    it("a caret at the end of the unchanged [^1] line stays there", () => {
         const after = lintFootnotes(before, options);
         expect(caretAfter(before, after, 6, 4)).toEqual({ line: 4, ch: 4, text: "[^1]" });
     });
 
     // Pre-existing: the cec4352 line mapper gave the same wrong line here.
-    it.fails("a second pane's caret on the [^1] line stays on it", () => {
+    it("a second pane's caret on the [^1] line stays on it", () => {
         const after = lintFootnotes(before, options);
         expect(lineMapper(lineDiffChanges(before, after), before)(6)).toBe(4);
     });
 
     // Before the fix: { line: 4, ch: 4, text: "[^1]: one" }; the cec4352 diff kept it on "[^1]".
-    it.fails("shorter: the caret on the [^1] line does not land on the moved definition", () => {
+    it("shorter: the caret on the [^1] line does not land on the moved definition", () => {
         const b = ["[^1]: one", "", "[^9]", "", "[^1]"].join("\n");
         const after = lintFootnotes(b, options);
         expect(after.split("\n")).toEqual(["", "", "[^1]", "", "[^1]: one"]);
@@ -83,7 +83,7 @@ describe("a line holding only a reference keeps the caret when the lint empties 
 
     // The random case the hunt's differential run found (the cec4352 diff
     // kept the caret on line 21, column 3; now it goes to line 23, column 0).
-    it.fails("random case: the caret on an untouched [^Note] line does not jump to the ## Five heading", () => {
+    it("random case: the caret on an untouched [^Note] line does not jump to the ## Five heading", () => {
         const b = [
             "## Two", "", "---", "title: t", "---", "```", "fake[^Note]", "```", "", "[^Note]: aside ^[nested inline]", "",
             "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Lorem ipsum dolor sit amet[^1].",

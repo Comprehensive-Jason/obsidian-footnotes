@@ -248,11 +248,21 @@ function unmatchedRuns(a: readonly string[], b: readonly string[]): Run[] {
  * "- item^[note]." and the "- item.^[note]" the punctuation rule makes of
  * it did not match, and a fold on that item was dropped: hunt 2026-10-05
  * round 2, cluster D5, pin bug-fold-list-item-rewritten-in-place.)
+ *
+ * A line that holds nothing but footnotes, such as "[^1]", keeps them in
+ * its key. Taken out, they left nothing to recognise the line by: every
+ * such line keyed as "", the same as a blank line and as each other. When
+ * the lint emptied one of them (an orphaned "[^9]" taken out), the line-up
+ * paired the emptied line's old text with another untouched "[^1]" line,
+ * and the caret on that line jumped to the next paragraph or to a moved
+ * definition (hunt 2026-10-06 cycle 3, cluster D1, pin
+ * bug-caret-reference-only-line).
  */
 function lineKey(line: string): string {
     // most lines hold no footnote, and two searches are quicker than the scan
     const plain = line.includes("[^") || line.includes("^[") ? withoutFootnotes(line) : line;
-    return plain.replace(/\s+/g, " ").trimEnd();
+    const key = plain.replace(/\s+/g, " ").trimEnd();
+    return key === "" ? line.replace(/\s+/g, " ").trimEnd() : key;
 }
 
 /**
