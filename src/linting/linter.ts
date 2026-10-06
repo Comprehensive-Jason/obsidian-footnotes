@@ -371,7 +371,11 @@ export function lintNote(plugin: FootnotePlugin, markdown: string, sectionHeadin
 export function lintRulesAllDisabled(plugin: FootnotePlugin): boolean {
     const s = plugin.settings;
     return (
-        !s.lintFixPunctuation &&
+        // Under the placement "Don't move" the punctuation rule does
+        // nothing, and the settings tab greys its toggle out, so it counts
+        // as off then, as the prefix rule does while prefixes are off
+        // (hunt 2026-10-02, pin bug-settings-idle-placement-counts-as-lint-on).
+        !(s.lintFixPunctuation && s.footnotePlacement !== "none") &&
         !s.lintFixLazyDefinitions &&
         !s.lintMoveToBottom &&
         !s.lintReindex &&

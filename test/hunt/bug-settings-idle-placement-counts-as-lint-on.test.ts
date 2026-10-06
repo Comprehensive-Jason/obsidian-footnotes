@@ -32,6 +32,9 @@ import { noticeCalls } from "../mocks/obsidian";
 // Cause: lintRulesAllDisabled reads the placement toggle
 // (lintFixPunctuation) on its own and never asks whether Placement is
 // "Don't move".
+//
+// Fix (2026-10-06): lintRulesAllDisabled counts the placement rule as off
+// while Placement is "Don't move".
 
 /** Every lint rule except the placement one switched off. */
 const everyOtherRuleOff = {
@@ -48,13 +51,13 @@ const everyOtherRuleOff = {
 beforeEach(resetNotices);
 
 describe("Placement \"Don't move\" with every other lint rule off", () => {
-    it.fails("lintRulesAllDisabled counts the idle (greyed) placement rule as off", () => {
+    it("lintRulesAllDisabled counts the idle (greyed) placement rule as off", () => {
         const plugin = fakePlugin({ ...everyOtherRuleOff, footnotePlacement: "none", lintFixPunctuation: true });
-        // Today: false.
+        // Before the fix: false.
         expect(lintRulesAllDisabled(plugin)).toBe(true);
     });
 
-    it.fails("lint on footnote creation stays silent, as it does with every rule off", () => {
+    it("lint on footnote creation stays silent, as it does with every rule off", () => {
         const lines = ["text[^1] here", "", "[^1]: used", "[^9]: stray"];
         const doc = fakeEditor(lines, { cursor: { line: 0, ch: 4 }, edits: true, wholeDoc: true });
         const plugin = fakePlugin(
@@ -62,7 +65,7 @@ describe("Placement \"Don't move\" with every other lint rule off", () => {
             doc,
         );
         lintAfterFootnoteCreation(plugin, doc, false);
-        // Today: one notice, the orphan alert naming [^9].
+        // Before the fix: one notice, the orphan alert naming [^9].
         expect(noticeCalls).toEqual([]);
     });
 });
