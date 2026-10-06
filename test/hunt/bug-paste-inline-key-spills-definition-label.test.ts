@@ -23,6 +23,11 @@ import { pasteInlineFootnote } from "../../src/commands/insert-or-navigate-footn
 // Source of truth: the carry design (Jason, 2026-09-22): the definition
 // lines in the clipboard are there for the paste to land as definitions,
 // not as text. A definition label is never prose.
+//
+// Fix (2026-10-06): readInlineFootnoteFromClipboard, which the single-caret
+// and the multi-caret paste both read the clipboard through, takes the
+// trailing definitions off the text the way a paste does
+// (splitCarriedText) before making it a footnote body.
 
 // Makes navigator.clipboard.readText hand back `text`.
 function stubClipboard(text: string) {
@@ -48,7 +53,7 @@ afterEach(() => {
 });
 
 describe("copy with carried definitions, then the paste-as-inline key", () => {
-    it.fails("does not flatten the copied definition's label into the inline footnote", async () => {
+    it("does not flatten the copied definition's label into the inline footnote", async () => {
         const src = fakeEditor(["a[^1] b", "", "[^1]: one"], {
             wholeDoc: true,
             edits: true,
@@ -72,5 +77,13 @@ describe("copy with carried definitions, then the paste-as-inline key", () => {
         await pasteInlineFootnote(fakePlugin({ ...base }, doc));
         // Today: "x^[a[^1] b [^1]: one]".
         expect(doc.lines.join("\n")).not.toContain("[^1]: one]");
+    });
+
+    it("multi-caret: the same clipboard leaves the label out at every caret", async () => {
+        stubClipboard("a[^1] b" + String.fromCharCode(10, 10) + "[^1]: one");
+        const doc = fakeEditor(["x y"], { wholeDoc: true, edits: true, carets: [{ line: 0, ch: 1 }, { line: 0, ch: 3 }] });
+        await pasteInlineFootnote(fakePlugin({ ...base }, doc));
+        // Before the fix: "x^[a[^1] b [^1]: one] y^[a[^1] b [^1]: one]".
+        expect(doc.lines.join(String.fromCharCode(10))).toBe("x^[a[^1] b] y^[a[^1] b]");
     });
 });

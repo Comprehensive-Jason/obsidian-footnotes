@@ -7,6 +7,7 @@ import { deadInsertionVerdict, InsertionVerdict } from "../editor/insertion-live
 import { inlineNoteInCell, maskInlineRegions } from "../parsing/cell-reading";
 import { InlineNote, NoteReading, readNote } from "../parsing/note-reading";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
+import { splitCarriedText } from "./carry-footnotes";
 
 import { showNotice } from "../editor/notice";
 import { readingViewActive } from "../editor/obsidian-internals";
@@ -45,7 +46,14 @@ export async function readInlineFootnoteFromClipboard(
     }
     const viewAfterAwait = plugin.app.workspace.getActiveViewOfType(MarkdownView);
     if (!viewAfterAwait || readingViewActive(viewAfterAwait)) return null;
-    const content = sanitizeInlineFootnoteContent(raw);
+    // Definitions at the end of the clipboard text are not text for the
+    // footnote: a copy writes the definitions its references need after
+    // the copied text, for a paste to land them as definitions. They are
+    // read off the way a paste reads them (splitCarriedText), so their
+    // labels are never flattened into the footnote as prose (hunt
+    // 2026-10-02, pin bug-paste-inline-key-spills-definition-label:
+    // "x^[a[^1] b [^1]: one]").
+    const content = sanitizeInlineFootnoteContent(splitCarriedText(raw).body);
     if (!content) {
         showNotice("The clipboard is empty, so there is nothing to put in an inline footnote.");
         return null;
