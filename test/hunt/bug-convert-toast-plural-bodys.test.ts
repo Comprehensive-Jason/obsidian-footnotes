@@ -16,11 +16,13 @@ import { convertInlineFootnotesToNormal } from "../../src/commands/convert-footn
 //
 // Source of truth: English spelling ("bodies"), and AGENTS.md's rule that
 // notices get a real rewrite when their wording is wrong.
+//
+// Fix (2026-10-06): the toast spells the plural "bodies".
 
 beforeEach(resetNotices);
 
 describe("the merge toast of inline to normal", () => {
-    it.fails("the merge toast spells the plural of body", () => {
+    it("the merge toast spells the plural of body", () => {
         const doc = fakeEditor(["a^[s] b^[s] c^[s] d^[t] e^[t]"], { wholeDoc: true, edits: true, cursor: { line: 0, ch: 0 } });
         convertInlineFootnotesToNormal(fakePlugin({}, doc), doc);
         expect(messages().join("\n")).not.toContain("bodys");

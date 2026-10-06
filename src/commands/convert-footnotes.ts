@@ -350,10 +350,12 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         merged: spans.length - ids.length,
         skipped,
     };
-    const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+    // `words` is the plural form, for a word that does not just add an "s"
+    // ("bodies", hunt 2026-10-02, pin bug-convert-toast-plural-bodys)
+    const plural = (n: number, word: string, words = `${word}s`) => `${n} ${n === 1 ? word : words}`;
     showNotice(
         `Converted ${plural(result.converted, "inline footnote")} into ${plural(result.definitions, "normal footnote")}` +
-            (result.merged > 0 ? ` (${plural(result.merged, "identical body")} merged)` : "") +
+            (result.merged > 0 ? ` (${plural(result.merged, "identical body", "identical bodies")} merged)` : "") +
             "." +
             (skipped.length > 0 ? ` Skipped ${skippedList(skipped)}.` : ""),
     );
