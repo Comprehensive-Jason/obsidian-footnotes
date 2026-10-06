@@ -43,7 +43,7 @@ describe("move-to-bottom unblocks an orphan cut the same lint refused", () => {
 
     // Now: the first lint gives "a[^b]", "", "> [^q]: orphan q",
     // "    more", "", "[^b]: def b"; the second deletes "> [^q]: orphan q".
-    it.fails("the lint with Delete orphaned definitions on is idempotent", () => {
+    it("the lint with Delete orphaned definitions on is idempotent", () => {
         const once = lintFootnotes(doc, options);
         expect(lintFootnotes(once, options)).toBe(once);
     });
@@ -51,7 +51,7 @@ describe("move-to-bottom unblocks an orphan cut the same lint refused", () => {
     // After one lint, either [^q] is gone, or the orphan rule still refuses
     // it in the note as it now is, so the alert is right to name it. Now:
     // [^q] is left, and the orphan rule would cut it.
-    it.fails("after one lint, either [^q] is gone or the orphan rule still refuses it (so the alert names it)", () => {
+    it("after one lint, either [^q] is gone or the orphan rule still refuses it (so the alert names it)", () => {
         const once = lintFootnotes(doc, options);
         const left = orphanedFootnoteDefinitionNames(once);
         if (left.length === 0) return;

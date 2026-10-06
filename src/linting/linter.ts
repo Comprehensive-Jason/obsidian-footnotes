@@ -244,9 +244,11 @@ export function lintFootnotes(
         // definitions sit before it decides whether to refuse a deletion, so
         // a definition deleted after it looked would flip its verdict on the
         // next run. (Caught by the idempotence property, 2026-08-10.)
-        if (options.removeOrphanedDefinitions) {
-            let beforeDeletion = result;
-            result = removeOrphanedDefinitionsRule.apply(result);
+        // The orphan rule, with the rules above run again after each
+        // deletion it makes; it runs here and again after the move.
+        const deleteOrphans = (text: string): string => {
+            let beforeDeletion = text;
+            let out = removeOrphanedDefinitionsRule.apply(text);
             // A deletion can take away the reason fix-lazy left a label
             // alone: the blank line it would have put in pulled the deleted
             // definition into the label's footnote (Jason's triage decision
@@ -259,22 +261,41 @@ export function lintFootnotes(
             // bug-fix-lazy-skip-then-orphan-not-idempotent). Each round
             // that goes on deletes a definition, so the rounds end; the cap
             // is a safety net.
-            for (let round = 0; round < 10 && result !== beforeDeletion && (options.fixLazyDefinitions ?? true); round++) {
-                const fixed = fixLazyDefinitionsRule.apply(result);
-                if (fixed === result) break;
-                result = options.mergeDuplicateDefinitions ? mergeDuplicateDefinitionsRule.apply(fixed) : fixed;
-                beforeDeletion = result;
-                result = removeOrphanedDefinitionsRule.apply(result);
+            for (let round = 0; round < 10 && out !== beforeDeletion && (options.fixLazyDefinitions ?? true); round++) {
+                const fixed = fixLazyDefinitionsRule.apply(out);
+                if (fixed === out) break;
+                out = options.mergeDuplicateDefinitions ? mergeDuplicateDefinitionsRule.apply(fixed) : fixed;
+                beforeDeletion = out;
+                out = removeOrphanedDefinitionsRule.apply(out);
             }
-        }
+            return out;
+        };
+        if (options.removeOrphanedDefinitions) result = deleteOrphans(result);
         if (options.fixPunctuation ?? true) {
             result = footnoteAfterPunctuationRule.apply(result, { placement: options.placement });
         }
         if (options.moveDefinitionsToBottom ?? true) {
-            result = moveFootnotesToTheBottomRule.apply(
-                result,
-                options.sectionHeading ?? "",
-            );
+            const move = (text: string): string => moveFootnotesToTheBottomRule.apply(text, options.sectionHeading ?? "");
+            let beforeMove = result;
+            result = move(result);
+            // The move can take away the reason the orphan rule left an
+            // orphaned definition alone: the definition it moved away was
+            // the one the line under the orphan would have joined once the
+            // orphan was cut. The orphan rule then cut it on the next lint,
+            // so a lint was not idempotent, and the alert after the first
+            // lint named nothing (hunt 2026-10-06, cycle 4, pin
+            // bug-orphan-refused-then-move-deletes-next-lint). So after a
+            // move that changed the note, the orphan rule runs again, and
+            // after a deletion the move does, until neither changes
+            // anything. Each round that goes on deletes a definition, so
+            // the rounds end; the cap is a safety net. Every definition
+            // deletion still comes before the reference deletion below.
+            for (let round = 0; round < 10 && result !== beforeMove && options.removeOrphanedDefinitions; round++) {
+                const cut = deleteOrphans(result);
+                if (cut === result) break;
+                beforeMove = cut;
+                result = move(cut);
+            }
         }
         // Orphaned REFERENCE deletion runs once the layout has settled:
         // after the deletions and moves above, and before prefixing and
