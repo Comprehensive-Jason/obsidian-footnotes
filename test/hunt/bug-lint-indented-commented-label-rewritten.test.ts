@@ -37,6 +37,11 @@ import { messages, resetNotices } from "../helpers/notices";
 // columns of indent (definitionLabelWithName), so a four-column label is
 // not a label to it, and the punctuation rule then treats "[^k]" as a
 // reference followed by a colon.
+//
+// The lint half is fixed (2026-10-05, round 2's cluster L5, pin
+// bug-punctuation-wide-item-label): the punctuation rule reads a label
+// from where the line's containers end, here past the definition's four
+// columns, so it steps over "[^k]:". The alert half is still open.
 
 /** Lint `doc` on default settings, then run the alerts on the result, as linter.ts does. */
 function lintThenAlerts(doc: string) {
@@ -59,8 +64,8 @@ beforeEach(resetNotices);
 describe("a commented label inside a definition's indented %% block", () => {
     const DOC = "use[^a]\n\n[^a]: x\n    %%\n    [^k]: y\n    %%\n";
 
-    it.fails("the default lint leaves the hidden label as written", () => {
-        // Today: the hidden line becomes "    :[^k] y".
+    it("the default lint leaves the hidden label as written", () => {
+        // Before the fix: the hidden line became "    :[^k] y".
         expect(lintThenAlerts(DOC).after).toBe(DOC);
     });
 

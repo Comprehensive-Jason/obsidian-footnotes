@@ -29,22 +29,25 @@ import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after
 // most three spaces before it. At an item's content column of 4 or more
 // the label is four spaces in, so the rule takes "[^b]" for a reference
 // before a colon and moves it after the colon.
+//
+// Fixed 2026-10-05: the rule reads a lazy label from where the line's
+// containers end, as labelShapedLines does.
 
 describe("the punctuation rule and a label at a wide item's content column", () => {
-    it.fails("a lazy label in a 10. item is left whole", () => {
-        // Today: "Text.[^b]\n\n10. item\n    :[^b] lazy".
+    it("a lazy label in a 10. item is left whole", () => {
+        // Before the fix: "Text.[^b]\n\n10. item\n    :[^b] lazy".
         expect(footnoteAfterPunctuation("Text[^b].\n\n10. item\n    [^b]: lazy")).toBe("Text.[^b]\n\n10. item\n    [^b]: lazy");
     });
 
-    it.fails("the default lint leaves an underlined label in a 10. item whole", () => {
+    it("the default lint leaves an underlined label in a 10. item whole", () => {
         const out = lintFootnotes("Text[^b].\n\n10. item\n    [^b]: lazy\n    ---", { sectionHeading: "# Footnotes" });
-        // Today: "Text.[^b]\n\n10. item\n    :[^b] lazy\n    ---".
+        // Before the fix: "Text.[^b]\n\n10. item\n    :[^b] lazy\n    ---".
         expect(out).toContain("    [^b]: lazy");
     });
 
-    it.fails("the default lint leaves an underlined label in a nested item whole", () => {
+    it("the default lint leaves an underlined label in a nested item whole", () => {
         const out = lintFootnotes("Text[^b].\n\n- parent\n  - child\n    [^b]: lazy\n    ---", { sectionHeading: "# Footnotes" });
-        // Today: "Text.[^b]\n\n- parent\n  - child\n    :[^b] lazy\n    ---".
+        // Before the fix: "Text.[^b]\n\n- parent\n  - child\n    :[^b] lazy\n    ---".
         expect(out).toContain("    [^b]: lazy");
     });
 });

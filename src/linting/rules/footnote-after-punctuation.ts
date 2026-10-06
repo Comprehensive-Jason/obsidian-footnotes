@@ -190,7 +190,15 @@ export function footnoteAfterPunctuation(markdown: string, placement: FootnotePl
             // the label reader sees, so it is stepped over first (the old
             // colon guard happened to cover it; spec-bom-before-line-zero-label)
             const bom = line.startsWith("\ufeff") ? 1 : 0;
-            const prefixLength = reading.labelOn(i)?.labelEnd ?? bom + (definitionLabelIn(line.slice(bom))?.labelEnd ?? 0);
+            // A lazy label is read from where the line's containers end,
+            // as labelShapedLines reads it, so one at a list item's content
+            // column of 4 or more ("10. item" puts it at column 4) is a
+            // label too. Read from the margin it sat four spaces in, and its
+            // "[^b]" was moved after the colon, ":[^b] lazy" (hunt
+            // 2026-10-05, round 2, pin bug-punctuation-wide-item-label).
+            const textStart = Math.max(bom, reading.containerEnd(i));
+            const shaped = definitionLabelIn(line.slice(textStart));
+            const prefixLength = reading.labelOn(i)?.labelEnd ?? (shaped === null ? bom : textStart + shaped.labelEnd);
             return (
                 line.slice(0, prefixLength) +
                 swapInSegment(
