@@ -131,8 +131,8 @@ export function replaceInTableCell(
 }
 
 // The one place cell writes happen. It refuses born-dead text, and an
-// edit that leaves fewer links drawn than there were, images and embeds
-// counted apart (the cell's twin of pressLineVerdict's "link" verdict,
+// edit after which some link is not drawn as it was, a bare address cut
+// short included (the cell's twin of pressLineVerdict's "link" verdict,
 // judged with the note's link labels; fewerLinksDrawn),
 // and otherwise writes through the cell's own editor, leaving the caret
 // inside what it just wrote. Never the main editor: a main-editor write

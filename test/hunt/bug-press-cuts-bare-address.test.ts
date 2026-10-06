@@ -73,7 +73,7 @@ function drawnLinks(lines: string[]): string[] {
 // keeps every link pointing where it pointed.
 describe("a press inside a bare address never changes where it points", () => {
     // Now: "contact b[^1]ob@example.com today", which links "ob@example.com".
-    it.fails("autonum, end of word off: caret after the 'b' of 'bob@example.com'", async () => {
+    it("autonum, end of word off: caret after the 'b' of 'bob@example.com'", async () => {
         const lines = ["contact bob@example.com today"];
         const doc = fakeEditor([...lines], { cursor: { line: 0, ch: 9 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(EndOfWordOff, doc));
@@ -83,7 +83,7 @@ describe("a press inside a bare address never changes where it points", () => {
 
     // Now: "see ht[^1]tps://e.com/[t](u) end": the web address is gone and
     // "[t](u)" is drawn alone.
-    it.fails("autonum, end of word off: caret in the scheme of an address that runs into a link", async () => {
+    it("autonum, end of word off: caret in the scheme of an address that runs into a link", async () => {
         const lines = ["see https://e.com/[t](u) end"];
         const doc = fakeEditor([...lines], { cursor: { line: 0, ch: 6 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(EndOfWordOff, doc));
@@ -93,7 +93,7 @@ describe("a press inside a bare address never changes where it points", () => {
 
     // A table cell is edited in its own small editor; this object stands in
     // for it. Now: the cell press writes "b[^1]ob@example.com".
-    it.fails("table cell, end of word off: caret after the 'b' of 'bob@example.com' is refused", () => {
+    it("table cell, end of word off: caret after the 'b' of 'bob@example.com' is refused", () => {
         const dispatched: { changes?: { from: number } }[] = [];
         const cell = {
             state: { doc: { toString: () => "bob@example.com" }, selection: { main: { head: 1, anchor: 1 } } },
@@ -106,7 +106,7 @@ describe("a press inside a bare address never changes where it points", () => {
     // A lone press at ch 10 is refused. Now: "[^1]h[^1]ttps://e.[^1]coma@b.co":
     // the first two references break the web address, so the third comes
     // out live, and the line now links the email "coma@b.co".
-    it.fails("multi-caret, end of word off: carets at ch 0, 1, and 10 of 'https://e.coma@b.co'", async () => {
+    it("multi-caret, end of word off: carets at ch 0, 1, and 10 of 'https://e.coma@b.co'", async () => {
         const lines = ["https://e.coma@b.co", "Wow", ""];
         const doc = fakeEditor([...lines], {
             carets: [
