@@ -39,7 +39,7 @@ const deleteOrphans: LintOptions = { removeOrphanedDefinitions: true };
 
 describe("fix-lazy's skip is decided before the orphan rule removes its cause", () => {
     // Once: "Text." / "" / "- item" / "[^n]: outer". Twice: "Text." / "" / "- item".
-    it.fails("a lazy label nothing references, over an orphaned in-item definition: lint twice is lint once", () => {
+    it("a lazy label nothing references, over an orphaned in-item definition: lint twice is lint once", () => {
         const doc = "Text.\n\n- item\n[^n]: outer\n\n    [^m]: inner";
         const once = lintFootnotes(doc, deleteOrphans);
         expect(lintFootnotes(once, deleteOrphans)).toBe(once);
@@ -47,13 +47,13 @@ describe("fix-lazy's skip is decided before the orphan rule removes its cause", 
 
     // Once: "Text.[^n]" / "" / "- item" / "[^n]: outer".
     // Twice: "Text.[^n]" / "" / "- item" / "" / "[^n]: outer".
-    it.fails("a referenced lazy label: lint twice is lint once", () => {
+    it("a referenced lazy label: lint twice is lint once", () => {
         const doc = "Text[^n].\n\n- item\n[^n]: outer\n\n    [^m]: inner";
         const once = lintFootnotes(doc, deleteOrphans);
         expect(lintFootnotes(once, deleteOrphans)).toBe(once);
     });
 
-    it.fails("a numbered item that does not start at 1: lint twice is lint once", () => {
+    it("a numbered item that does not start at 1: lint twice is lint once", () => {
         const doc = "Text.\n\n3. three\n[^n]: outer\n\n    [^m]: inner";
         const once = lintFootnotes(doc, deleteOrphans);
         expect(lintFootnotes(once, deleteOrphans)).toBe(once);

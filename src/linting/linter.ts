@@ -245,7 +245,27 @@ export function lintFootnotes(
         // a definition deleted after it looked would flip its verdict on the
         // next run. (Caught by the idempotence property, 2026-08-10.)
         if (options.removeOrphanedDefinitions) {
+            let beforeDeletion = result;
             result = removeOrphanedDefinitionsRule.apply(result);
+            // A deletion can take away the reason fix-lazy left a label
+            // alone: the blank line it would have put in pulled the deleted
+            // definition into the label's footnote (Jason's triage decision
+            // Q7, 2026-10-05). So once the orphan rule has deleted
+            // something, the three rules above run again, until nothing
+            // more changes: fix-lazy fixes the label now, and the merge and
+            // the orphan rule judge it like any other definition. Before,
+            // the next lint did that, and a lint was not idempotent (hunt
+            // 2026-10-06, cycle 3, pin
+            // bug-fix-lazy-skip-then-orphan-not-idempotent). Each round
+            // that goes on deletes a definition, so the rounds end; the cap
+            // is a safety net.
+            for (let round = 0; round < 10 && result !== beforeDeletion && (options.fixLazyDefinitions ?? true); round++) {
+                const fixed = fixLazyDefinitionsRule.apply(result);
+                if (fixed === result) break;
+                result = options.mergeDuplicateDefinitions ? mergeDuplicateDefinitionsRule.apply(fixed) : fixed;
+                beforeDeletion = result;
+                result = removeOrphanedDefinitionsRule.apply(result);
+            }
         }
         if (options.fixPunctuation ?? true) {
             result = footnoteAfterPunctuationRule.apply(result, { placement: options.placement });
