@@ -19,6 +19,10 @@ import { readNote } from "../../src/parsing/note-reading";
 // to the other side of the punctuation, never turns it into something
 // else) and spec-image-alt-reference (resolved in Reading view
 // 2026-09-16: a reference inside an image's alt text is dead).
+//
+// Fixed 2026-10-05 with round 2's cluster P10 (pin
+// bug-punctuation-steps-over-bracket): the rule makes a move only if every
+// footnote on the line is still a footnote after it.
 
 // The names of the live references on `line` of `text`, as the plugin reads them.
 function liveNames(text: string, line = 0): string[] {
@@ -27,9 +31,9 @@ function liveNames(text: string, line = 0): string[] {
 }
 
 describe("after: the move never builds an image out of a '!' and a '(...)'", () => {
-    it.fails("lint: It was free[^1]!(sic) keeps a live [^1]", () => {
+    it("lint: It was free[^1]!(sic) keeps a live [^1]", () => {
         const out = footnoteAfterPunctuation("It was free[^1]!(sic)\n\n[^1]: x", "after");
-        // Today out starts "It was free![^1](sic)", and [^1] is no longer live.
+        // Before the fix out started "It was free![^1](sic)", and [^1] is no longer live.
         expect(liveNames(out)).toEqual(["1"]);
     });
 });

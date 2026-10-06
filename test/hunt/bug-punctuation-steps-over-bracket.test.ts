@@ -36,6 +36,10 @@ import { fakePlugin } from "../helpers/fake-plugin";
 // referenceLandingAfter, which counts "]" as a closing mark; nothing asks
 // whether the moved reference is still live after the "]". Not a
 // regression: it predates 6d37374.
+//
+// Fixed 2026-10-05: the rule reads the note as its moves leave it, and a
+// line that holds fewer footnotes than before is done again, each move on
+// it made only if the line still holds them all after it.
 
 function liveNames(text: string, line = 0): string[] {
     return readNote(text.split("\n")).referencesOn(line).map((o) => o.name);
@@ -44,22 +48,22 @@ function liveNames(text: string, line = 0): string[] {
 beforeEach(resetNotices);
 
 describe("the punctuation rule and bracketed text", () => {
-    it.fails("after: '[some text[^1]] here' keeps [^1] live", () => {
+    it("after: '[some text[^1]] here' keeps [^1] live", () => {
         const out = footnoteAfterPunctuation("I said [some text[^1]] here\n\n[^1]: note", "after");
         expect(liveNames(out)).toEqual(["1"]);
     });
-    it.fails("after: '[some text[^1]]' at the line's end keeps [^1] live", () => {
+    it("after: '[some text[^1]]' at the line's end keeps [^1] live", () => {
         const out = footnoteAfterPunctuation("I said [some text[^1]]\n\n[^1]: note", "after");
         expect(liveNames(out)).toEqual(["1"]);
     });
-    it.fails("before: '[some text[^1]] here' keeps [^1] live", () => {
+    it("before: '[some text[^1]] here' keeps [^1] live", () => {
         const out = footnoteAfterPunctuation("I said [some text[^1]] here\n\n[^1]: note", "before");
         expect(liveNames(out)).toEqual(["1"]);
     });
 });
 
 describe("default settings: convert the last word in brackets, then lint", () => {
-    it.fails("the default lint keeps the converted footnote live", async () => {
+    it("the default lint keeps the converted footnote live", async () => {
         const doc = fakeEditor(["I said [some text] here"], {
             cursor: { line: 0, ch: 17 },
             selection: { anchor: { line: 0, ch: 13 }, head: { line: 0, ch: 17 } },
@@ -70,7 +74,7 @@ describe("default settings: convert the last word in brackets, then lint", () =>
         await insertAutonumFootnote(fakePlugin({ ...DEFAULT_SETTINGS, enablePopupEditor: false, lintOnFootnoteCreation: false }, doc));
         // The conversion itself is fine: "I said [some[^1]] here" / "" / "[^1]: text".
         expect(doc.lines[0]).toBe("I said [some[^1]] here");
-        // Today the lint writes "I said [some][^1] here", a reference link with the label "^1".
+        // Before the fix the lint wrote "I said [some][^1] here", a reference link with the label "^1".
         expect(liveNames(lintFootnotes(doc.lines.join("\n"), {}))).toEqual(["1"]);
     });
 });

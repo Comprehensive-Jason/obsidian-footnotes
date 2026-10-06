@@ -1,6 +1,6 @@
 import { definitionLabelIn } from "../../parsing/label-shapes";
 import { ClosingMarkChars, FootnotePlacement, punctuationAt, referenceLandingAfter } from "../../parsing/landing";
-import { NoteReading } from "../../parsing/note-reading";
+import { NoteReading, readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
@@ -59,6 +59,11 @@ function movableUnits(reading: NoteReading, i: number, from: number): MovableUni
 // The punctuation is looked for on the masked twin, but the text handed
 // back is built from the original line. Otherwise a footnote name could
 // come out with the blanking characters in it.
+//
+// `keeps` is asked about each move before it is made, with the stretch as
+// the move would leave it, and a move it turns down is not made. The
+// first pass over a note allows every move; a line where a footnote died
+// is done again with a real check (footnoteAfterPunctuation).
 function swapInSegment(
     original: string,
     masked: string,
@@ -66,6 +71,7 @@ function swapInSegment(
     insideBody = false,
     mayBeLabel = true,
     placement: FootnotePlacement = "after",
+    keeps: (segment: string) => boolean = () => true,
 ): string {
     let out = "";
     let copied = 0;
@@ -124,10 +130,9 @@ function swapInSegment(
             // second definition of footnote 1 (hunt 2026-10-02, pin
             // bug-placement-before-colon-makes-label).
             if (labelAt(punctuationStart, masked[punctuationStart])) continue;
-            out +=
-                original.slice(copied, punctuationStart) +
-                original.slice(start, end) +
-                original.slice(punctuationStart, start);
+            const movedBack = original.slice(copied, punctuationStart) + original.slice(start, end) + original.slice(punctuationStart, start);
+            if (!keeps(out + movedBack + original.slice(end))) continue;
+            out += movedBack;
             copied = end;
             continue;
         }
@@ -144,10 +149,9 @@ function swapInSegment(
         // to. Under "before" the forward move only ever carries a run out
         // of a quote, which is right wherever the run started.
         if (placement === "after" && start > 0 && (punctuationAt(masked, start - 1) || ClosingMarkChars.includes(masked[start - 1]))) continue;
-        out +=
-            original.slice(copied, start) +
-            original.slice(end, punctuationEnd) +
-            original.slice(start, end);
+        const moved = original.slice(copied, start) + original.slice(end, punctuationEnd) + original.slice(start, end);
+        if (!keeps(out + moved + original.slice(punctuationEnd))) continue;
+        out += moved;
         copied = punctuationEnd;
     }
     return out + original.slice(copied);
@@ -173,7 +177,10 @@ export function footnoteAfterPunctuation(markdown: string, placement: FootnotePl
     // while the part outside it still gets the swap
     // (bug-comment-boundary-lines).
     return rewriteDocument(markdown, (_text, { lines, reading, maskedLines }) => {
-        const result = lines.map((line, i) => {
+        // Line `i` with its moves made, each one only if `keeps` allows
+        // the line as that move would leave it.
+        const rewriteLine = (i: number, keeps: (line: string) => boolean = () => true): string => {
+            const line = lines[i];
             if (reading.protectedLines[i]) return line;
             const masked = maskedLines[i];
             // A definition's own "[^x]:" label is not a reference sitting
@@ -208,9 +215,37 @@ export function footnoteAfterPunctuation(markdown: string, placement: FootnotePl
                     prefixLength > bom,
                     i === 0 || lines[i - 1].trim() === "",
                     placement,
+                    (segment) => keeps(line.slice(0, prefixLength) + segment),
                 )
             );
-        });
+        };
+        const result = lines.map((_line, i) => rewriteLine(i));
+        // A move must leave every footnote it moves a footnote, as a press
+        // must (the born-dead check, insertion-liveness.ts). Stepping over
+        // the "]" of bracketed text that is no link turns
+        // "[some text[^1]] here" into "[some text][^1] here", which reads
+        // as a reference link with the label "^1", so the footnote's only
+        // reference is gone (hunt 2026-10-05, round 2, pin
+        // bug-punctuation-steps-over-bracket); so does stepping over a "!"
+        // in front of "(sic)", which makes an image (pin
+        // bug-placement-after-builds-image). A move stays on its line, so
+        // the note as the moves leave it is read once, and only a line
+        // that holds fewer footnotes than before is done again, each move
+        // on it made only if the line still holds them all after it. The
+        // lint's next rule reads the same note, so the check reads nothing
+        // the lint would not read anyway.
+        const footnotesOn = (of: NoteReading, i: number) => of.referencesOn(i).length + of.inlineNotesOn(i).length;
+        if (result.some((line, i) => line !== lines[i])) {
+            const after = readNote(result);
+            for (let i = 0; i < result.length; i++) {
+                if (result[i] === lines[i] || footnotesOn(after, i) >= footnotesOn(reading, i)) continue;
+                result[i] = rewriteLine(i, (line) => {
+                    const trial = [...result];
+                    trial[i] = line;
+                    return footnotesOn(readNote(trial), i) >= footnotesOn(reading, i);
+                });
+            }
+        }
         return result.join("\n");
     });
 }
