@@ -52,7 +52,7 @@ describe("an empty inline footnote over two lines", () => {
     });
 
     // Today: no notice, and the caret hops to line 1, column 3.
-    it.fails("over two lines of a quote warns that it is empty, as in a list item", async () => {
+    it("over two lines of a quote warns that it is empty, as in a list item", async () => {
         const lines = ["> a ^[", "> ] b"];
         const { doc, messages } = await press(lines, { line: 0, ch: 6 });
         expect(messages).toEqual([Empty]);
@@ -61,7 +61,7 @@ describe("an empty inline footnote over two lines", () => {
     });
 
     // Today: no notice, and the caret hops to line 2, column 3.
-    it.fails("over two lines of a callout warns that it is empty", async () => {
+    it("over two lines of a callout warns that it is empty", async () => {
         const lines = ["> [!note]", "> a ^[", "> ] b"];
         const { doc, messages } = await press(lines, { line: 1, ch: 6 });
         expect(messages).toEqual([Empty]);
@@ -81,7 +81,7 @@ describe("several carets in empty inline footnotes in a quote", () => {
     });
 
     // Today: the note is unchanged, but the notice is the one about nesting footnotes.
-    it.fails("carets in an empty inline footnote over two quote lines and an empty one-line one warn as empty, as in a list item", async () => {
+    it("carets in an empty inline footnote over two quote lines and an empty one-line one warn as empty, as in a list item", async () => {
         const lines = ["> a ^[", "> ] b ^[ ] c"];
         const doc = fakeEditor([...lines], { carets: [{ line: 0, ch: 6 }, { line: 1, ch: 8 }], edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin({}, doc));

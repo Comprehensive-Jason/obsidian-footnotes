@@ -242,12 +242,21 @@ function maskedInlineFootnoteSpan(
  * masked, line by line when it runs over several lines of its paragraph.
  * The single-caret guards and the multi-caret press both ask it whether an
  * inline footnote is still empty.
+ *
+ * Each later line is read from where its containers end (containerEnd),
+ * not from its first column. A quote's "> " or a list item's indentation
+ * there belongs to the container, and Obsidian strips it before it reads
+ * the paragraph, so it is no text of the footnote. Read from the first
+ * column, an empty inline footnote over two lines of a quote ("> a ^[" /
+ * "> ] b") counted its "> " as text and was taken to be filled (hunt
+ * 2026-10-05, round 2, pin bug-empty-multi-line-inline-in-quote).
  */
 export function inlineNoteBody(reading: NoteReading, note: InlineNote): string {
     const body: string[] = [];
     for (let line = note.line; line <= note.closeLine; line++) {
         const masked = reading.maskedLine(line);
-        body.push(masked.slice(line === note.line ? note.open + 2 : 0, line === note.closeLine ? note.close : masked.length));
+        const from = line === note.line ? note.open + 2 : reading.containerEnd(line);
+        body.push(masked.slice(from, line === note.closeLine ? note.close : masked.length));
     }
     return body.join("\n");
 }
