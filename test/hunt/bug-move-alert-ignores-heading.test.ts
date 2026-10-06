@@ -54,26 +54,28 @@ describe("the move alert with a section heading and a list after it", () => {
     // Now: "This note has a footnote definition the lint could not move to
     // the bottom ("[^c]"), and the lint left it in place, because moving
     // it would change how Obsidian reads the lines around it. ..."
-    it.fails("after the lint gathered [^c] under the heading, the move alert does not name it", () => {
+    it("after the lint gathered [^c] under the heading, the move alert does not name it", () => {
         const after = lintFootnotes(doc, { sectionHeading: heading });
         expect(after).toBe("x[^c] here.\n\n# Footnotes\n\n  [^c]: def\n\n- item");
         noticeLintAlerts(fakePlugin({ lintMoveToBottom: true, enableFootnoteSectionHeading: true, footnoteSectionHeading: heading }), after);
         expect(messages().filter((m) => m.includes("could not move to the bottom"))).toEqual([]);
     });
 
-    // Now: ["c"].
-    it.fails("definitionsHoldingTheMoveBack on the gathered note is empty", () => {
+    // Now: ["c"]. Told the heading the lint used (the pin first called it
+    // without one, which asks about gathering at the end of the note, where
+    // [^c] would join the list: the cause above is that it was never told).
+    it("definitionsHoldingTheMoveBack on the gathered note is empty", () => {
         const after = lintFootnotes(doc, { sectionHeading: heading });
-        expect(definitionsHoldingTheMoveBack(after)).toEqual([]);
+        expect(definitionsHoldingTheMoveBack(after, heading)).toEqual([]);
     });
 
     // The same with text between the heading and the list, and the
     // heading one level down.
     // Now: ["c"].
-    it.fails("with text under the heading: no move alert for a definition the lint gathered there", () => {
+    it("with text under the heading: no move alert for a definition the lint gathered there", () => {
         const note = "Text[^c].\n\n  [^c]: def\n\n## Footnotes\n\nAfter\n- item";
         const linted = lintFootnotes(note, { sectionHeading: "## Footnotes" });
         expect(linted).toBe("Text.[^c]\n\n## Footnotes\n\n  [^c]: def\n\nAfter\n- item");
-        expect(definitionsHoldingTheMoveBack(linted)).toEqual([]);
+        expect(definitionsHoldingTheMoveBack(linted, "## Footnotes")).toEqual([]);
     });
 });

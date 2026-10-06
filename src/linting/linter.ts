@@ -42,7 +42,8 @@ import { invalidPrefixMessage, LintingCanceled, showNotice } from "../editor/not
 // user's settings into the options the rules take, and running the lint
 // automatically when a trigger fires (on save, and on footnote creation).
 
-function configuredSectionHeading(plugin: FootnotePlugin): string {
+/** The section heading setting as the lint takes it: trimmed, or "" while the setting is off. */
+export function configuredSectionHeading(plugin: FootnotePlugin): string {
     return plugin.settings.enableFootnoteSectionHeading
         ? trimmedSectionHeading(plugin.settings.footnoteSectionHeading)
         : "";
