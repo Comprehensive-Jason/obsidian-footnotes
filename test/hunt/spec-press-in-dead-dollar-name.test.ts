@@ -43,6 +43,13 @@ import { messages, resetNotices } from "../helpers/notices";
 //       in a shape it reads as dead.
 // The tests below take option (a).
 //
+// The same question with a "|" in a table row: "|" is a legal name
+// character too, but in a table row it splits the cell, so "[^|]" is no
+// reference there. The multi-caret named flow with "|" typed as the name
+// writes a fresh "[^]" into each dead shape on the second press, with no
+// notice (the last test below; hunt 2026-10-06, cycle 4, cluster P6, seed
+// 31037102 of the same "FULL MULTI-CARET NAMED flow").
+//
 // Hunt 2026-10-06, cycle 3, lens press. Cluster P1.
 //
 // Origin: pre-existing (cec4352 does the same).
@@ -90,5 +97,24 @@ describe("spec question: a typed name whose '$' pairs with a '$' in front of the
         await insertAutonumFootnote(fakePlugin(Settings, doc));
         expect(doc.lines[0]).not.toContain("[^$start[^");
         expect(messages().length === 0 && doc.lines[0] !== lines[0]).toBe(false);
+    });
+});
+
+describe("spec question: a name typed into a table row's placeholder holds the row's '|'", () => {
+    // Now: "|[^|[^]] a | b |" and "| c[^100][^|[^]] | d |", no notice.
+    it.fails("multi-caret named flow with '|' typed as the name in a table row: the second press writes nothing", async () => {
+        const lines = ["| a | b |", "| --- | --- |", "| c[^100] | d |"];
+        const doc = fakeEditor([...lines], { carets: [{ line: 0, ch: 1 }, { line: 2, ch: 9 }], edits: true, wholeDoc: true, words: true });
+        await insertNamedFootnote(fakePlugin(Settings, doc));
+        expect(doc.lines[0]).toBe("|[^] a | b |");
+        expect(doc.lines[2]).toBe("| c[^100][^] | d |");
+        // Typing "|" once: CodeMirror repeats it at every caret.
+        const typed = simulateChanges(doc.lines, [
+            { from: { line: 0, ch: 3 }, text: "|" },
+            { from: { line: 2, ch: 11 }, text: "|" },
+        ]);
+        const doc2 = fakeEditor([...typed], { carets: [{ line: 0, ch: 4 }, { line: 2, ch: 12 }], edits: true, wholeDoc: true, words: true });
+        await insertNamedFootnote(fakePlugin(Settings, doc2));
+        expect(doc2.lines).toEqual(typed);
     });
 });
