@@ -73,17 +73,18 @@ describe("a label under a table row that is not the last", () => {
         expect(fixLazyDefinitions(DELIMITER_ROW)).toBe(DELIMITER_ROW);
     });
 
-    it("the default lint keeps the row Obsidian folds into the footnote with it, so nothing renders differently", () => {
+    it("the default lint leaves the label and the row Obsidian folds into the footnote where they are, for the alert to name", () => {
         // Reading view ends the table at the label and reads "| e | f |"
         // as the footnote's lazy text (the A2 alert says so, and a lone
-        // piped line under a label was probed as body text 2026-09-16),
-        // so the block walker owns that row and the move carries it away
-        // with the footnote (GLM hunt cycle 10): the table keeps the two
-        // rows it rendered before, and the footnote keeps its text. The
-        // in-table alert still names the label so the user can decide.
-        expect(lintFootnotes(MIDDLE_ROW)).toBe(
-            ["| a | b |", "| - | - |", "| c | d |", "", "ref[^1]", "", "[^1]: x", "| e | f |"].join("\n"),
-        );
+        // piped line under a label was probed as body text 2026-09-16).
+        // GLM hunt cycle 10 let the move carry the label and that row to
+        // the bottom, which renders the same, but then the in-table alert
+        // found nothing to name, and a row the user typed into the table
+        // ended up at the bottom of the note. Under ruling A2 the plugin
+        // leaves such a label where it is and the alert tells the user, so
+        // the lint moves nothing here (hunt 2026-10-02, round 4, cluster
+        // A1, pin bug-lint-move-silences-in-table-alert).
+        expect(lintFootnotes(MIDDLE_ROW)).toBe(MIDDLE_ROW);
     });
 
     it("the lint is stable: a second lint changes nothing", () => {

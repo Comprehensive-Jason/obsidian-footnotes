@@ -12,6 +12,7 @@ import {
     referenceShapes,
     referenceText,
 } from "../parsing/footnote-grammar";
+import { labelInsideTable } from "./rewrite-document";
 import { duplicateFootnoteDefinitionNames, mergeDuplicateFootnoteDefinitions } from "./rules/merge-duplicate-definitions";
 import { definitionsHoldingTheMoveBack } from "./rules/move-footnotes-to-the-bottom";
 import {
@@ -563,37 +564,22 @@ function noticeCommentedDefinitions(markdown: string) {
     );
 }
 
-// Whether `line`, right under a label, has the shape of another row of the
-// table whose row `row` sits right above the label: it holds a pipe, is
-// not itself a label, and starts with a pipe when that row does. The note
-// reading's table rows answer the "row above" question, so a pipe-less GFM
-// table ("a | b" over "--- | ---") counts like a piped one (Kimi hunt
-// cycle 3, 2026-09-16: Reading view breaks both the same way, folding the
-// rows after the label into the footnote's text). Under a table written
-// with outer pipes, a sentence with a pipe in it ("where a|b is
-// shorthand") is the footnote's own text, not a row someone typed there
-// (hunt 2026-10-02, round 4, cluster A2, pin
-// bug-lint-pipe-prose-false-in-table-alert).
-const rowShaped = (line: string, row: string): boolean =>
-    line.includes("|") && line.trim() !== "" && !/^ {0,3}\[\^/.test(line) && (!row.trimStart().startsWith("|") || line.trimStart().startsWith("|"));
-
 /**
  * The names of definitions that sit INSIDE a table: a table row directly
- * above the label and another directly below it. Obsidian ends the table
- * at the label and folds the rows after it into the footnote's text as a
- * lazy continuation, so the table is broken either way. The plugin does
- * not move the label; it tells the user (Jason's ruling A2, 2026-09-15).
+ * above the label and another directly below it (labelInsideTable).
+ * Obsidian ends the table at the label and folds the rows after it into
+ * the footnote's text as a lazy continuation, so the table is broken
+ * either way. The plugin does not move the label; it tells the user
+ * (Jason's ruling A2, 2026-09-15).
  */
 export function definitionsInsideTableNames(markdown: string): string[] {
     const lines = normalizeEol(markdown).text.split("\n");
     const reading = readNote(lines);
-    const rows = reading.tableRowLines;
     const names: string[] = [];
     const seen = new Set<string>();
     for (let i = 1; i + 1 < lines.length; i++) {
         const label = reading.labelOn(i);
-        if (!label) continue;
-        if (!rows[i - 1] || !rowShaped(lines[i + 1], lines[i - 1])) continue;
+        if (!label || !labelInsideTable(reading, i)) continue;
         const folded = label.name.toLowerCase();
         if (seen.has(folded)) continue;
         seen.add(folded);

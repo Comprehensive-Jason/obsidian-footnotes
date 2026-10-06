@@ -296,7 +296,7 @@ function reindexOnce(
         // keeps its own slot, renamed there, and only the referenced
         // definitions trade places (see the option for why).
         const referenced = new Set(referenceOrder);
-        const blocks = movedDefinitions(definitions).filter(
+        const blocks = movedDefinitions(reading).filter(
             (block) => !options.leaveOrphansInPlace || referenced.has(block.name.toLowerCase()),
         );
         const sorted = blocks

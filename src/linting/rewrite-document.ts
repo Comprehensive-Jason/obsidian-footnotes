@@ -53,10 +53,21 @@ export interface DocumentView {
 
 /**
  * The definitions a rule may move or reorder, out of every definition
- * `definitions` holds (the note reading's list, in label order): the ones
- * whose lines are their own (Definition.movable), except a copy of a name
- * that also has a copy staying put, in a quote, a list item, another
- * footnote, or on a comment closer's line.
+ * `reading` holds (its list, in label order): the ones whose lines are
+ * their own (Definition.movable), except one whose label sits inside a
+ * table (labelInsideTable), and a copy of a name that also has a copy
+ * staying put, in a quote, a list item, another footnote, on a comment
+ * closer's line, or inside a table.
+ *
+ * A label typed between two rows of a table stays where it is (Jason's
+ * ruling A2, 2026-09-15: the plugin does not move it, the in-table alert
+ * tells the user). Its definition holds the rows below it, which Obsidian
+ * folds into the footnote's text, so moving it to the bottom carried a row
+ * of the table away with it, and the blank line the move puts above the
+ * definitions took a label that already ended the note out of the table;
+ * either way the alert, which reads the note after the lint, found
+ * nothing to name (hunt 2026-10-02, round 4, cluster A1, pin
+ * bug-lint-move-silences-in-table-alert).
  *
  * Obsidian renders the LAST definition of a name. Moving a copy past one
  * that stays put would change which copy that is, and so the text the
@@ -74,13 +85,14 @@ export interface DocumentView {
  * 2026-10-05 round 2, pin bug-lint-moves-held-duplicate). The merge rule
  * takes its copies from here for the same reason.
  */
-export function movedDefinitions(definitions: readonly Definition[]): readonly Definition[] {
+export function movedDefinitions(reading: NoteReading): readonly Definition[] {
+    const definitions = reading.definitions;
     let moved = movedOf.get(definitions);
     if (moved === undefined) {
         const folded = (definition: Definition): string => definition.name.toLowerCase();
         const copies = new Map<string, number>();
         for (const definition of definitions) copies.set(folded(definition), (copies.get(folded(definition)) ?? 0) + 1);
-        const staying = new Set(definitions.filter((definition) => !definition.movable).map(folded));
+        const staying = new Set(definitions.filter((definition) => !definition.movable || labelInsideTable(reading, definition.start)).map(folded));
         for (const definition of definitions) {
             if (!definition.movable) continue;
             // the definitions this one carries along when it moves: itself
@@ -97,6 +109,28 @@ export function movedDefinitions(definitions: readonly Definition[]): readonly D
         movedOf.set(definitions, moved);
     }
     return moved;
+}
+
+/**
+ * Whether the definition label on `line` sits inside a table: a row of a
+ * table right above it, and right below it a line with the shape of
+ * another row of that table. The line below is such a row when it holds a
+ * pipe, is no label itself, and starts with a pipe when the row above
+ * does. The note reading's table rows answer the "row above" question, so
+ * a pipe-less GFM table ("a | b" over "--- | ---") counts like a piped one
+ * (Kimi hunt cycle 3, 2026-09-16: Reading view breaks both the same way,
+ * folding the rows after the label into the footnote's text). Under a
+ * table written with outer pipes, a sentence with a pipe in it ("where
+ * a|b is shorthand") is the footnote's own text, not a row someone typed
+ * there (hunt 2026-10-02, round 4, cluster A2, pin
+ * bug-lint-pipe-prose-false-in-table-alert). The lines are read on the
+ * masked twin, where a pipe in code or math does not count.
+ */
+export function labelInsideTable(reading: NoteReading, line: number): boolean {
+    if (line === 0 || line + 1 >= reading.tableRowLines.length || !reading.tableRowLines[line - 1]) return false;
+    const below = reading.maskedLine(line + 1);
+    if (!below.includes("|") || /^ {0,3}\[\^/.test(below)) return false;
+    return !reading.maskedLine(line - 1).trimStart().startsWith("|") || below.trimStart().startsWith("|");
 }
 
 // The answer above, remembered per list: the note reading hands out one
@@ -134,7 +168,7 @@ function documentView(lines: string[]): DocumentView {
             return reading().definitions;
         },
         get blocks() {
-            return movedDefinitions(reading().definitions);
+            return movedDefinitions(reading());
         },
     };
 }

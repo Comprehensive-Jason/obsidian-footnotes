@@ -35,6 +35,11 @@ import { messages, resetNotices } from "../helpers/notices";
 // bottom (or the blank line it adds above a label that is already last)
 // has already taken the label out of the table, so the alert finds nothing
 // to name.
+//
+// Fix (2026-10-06): movedDefinitions (rewrite-document.ts) leaves out a
+// definition whose label sits inside a table (labelInsideTable, the
+// question the in-table alert asks), so neither move-to-bottom nor reindex
+// moves it and the alert finds it after the lint.
 
 /** Lint `doc` with the default settings plus `extra`, then run the alerts on the result, as linter.ts does. */
 function lintThenAlerts(doc: string, extra: Record<string, unknown> = {}) {
@@ -48,15 +53,15 @@ function lintThenAlerts(doc: string, extra: Record<string, unknown> = {}) {
 beforeEach(resetNotices);
 
 describe("the default lint and the definition-inside-a-table alert", () => {
-    it.fails("the A2 fixture, linted with default settings, still gets the in-table alert", () => {
+    it("the A2 fixture, linted with default settings, still gets the in-table alert", () => {
         const { alerts } = lintThenAlerts("| a | b |\n| - | - |\n| c | d |\n[^1]: x\n| e | f |\n\nref[^1]");
-        // Today: no in-table alert.
+        // Before the fix: no in-table alert.
         expect(alerts.some((m) => m.includes('inside a table ("[^1]:")'))).toBe(true);
     });
 
-    it.fails("a label already at the end of the note (reference in a cell) still gets the in-table alert", () => {
+    it("a label already at the end of the note (reference in a cell) still gets the in-table alert", () => {
         const { alerts } = lintThenAlerts("| a | b |\n| - | - |\n| c[^1] | d |\n[^1]: x\n| e | f |");
-        // Today: no in-table alert.
+        // Before the fix: no in-table alert.
         expect(alerts.some((m) => m.includes('inside a table ("[^1]:")'))).toBe(true);
     });
 

@@ -275,7 +275,7 @@ export function definitionsHoldingTheMoveBack(markdown: string): string[] {
     const lines = normalizeEol(markdown).text.split("\n");
     while (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
     const reading = readNote(lines);
-    const blocks = movedDefinitions(reading.definitions);
+    const blocks = movedDefinitions(reading);
     if (blocks.length === 0 || reading.openRegionFrom !== -1) return [];
     // definitions that already close the note, with nothing but blank
     // lines among them, have nowhere to go, so nothing was held back
