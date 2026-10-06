@@ -19,6 +19,11 @@ import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 // case should leave one blank quote line the same way.
 //
 // Cause: removeLineRanges merges only "" lines, never a bare ">".
+//
+// Fix (2026-10-06): removeLineRanges merges a quote's blank lines (">") as
+// it merges empty ones, and drops one a cut leaves at the end of its quote;
+// the cut guard (linesReadDifferently) steps over such a line as it steps
+// over a merged empty one.
 
 // Deletes footnote `name` from `lines` and returns the note, or the plan's kind if nothing was deleted.
 function md(lines: string[], name: string): string {
@@ -27,13 +32,13 @@ function md(lines: string[], name: string): string {
 }
 
 describe("deleting a quoted definition", () => {
-    it.fails("between quoted paragraphs leaves one blank quote line, not two", () => {
-        // Today: "p\n\n> a\n>\n>\n> b".
+    it("between quoted paragraphs leaves one blank quote line, not two", () => {
+        // Before the fix: "p\n\n> a\n>\n>\n> b".
         expect(md(["p[^q]", "", "> a", ">", "> [^q]: x", "> more", ">", "> b"], "q")).toBe("p\n\n> a\n>\n> b");
     });
 
-    it.fails("at the end of its quote leaves no dangling '>' line", () => {
-        // Today: "p\n\n> a\n>\n\nafter".
+    it("at the end of its quote leaves no dangling '>' line", () => {
+        // Before the fix: "p\n\n> a\n>\n\nafter".
         expect(md(["p[^q]", "", "> a", ">", "> [^q]: x", "", "after"], "q")).toBe("p\n\n> a\n\nafter");
     });
 });

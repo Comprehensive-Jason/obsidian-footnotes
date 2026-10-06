@@ -67,6 +67,11 @@ export function findLineRunEnd(
  * The lines with the given ranges cut out, both ends of each range
  * included. Where a cut leaves two blank lines next to each other, they
  * collapse into one, so removing a block never leaves a double gap behind.
+ * The same goes for the blank lines of a quote (">" and nothing else):
+ * two of the same depth left next to each other become one, and one left
+ * at the end of its quote goes (hunt 2026-10-02, round 2, cluster D13, pin
+ * bug-delete-quoted-definition-separator). Neither changes how the quote
+ * reads.
  */
 export function removeLineRanges(
     lines: string[],
@@ -92,6 +97,16 @@ export function removeLineRanges(
             (out.length === 0 || out[out.length - 1] === "")
         ) {
             continue; // keep merging until a non-blank line arrives
+        }
+        // a blank quote line right after a cut, under another one of the
+        // same depth, is merged the same way
+        if (mergeBlanks && blankQuoteLine(lines[i]) && out.length > 0 && sameBlankQuoteLine(out[out.length - 1], lines[i])) {
+            continue;
+        }
+        // a blank quote line the cut left at the end of its quote, with
+        // the quote ending in a blank line or the end of the note, goes
+        if (mergeBlanks && lines[i] === "" && out.length > 0 && blankQuoteLine(out[out.length - 1])) {
+            out.pop();
         }
         // A cut must not drop a paragraph straight onto a "---" or "==="
         // line, a quoted "> ---" included
@@ -121,9 +136,19 @@ export function removeLineRanges(
         out.push(lines[i]);
     }
     if (cutReachesEnd) {
-        while (out.length > 0 && out[out.length - 1] === "") out.pop();
+        while (out.length > 0 && (out[out.length - 1] === "" || blankQuoteLine(out[out.length - 1]))) out.pop();
     }
     return out;
+}
+
+/** Whether `line` is a blank line of a quote: quote markers (">") and spaces, nothing else. */
+export function blankQuoteLine(line: string): boolean {
+    return /^ {0,3}>[ >]*$/.test(line) && line.trimEnd().endsWith(">");
+}
+
+/** Whether two blank quote lines are of the same quote depth (the same number of ">"). */
+function sameBlankQuoteLine(a: string, b: string): boolean {
+    return blankQuoteLine(a) && a.split(">").length === b.split(">").length;
 }
 
 /**

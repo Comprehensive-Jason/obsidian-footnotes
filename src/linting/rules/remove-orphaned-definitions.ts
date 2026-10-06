@@ -1,4 +1,4 @@
-import { definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../../parsing/line-edits";
+import { blankQuoteLine, definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../../parsing/line-edits";
 import { Definition, linesReadAlike, NoteReading, readNote } from "../../parsing/note-reading";
 import { FootnoteRule } from "../rule";
 
@@ -360,8 +360,8 @@ export function linesReadDifferently(
         if (out[j] !== kept) {
             // a blank line the cut merged away, or dropped from the end of
             // the note (removeLineRanges takes the separator blank with a
-            // block cut from the end)
-            if (kept.trim() === "") continue;
+            // block cut from the end); a quote's blank line (">") likewise
+            if (kept.trim() === "" || blankQuoteLine(kept)) continue;
             return true;
         }
         if (!linesReadAlike(readingBefore, i, readingAfter, j, kept === before[i] ? "none" : "cut")) return true;
