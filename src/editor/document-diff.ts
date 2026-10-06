@@ -819,7 +819,7 @@ function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
         aFrom = aLine + 1;
         bFrom = bLine + 1;
     }
-    findMovedDefinitions(map, a, b);
+    findMovedDefinitions(map, a, b, kindsA, kindsB);
     return map;
 }
 
@@ -851,10 +851,11 @@ function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
  * with its own key stays where it was put, and the definition there is
  * taken. Each other definition the lint can move takes the first
  * definition of `b` with the same text that no other has taken.
+ * `kindsA` and `kindsB` say what each line of `a` and `b` is (lineKinds).
  */
-function findMovedDefinitions(map: { from: number; to: number }[], a: string[], b: string[]): void {
+function findMovedDefinitions(map: { from: number; to: number }[], a: string[], b: string[], kindsA: readonly LineKind[], kindsB: readonly LineKind[]): void {
     const textOf = (lines: string[], start: number, end: number) => lines.slice(start, end + 1).map(lineKey).join("\n");
-    const renamed = renamesOf(map, a, b);
+    const renamed = renamesOf(map, a, b, kindsA, kindsB);
     // the movable definitions of `b` not taken yet, by their text: the
     // line each starts on, in order; and by their name, folded to lower
     // case as Obsidian compares names
@@ -908,19 +909,32 @@ function findMovedDefinitions(map: { from: number; to: number }[], a: string[], 
 /**
  * The names the lint gave the footnotes, read off the lines it rewrote in
  * place: for each line of `a` that `map` (alignLines) puts on a line of
- * `b` with the same text without footnotes, the references on the two
- * lines pair up in order, so a "[^3]" that became "[^1]" maps "3" to "1".
- * Names are folded to lower case, as Obsidian compares them. A name the
- * lines say nothing about is missing from the map; the first pairing seen
- * for a name wins.
+ * `b` with the same text without footnotes, or on a citation line (one
+ * that holds nothing but footnotes) when it is one itself, the references
+ * on the two lines pair up in order, so a "[^3]" that became "[^1]" maps
+ * "3" to "1". Names are folded to lower case, as Obsidian compares them. A
+ * name the lines say nothing about is missing from the map; the first
+ * pairing seen for a name wins.
+ *
+ * A citation line keeps its footnotes in its key (lineKey), so a renamed
+ * one never has the same key as its new self, and its renames went unread:
+ * twins cited only from citation lines were then looked for under their
+ * old names, and a fold on one came back on the other (hunt 2026-10-06,
+ * cycle 5, cluster X17, pin bug-twin-renames-on-citation-lines). The
+ * line-up pairs citation lines with each other in their own places
+ * (citationPairs), so a citation line put on a citation line is the same
+ * line, rewritten. `kindsA` and `kindsB` say what each line is
+ * (lineKinds).
  */
-function renamesOf(map: readonly { from: number; to: number }[], a: string[], b: string[]): Map<string, string> {
+function renamesOf(map: readonly { from: number; to: number }[], a: string[], b: string[], kindsA: readonly LineKind[], kindsB: readonly LineKind[]): Map<string, string> {
     const readingA = readNote(a);
     const readingB = readNote(b);
     const renamed = new Map<string, string>();
     for (let line = 0; line < map.length; line++) {
         const now = map[line].from;
-        if (now === -1 || !a[line].includes("[^") || lineKey(a[line]) !== lineKey(b[now])) continue;
+        if (now === -1 || !a[line].includes("[^")) continue;
+        const sameLine = lineKey(a[line]) === lineKey(b[now]) || (kindsA[line] === "citation" && kindsB[now] === "citation");
+        if (!sameLine) continue;
         const before = readingA.referencesOn(line);
         const after = readingB.referencesOn(now);
         if (before.length !== after.length) continue;
