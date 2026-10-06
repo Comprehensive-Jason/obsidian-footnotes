@@ -177,7 +177,7 @@ export interface NoteReading {
     referenceAt(line: number, ch: number): ReferenceOccurrence | null;
     /** The "[^name]" part of every definition label on `line`, in order: where a rename rewrites the label's name. */
     labelsOn(line: number): readonly ReferenceOccurrence[];
-    /** The inline footnotes wholly on `line` that no other such inline footnote holds, in order. */
+    /** The inline footnotes wholly on `line` that no other inline footnote holds (one that runs over a line break included), in order. */
     inlineNotesOn(line: number): readonly InlineNoteSpan[];
     /**
      * The inline footnote "^[...]" wholly on `line` whose brackets hold
@@ -710,13 +710,26 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
         inlineNotesOn(line) {
             if (inlineNotesByLine === null) {
                 inlineNotesByLine = Array.from({ length: lineCount }, () => [] as InlineNoteSpan[]);
-                const sorted = facts.inlineNotes.filter((note) => note.closeLine === note.line).sort((a, b) => a.line - b.line || a.open - b.open);
-                for (const { line: at, open, close } of sorted) {
+                // Every inline footnote in the order they open, so one held
+                // inside another comes after the one holding it. The ones
+                // that run over a line break take part here too, though they
+                // are never listed: a footnote on one line held inside one
+                // that runs over two is text of that one's body, not a
+                // footnote of its own line (hunt 2026-10-05, round 2, pin
+                // bug-nested-inline-in-multi-line; the punctuation rule moved
+                // it, and Convert inline to normal made a dead reference of
+                // it).
+                const sorted = [...facts.inlineNotes].sort((a, b) => a.line - b.line || a.open - b.open);
+                // the line and column of the "]" of the last outermost one
+                let holderLine = -1;
+                let holderClose = -1;
+                for (const { line: at, open, closeLine, close } of sorted) {
+                    // one that opens before the last outermost one closes is held by it
+                    if (at < holderLine || (at === holderLine && open < holderClose)) continue;
+                    holderLine = closeLine;
+                    holderClose = close;
                     const list = inlineNotesByLine[at] as InlineNoteSpan[] | undefined;
-                    if (list === undefined) continue;
-                    // one inside the last one kept is held by it
-                    const last = list.at(-1);
-                    if (last !== undefined && open < last.close) continue;
+                    if (list === undefined || closeLine !== at) continue;
                     list.push({ open, close });
                 }
             }

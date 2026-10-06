@@ -28,6 +28,9 @@ import { readNote } from "../../src/parsing/note-reading";
 // that runs over a line break (closeLine !== line) BEFORE it drops the ones held inside
 // another, so a one-line footnote nested in a multi-line one comes back as an outermost one.
 // Convert inline to normal and the punctuation rule both list a line's footnotes through it.
+//
+// Fixed 2026-10-05: inlineNotesOn drops the inline footnotes held inside another one, those that
+// run over a line break included, before it keeps the ones wholly on one line.
 
 function convert(lines: string[]) {
     const doc = fakeEditor(lines, { wholeDoc: true, edits: true, cursor: { line: 0, ch: 0 } });
@@ -40,8 +43,8 @@ describe("an inline footnote nested in a multi-line one", () => {
         expect(readNote(["a ^[x ^[z] w] v"]).inlineNotesOn(0)).toEqual([{ open: 2, close: 12 }]);
     });
 
-    // Today inlineNotesOn(1) returns [{ open: 2, close: 5 }], the nested one.
-    it.fails("the reading: under a multi-line one it is not among its line's inline footnotes either", () => {
+    // Before the fix inlineNotesOn(1) returns [{ open: 2, close: 5 }], the nested one.
+    it("the reading: under a multi-line one it is not among its line's inline footnotes either", () => {
         const reading = readNote(["a ^[x", "y ^[z] w] v"]);
         // the reader itself sees the outer one holding it
         expect(reading.inlineNoteHolding(1, 4)).toMatchObject({ line: 1, open: 2 });
@@ -53,8 +56,8 @@ describe("an inline footnote nested in a multi-line one", () => {
         expect(footnoteAfterPunctuation("a ^[x ^[z]. w] v")).toBe("a ^[x ^[z]. w] v");
     });
 
-    // Today: "a ^[x\ny .^[z] w] v".
-    it.fails("the punctuation rule leaves a nested one in a multi-line inline footnote's body alone", () => {
+    // Before the fix: "a ^[x\ny .^[z] w] v".
+    it("the punctuation rule leaves a nested one in a multi-line inline footnote's body alone", () => {
         expect(footnoteAfterPunctuation("a ^[x\ny ^[z]. w] v")).toBe("a ^[x\ny ^[z]. w] v");
     });
 
@@ -63,8 +66,8 @@ describe("an inline footnote nested in a multi-line one", () => {
         expect(out.join("\n")).not.toMatch(/\[\^\d+\]: z$/m);
     });
 
-    // Today the second line becomes "y [^1] w] v", with a "[^1]: z" definition below.
-    it.fails("Convert inline to normal does not convert the nested one out of a multi-line inline footnote's body", () => {
+    // Before the fix the second line becomes "y [^1] w] v", with a "[^1]: z" definition below.
+    it("Convert inline to normal does not convert the nested one out of a multi-line inline footnote's body", () => {
         const lines = ["a ^[x", "y ^[z] w] v"];
         const out = convert(lines);
         expect(out.slice(0, 2)).toEqual(lines);
