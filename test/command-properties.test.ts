@@ -712,7 +712,14 @@ describe("creation-command invariants over random documents", () => {
         if (start === ch) return ch;
         const before = line.slice(0, start);
         if (before === "") return ch;
-        if (before.endsWith("|") || before.endsWith(">")) return ch;
+        if (before.endsWith("|")) return ch;
+        // A ">" counts as a quote marker only when everything before it is
+        // more quote markers or list or task markers ("> >", "- >",
+        // "> - [ ] >"). A ">" that closes an HTML comment ("-->") or a tag
+        // ("<b>"), or ends a word ("x >"), is text the reference attaches
+        // to (hunt 2026-10-06, cycle 4, test defect T1, seeds 2653,
+        // -123456789, and 1167636531).
+        if (/^(?:\s*>|\s*(?:[-*+]|\d+[.)])(?:\s+\[.\])?\s)*\s*>$/.test(before)) return ch;
         const marker = before.trim().replace(/^(?:>\s*)+/, "");
         if (/^(?:[-*+]|\d+[.)])(?: \[[ xX]\])?$/.test(marker)) return ch;
         if (/^#{1,6}$/.test(marker)) return ch;
