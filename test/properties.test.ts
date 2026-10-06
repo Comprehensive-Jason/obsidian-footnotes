@@ -214,18 +214,38 @@ const hasLazyLabel = (doc: string): boolean => {
 // "$5 or $6 alpha[^1]. $m$" is one math span to Obsidian and [^1] dead,
 // while micromark pairs the dollars differently. Where the two parsers
 // disagree on the input, micromark cannot referee what the lint did.
-const parsersDisagree = (doc: string): boolean => {
+// The check runs twice: on the note as it is, and on the note with a
+// definition added at the end for every name written as "[^name]" in it.
+// The second run is needed because micromark only reads "[^name]" as a
+// reference once the note defines that name, so a disagreement about
+// reference-shaped text with no definition stays invisible on the note as
+// it is. In "$5 or $6 [^1] $m[^79]$" with only "[^note]: alpha" defined,
+// Obsidian reads [^1] as math (the "$" before 6 cannot close, as
+// bug-math-closer-before-digit records), while micromark pairs "$5 or $" and
+// leaves [^1] as text; neither counts it, so they seemed to agree. Reindex
+// with Renumber named footnotes on then renumbers the orphan [^note] to [^1],
+// which is right by Obsidian's reading ([^1] stays math, the definition stays
+// an orphan), but micromark now sees a reference appear (found as a property
+// flake at seed -2078428889, 2026-10-06; the same "minted pair" as the head
+// block case above).
+const obsidianShape = (doc: string): FootnoteShape => {
     const reading = readNote(normalizeEol(doc).text.split("\n"));
     const live = reading.references.filter((reference) => reference.live);
     const defined = new Set(reading.definitions.map((definition) => definition.name.toLowerCase()));
-    const obsidian: FootnoteShape = {
+    return {
         definitions: reading.definitions.length,
         references: live.length,
         resolved: live.filter((reference) => defined.has(reference.name.toLowerCase())).length,
     };
-    const micromark = footnoteShape(doc);
-    return JSON.stringify(obsidian) !== JSON.stringify(micromark);
 };
+const withEveryNameDefined = (doc: string): string => {
+    const names = new Set([...doc.matchAll(/\[\^([^\]\s]+)\]/g)].map((match) => match[1]));
+    return [doc, ...[...names].map((name) => `[^${name}]: defined`)].join("\n\n");
+};
+const parsersDisagree = (doc: string): boolean =>
+    [doc, withEveryNameDefined(doc)].some(
+        (text) => JSON.stringify(obsidianShape(text)) !== JSON.stringify(footnoteShape(text)),
+    );
 
 const oracleDocArb = docArb.filter(
     (doc) =>
@@ -266,6 +286,38 @@ describe("differential oracle over random documents", () => {
         // jurisdiction, closed or not
         expect(headBlockWithReference("---\ntitle: t\n---\nbody[^1].")).toBe(false);
         expect(headBlockWithReference("---\n\nalpha[^2].\n\nno closer")).toBe(false);
+    });
+
+    it("recuses itself when the parsers disagree about reference-shaped text the note does not define", () => {
+        // the flake of 2026-10-06 (seed -2078428889), pinned: Obsidian reads
+        // [^1] as math, micromark as text, and neither counts it while no
+        // definition [^1] exists (see withEveryNameDefined above)
+        const doc = "$5 or $6 [^1] $m[^79]$\n\n[^note]: alpha";
+        const options: LintOptions = {
+            fixPunctuation: false,
+            moveDefinitionsToBottom: false,
+            reindex: true,
+            reindexOptions: {
+                renumberNamedFootnotes: true,
+            },
+            removeOrphanedReferences: false,
+            removeOrphanedDefinitions: false,
+            mergeDuplicateDefinitions: false,
+            orphanSafePrefix: "",
+            applyNotePrefix: false,
+            sectionHeading: "",
+        };
+        const out = lintFootnotes(doc, options);
+        // the orphan is renumbered into the name the math holds, and by
+        // Obsidian's reading nothing changes: no reference, one orphan
+        expect(out).toBe("$5 or $6 [^1] $m[^79]$\n\n[^1]: alpha");
+        expect(obsidianShape(out)).toEqual(obsidianShape(doc));
+        // the parsers agree on the note as it is, so only the second run catches it
+        expect(JSON.stringify(obsidianShape(doc))).toBe(JSON.stringify(footnoteShape(doc)));
+        expect(parsersDisagree(doc)).toBe(true);
+        // a note where both parsers read the reference the same way stays in
+        // the oracle's jurisdiction
+        expect(parsersDisagree("pay $5 today[^1].\n\n[^1]: alpha")).toBe(false);
     });
 
     soakIt("remark sees the same footnote structure before and after lint (deletions off)", () => {
