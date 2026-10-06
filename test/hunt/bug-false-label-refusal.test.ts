@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote, insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
+import { BlockSyntaxNotice } from "../../src/editor/notice";
 import { fixLazyDefinitions } from "../../src/linting/rules/fix-lazy-definitions";
 import { readNote } from "../../src/parsing/note-reading";
 import { messages, resetNotices } from "../helpers/notices";
@@ -36,6 +37,10 @@ import { fakePlugin } from "../helpers/fake-plugin";
 // the line's text start, measured with blockSyntaxEnd, which for a
 // heading is after "# ", and it takes any indent, where a label line
 // takes at most 3 spaces (label-shapes.ts).
+//
+// Fix: startsLabel asks the reader whether the written reference is a
+// definition's label (labelsOn) or a lazy label (labelShapedLines), with a
+// name typed into the named key's "[^]".
 
 const Settings = {
     insertAtEndOfWord: true,
@@ -50,7 +55,7 @@ const Settings = {
 beforeEach(resetNotices);
 
 describe("a heading's text starting with ':'", () => {
-    it.fails("numbered key at the heading's text start writes the footnote", async () => {
+    it("numbered key at the heading's text start writes the footnote", async () => {
         // The written result is a heading with a live reference, which the lint leaves alone.
         const written = ["# [^1]:rocket: Launch plan", "", "[^1]: "];
         const reading = readNote(written);
@@ -61,23 +66,23 @@ describe("a heading's text starting with ':'", () => {
         const lines = ["# :rocket: Launch plan"];
         const doc = fakeEditor([...lines], { cursor: { line: 0, ch: 2 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(Settings, doc));
-        // Today: unchanged, with the block-syntax notice.
+        // Before the fix: unchanged, with the block-syntax notice.
         expect(messages()).toEqual([]);
         expect(doc.lines[0]).toBe("# [^1]:rocket: Launch plan");
     });
 
-    it.fails("named key at the heading's text start writes the placeholder", async () => {
+    it("named key at the heading's text start writes the placeholder", async () => {
         const lines = ["## :rocket: Launch plan"];
         const doc = fakeEditor([...lines], { cursor: { line: 0, ch: 3 }, edits: true, wholeDoc: true, words: true });
         await insertNamedFootnote(fakePlugin(Settings, doc));
-        // Today: unchanged, with the block-syntax notice.
+        // Before the fix: unchanged, with the block-syntax notice.
         expect(messages()).toEqual([]);
         expect(doc.lines[0]).toBe("## [^]:rocket: Launch plan");
     });
 });
 
 describe("a 4-space-indented lazy line", () => {
-    it.fails("numbered key at column 4 writes the footnote", async () => {
+    it("numbered key at column 4 writes the footnote", async () => {
         // The written result reads a live reference, and the lint leaves it alone.
         const written = ["para", "    [^1]:x done", "", "[^1]: "];
         expect(readNote(written).referencesOn(1).map((r) => r.name)).toEqual(["1"]);
@@ -86,8 +91,36 @@ describe("a 4-space-indented lazy line", () => {
         const lines = ["para", "    :x done"];
         const doc = fakeEditor([...lines], { cursor: { line: 1, ch: 4 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(Settings, doc));
-        // Today: unchanged, with the block-syntax notice.
+        // Before the fix: unchanged, with the block-syntax notice.
         expect(messages()).toEqual([]);
         expect(doc.lines[1]).toBe("    [^1]:x done");
+    });
+});
+
+// Controls: where the reader does read the written reference as a label,
+// the press is still refused with the block-syntax notice (Jason's ruling,
+// round-2 hunt brief, 2026-10-05). Inside a list item or a quote a
+// definition counts too, and three spaces under a paragraph is still a
+// lazy label.
+describe("controls: a reference the reader reads as a label is still refused", () => {
+    it.each([
+        ["a list item", ["- :x done"], 0, 2],
+        ["a numbered list item", ["10. :x done"], 0, 4],
+        ["a quote", ["> :x done"], 0, 2],
+        ["a lazy line three spaces in", ["para", "   :x done"], 1, 3],
+        ["a lazy line at column 0", ["para", ":x done"], 1, 0],
+    ])("numbered key in %s", async (_, lines, line, ch) => {
+        const doc = fakeEditor([...lines], { cursor: { line, ch }, edits: true, wholeDoc: true, words: true });
+        await insertAutonumFootnote(fakePlugin(Settings, doc));
+        expect(doc.lines).toEqual(lines);
+        expect(messages()).toEqual([BlockSyntaxNotice]);
+    });
+
+    it("named key in a list item", async () => {
+        const lines = ["- :x done"];
+        const doc = fakeEditor([...lines], { cursor: { line: 0, ch: 2 }, edits: true, wholeDoc: true, words: true });
+        await insertNamedFootnote(fakePlugin(Settings, doc));
+        expect(doc.lines).toEqual(lines);
+        expect(messages()).toEqual([BlockSyntaxNotice]);
     });
 });

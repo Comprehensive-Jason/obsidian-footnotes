@@ -4,7 +4,8 @@ import { NoFootnoteCreated } from "./notice";
 import { contextOfLines, DocContext, docLines, insideDefinition } from "./doc-context";
 import { escapedAt } from "../parsing/footnote-grammar";
 import { drawnAsLink } from "../parsing/landing";
-import type { NoteReading } from "../parsing/note-reading";
+import { labelShapedLines } from "../parsing/label-shapes";
+import { NoteReading, readNote } from "../parsing/note-reading";
 
 // The born-dead safety kit. One question: once the text lands, will it
 // still MEAN what it says?
@@ -378,14 +379,15 @@ export function deadInsertionVerdict(after: NoteReading, at: EditorPosition): "d
  * note as it reads before the press, `after` the note as the press leaves
  * it, `anchors` where each copy of `text` begins in `after`.
  *
- * "label": a reference that starts its line's text, with a ":" right after
- * it, is a definition's label: "[^1]: smile: done" written at the start of
- * ":smile: done" defines a footnote and points at none. Under a line of
- * prose Obsidian still reads it as a reference, but the lint's Fix lazy
- * definitions makes it a definition all the same, and the named key's
- * "[^]" becomes one as soon as a name is typed in. So the press refuses
- * (hunt 2026-10-05, pins bug-colon-line-start-label and
- * spec-colon-line-start-notice; the notice is Jason's pick, 2026-10-05).
+ * "label": a reference the note would read as a definition's label:
+ * "[^1]: smile: done" written at the start of ":smile: done" defines a
+ * footnote and points at none. A lazy label counts too, one directly
+ * under a line of prose: Obsidian still reads its "[^1]" as a reference,
+ * but the lint's Fix lazy definitions makes it a definition all the same.
+ * And the named key's "[^]" counts as soon as a name typed into it would
+ * make it a label. So the press refuses (hunt 2026-10-05, pins
+ * bug-colon-line-start-label and spec-colon-line-start-notice; the notice
+ * is Jason's pick, 2026-10-05).
  *
  * "link": the press leaves fewer link reference definitions ("[ref]:
  * http://u", which give "[x][ref]" links their address) than there were.
@@ -405,7 +407,7 @@ export function pressLineVerdict(
     anchors: EditorPosition[],
     text: string,
 ): "label" | "link" | null {
-    if (text.startsWith("[^") && anchors.some((anchor) => startsLabel(after, anchor, text.length))) return "label";
+    if (text.startsWith("[^") && anchors.some((anchor) => startsLabel(after, anchor, text))) return "label";
     const lost = linkDefinitionCount(after.reading()) < linkDefinitionCount(before) || drawnLinkCount(after.reading()) < drawnLinkCount(before);
     return lost ? "link" : null;
 }
@@ -416,17 +418,40 @@ export function drawnLinkCount(reading: NoteReading, linkLabels: ReadonlySet<str
 }
 
 /**
- * Whether the `length` characters written at `anchor` start the text of
- * their line and have a ":" right after them. The text starts where the
- * line's block syntax ends (quote and list markers, a task box), past any
- * spaces. A line the reference has made a definition counts its label as
- * block syntax too, which takes in the anchor all the same.
+ * Whether the reference `text` written at `anchor` reads as a definition's
+ * label in the note `after`: the label of a definition the reading finds,
+ * or a lazy label (labelShapedLines), one a blank line above would make a
+ * definition.
+ *
+ * The reader answers, not a count of columns. A column count refused a
+ * press at the start of a heading's text ("# [^1]:rocket: Launch plan" is
+ * a heading with a live reference) and on a line four spaces in under a
+ * paragraph ("    [^1]:x done" is a lazy line of the paragraph, and four
+ * spaces is too far in for a label), though neither is a label (Obsidian
+ * 1.14.4, asked live 2026-10-05; hunt 2026-10-05, round 2, pin
+ * bug-false-label-refusal). In a list item or a quote, where a definition
+ * counts as well, the reader finds the label all the same.
  */
-function startsLabel(after: DocContext, anchor: EditorPosition, length: number): boolean {
+function startsLabel(after: DocContext, anchor: EditorPosition, text: string): boolean {
     const line = after.lines[anchor.line] ?? "";
-    if (line[anchor.ch + length] !== ":") return false;
-    const textStart = after.reading().blockSyntaxEnd(anchor.line);
-    return anchor.ch <= textStart || /^[ \t]*$/.test(line.slice(textStart, anchor.ch));
+    // a label ends in "]:", so with no ":" right after the reference the
+    // question does not arise, and most presses stop here
+    if (line[anchor.ch + text.length] !== ":") return false;
+    // An empty "[^]" reads as nothing until a name is typed into it, so the
+    // note is read with a name in it.
+    let lines = after.lines;
+    let reading = after.reading();
+    if (text === "[^]") {
+        lines = [...after.lines];
+        lines[anchor.line] = line.slice(0, anchor.ch) + "[^x]" + line.slice(anchor.ch + text.length);
+        reading = readNote(lines);
+    }
+    if (reading.labelsOn(anchor.line).some((label) => label.start === anchor.ch)) return true;
+    // A lazy label starts its line's text inside its containers, at most
+    // three spaces in, so a line that holds one holds it at the reference
+    // when only spaces come between the containers' end and the reference.
+    if (!/^ *$/.test(line.slice(reading.containerEnd(anchor.line), anchor.ch))) return false;
+    return labelShapedLines(lines).some((label) => label.line === anchor.line);
 }
 
 /** How many link reference definitions the note holds: the lines where the reading starts a "definition" block (a footnote's is a "footnoteDefinition"). */
