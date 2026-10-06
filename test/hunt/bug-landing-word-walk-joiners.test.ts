@@ -26,6 +26,9 @@ import { endOfWordForSelection, endOfWordOffset, startOfWordOffset } from "../..
 // Cause: isWordCp in src/editor/cursor-motion.ts counts letters, numbers,
 // marks, and "_" as word characters. The joiners are format characters
 // (\p{Cf}), not marks, so every word walk stops at them.
+//
+// Fix (2026-10-06): isWordCp counts the two joiners (\p{Join_C}) as word
+// characters, as it counts marks, so every walk crosses them.
 
 // "می\u200Cخواهم": MEEM, FARSI YEH, ZERO WIDTH NON-JOINER, KHAH, WAW, ALEF, HEH, MEEM
 const persian = "\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645";
@@ -35,29 +38,29 @@ const nextWord = "\u0628\u0631\u0648\u0645";
 const hindi = "\u0915\u094D\u200D\u0937\u0923";
 
 describe("the word walks cross a joiner inside a word", () => {
-    it.fails("a press on a Persian sentence lands after the word, not between its halves", () => {
+    it("a press on a Persian sentence lands after the word, not between its halves", () => {
         const line = `${persian} ${nextWord}`;
         // caret after the first letter of the first word
         // Today: 2, at the non-joiner
         expect(endOfWordOffset(line, 1, "after")).toBe(persian.length);
     });
 
-    it.fails("the end-of-word walk crosses the ZWNJ inside a Persian word", () => {
+    it("the end-of-word walk crosses the ZWNJ inside a Persian word", () => {
         // Today: 2
         expect(endOfWordOffset(persian, 1, "none")).toBe(persian.length);
     });
 
-    it.fails("the selection end walk crosses the ZWNJ inside a Persian word", () => {
+    it("the selection end walk crosses the ZWNJ inside a Persian word", () => {
         // Today: 2
         expect(endOfWordForSelection(persian, 1, "before")).toBe(persian.length);
     });
 
-    it.fails("the start-of-word walk crosses the ZWNJ inside a Persian word", () => {
+    it("the start-of-word walk crosses the ZWNJ inside a Persian word", () => {
         // Today: 3, just after the non-joiner
         expect(startOfWordOffset(persian, 5)).toBe(0);
     });
 
-    it.fails("the end-of-word walk crosses a ZWJ inside a Devanagari word", () => {
+    it("the end-of-word walk crosses a ZWJ inside a Devanagari word", () => {
         // Today: 2, at the joiner
         expect(endOfWordOffset(hindi, 1, "none")).toBe(hindi.length);
     });

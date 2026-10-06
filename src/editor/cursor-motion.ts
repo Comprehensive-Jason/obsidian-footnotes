@@ -68,13 +68,19 @@ export function moveCursorAndSetJumpPoint(
 
 // What counts as a word character in the walks below: any unicode letter,
 // number, or mark. Marks include combining accents, which belong to the
-// word they follow, matching the grapheme-aware `wordAt`. The walks step by
-// whole CODE POINTS: letters outside the basic range (Deseret, CJK Ext-B
-// like 𠮷) take two UTF-16 units, and testing one half of such a pair on
-// its own against \p{L} split words apart inside table cells
-// (bug-astral-word-walk).
+// word they follow, matching the grapheme-aware `wordAt`. The two
+// invisible joiners count the same way: the zero-width non-joiner (U+200C)
+// written inside Persian words and the zero-width joiner (U+200D) of
+// Devanagari half forms never end a word, in Unicode's word rules or in
+// the editor's `wordAt` (hunt 2026-10-02, pin
+// bug-landing-word-walk-joiners: a press in a Persian word that holds one
+// wrote the reference at the joiner, splitting the word). \p{Join_C} is
+// exactly those two characters. The walks step by whole CODE POINTS: letters
+// outside the basic range (Deseret, CJK Ext-B like 𠮷) take two UTF-16
+// units, and testing one half of such a pair on its own against \p{L}
+// split words apart inside table cells (bug-astral-word-walk).
 const isWordCp = (cp: number | undefined) =>
-    cp !== undefined && /[\p{L}\p{N}\p{M}_]/u.test(String.fromCodePoint(cp));
+    cp !== undefined && /[\p{L}\p{N}\p{M}\p{Join_C}_]/u.test(String.fromCodePoint(cp));
 
 // The code point touching `i` from the left, or undefined when `i` is at
 // the very start of the text. When that code point takes two UTF-16 units,
