@@ -66,10 +66,19 @@ describe("an underlined label at a wide item's content column", () => {
             expect(messages().some((m) => m.includes("no blank line above"))).toBe(false);
         });
 
-        it(`${what}: Delete footnote everywhere takes the label and its underline, as in a narrow item`, () => {
-            const plan = deleteFootnoteEverywhere(note.join("\n"), "b");
-            // Before the fix: refused, since the "---" left under the item's text would make a heading.
-            expect(plan.kind).toBe("deleted");
+        // Changed 2026-10-06 (hunt cycle 5, cluster X35): this test first
+        // asked for the label and its "---" to go together, as they did in
+        // a narrow item. Under a line that carries on the item's paragraph,
+        // the note reading takes the "---" for a horizontal rule of its own
+        // (docs/obsidian-reading-rules.md D3; live Obsidian 1.14.4 for the
+        // same shape at the margin, pin bug-delete-cuts-rule-under-lazy-label),
+        // so Delete footnote everywhere now keeps it. Here the "---" left
+        // under the item's text would make that text a heading, so the
+        // command refuses, which bug-delete-cuts-rule-under-lazy-label
+        // accepts.
+        it(`${what}: Delete footnote everywhere keeps the '---' (or refuses)`, () => {
+            const plan = deleteFootnoteEverywhere(note.join("\n"), "b") as { kind: string; markdown?: string };
+            expect(plan.kind === "refused" || (plan.markdown ?? "").split("\n").includes(note[note.length - 1])).toBe(true);
         });
     }
 });

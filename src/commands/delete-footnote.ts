@@ -117,9 +117,20 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     // is the one labelShapedLines read from where the line's list and
     // quote markers end, so a label at a nested item's content column
     // counts too (hunt 2026-10-05, cluster CN3).
+    //
+    // The underline goes only while it is paragraph text in the note as
+    // it is. A line that starts a block of its own stays: under a lazy
+    // label, "---" is a horizontal rule (live Obsidian 1.14.4,
+    // 2026-10-06), and under a table's last row a "===" is a paragraph of
+    // its own. The label is filed underlined because the "---" would
+    // underline it once a blank line went in above it, but no blank line
+    // goes in here (hunt 2026-10-06, cycle 5, pins
+    // bug-delete-cuts-rule-under-lazy-label and
+    // bug-delete-cuts-paragraph-under-table-row).
     for (const label of labelShapedLines(lines)) {
         if (label.name.toLowerCase() !== folded) continue;
-        blocks.push({ start: label.line, end: label.underlined ? label.line + 1 : label.line });
+        const underlineIsText = label.underlined && !(reading.lineBlocks[label.line + 1] ?? "").includes("^");
+        blocks.push({ start: label.line, end: underlineIsText ? label.line + 1 : label.line });
         definitions++;
     }
     blocks.sort((a, b) => a.start - b.start);
