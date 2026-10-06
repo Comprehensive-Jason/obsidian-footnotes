@@ -49,7 +49,11 @@ describe("lineDiffChanges", () => {
         const before = "one[^2]\nkeep\nkeep\nkeep\n\n[^2]: two\n[^1]: one";
         const after = "one[^1]\nkeep\nkeep\nkeep\n\n[^1]: two\n[^2]: one";
         const changes = lineDiffChanges(before, after);
-        expect(changes).toHaveLength(2);
+        // one edit for the first line, then one for each of the two
+        // renumbered definition lines: neighbouring rewritten lines are
+        // edits of their own, so a caret on either keeps its place (hunt
+        // 2026-10-06 cycle 3, cluster D3, pin bug-caret-merged-rewrite-runs)
+        expect(changes).toHaveLength(3);
         expect(changes[0]).toEqual({ from: "one[^".length, to: "one[^2".length, text: "1" });
         expect(changes[1].from).toBeGreaterThanOrEqual("one[^2]\nkeep\nkeep\nkeep\n\n".length);
         expect(apply(before, changes)).toBe(after);

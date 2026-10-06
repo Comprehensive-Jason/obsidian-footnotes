@@ -304,28 +304,30 @@ function balancedClose(line: string, open: number): number {
 /**
  * `runs` (from lines `a` and `b` compared without their references) with
  * every pair of lines they leave matched whose full text differs added as
- * a run of its own, one line for one line, and runs that touch merged
- * into one, so each run is still one edit.
+ * a run of its own, one line for one line, so each line rewritten in place
+ * is an edit of its own.
+ *
+ * A rewritten line is never merged with the run next to it. Merged, the
+ * edit spanned from the first changed character of the one line to the
+ * last changed character of the other, and a caret after the changed
+ * characters of the first line went to the edit's start: with two
+ * neighbouring list items renumbered, the caret in "- apple[^2] is red"
+ * jumped into the reference (hunt 2026-10-06 cycle 3, cluster D3, pin
+ * bug-caret-merged-rewrite-runs). Kept apart, each edit is trimmed to its
+ * own changed characters. They still never overlap: a rewritten line's
+ * edit stops before its line break, and the edits of the runs next to it
+ * start at a line's start or end at the line break before it.
  */
 function withRewrittenLines(runs: readonly Run[], a: readonly string[], b: readonly string[]): Run[] {
     const out: Run[] = [];
-    const add = (run: Run) => {
-        const last = out.at(-1);
-        if (last !== undefined && last.aEnd === run.aStart && last.bEnd === run.bStart) {
-            last.aEnd = run.aEnd;
-            last.bEnd = run.bEnd;
-        } else {
-            out.push({ ...run });
-        }
-    };
     let i = 0;
     let j = 0;
     for (const run of [...runs, { aStart: a.length, aEnd: a.length, bStart: b.length, bEnd: b.length }]) {
         // the matched lines before this run, which pair up one for one
         for (; i < run.aStart; i++, j++) {
-            if (a[i] !== b[j]) add({ aStart: i, aEnd: i + 1, bStart: j, bEnd: j + 1 });
+            if (a[i] !== b[j]) out.push({ aStart: i, aEnd: i + 1, bStart: j, bEnd: j + 1 });
         }
-        if (run.aEnd > run.aStart || run.bEnd > run.bStart) add(run);
+        if (run.aEnd > run.aStart || run.bEnd > run.bStart) out.push(run);
         i = run.aEnd;
         j = run.bEnd;
     }

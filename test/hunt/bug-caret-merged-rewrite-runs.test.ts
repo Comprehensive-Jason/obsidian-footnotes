@@ -91,7 +91,7 @@ function caretAfterRewriteMiss(before: string, after: string) {
 }
 
 describe("a caret after the changed characters on a rewritten line keeps its place", () => {
-    it.fails("two neighbouring list items renumbered: a caret after the reference on the first keeps its column", () => {
+    it("two neighbouring list items renumbered: a caret after the reference on the first keeps its column", () => {
         const before = "- apple[^2] is red\n- pear[^1] is green\n\n[^1]: p\n[^2]: a";
         const after = lintFootnotes(before, {});
         expect(after).toBe("- apple[^1] is red\n- pear[^2] is green\n\n[^1]: a\n[^2]: p");
@@ -102,7 +102,7 @@ describe("a caret after the changed characters on a rewritten line keeps its pla
         expect(after.slice(0, mapped) + "|" + after.slice(mapped, mapped + 3)).toBe("- apple[^1] is r|ed\n");
     });
 
-    it.fails("the note being typed in, with the typing line renumbered: the caret stays after the changed characters", () => {
+    it("the note being typed in, with the typing line renumbered: the caret stays after the changed characters", () => {
         const typing = "More text[^3][^2] and I am typing here";
         const note = ["# Part one", "Text.[^1]", "", "[^1]: one", "[^2]: two", "[^3]: three", "", typing].join("\n");
         const after = lintFootnotes(note, {});
@@ -110,7 +110,7 @@ describe("a caret after the changed characters on a rewritten line keeps its pla
         expect(caretAfterRewriteMiss(note, after)).toBeNull();
     });
 
-    it.fails("a definition moved below the renumbered last prose line", () => {
+    it("a definition moved below the renumbered last prose line", () => {
         const before = "[^2]: two\n\ntext[^2] more words";
         const after = lintFootnotes(before, {});
         expect(after).toBe("text[^1] more words\n\n[^1]: two");
@@ -119,7 +119,7 @@ describe("a caret after the changed characters on a rewritten line keeps its pla
 
     // Before the fix: the caret goes to the start of "# Footnotes", as in
     // pin bug-caret-jumps-to-inserted-line before its fix.
-    it.fails("a section heading inserted above a renamed definition: a caret at the start of the definition stays on it", () => {
+    it("a section heading inserted above a renamed definition: a caret at the start of the definition stays on it", () => {
         const before = "text[^2] here\n\n[^2]: alpha";
         const after = lintFootnotes(before, { sectionHeading: "# Footnotes" });
         expect(after.split("\n")).toEqual(["text[^1] here", "", "# Footnotes", "", "[^1]: alpha"]);
