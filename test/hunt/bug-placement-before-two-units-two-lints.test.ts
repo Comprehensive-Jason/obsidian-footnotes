@@ -18,10 +18,27 @@ import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after
 // one reference's walk ends at the next reference's "[". When both move
 // forward in the same pass, the first stops where the second used to
 // start, and only the next lint carries it on.
+//
+// Fix (2026-10-06): swapInSegment in
+// src/linting/rules/footnote-after-punctuation.ts carries a run whose
+// forward move ends at the next run's start on with that run, written in
+// front of it wherever it lands, so one lint gives "(see “this”)[^1][^2]
+// next". Under "after" the next run never moves forward from there, so
+// nothing changes for that placement.
 
 describe("before: two references separated by closing marks", () => {
-    it.fails("(see “this[^1]”[^2]) next settles in one pass", () => {
+    it("(see “this[^1]”[^2]) next settles in one pass", () => {
         const once = footnoteAfterPunctuation("(see “this[^1]”[^2]) next", "before");
         expect(footnoteAfterPunctuation(once, "before")).toBe(once);
+    });
+});
+
+describe("before: the one-pass result", () => {
+    it("(see “this[^1]”[^2]) next gives both references after the bracket in one lint", () => {
+        expect(footnoteAfterPunctuation("(see “this[^1]”[^2]) next", "before")).toBe("(see “this”)[^1][^2] next");
+    });
+
+    it("control: under after the same line keeps both inside the bracket, as before the fix", () => {
+        expect(footnoteAfterPunctuation("(see “this[^1]”[^2]) next", "after")).toBe("(see “this”[^1][^2]) next");
     });
 });

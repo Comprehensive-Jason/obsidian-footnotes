@@ -75,6 +75,16 @@ function swapInSegment(
 ): string {
     let out = "";
     let copied = 0;
+    // A run whose forward move ends right where the next run starts goes
+    // on with that run: it is written in front of it, wherever that run
+    // lands, so one pass does what two did. Moved on its own it stopped at
+    // the next run's "[", and under "before", where that run then moved out
+    // of a closing bracket, only a second lint carried it on: "(see
+    // “this[^1]”[^2]) next" became "(see “this”[^1])[^2] next", and then
+    // "(see “this”)[^1][^2] next" (hunt 2026-10-02, pin
+    // bug-placement-before-two-units-two-lints). `carried` holds such a
+    // run's text until the next run is placed.
+    let carried = "";
     let k = 0;
     while (k < units.length) {
         // Units written back to back move as one run. Anything the grammar
@@ -85,8 +95,11 @@ function swapInSegment(
         }
         const start = units[k].start;
         const end = units[last].end;
-        const loneReference = last === k && units[k].reference;
+        const loneReference = last === k && units[k].reference && carried === "";
         k = last + 1;
+        // the run's text, with a run carried to it in front
+        const run = carried + original.slice(start, end);
+        carried = "";
         // Whether this run, written at `at` with the character `next` right
         // after it, is a definition label: a SINGLE reference followed by
         // ":" with nothing but whitespace, quote markers, or dead text
@@ -105,54 +118,67 @@ function swapInSegment(
             mayBeLabel &&
             next === ":" &&
             masked.slice(0, at).replace(/[>%\0\s]/g, "") === "";
-        // The run of punctuation AND closing marks immediately after it,
-        // the same walk the insert commands use (referenceLandingAfter:
-        // "bravo[^1]". becomes "bravo".[^1], **bold[^1]** becomes
-        // **bold**[^1], and a link's "(url)" tail is stepped over whole).
-        // Taking both sides as whole runs is what lets one pass finish the
-        // job, so running the lint again changes nothing: "[^1][^2]?!"
-        // moves in one go. Under "before" the walk stops in front of
-        // punctuation and steps over it only together with a closing mark
-        // that follows, so the forward move then carries the run out of a
-        // quote and no further.
-        const punctuationEnd = referenceLandingAfter(masked, end, placement);
-        if (punctuationEnd === end) {
-            // Under "before", a run that sits right AFTER punctuation moves
-            // back in front of it: "word.[^1]" becomes "word[^1].", and
-            // "句子。[^1]" becomes "句子[^1]。" (T5, 2026-09-21). A run after
-            // a closing mark stays: the marker belongs outside the quote in
-            // every convention found, punctuation inside the quote or not.
-            if (placement !== "before" || !punctuationAt(masked, start - 1)) continue;
-            let punctuationStart = start;
-            while (punctuationAt(masked, punctuationStart - 1)) punctuationStart--;
-            // A reference moved in front of a line-initial colon would
-            // become a label: ":[^1] text" would turn into "[^1]: text", a
-            // second definition of footnote 1 (hunt 2026-10-02, pin
-            // bug-placement-before-colon-makes-label).
-            if (labelAt(punctuationStart, masked[punctuationStart])) continue;
-            const movedBack = original.slice(copied, punctuationStart) + original.slice(start, end) + original.slice(punctuationStart, start);
-            if (!keeps(out + movedBack + original.slice(end))) continue;
-            out += movedBack;
+        // The run's move, or null when it stays where it is: the run is
+        // written between `before` and `after`, and the three take the
+        // place of the text from `copied` up to `to`.
+        const move = ((): { before: string; after: string; to: number } | null => {
+            // The run of punctuation AND closing marks immediately after
+            // it, the same walk the insert commands use
+            // (referenceLandingAfter: "bravo[^1]". becomes "bravo".[^1],
+            // **bold[^1]** becomes **bold**[^1], and a link's "(url)" tail
+            // is stepped over whole). Taking both sides as whole runs is
+            // what lets one pass finish the job, so running the lint again
+            // changes nothing: "[^1][^2]?!" moves in one go. Under "before"
+            // the walk stops in front of punctuation and steps over it only
+            // together with a closing mark that follows, so the forward
+            // move then carries the run out of a quote and no further.
+            const punctuationEnd = referenceLandingAfter(masked, end, placement);
+            if (punctuationEnd === end) {
+                // Under "before", a run that sits right AFTER punctuation
+                // moves back in front of it: "word.[^1]" becomes
+                // "word[^1].", and "句子。[^1]" becomes "句子[^1]。" (T5,
+                // 2026-09-21). A run after a closing mark stays: the marker
+                // belongs outside the quote in every convention found,
+                // punctuation inside the quote or not.
+                if (placement !== "before" || !punctuationAt(masked, start - 1)) return null;
+                let punctuationStart = start;
+                while (punctuationAt(masked, punctuationStart - 1)) punctuationStart--;
+                // A reference moved in front of a line-initial colon would
+                // become a label: ":[^1] text" would turn into "[^1]: text",
+                // a second definition of footnote 1 (hunt 2026-10-02, pin
+                // bug-placement-before-colon-makes-label).
+                if (labelAt(punctuationStart, masked[punctuationStart])) return null;
+                return { before: original.slice(copied, punctuationStart), after: original.slice(punctuationStart, start), to: end };
+            }
+            // A label the label reader did not claim stays where it is: one
+            // indented past three spaces inside a list item ("    [^113]:
+            // def", a definition to Obsidian that the plugin does not model
+            // yet), or one after a "%%" that is not a block's closer.
+            // Swapping its colon would turn it into ":[^113]" for good
+            // (Claude sweep 2026-09-13).
+            if (labelAt(start, masked[end])) return null;
+            // A run of references that already comes AFTER punctuation or a
+            // closing mark is where it should be. Any punctuation after it
+            // belongs to the next clause, and moving the references again
+            // would walk them further and further from the words they belong
+            // to. Under "before" the forward move only ever carries a run
+            // out of a quote, which is right wherever the run started.
+            if (placement === "after" && start > 0 && (punctuationAt(masked, start - 1) || ClosingMarkChars.includes(masked[start - 1]))) return null;
+            return { before: original.slice(copied, start) + original.slice(end, punctuationEnd), after: "", to: punctuationEnd };
+        })();
+        if (move === null || !keeps(out + move.before + run + move.after + original.slice(move.to))) {
+            out += original.slice(copied, start) + run;
             copied = end;
             continue;
         }
-        // A label the label reader did not claim stays where it is: one
-        // indented past three spaces inside a list item ("    [^113]: def",
-        // a definition to Obsidian that the plugin does not model yet), or
-        // one after a "%%" that is not a block's closer. Swapping its colon
-        // would turn it into ":[^113]" for good (Claude sweep 2026-09-13).
-        if (labelAt(start, masked[end])) continue;
-        // A run of references that already comes AFTER punctuation or a
-        // closing mark is where it should be. Any punctuation after it
-        // belongs to the next clause, and moving the references again
-        // would walk them further and further from the words they belong
-        // to. Under "before" the forward move only ever carries a run out
-        // of a quote, which is right wherever the run started.
-        if (placement === "after" && start > 0 && (punctuationAt(masked, start - 1) || ClosingMarkChars.includes(masked[start - 1]))) continue;
-        const moved = original.slice(copied, start) + original.slice(end, punctuationEnd) + original.slice(start, end);
-        if (!keeps(out + moved + original.slice(punctuationEnd))) continue;
-        out += moved;
-        copied = punctuationEnd;
+        if (move.after === "" && move.to === units[k]?.start) {
+            // a forward move up to the next run: go on with it
+            out += move.before;
+            carried = run;
+        } else {
+            out += move.before + run + move.after;
+        }
+        copied = move.to;
     }
     return out + original.slice(copied);
 }
