@@ -23,6 +23,7 @@ import {
     withCarriedText,
 } from "./carry-footnotes";
 import { planDefinitionAppend } from "./definition-append";
+import { footnotePopupEditor, footnotePopupSection } from "./footnote-popup";
 
 // The editor side of carrying footnote definitions on copy, cut, and paste
 // (issue #59; Jason's rulings 2026-09-21 and 2026-09-22). The pure pieces
@@ -342,8 +343,17 @@ export function carriedInputHandler(
     };
 }
 
-/** The Obsidian editor whose CodeMirror view is `view`, or null when no open note owns it. */
+/**
+ * The Obsidian editor whose CodeMirror view is `view`, or null when no open
+ * note owns it. The footnote popup's editor counts: the plugin's input
+ * handler runs in it too, and the keyboard's clipboard history lands there
+ * as it does in a note. Without it the handler found no editor, and the
+ * carried definition lines went into the footnote as its own text (probed
+ * live, 2026-10-06; hunt 2026-10-02, round 4, cluster U6).
+ */
 function editorOwning(plugin: FootnotePlugin, view: EditorView): Editor | null {
+    const popup = footnotePopupEditor();
+    if (popup && codeMirrorViewOf(popup) === view) return popup;
     for (const leaf of plugin.app.workspace.getLeavesOfType("markdown")) {
         const md = leaf.view;
         if (!(md instanceof MarkdownView)) continue;
@@ -382,26 +392,49 @@ function landCarriedText(
     beforeWrite: () => void = () => undefined,
 ): boolean {
     const lines = docLines(doc);
+    // In the footnote popup, the editor holds one definition's text, and the
+    // note is around it. The paste is planned against the whole note, so it
+    // sees the names the note already uses, and its definitions go where a
+    // creation press would put them in the note: the popup's text is joined
+    // into the note as that footnote's own text, so a definition left in it
+    // would be held inside the footnote. Planned against the popup's text
+    // alone, the paste kept a name the note already used, and the note got
+    // a second definition of it (hunt 2026-10-02, round 4, cluster U6, pin
+    // bug-carry-paste-into-popup-ignores-note). Elsewhere the note is the
+    // editor's own text.
+    const popup = footnotePopupSection(doc);
+    const noteLines = popup ? popup.note.split("\n") : lines;
+    const toNote = popup ? popup.toNote : (pos: EditorPosition) => pos;
+    // the text as it reads in the note: in the popup, each line after the
+    // first carries the indent the popup's lines get there
+    const inNote = (text: string) => (popup ? text.replace(/\n/g, `\n${popup.indent}`) : text);
+    const fromNote = (text: string) => (popup ? text.split(`\n${popup.indent}`).join("\n") : text);
+    const [noteFrom, noteTo] = [toNote(from), toNote(to)];
     // The paste is planned against the note as it reads once the selection
     // is gone. A definition the paste deletes is then not one the note
     // "already has" to reuse, and a name only the deleted text used is free
     // again (hunt 2026-10-02, pin
     // bug-carry-paste-over-selection-holding-definitions: Ctrl+A and paste
     // pointed the pasted reference at the definition it was deleting).
-    const cleared = simulateChanges(lines, [{ from, to, text: "" }]);
+    const cleared = simulateChanges(noteLines, [{ from: noteFrom, to: noteTo, text: "" }]);
     // The body is planned where it lands, with any blank line in front of
     // it already there: the planner reads its footnotes in place (renames
     // only change names, so the blank lines asOwnParagraph wants are the
     // same before and after them).
-    const landing = asOwnParagraph(cleared, from, body);
-    const plan = planCarriedPaste(cleared.join("\n"), landing.text, carried, from);
+    const landing = asOwnParagraph(cleared, noteFrom, inNote(body));
+    const plan = planCarriedPaste(cleared.join("\n"), landing.text, carried, noteFrom);
     if (plan.landsInProtectedText) return false;
-    const { after } = landing;
-    const text = plan.body;
+    // the pasted text as the editor gets it, and as the note reads it
+    const text = fromNote(plan.body);
+    const after = landing.after;
     // a blank line after the text goes in as an edit of its own, so the
     // caret can land at the end of the text, before it
-    const edits: EditorChange[] = after ? [{ from, to, text }, { from: to, text: after }] : [{ from, to, text }];
-    let changes: EditorChange[] = edits;
+    const editsAt = (start: EditorPosition, end: EditorPosition, inserted: string, blank: string): EditorChange[] =>
+        blank ? [{ from: start, to: end, text: inserted }, { from: end, text: blank }] : [{ from: start, to: end, text: inserted }];
+    const edits = editsAt(from, to, text, after);
+    const noteEdits = editsAt(noteFrom, noteTo, inNote(text), inNote(after));
+    let changes: EditorChange[] = noteEdits;
+    let noteAfter: string[] | null = null;
     const textLines = text.split("\n");
     let end: EditorPosition =
         textLines.length === 1
@@ -418,26 +451,41 @@ function landCarriedText(
         // so a block that needs a blank line in front gets it here too.
         const [first] = plan.definitions;
         const append = planDefinitionAppend({
-            lines,
-            edits,
+            lines: noteLines,
+            edits: noteEdits,
             footnoteId: first.name,
             plugin,
             body: blockBody(first),
             moreDefinitionLines: carriedLines(plan.definitions).slice(first.lines.length),
         });
         changes = append.changes;
-        end = append.edits[0].end;
+        noteAfter = append.final;
+        // in the popup the definitions land outside its text, so the caret
+        // there stays right after the pasted text
+        if (!popup) end = append.edits[0].end;
     }
+    // In the popup, the definitions go into the note around the popup's
+    // text, and the pasted text into the popup's editor. A note that does
+    // not come apart that way, with the popup's new text whole in it, is
+    // left alone, and the paste is the editor's own.
+    const around = popup
+        ? popup.around((noteAfter ?? simulateChanges(noteLines, noteEdits)).join("\n"), simulateChanges(lines, edits).join("\n"))
+        : null;
+    if (popup && !around) return false;
     beforeWrite();
+    around?.();
     // through the shared write-back, so a folded section the definitions
     // go into stays folded and a second pane on the note stays where it
     // was, as after a cut (hunt 2026-10-02, round 4, cluster U2, pin
     // bug-convert-paste-skip-shared-write-back); the edits are handed over
-    // as offsets into the note as it is now, in document order
-    const offsetChanges = changes
+    // as offsets into the note as it is now, in document order. In the
+    // popup only the pasted text goes into its editor, and the folds and
+    // panes are the note's, not the popup's, so none are handed over.
+    const offsetChanges = (popup ? edits : changes)
         .map((change) => ({ from: doc.posToOffset(change.from), to: doc.posToOffset(change.to ?? change.from), text: change.text }))
         .sort((x, y) => x.from - y.from);
-    writeChanges(doc, lines.join("\n"), offsetChanges, plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined, { from: end });
+    const mdView = popup ? undefined : (plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined);
+    writeChanges(doc, lines.join("\n"), offsetChanges, mdView, { from: end });
 
     // The counts read in a fixed order, added, reused, matched, renamed,
     // and a zero is left out rather than said, so the usual paste reads
@@ -463,7 +511,8 @@ function landCarriedText(
         notice += ` ${missing.map(quotedReference).join(", ")} ${missing.length === 1 ? "has" : "have"} no definition to carry.`;
     }
     showNotice(notice, missing.length > 0 ? 8000 : undefined);
-    lintAfterPaste(plugin, doc);
+    // the note as the paste left it, which in the popup is not the editor's text
+    lintAfterPaste(plugin, doc, () => (popup ? (noteAfter ?? simulateChanges(noteLines, noteEdits)).join("\n") : doc.getValue()));
     return true;
 }
 
@@ -479,18 +528,18 @@ function landCarriedText(
  * canceled, as a save does (ADR 0002, the lint is never silent; hunt
  * 2026-10-02, pin bug-paste-invalid-prefix-lint-silent).
  */
-function lintAfterPaste(plugin: FootnotePlugin, doc: Editor): void {
+function lintAfterPaste(plugin: FootnotePlugin, doc: Editor, note: () => string): void {
     if (lintAfterFootnoteCreation(plugin, doc, false) !== null) return;
     if (!plugin.settings.lintOnFootnoteCreation) {
         // no lint ran, so the orphan alerts speak even while their delete
         // toggles are on: a paste over the only reference to a footnote
         // leaves its definition behind, and nothing else would say so
         // (found while fixing, 2026-10-06, pin bug-paste-orphan-unreported)
-        noticeLintAlerts(plugin, doc.getValue(), false);
+        noticeLintAlerts(plugin, note(), false);
         return;
     }
     if (lintRulesAllDisabled(plugin)) return;
-    const blocked = lintBlockedByPrefix(doc.getValue(), plugin.settings.enableFootnotePrefix);
+    const blocked = lintBlockedByPrefix(note(), plugin.settings.enableFootnotePrefix);
     if (blocked) showNotice(blocked, 8000);
 }
 

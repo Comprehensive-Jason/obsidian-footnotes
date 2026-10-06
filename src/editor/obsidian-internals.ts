@@ -161,6 +161,17 @@ interface MarkdownEmbed {
     /** The file's text in front of the section the embed edits, label included ("...\n\n[^1]: "), and the text after it. Stable across saves. */
     before?: string;
     after?: string;
+    /**
+     * What the embed puts in front of every line of the section after its
+     * first when it joins the section into the file: "\t", or four spaces,
+     * by the vault's "Indent using tabs" setting. Everything typed in a
+     * footnote's popup is joined this way, so all of it is the footnote's
+     * own text (read off Obsidian 1.13's app.js and probed live,
+     * 2026-10-06).
+     */
+    indent?: string;
+    /** A heading's text for a heading subpath, joined in front of the section; "" for a footnote. */
+    heading?: string;
     editMode?: {
         editor?: {
             focus(): void;

@@ -1,4 +1,4 @@
-import { MarkdownView, Notice, Scope } from "obsidian";
+import { Editor, EditorPosition, MarkdownView, Notice, Scope } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { definitionLabel, referenceText } from "../parsing/footnote-grammar";
@@ -23,9 +23,56 @@ import { showNotice } from "../editor/notice";
 
 type ActivePopup = {
     close: (focusEditor: boolean) => void;
+    /** the popup's own editor, once its embed shows one */
+    editor?: () => Editor | null;
+    /** the popup's footnote seen from `editor`, when that is the popup's own editor (see PopupSection) */
+    section?: (editor: Editor) => PopupSection | null;
 };
 
 let activePopup: ActivePopup | null = null;
+
+/**
+ * The open popup's footnote, seen from the popup's own editor.
+ *
+ * The popup's editor holds only the text of one footnote's definition. The
+ * embed joins that text into the note after every change: the note's text
+ * in front of it, the popup's text with each line after its first indented
+ * (so all of it stays the footnote's own text), then the note's text after
+ * it. The main editor shows that joined note at once (probed live,
+ * 2026-10-06). So a command working in the popup's editor reads the note
+ * through this, and anything it writes outside the definition goes through
+ * `around`, or the popup's next change would write the old text around the
+ * definition back over it.
+ */
+export interface PopupSection {
+    /** The note as the embed joins it now. */
+    note: string;
+    /** What the embed puts in front of every popup line after the first when it joins them into the note. */
+    indent: string;
+    /** Where position `pos` of the popup's editor sits in `note`. */
+    toNote: (pos: EditorPosition) => EditorPosition;
+    /**
+     * Prepares the note to read `next` once the popup's editor holds
+     * `popupText`, for an edit that also changes the note outside the
+     * definition. Returns null, having changed nothing, when `next` is not
+     * `popupText` joined in with only the text before it or only the text
+     * after it changed. Otherwise returns the step that writes the text
+     * around the definition: into the embed, so its joins keep it, and
+     * into the main editor. The caller then writes `popupText` into the
+     * popup's editor, and the embed joins the rest.
+     */
+    around(next: string, popupText: string): (() => void) | null;
+}
+
+/** The open popup's own editor, or null when no popup is showing one. */
+export function footnotePopupEditor(): Editor | null {
+    return activePopup?.editor?.() ?? null;
+}
+
+/** The open popup's footnote when `editor` is the popup's own editor, or null for any other editor. */
+export function footnotePopupSection(editor: Editor): PopupSection | null {
+    return activePopup?.section?.(editor) ?? null;
+}
 
 /** Obsidian's core "Toggle reading view" command. */
 const TogglePreviewCommand = "markdown:toggle-preview";
@@ -234,7 +281,8 @@ export async function openFootnotePopup(
             placeCursorAfterReference();
         }
     };
-    activePopup = { close };
+    const handle: ActivePopup = { close };
+    activePopup = handle;
 
     // Pressing the reading-view toggle while the popup (or the note under
     // it) had focus used to be SWALLOWED. The popup's editor counts as
@@ -418,6 +466,56 @@ export async function openFootnotePopup(
         return built;
     };
     let embed = buildEmbed();
+
+    // The popup's own editor, read through `embed` each time, since a retry
+    // builds a new embed. The editor Obsidian hands a paste in the popup is
+    // this very object (probed live, 2026-10-06).
+    const popupEditor = (): Editor | null => (embed.editMode?.editor as Editor | undefined) ?? null;
+    handle.editor = popupEditor;
+    handle.section = (asked: Editor): PopupSection | null => {
+        const inner = popupEditor();
+        if (!inner || asked !== inner) return null;
+        const { before, after } = embed;
+        const indent = embed.indent ?? "";
+        const text = inner.getValue();
+        // a heading subpath joins its heading in front; a footnote has none
+        if (typeof before !== "string" || typeof after !== "string" || (embed.heading ?? "") !== "") return null;
+        // the popup's text as the embed joins it into the note
+        const joined = (popupText: string) => popupText.replace(/\n/g, `\n${indent}`);
+        // `before` ends with the label line's start, where the popup's first line goes on
+        const beforeLines = before.split("\n");
+        const firstLine = beforeLines.length - 1;
+        const labelWidth = beforeLines[firstLine].length;
+        return {
+            note: before + joined(text) + after,
+            indent,
+            toNote: (pos) => ({ line: firstLine + pos.line, ch: (pos.line === 0 ? labelWidth : indent.length) + pos.ch }),
+            around: (next, popupText) => {
+                const section = joined(popupText);
+                let newBefore: string;
+                let newAfter: string;
+                if (next.startsWith(before + section)) {
+                    newBefore = before;
+                    newAfter = next.slice(before.length + section.length);
+                } else if (next.endsWith(section + after)) {
+                    newBefore = next.slice(0, next.length - section.length - after.length);
+                    newAfter = after;
+                } else {
+                    return null;
+                }
+                return () => {
+                    embed.before = newBefore;
+                    embed.after = newAfter;
+                    // the main editor gets the new text around the popup's
+                    // text right away too; the embed's next join, when the
+                    // caller writes the popup, then fills in the popup's part
+                    const current = editor.getValue();
+                    const target = newBefore + joined(text) + newAfter;
+                    if (current !== target) replaceMinimal(editor, current, target, mdView);
+                };
+            },
+        };
+    };
 
     const onDocMouseDown = (evt: MouseEvent) => {
         // Element, not HTMLElement. An SVG icon is a common thing to click
