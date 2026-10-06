@@ -514,10 +514,17 @@ function renamedLines(text: readonly string[], syntaxOn: (line: number) => reado
  * line: what copy and cut write to the clipboard (Jason, 2026-09-22:
  * always, so a paste outside Obsidian keeps the definitions). A
  * body with no definitions to carry comes back untouched.
+ *
+ * The body goes in exactly as it was selected, its trailing line breaks
+ * included, and splitCarriedText takes back off exactly the one blank
+ * line put in here. A paragraph selected line-wise (Shift+Down, so the
+ * selection holds its line break) used to lose that line break here, and
+ * a paste of the clipboard text glued it onto the text after the caret
+ * (hunt 2026-10-02, pin bug-carry-line-wise-body-loses-line-break).
  */
 export function withCarriedText(body: string, carried: CarriedDefinition[]): string {
     if (carried.length === 0) return body;
-    return body.replace(/\n+$/, "") + "\n\n" + carriedLines(carried).join("\n");
+    return body + "\n\n" + carriedLines(carried).join("\n");
 }
 
 /**
@@ -549,6 +556,14 @@ export function carriedLines(carried: readonly CarriedDefinition[]): string[] {
  * between them allowed) counts; a definition in the middle of the text is
  * part of the body, since the text around it is. A definition-shaped line
  * inside a code fence is protected text and not a definition.
+ *
+ * The body comes back with everything in front of the definitions except
+ * the one blank line that separates them from it, so a body that ended in
+ * a line break keeps it. Line breaks after the last definition go back on
+ * the end of the body: a text that ends in a line break was taken whole
+ * lines at a time, and pasted at the start of a line it must still end
+ * its own line, with the definitions lifted out of it (hunt 2026-10-02,
+ * pin bug-carry-line-wise-body-loses-line-break).
  */
 export function splitCarriedText(text: string): { body: string; carried: CarriedDefinition[] } {
     const lines = normalizeEol(text).text.split("\n");
@@ -557,18 +572,22 @@ export function splitCarriedText(text: string): { body: string; carried: Carried
     // off any indentation in front of a label
     const blocks = readNote(lines).blocks;
     const byEnd = new Map(blocks.map((block) => [block.end, block]));
+    // `cut` is the first line of the trailing run of definitions, and
+    // `end` the line the search for the next block up has reached
     let cut = lines.length;
+    let end = lines.length;
+    while (end > 0 && lines[end - 1].trim() === "") end--;
+    const after = lines.slice(end);
     for (;;) {
-        while (cut > 0 && lines[cut - 1].trim() === "") cut--;
-        const block = byEnd.get(cut - 1);
+        while (end > 0 && lines[end - 1].trim() === "") end--;
+        const block = byEnd.get(end - 1);
         if (!block) break;
-        cut = block.start;
+        cut = end = block.start;
     }
     if (cut === lines.length) return { body: text, carried: [] };
     const carried = liftedBlocks(lines, blocks.filter((block) => block.start >= cut));
-    let bodyEnd = cut;
-    while (bodyEnd > 0 && lines[bodyEnd - 1].trim() === "") bodyEnd--;
-    return { body: lines.slice(0, bodyEnd).join("\n"), carried };
+    const bodyEnd = cut > 0 && lines[cut - 1].trim() === "" ? cut - 1 : cut;
+    return { body: [...lines.slice(0, bodyEnd), ...after].join("\n"), carried };
 }
 
 /** What a cut does to the note and to the clipboard (planCut). */

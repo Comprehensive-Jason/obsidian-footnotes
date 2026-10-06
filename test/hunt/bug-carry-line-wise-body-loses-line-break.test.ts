@@ -93,7 +93,7 @@ beforeEach(() => {
 });
 
 describe("a line-wise selection keeps its trailing line break through the clipboard text", () => {
-    it.fails("phone: cut a paragraph line-wise and paste it back where it was, the note reads as before", () => {
+    it("phone: cut a paragraph line-wise and paste it back where it was, the note reads as before", () => {
         const note = ["Intro[^1] text.", "", "Next para.", "", "[^1]: one"];
         const doc = ed(note, { line: 0, ch: 0 }, { line: 2, ch: 0 });
         const e = clip();
@@ -104,7 +104,7 @@ describe("a line-wise selection keeps its trailing line break through the clipbo
         expect(back.slice(0, 3)).toEqual(["Intro[^1] text.", "", "Next para."]);
     });
 
-    it.fails("another window's clipboard: a paragraph copied line-wise and pasted at the start of another stays its own paragraph", () => {
+    it("another window's clipboard: a paragraph copied line-wise and pasted at the start of another stays its own paragraph", () => {
         const source = ["First[^1] paragraph.", "", "Second paragraph.", "", "[^1]: one"];
         const destination = ["Other note.", "", "Last para."];
         const text = copy(source, { line: 0, ch: 0 }, { line: 2, ch: 0 });

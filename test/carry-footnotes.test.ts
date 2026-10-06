@@ -211,9 +211,24 @@ describe("the clipboard text with definitions in it", () => {
         expect(splitCarriedText(text)).toEqual({ body: "a[^1] b", carried: [{ name: "1", lines: ["[^1]: one", "    more"] }] });
     });
 
-    it("keeps the body's own trailing newline count sensible and adds nothing when there is nothing to carry", () => {
-        expect(withCarriedText("a[^1]\n", [{ name: "1", lines: ["[^1]: one"] }])).toBe("a[^1]\n\n[^1]: one");
+    // A body selected line-wise ends in its line break, and keeps it both
+    // ways: the clipboard text holds it before the one blank line, and the
+    // split gives it back (hunt 2026-10-02, pin
+    // bug-carry-line-wise-body-loses-line-break; this test used to pin the
+    // line break trimmed away).
+    it("keeps the body's own trailing line breaks through the round trip and adds nothing when there is nothing to carry", () => {
+        const carried = [{ name: "1", lines: ["[^1]: one"] }];
+        expect(withCarriedText("a[^1]\n", carried)).toBe("a[^1]\n\n\n[^1]: one");
+        expect(splitCarriedText(withCarriedText("a[^1]\n", carried))).toEqual({ body: "a[^1]\n", carried });
+        expect(splitCarriedText(withCarriedText("a[^1]\n\n", carried))).toEqual({ body: "a[^1]\n\n", carried });
         expect(withCarriedText("plain", [])).toBe("plain");
+    });
+
+    // A text taken whole lines at a time ends in a line break after its
+    // definitions; with them lifted out, the body keeps ending its own line.
+    it("puts a line break after the definitions back on the end of the body", () => {
+        expect(splitCarriedText("a[^1]\n\n[^1]: one\n")).toEqual({ body: "a[^1]\n", carried: [{ name: "1", lines: ["[^1]: one"] }] });
+        expect(splitCarriedText("[^1]: one\n")).toEqual({ body: "", carried: [{ name: "1", lines: ["[^1]: one"] }] });
     });
 
     it("splits only a trailing run of definitions; a definition in the middle stays in the body", () => {
