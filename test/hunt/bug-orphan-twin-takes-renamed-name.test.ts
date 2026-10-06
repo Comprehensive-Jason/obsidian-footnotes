@@ -42,7 +42,7 @@ import { lintFootnotes } from "../../src/linting/linter";
 
 describe("an orphaned twin whose name is the name the lint gives the used twin", () => {
     // Now: the fold is dropped (an empty list).
-    it.fails("the fold on the used twin follows it; the orphan takes nothing", () => {
+    it("the fold on the used twin follows it; the orphan takes nothing", () => {
         const before = ["Intro[^3]", "", "[^1]: Ibid.", "    p. 4", "", "[^3]: Ibid.", "    p. 4", "", "Para."].join("\n");
         const after = lintFootnotes(before, { removeOrphanedDefinitions: true });
         expect(after.split("\n")).toEqual(["Intro[^1]", "", "Para.", "", "[^1]: Ibid.", "    p. 4"]);

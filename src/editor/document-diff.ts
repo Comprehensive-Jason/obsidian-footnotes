@@ -847,6 +847,13 @@ function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
  * used one, whose fold was dropped (hunt 2026-10-06 cycle 4, cluster D3,
  * pin bug-fold-follows-wrong-twin).
  *
+ * A definition whose name no line renames, but that some other footnote
+ * was renamed to, is not looked for under its name: that name now belongs
+ * to the other footnote. An orphaned twin "[^1]" above a used twin "[^3]"
+ * that the lint renamed to "[^1]" took the used twin's place, and the used
+ * twin's fold was dropped (hunt 2026-10-06, cycle 5, cluster X18, pin
+ * bug-orphan-twin-takes-renamed-name).
+ *
  * A definition not found that way that the line-up already put on a line
  * with its own key stays where it was put, and the definition there is
  * taken. Each other definition the lint can move takes the first
@@ -856,6 +863,8 @@ function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
 function findMovedDefinitions(map: { from: number; to: number }[], a: string[], b: string[], kindsA: readonly LineKind[], kindsB: readonly LineKind[]): void {
     const textOf = (lines: string[], start: number, end: number) => lines.slice(start, end + 1).map(lineKey).join("\n");
     const renamed = renamesOf(map, a, b, kindsA, kindsB);
+    // the names some footnote was renamed to
+    const taken = new Set(renamed.values());
     // the movable definitions of `b` not taken yet, by their text: the
     // line each starts on, in order; and by their name, folded to lower
     // case as Obsidian compares names
@@ -882,7 +891,8 @@ function findMovedDefinitions(map: { from: number; to: number }[], a: string[], 
         if (!definition.movable) continue;
         const text = textOf(a, definition.start, definition.end);
         const name = definition.name.toLowerCase();
-        const twin = named.get(renamed.get(name) ?? name);
+        const now = renamed.get(name) ?? (taken.has(name) ? undefined : name);
+        const twin = now === undefined ? undefined : named.get(now);
         if (twin !== undefined && twin.text === text && free.get(text)?.includes(twin.start)) {
             take(text, twin.start);
             takenByName.add(twin.start);
