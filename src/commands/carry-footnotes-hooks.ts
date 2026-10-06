@@ -9,7 +9,7 @@ import { codeMirrorViewOf, readingViewActive, viewEditor } from "../editor/obsid
 import { mainEditorTextHolds, nestedSubEditorOwnsFocus } from "../editor/table-cursor";
 import { replaceMinimal } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
-import { lintAfterFootnoteCreation, withEmptySectionHeadingRemoved } from "../linting/linter";
+import { lintAfterFootnoteCreation, lintBlockedByPrefix, lintRulesAllDisabled, withEmptySectionHeadingRemoved } from "../linting/linter";
 import { quotedReference } from "../parsing/footnote-grammar";
 import { normalizeEol, restoreEol } from "../parsing/line-edits";
 import {
@@ -455,10 +455,31 @@ function landCarriedText(
         notice += ` ${missing.map(quotedReference).join(", ")} ${missing.length === 1 ? "has" : "have"} no definition to carry.`;
     }
     showNotice(notice, missing.length > 0 ? 8000 : undefined);
-    if (lintAfterFootnoteCreation(plugin, doc, false) === null && !plugin.settings.lintOnFootnoteCreation) {
-        noticeLintAlerts(plugin, doc.getValue());
-    }
+    lintAfterPaste(plugin, doc);
     return true;
+}
+
+/**
+ * After a paste that landed footnotes: the lint on footnote creation, as
+ * after every press that creates a footnote, or its alerts when that
+ * trigger is off.
+ *
+ * A footnote-prefix the plugin cannot use cancels the lint, and the lint
+ * then says nothing, because a press under such a prefix has already
+ * refused and said why. A paste does not need the prefix and lands anyway,
+ * so nothing had said anything: the paste gives the reason the lint was
+ * canceled, as a save does (ADR 0002, the lint is never silent; hunt
+ * 2026-10-02, pin bug-paste-invalid-prefix-lint-silent).
+ */
+function lintAfterPaste(plugin: FootnotePlugin, doc: Editor): void {
+    if (lintAfterFootnoteCreation(plugin, doc, false) !== null) return;
+    if (!plugin.settings.lintOnFootnoteCreation) {
+        noticeLintAlerts(plugin, doc.getValue());
+        return;
+    }
+    if (lintRulesAllDisabled(plugin)) return;
+    const blocked = lintBlockedByPrefix(doc.getValue(), plugin.settings.enableFootnotePrefix);
+    if (blocked) showNotice(blocked, 8000);
 }
 
 /**

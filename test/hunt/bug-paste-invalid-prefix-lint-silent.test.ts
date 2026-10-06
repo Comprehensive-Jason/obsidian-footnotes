@@ -72,7 +72,7 @@ function pasteInto(lintOnFootnoteCreation: boolean): string[] {
 beforeEach(resetNotices);
 
 describe("paste with an invalid note prefix", () => {
-    it.fails("with lint on creation ON, the user still hears either the orphan alert or why the lint was cancelled", () => {
+    it("with lint on creation ON, the user still hears either the orphan alert or why the lint was cancelled", () => {
         const said = pasteInto(true);
         expect(said.some((m) => m.includes("[^9]") || m.includes("ch2"))).toBe(true);
     });
