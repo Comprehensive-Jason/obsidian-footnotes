@@ -13,6 +13,7 @@ import {
     referenceText,
 } from "../parsing/footnote-grammar";
 import { duplicateFootnoteDefinitionNames, mergeDuplicateFootnoteDefinitions } from "./rules/merge-duplicate-definitions";
+import { definitionsHoldingTheMoveBack } from "./rules/move-footnotes-to-the-bottom";
 import {
     definitionsHeldBy,
     orphanedFootnoteDefinitionNames,
@@ -179,9 +180,11 @@ function noticeUnderlinedDefinitions(lines: string[]) {
 // general sentence that names no cause, so a new reason for leaving one
 // never makes the text wrong (Jason, 2026-10-05; hunt 2026-10-05, pin
 // spec-callout-title-orphan-alert-wording, where it blamed a comment's
-// closer for a definition on a callout's title). `them` is "it" or "them".
-function leftInPlace(them: "it" | "them"): string {
-    return `the lint left ${them} in place, because deleting ${them} would change how Obsidian reads the lines around ${them}.`;
+// closer for a definition on a callout's title). `them` is "it" or "them";
+// `doing` is what the lint held back from, deleting unless it says moving
+// (the move alert, Jason's triage decision Q5, 2026-10-05).
+function leftInPlace(them: "it" | "them", doing: "deleting" | "moving" = "deleting"): string {
+    return `the lint left ${them} in place, because ${doing} ${them} would change how Obsidian reads the lines around ${them}.`;
 }
 
 // Why the lint left a duplicate's copies alone with merging on (Jason,
@@ -280,6 +283,27 @@ function noticeOrphanedDefinitions(
         names.length === 1
             ? `This note has a footnote definition nothing references (${referenceList(names)}). ${addReferenceOrDeleteDefinition(names[0])}`
             : `This note has ${names.length} footnote definitions nothing references (${referenceList(names)}). Add their references in the text, or delete the definitions.`,
+        8000,
+    );
+}
+
+// The alert half of "Move footnotes to the bottom". The rule gathers every
+// definition or none: when moving one of them would change how Obsidian
+// reads the lines around it (a definition between two lists, whose move
+// would join them), it leaves them all where they are. That used to happen
+// without a word on every lint (hunt 2026-10-05 round 2, cluster L8; ADR 2,
+// the lint is never silent). Now the definitions that held the move back
+// are named, with the general "left in place" reason, so the user can
+// move them by hand and let the next lint gather the rest (Jason's triage
+// decision Q5, 2026-10-05). Only while the rule is on.
+function noticeUngatheredDefinitions(plugin: FootnotePlugin, markdown: string) {
+    if (!plugin.settings.lintMoveToBottom) return;
+    const names = definitionsHoldingTheMoveBack(markdown);
+    if (names.length === 0) return;
+    showNotice(
+        names.length === 1
+            ? `This note has a footnote definition the lint could not move to the bottom (${referenceList(names)}), and ${leftInPlace("it", "moving")} Move it by hand, and the next lint gathers the rest.`
+            : `This note has ${names.length} footnote definitions the lint could not move to the bottom (${referenceList(names)}), and ${leftInPlace("them", "moving")} Move them by hand, and the next lint gathers the rest.`,
         8000,
     );
 }
@@ -547,6 +571,7 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string) {
     noticeCommentedDefinitions(markdown);
     noticeDefinitionsInsideTables(markdown);
     noticeOrphanedDefinitions(plugin, markdown, { lines });
+    noticeUngatheredDefinitions(plugin, markdown);
     noticeDuplicateDefinitions(plugin, markdown, { lines });
     noticeNestedFootnotes(lines);
     noticeInvalidNames(lines);

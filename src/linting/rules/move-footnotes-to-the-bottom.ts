@@ -1,7 +1,7 @@
-import { findLineRunEnd, removeLineRanges } from "../../parsing/line-edits";
-import { readNote } from "../../parsing/note-reading";
+import { findLineRunEnd, normalizeEol, removeLineRanges } from "../../parsing/line-edits";
+import { Definition, readNote } from "../../parsing/note-reading";
 import { linesReadDifferently } from "./remove-orphaned-definitions";
-import { DocumentView, rewriteDocument } from "../rewrite-document";
+import { DocumentView, movedDefinitions, rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
 // The obsidian-linter plugin's "move footnotes to the bottom" rule,
@@ -117,17 +117,15 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
     });
     const definitions = packed.join("\n");
 
-    // Everything that is staying put, still in order. removeLineRanges
-    // also closes the gap: when cutting a block leaves two blank lines
-    // next to each other, they become one.
-    const body = removeLineRanges(lines, blocks);
-    while (body.length > 0 && body[body.length - 1] === "") body.pop();
     // Taking the definitions out must leave every other line reading as it
     // did, the promise the orphan rules make for their cuts: a definition
     // can be all that keeps "   thin prose" under a list item from
     // becoming that item's second paragraph, and the indented code under
     // it from waking up as live text (found by the conservation property,
-    // the runtime swap step 2, 2026-10-03). Such a note is left as it is.
+    // the runtime swap step 2, 2026-10-03). Such a note is left as it is,
+    // and the move alert names the definitions that held it back
+    // (definitionsHoldingTheMoveBack).
+    const body = bodyWithout(lines, blocks);
     if (linesReadDifferently(lines, { lines, ranges: blocks }, body)) return text;
 
     // The section-heading setting is markdown that may run over
@@ -244,6 +242,55 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
         result + "\n".repeat(trailingNewlines),
     );
     return rebuilt;
+}
+
+/**
+ * Everything that is staying put once `blocks` are taken out, still in
+ * order, without blank lines at the end. removeLineRanges also closes the
+ * gap: when cutting a block leaves two blank lines next to each other,
+ * they become one.
+ */
+function bodyWithout(lines: string[], blocks: readonly Definition[]): string[] {
+    const body = removeLineRanges(lines, blocks);
+    while (body.length > 0 && body[body.length - 1] === "") body.pop();
+    return body;
+}
+
+/**
+ * The names of the definitions that hold the whole move back, each once, in
+ * the order they appear: the ones whose own move would change how Obsidian
+ * reads the lines around them, such as a definition between two lists,
+ * whose move would join the lists. The rule then leaves every definition
+ * where it is, so the lint alert names these, and once the user has moved
+ * them by hand the next lint gathers the rest (hunt 2026-10-05 round 2,
+ * cluster L8; Jason's triage decision Q5, 2026-10-05; ADR 0002: the lint is
+ * never silent about what it leaves). When no single definition does it
+ * but the whole set does, every movable definition is named. Empty when
+ * the move is not held back this way.
+ */
+export function definitionsHoldingTheMoveBack(markdown: string): string[] {
+    if (!markdown.includes("[^")) return [];
+    // the note as the rule sees it: plain line endings, no blank lines at
+    // the end
+    const lines = normalizeEol(markdown).text.split("\n");
+    while (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+    const reading = readNote(lines);
+    const blocks = movedDefinitions(reading.definitions);
+    if (blocks.length === 0 || reading.openRegionFrom !== -1) return [];
+    // definitions that already close the note, with nothing but blank
+    // lines among them, have nowhere to go, so nothing was held back
+    const inBlock = (i: number): boolean => blocks.some((block) => block.start <= i && i <= block.end);
+    let alreadyGathered = true;
+    for (let i = blocks[0].start; i < lines.length && alreadyGathered; i++) alreadyGathered = inBlock(i) || lines[i].trim() === "";
+    if (alreadyGathered) return [];
+    const holdsBack = (cut: readonly Definition[]): boolean => linesReadDifferently(lines, { lines, ranges: cut }, bodyWithout(lines, cut));
+    if (!holdsBack(blocks)) return [];
+    const holding = blocks.filter((block) => holdsBack([block]));
+    const names: string[] = [];
+    for (const block of holding.length > 0 ? holding : blocks) {
+        if (!names.some((name) => name.toLowerCase() === block.name.toLowerCase())) names.push(block.name);
+    }
+    return names;
 }
 
 /**
