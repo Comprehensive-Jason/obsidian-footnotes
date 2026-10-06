@@ -23,6 +23,10 @@ import FootnotePlugin from "../../src/main";
 //
 // Cause: Number("") and Number(" ") are both 0, so the version reads as 0
 // and the version-1 heading rewrite runs again.
+//
+// Fix (2026-10-06): loadSettings reads only a string with something other
+// than spaces in it as a number; an empty or blank one counts as current,
+// like any other string that is no number.
 
 /** A plugin whose saved data is `data`, counting how many times it saves. */
 function withSaved(data: unknown): { plugin: FootnotePlugin; saves: () => number } {
@@ -39,10 +43,10 @@ function withSaved(data: unknown): { plugin: FootnotePlugin; saves: () => number
 
 describe("a settingsVersion saved as an empty or blank string", () => {
     for (const version of ["", " "]) {
-        it.fails(`version ${JSON.stringify(version)} leaves a deliberate heading alone and writes nothing`, async () => {
+        it(`version ${JSON.stringify(version)} leaves a deliberate heading alone and writes nothing`, async () => {
             const { plugin, saves } = withSaved({ settingsVersion: version, footnoteSectionHeading: "**Footnotes**" });
             await plugin.loadSettings();
-            // Today: "# **Footnotes**", and the change is saved.
+            // Before the fix: "# **Footnotes**", and the change is saved.
             expect(plugin.settings.footnoteSectionHeading).toBe("**Footnotes**");
             expect(saves()).toBe(0);
         });
