@@ -1,5 +1,5 @@
 import { EditorView } from "@codemirror/view";
-import { Editor, EditorPosition, EditorSelection, MarkdownView } from "obsidian";
+import { Editor, EditorPosition, EditorRangeOrCaret, EditorSelection, MarkdownView } from "obsidian";
 
 import { applyOffsetChanges, lineDiffChanges, lineMapper, mapFoldLines, OffsetChange } from "./document-diff";
 import { codeMirrorViewOf } from "./obsidian-internals";
@@ -33,8 +33,15 @@ export function replaceMinimal(doc: Editor, before: string, after: string, mdVie
  * edits land exactly as planned and still keep the folds and the other
  * panes (hunt 2026-10-02, round 4, cluster U2, pin
  * bug-convert-paste-skip-shared-write-back).
+ *
+ * `selection`, when given, is where the caret goes once the edits are in,
+ * as a position in the text after them, set in the same transaction. The
+ * carried paste puts the caret right after the pasted text this way,
+ * wherever the definitions it adds pushed that text (same pin). Without
+ * it the editor carries the caret through the edits, as it does for the
+ * lint.
  */
-export function writeChanges(doc: Editor, before: string, changes: OffsetChange[], mdView?: MarkdownView) {
+export function writeChanges(doc: Editor, before: string, changes: OffsetChange[], mdView?: MarkdownView, selection?: EditorRangeOrCaret) {
     if (changes.length === 0) return;
     // the other panes showing this note, and where each one is, read
     // before anything moves (see restoreOtherPanes)
@@ -52,8 +59,10 @@ export function writeChanges(doc: Editor, before: string, changes: OffsetChange[
             to: doc.offsetToPos(change.to),
             text: change.text,
         })),
+        ...(selection ? { selection } : {}),
     });
-    keepCaretBelowLinesAbove(doc, changes);
+    // a caret the caller placed is already where it should be
+    if (!selection) keepCaretBelowLinesAbove(doc, changes);
     const after = applyOffsetChanges(before, changes);
     if (foldInfo && foldInfo.folds.length > 0 && mode?.applyFoldInfo) {
         mode.applyFoldInfo({

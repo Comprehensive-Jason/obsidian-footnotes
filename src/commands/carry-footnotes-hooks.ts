@@ -7,7 +7,7 @@ import { simulateChanges } from "../editor/insertion-liveness";
 import { showNotice } from "../editor/notice";
 import { codeMirrorViewOf, readingViewActive, viewEditor } from "../editor/obsidian-internals";
 import { mainEditorTextHolds, nestedSubEditorOwnsFocus } from "../editor/table-cursor";
-import { replaceMinimal } from "../editor/write-back";
+import { replaceMinimal, writeChanges } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
 import { lintAfterFootnoteCreation, lintBlockedByPrefix, lintRulesAllDisabled, withEmptySectionHeadingRemoved } from "../linting/linter";
 import { quotedReference } from "../parsing/footnote-grammar";
@@ -429,7 +429,15 @@ function landCarriedText(
         end = append.edits[0].end;
     }
     beforeWrite();
-    doc.transaction({ changes, selection: { from: end } });
+    // through the shared write-back, so a folded section the definitions
+    // go into stays folded and a second pane on the note stays where it
+    // was, as after a cut (hunt 2026-10-02, round 4, cluster U2, pin
+    // bug-convert-paste-skip-shared-write-back); the edits are handed over
+    // as offsets into the note as it is now, in document order
+    const offsetChanges = changes
+        .map((change) => ({ from: doc.posToOffset(change.from), to: doc.posToOffset(change.to ?? change.from), text: change.text }))
+        .sort((x, y) => x.from - y.from);
+    writeChanges(doc, lines.join("\n"), offsetChanges, plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined, { from: end });
 
     // The counts read in a fixed order, added, reused, matched, renamed,
     // and a zero is left out rather than said, so the usual paste reads
