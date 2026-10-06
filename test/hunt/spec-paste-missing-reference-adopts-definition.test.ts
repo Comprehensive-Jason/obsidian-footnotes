@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
-import { resetNotices } from "../helpers/notices";
+import { messages, resetNotices } from "../helpers/notices";
 import { handleCopy, handlePaste, resetCarryRegister } from "../../src/commands/carry-footnotes-hooks";
 
 // spec question: when a pasted reference had no definition where it was
@@ -88,5 +88,28 @@ describe("spec question: a reference that had no definition does not adopt the d
         const lines = pasteRegister(["x[^9]", "", "[^9]: theirs"], { line: 0, ch: 5 }, text);
         // Today: ["x[^9]a[^9] b[^1]", "", "[^9]: theirs", "[^1]: one"]
         expect(lines[0]).not.toBe("x[^9]a[^9] b[^1]");
+    });
+});
+
+// Hunt 2026-10-06, cycle 5, lens carry (cluster X10): the other face of
+// the same question. A clipboard from another app reads " a[^9] b[^1]",
+// a blank line, and "[^1]: one", and the destination defines [^9]. The
+// toast says '"[^9]" has no definition to carry.', though the pasted [^9]
+// now shows the destination's footnote. If [^9] is meant to take up the
+// destination's definition, that notice is wrong, and this test says so;
+// if it is meant to stay an orphan, the test above holds instead. The two
+// tests take opposite answers, so Jason's ruling flips one of them and the
+// other goes. The notice says the same for the plugin's own copy and for
+// a line copied in a popout window of the same note. (Origin: mixed; this
+// foreign face since 5379d63, which gave a clipboard from another app the
+// notice.)
+describe("spec question: the toast for a pasted reference the destination defines", () => {
+    it.fails("a foreign clipboard citing [^9] with a definition for [^1] only, pasted into a note that defines [^9]: the toast does not call [^9] undefined", () => {
+        const doc = ed(["Dest.", "", "[^9]: nine"], { line: 0, ch: 5 });
+        const e = clip([" a[^9] b[^1]", "", "[^1]: one"].join("\n"));
+        expect(handlePaste(on(doc), e as never, doc)).toBe(true);
+        const toast = messages().find((m) => m.startsWith("Pasted with")) ?? "";
+        // Today: 'Pasted with 1 footnote definition: 1 added. "[^9]" has no definition to carry.'
+        expect(toast, JSON.stringify({ lines: doc.lines, toasts: messages() })).not.toContain("no definition to carry");
     });
 });

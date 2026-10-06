@@ -92,6 +92,30 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
+// Hunt 2026-10-06, cycle 5, lens round trip (cluster X25): the lead case
+// of this question, mid-note. The note reads "Intro", "[^a]: def",
+// "Para[^a].", and "tail", with blank lines between. The user selects the
+// text of the line "Para[^a]." (not its line break) and cuts. The cut
+// takes "[^a]: def", which sits ABOVE the selection, along, and tidies the
+// blank lines around it, and with them the empty line the selection left
+// behind, so the caret lands at the start of "tail". Pasting straight
+// back writes "Para[^a].tail": two paragraphs glued into one line.
+// Option (a) above answers this face too: the cut keeps the emptied line
+// for the caret. (Origin: pre-existing.)
+describe("spec question: the caret after a cut that takes a definition above the selection out", () => {
+    it.fails("cut the line's text 'Para[^a].' and paste back: 'Para[^a].' and 'tail' stay separate paragraphs", () => {
+        const note = ["Intro", "", "[^a]: def", "", "Para[^a].", "", "tail"];
+        const after = cut(note, { line: 4, ch: 0 }, { line: 4, ch: 9 });
+        expect(after.taken).toBe(true);
+        const back = paste(after.lines, after.caret, after.clip);
+        expect(back.taken).toBe(true);
+        // Today: the cut leaves ["Intro", "", "tail"] with the caret at the
+        // start of "tail", and the paste back gives ["Intro", "", "Para[^a].tail", "", "[^a]: def"].
+        expect(back.lines).not.toContain("Para[^a].tail");
+        expect(back.lines.indexOf("tail") - back.lines.indexOf("Para[^a].")).toBeGreaterThan(1);
+    });
+});
+
 describe("spec question: the caret after a cut that takes the note's last definition out", () => {
     // the selection: the blank line under [^2]'s definition and the
     // paragraph citing [^1], through its line break
