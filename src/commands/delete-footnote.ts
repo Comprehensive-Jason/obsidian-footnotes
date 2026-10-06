@@ -81,13 +81,27 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     // would be left with nothing, so the command refuses and names it, as
     // it refuses a definition it never cuts (hunt 2026-10-05, pin
     // bug-nested-definition-deleted-with-outer; ADR 0001: hand-typed
-    // nesting is never destroyed).
+    // nesting is never destroyed). The refusal names every definition held
+    // inside, each name once, so one fix by hand is enough; naming only the
+    // first held one left the user to be refused again for the next (hunt
+    // 2026-10-05 round 2, cluster L10; Jason's triage decision Q6,
+    // 2026-10-05).
     for (const definition of named) {
-        const inner = definitionsHeldBy(reading.definitions, definition).find((held) => held.name.toLowerCase() !== folded);
-        if (inner) {
+        const inner: string[] = [];
+        for (const held of definitionsHeldBy(reading.definitions, definition)) {
+            const heldName = held.name.toLowerCase();
+            if (heldName !== folded && !inner.some((name) => name.toLowerCase() === heldName)) inner.push(held.name);
+        }
+        if (inner.length > 0) {
+            // the held labels as one list: "a", "a and b", or "a, b, and c"
+            const labels = inner.map(quotedDefinitionLabel);
+            const them = labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")}${labels.length > 2 ? "," : ""} and ${labels[labels.length - 1]}`;
             return {
                 kind: "refused",
-                reason: `Nothing was deleted: the ${quotedDefinitionLabel(inner.name)} definition sits inside the ${quotedDefinitionLabel(definition.name)} definition, which cutting it would take too. Move it out, or delete it by hand.`,
+                reason:
+                    inner.length === 1
+                        ? `Nothing was deleted: the ${them} definition sits inside the ${quotedDefinitionLabel(definition.name)} definition, which cutting it would take too. Move it out, or delete it by hand.`
+                        : `Nothing was deleted: the ${them} definitions sit inside the ${quotedDefinitionLabel(definition.name)} definition, which cutting it would take too. Move them out, or delete them by hand.`,
             };
         }
     }

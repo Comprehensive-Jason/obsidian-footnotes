@@ -2,41 +2,53 @@ import { describe, expect, it } from "vitest";
 
 import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 
-// spec question: when Delete footnote everywhere refuses because the
+// Settled behaviour: when Delete footnote everywhere refuses because the
 // definition holds others inside it (indented definitions under it, "held"
-// definitions), should the refusal name every held definition, or only
-// the first?
+// definitions), the refusal names every held definition, each name once.
 //
-// What it does now: the refusal names the FIRST definition held inside
-// [^a], whether or not anything references it. Here nothing references
-// [^b], and the text references [^c], the definition the refusal exists
-// to protect. A user who deletes [^b] by hand and tries again is refused
-// a second time, now naming [^c].
-// What a user might expect: one refusal that names both "[^b]:" and
-// "[^c]:", so one fix by hand is enough.
-// Why it is a question and not a bug: the refusal is right to refuse, and
-// what it names is UI text. Whether to name every held definition, or
-// only the ones the text still references, is Jason's call.
+// The note is "Text[^c].", then "[^a]: outer" holding "    [^b]: bee" and
+// "    [^c]: cee". Deleting a is refused with: Nothing was deleted: the
+// "[^b]:" and "[^c]:" definitions sit inside the "[^a]:" definition, which
+// cutting it would take too. Move them out, or delete them by hand.
 //
-// Hunt 2026-10-05, round 2, lens lint. Cluster L10.
+// This started as an open spec question from the hunt (2026-10-05, round
+// 2, lens lint, cluster L10): the refusal named only the FIRST held
+// definition ([^b], which nothing references), so a user who deleted it by
+// hand and tried again was refused a second time, now naming [^c]. Jason's
+// triage decision Q6 (2026-10-05) settled it: name them all, so one fix by
+// hand is enough.
 //
-// Source of truth: the refusal's own comment in delete-footnote.ts
-// ("Cutting the outer block would cut the inner definition too, and the
-// text citing it would be left with nothing"; fc3957c); Jason's decision
-// (2026-10-05): Delete footnote everywhere refuses on an outer definition
-// that holds another.
-//
-// Cause, for whoever takes it up: the refusal takes the first held
-// definition (definitionsHeldBy(...).find) and names that one alone.
+// Source of truth: Jason's triage decision Q6, 2026-10-05; the refusal's
+// own comment in delete-footnote.ts ("Cutting the outer block would cut
+// the inner definition too"; fc3957c); ADR 0001 (hand-typed nesting is
+// reported, never destroyed).
 
 describe("the nested refusal names the held definitions", () => {
-    it.fails("names both [^b]: and [^c]:", () => {
+    it("names both [^b]: and [^c]:", () => {
         const note = ["Text[^c].", "", "[^a]: outer", "", "    [^b]: bee", "", "    [^c]: cee"].join("\n");
         const plan = deleteFootnoteEverywhere(note, "a");
         expect(plan.kind).toBe("refused");
-        // Today: 'Nothing was deleted: the "[^b]:" definition sits inside the "[^a]:" definition, ...'.
         const reason = plan.kind === "refused" ? plan.reason : "";
         expect(reason).toContain('"[^b]:"');
         expect(reason).toContain('"[^c]:"');
+        expect(reason).toBe(
+            'Nothing was deleted: the "[^b]:" and "[^c]:" definitions sit inside the "[^a]:" definition, which cutting it would take too. Move them out, or delete them by hand.',
+        );
+    });
+
+    it("three held definitions are named with commas, each name once", () => {
+        const note = ["Text[^c].", "", "[^a]: outer", "", "    [^b]: bee", "", "    [^c]: cee", "", "    [^d]: dee", "", "    [^B]: bee again"].join("\n");
+        const plan = deleteFootnoteEverywhere(note, "a");
+        const reason = plan.kind === "refused" ? plan.reason : "";
+        expect(reason).toContain('the "[^b]:", "[^c]:", and "[^d]:" definitions sit inside the "[^a]:" definition');
+    });
+
+    it("one held definition keeps the singular sentence", () => {
+        const note = ["Text[^b].", "", "[^a]: outer", "", "    [^b]: bee"].join("\n");
+        const plan = deleteFootnoteEverywhere(note, "a");
+        const reason = plan.kind === "refused" ? plan.reason : "";
+        expect(reason).toBe(
+            'Nothing was deleted: the "[^b]:" definition sits inside the "[^a]:" definition, which cutting it would take too. Move it out, or delete it by hand.',
+        );
     });
 });
