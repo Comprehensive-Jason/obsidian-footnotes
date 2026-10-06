@@ -22,19 +22,23 @@ import { nameForBody } from "../../src/parsing/footnote-grammar";
 //
 // Cause: nameForBody splits words on [\p{L}\p{N}]+, which leaves
 // combining marks (\p{M}) out.
+//
+// Fix (2026-10-06): nameForBody's words take in combining marks, as
+// isWordCharAt does, so a decomposed accent or a vowel sign stays inside
+// its word.
 
 // "école" written as "e" plus a combining acute accent (U+0301), not as
 // the single character "é".
 const ecole = "école";
 
 describe("Named: words with combining marks", () => {
-    it.fails("a decomposed accent stays inside the word", () => {
+    it("a decomposed accent stays inside the word", () => {
         const out = reindexFootnotes(`a[^1]\n\n[^1]: ${ecole} normale`, { nameNumberedFootnotes: true });
-        // Today: "a[^cole]" - the name lost its first letter.
+        // Before the fix: "a[^cole]" - the name lost its first letter.
         expect(out).toBe(`a[^${ecole}]\n\n[^${ecole}]: ${ecole} normale`);
     });
 
-    it.fails("a Devanagari word is named whole", () => {
+    it("a Devanagari word is named whole", () => {
         expect(nameForBody("हिन्दी पाठ", new Set())).toBe("हिन्दी");
     });
 });

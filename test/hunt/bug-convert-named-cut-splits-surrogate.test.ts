@@ -21,12 +21,15 @@ import { nameForBody } from "../../src/parsing/footnote-grammar";
 //
 // Cause: nameForBody cuts the name at 30 UTF-16 units, the units
 // JavaScript counts in, rather than at 30 characters.
+//
+// Fix (2026-10-06): nameForBody cuts the name at 30 whole characters, so a
+// character stored as two units is kept or dropped whole.
 
 // Matches half of a two-unit character with its other half missing.
 const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 describe("Named: the 30-unit cut of a long first word", () => {
-    it.fails("a name cut at 30 characters never splits a surrogate pair", () => {
+    it("a name cut at 30 characters never splits a surrogate pair", () => {
         const body = "x" + "\u{1D49C}".repeat(20);
         const name = nameForBody(body, new Set()) ?? "";
         expect(name).not.toMatch(loneSurrogate);

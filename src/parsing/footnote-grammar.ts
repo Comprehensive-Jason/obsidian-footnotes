@@ -187,6 +187,16 @@ const FillerWords = new Set(
     "a an the of in on at to and or but for with by from as is are was were be been being this that these those it its see cf eg ie also not no than then so if we he she they i you my our your their his her which who whom what when where into over under per via vs et al".split(" "),
 );
 
+// Splits text into what a reader sees as single characters (grapheme
+// clusters, in Unicode's term): a letter together with the accents or
+// vowel signs written after it, and a character JavaScript stores as two
+// units, each come back as one piece. Made on first use.
+let graphemes: Intl.Segmenter | undefined;
+function characters(text: string): string[] {
+    graphemes ??= new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    return Array.from(graphemes.segment(text), (piece) => piece.segment);
+}
+
 /**
  * A footnote name taken from a body: its first word that is not a filler
  * word (a one-letter word only when nothing longer follows, and never a
@@ -198,12 +208,26 @@ const FillerWords = new Set(
  * the Named setting, by the reindex rule (Jason, 2026-09-22).
  */
 export function nameForBody(body: string, taken: ReadonlySet<string>, prefix = ""): string | null {
-    const words = [...body.matchAll(/[\p{L}\p{N}]+/gu)]
+    // A word is a run of letters, numbers, and combining marks, the
+    // plugin's own word characters (isWordCharAt). A combining mark is an
+    // accent or vowel sign written as a character of its own after the
+    // letter it sits on: an "e" plus an accent in "école" pasted from a
+    // PDF, and every vowel sign in Hindi or Thai. Leaving the marks out cut
+    // such words apart (hunt 2026-10-02, pin bug-lint-named-drops-combining-marks).
+    const words = [...body.matchAll(/[\p{L}\p{N}\p{M}]+/gu)]
         .map((m) => m[0])
         .filter((w) => /\p{L}/u.test(w) && !FillerWords.has(w.toLowerCase()));
-    const word = words.find((w) => w.length > 1) ?? words.at(0);
+    // a word's length counts what a reader sees as letters, so "é"
+    // written as two characters is still a one-letter word
+    const word = words.find((w) => characters(w).length > 1) ?? words.at(0);
     if (word === undefined) return null;
-    const base = `${prefix}${word.slice(0, 30)}`;
+    // The name keeps at most 30 letters of the word. The cut counts whole
+    // letters as a reader sees them: JavaScript stores a character from
+    // outside the basic plane (a math letter, a rare CJK character) as two
+    // units, and a cut between them left half a character in the name
+    // (hunt 2026-10-02, pin bug-convert-named-cut-splits-surrogate); a
+    // letter keeps its accents too.
+    const base = `${prefix}${characters(word).slice(0, 30).join("")}`;
     if (!taken.has(base.toLowerCase())) return base;
     for (let k = 2; ; k++) {
         const candidate = `${base}-${k}`;
