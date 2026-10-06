@@ -44,7 +44,7 @@ const names = (text: string): string[] => readNote(text.split("\n")).definitions
 
 describe("a lazy %% tail blocks the merge and the reindex swap", () => {
     // Now: false.
-    it.fails("the root: protectedTextAlike says a %% tail moved up the note changed the protected text", () => {
+    it("the root: protectedTextAlike says a %% tail moved up the note changed the protected text", () => {
         const before = "Text[^1] and[^2].\n\n[^2]: one\n[^1]: two\n%%".split("\n");
         const after = "Text[^1] and[^2].\n\n[^1]: two\n%%\n\n[^2]: one".split("\n");
         // Every definition reads the same in both: names, containers, and lines.
@@ -55,7 +55,7 @@ describe("a lazy %% tail blocks the merge and the reindex swap", () => {
     });
 
     // Now: ["2", "1"]. At 4572859: "Text[^1] and[^2].\n\n[^1]: two\n%%\n\n[^2]: one".
-    it.fails("reindex puts the definitions in reference order when the last one ends in a %% line", () => {
+    it("reindex puts the definitions in reference order when the last one ends in a %% line", () => {
         const out = reindexFootnotes("Text[^2] and[^1].\n\n[^1]: one\n[^2]: two\n%%");
         expect(names(out)).toEqual(["1", "2"]);
     });
@@ -64,7 +64,7 @@ describe("a lazy %% tail blocks the merge and the reindex swap", () => {
     // "Text[^a]\n\nMiddle\n\n[^a]: one\n[^a]: two\n%%", and the second
     // merges them into "[^a]: one", "    two", "%%". The duplicate alert
     // says nothing in between, since by then the merge would go through.
-    it.fails("merge on: the lint settles a note whose last copy ends in a %% line", () => {
+    it("merge on: the lint settles a note whose last copy ends in a %% line", () => {
         const note = "Text[^a]\n\n[^a]: one\n\nMiddle\n\n[^a]: two\n%%";
         const once = lintFootnotes(note, { mergeDuplicateDefinitions: true });
         expect(lintFootnotes(once, { mergeDuplicateDefinitions: true })).toBe(once);

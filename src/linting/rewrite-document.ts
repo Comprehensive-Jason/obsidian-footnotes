@@ -197,12 +197,21 @@ export function definitionsReadDifferently(before: readonly string[], after: rea
  * can open something once lines follow it: a "$$" moved into the middle
  * of the note opens a math block that runs over the lines after it (hunt
  * 2026-10-06, cycle 4, pin bug-end-dollar-line-swallows-definition).
+ *
+ * Blank lines do not count. The reading counts the blank line under a
+ * definition that ends in a "%%" line as part of that comment only when
+ * lines follow it, so the same definition moved up the note gained a
+ * protected blank line, and the check refused a move that changes nothing
+ * a reader sees (live Obsidian 1.14.4, 2026-10-06; hunt 2026-10-06, cycle
+ * 5, pin bug-protected-text-alike-blank-lines). A blank line holds no text
+ * to protect. A "$$" that opens a math block in its new place still shows:
+ * the lines it takes in are not blank.
  */
 export function protectedTextAlike(before: readonly string[], after: readonly string[]): boolean {
     const hidden = (lines: readonly string[]): string => {
         const reading = readNote(lines);
         return lines
-            .filter((_line, i) => reading.protectedLines[i] || reading.commentLines[i])
+            .filter((line, i) => line.trim() !== "" && (reading.protectedLines[i] || reading.commentLines[i]))
             .sort()
             .join("\n");
     };
