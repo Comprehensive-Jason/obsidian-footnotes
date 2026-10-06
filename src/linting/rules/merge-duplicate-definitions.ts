@@ -133,22 +133,32 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
             if (linesReadDifferently(lines, { lines, ranges: trial }, removeLineRanges(lines, trial))) continue;
             const base = group[0];
             const appended: string[] = [];
+            // the copy whose lines the next copy's text lands under: the
+            // first copy, then each copy that added lines
+            let above = base;
             for (const duplicate of group.slice(1)) {
+                const piece: string[] = [];
                 const body = lines[duplicate.start].slice(duplicate.labelEnd).trim();
-                if (body !== "") appended.push(`    ${body}`);
+                if (body !== "") piece.push(`    ${body}`);
                 for (let i = duplicate.start + 1; i <= duplicate.end; i++) {
-                    appended.push(lines[i]);
+                    piece.push(lines[i]);
                 }
-            }
-            // When the first copy ends with a definition held inside it (an
-            // indented "[^b]: inner" on its last lines), a line straight
-            // under that would continue the held definition's text, and b
-            // would read "inner two". A blank line first makes the merged
-            // text a paragraph of the first copy's own, after the held
-            // definition (hunt 2026-10-05 round 2, pin
-            // bug-merge-into-held-definition).
-            if (appended.length > 0 && appended[0] !== "" && definitionsHeldBy(definitions, base).some((held) => held.end === base.end)) {
-                appended.unshift("");
+                if (piece.length === 0) continue;
+                // When the copy above ends with a definition held inside it
+                // (an indented "[^b]: inner" on its last lines), a line
+                // straight under that would continue the held definition's
+                // text, and b would read "inner two". A blank line first
+                // makes the merged text a paragraph of the first copy's
+                // own, after the held definition (hunt 2026-10-05 round 2,
+                // pin bug-merge-into-held-definition). That goes for every
+                // copy the text lands under, not only the first: a middle
+                // copy ending in a held definition took the third copy's
+                // text the same way (hunt 2026-10-06, cycle 5, pin
+                // bug-merge-held-definition-middle-copy).
+                const heldAtEnd = above;
+                if (piece[0] !== "" && definitionsHeldBy(definitions, heldAtEnd).some((held) => held.end === heldAtEnd.end)) piece.unshift("");
+                appended.push(...piece);
+                above = duplicate;
             }
             const appends = new Map(appendAfter);
             if (appended.length > 0) appends.set(base.end, appended);
