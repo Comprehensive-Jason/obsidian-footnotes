@@ -269,6 +269,8 @@ export interface CarriedPastePlan {
  * name the destination does not use (as a definition or a reference) is
  * kept; a name the destination uses for a different body is renamed, a
  * number to the smallest free number, a name to name-2, name-3, and so on.
+ * A definition held inside a carried block's body has its name kept or
+ * renamed the same way, right after the block's own.
  * The renames are made in the body and inside the carried blocks (labels
  * and references alike), so a carried definition that cites another keeps
  * citing it. Protected text in the body is left as it is.
@@ -292,6 +294,24 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
         for (const occurrence of reading.referencesOn(i)) taken.add(occurrence.name.toLowerCase());
     }
 
+    // The names defined inside each carried block's body: a footnote held
+    // in another footnote's definition travels inside that block, and it
+    // lands in the destination as a definition like any other. So its name
+    // is checked against the destination's and renamed when taken, with
+    // the references to it; it used to keep its name, and where the
+    // destination already had that name for another footnote, the pasted
+    // copy came last and the destination's own references showed its text
+    // (hunt 2026-10-05 round 2, cluster C6, pin
+    // bug-paste-held-definition-name-collision). A held definition cannot
+    // be merged into an existing one, since its lines are part of the block
+    // that holds it; nor can another copy of its name, or the held copy
+    // would be the one that comes last.
+    const heldIn = (definition: CarriedDefinition) =>
+        readNote(definition.lines)
+            .definitions.filter((held) => held.start > 0)
+            .map((held) => held.name);
+    const heldNames = new Set(carried.flatMap(heldIn).map((name) => name.toLowerCase()));
+
     // the final name of every incoming name, folded
     const finalName = new Map<string, string>();
     const assigned = new Set<string>();
@@ -301,9 +321,30 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     let repointed = 0;
     let renamed = 0;
     const occupied = (folded: string) => taken.has(folded) || assigned.has(folded);
+    // an incoming name keeps its spelling when the destination and the
+    // names given so far leave it free, and is renamed otherwise
+    const settle = (incoming: string) => {
+        const folded = incoming.toLowerCase();
+        if (finalName.has(folded)) return;
+        let name = incoming;
+        if (occupied(folded)) {
+            if (/^\d+$/.test(incoming)) {
+                let n = 1;
+                while (occupied(String(n))) n++;
+                name = String(n);
+            } else {
+                let k = 2;
+                while (occupied(`${folded}-${k}`)) k++;
+                name = `${incoming}-${k}`;
+            }
+            renamed++;
+        }
+        finalName.set(folded, name);
+        assigned.add(name.toLowerCase());
+    };
     for (const definition of carried) {
         const folded = definition.name.toLowerCase();
-        const existing = bodies.get(normalisedBody(definition.lines));
+        const existing = finalName.has(folded) || heldNames.has(folded) ? undefined : bodies.get(normalisedBody(definition.lines));
         if (existing !== undefined) {
             finalName.set(folded, existing);
             reusedNames.add(folded);
@@ -311,26 +352,9 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
             if (existing.toLowerCase() !== folded) repointed++;
             continue;
         }
-        if (!occupied(folded)) {
-            finalName.set(folded, definition.name);
-            assigned.add(folded);
-            added++;
-            continue;
-        }
-        let name: string;
-        if (/^\d+$/.test(definition.name)) {
-            let n = 1;
-            while (occupied(String(n))) n++;
-            name = String(n);
-        } else {
-            let k = 2;
-            while (occupied(`${folded}-${k}`)) k++;
-            name = `${definition.name}-${k}`;
-        }
-        finalName.set(folded, name);
-        assigned.add(name.toLowerCase());
+        settle(definition.name);
         added++;
-        renamed++;
+        for (const held of heldIn(definition)) settle(held);
     }
 
     // the renames, made right to left on each line so that one keeps the

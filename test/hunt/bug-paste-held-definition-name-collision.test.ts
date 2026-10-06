@@ -96,7 +96,7 @@ beforeEach(() => {
 });
 
 describe("a held definition pasted into a note that uses its name", () => {
-    it.fails("the pasted y cites 'inner' and the destination's z still cites 'other'", () => {
+    it("the pasted y cites 'inner' and the destination's z still cites 'other'", () => {
         const source = ["x[^a] y[^b]", "", "[^a]: outer", "", "    [^b]: inner"];
         const dest = ["z[^b]", "", "[^b]: other", "", ""];
         const { doc } = copyThenPaste({}, source, { line: 0, ch: 0 }, { line: 0, ch: 11 }, dest, { line: 4, ch: 0 });
