@@ -257,6 +257,20 @@ export function adjustFootnotePosition(
     plugin: FootnotePlugin,
 ) {
     if (plugin.settings.insertAtEndOfWord) {
+        // A link whose text runs on past a line break ends on a later line,
+        // and the reference lands after it there, as it does after a link
+        // on one line (Jason's triage decision Q1, 2026-10-05; hunt
+        // 2026-10-05, round 2, pin bug-press-in-two-line-link). The walk
+        // past the link's end reads that line's masked twin, the only copy
+        // of it at hand: it keeps every closing mark, punctuation
+        // character, and backslash where it is, and protected text, which
+        // none of those is, ends the walk there as it would on the line
+        // itself.
+        const link = linkLikeEndAt(reading, cursorPosition.line, cursorPosition.ch);
+        if (link !== null && link.line !== cursorPosition.line) {
+            const endText = reading.maskedLine(link.line);
+            return { line: link.line, ch: safeInsertionCh(endText, referenceLandingAfter(endText, link.ch, plugin.settings.footnotePlacement)) };
+        }
         // The insertion point is the end of the word, then past the closing
         // marks and punctuation that follow it (the landing convention,
         // referenceLandingAfter: a note on the last word of "some bravo".
@@ -269,7 +283,7 @@ export function adjustFootnotePosition(
             lineText,
             cursorPosition.ch,
             plugin.settings.footnotePlacement,
-            linkLikeEndAt(reading, cursorPosition.line, cursorPosition.ch),
+            link?.ch ?? -1,
         );
         if (landing !== cursorPosition.ch) {
             cursorPosition = { line: cursorPosition.line, ch: landing };

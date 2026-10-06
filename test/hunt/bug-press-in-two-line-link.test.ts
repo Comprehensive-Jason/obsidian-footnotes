@@ -28,16 +28,25 @@ import { fakePlugin } from "../helpers/fake-plugin";
 // "some text" to http://u. Jason's landing rulings of 2026-09-15 (a
 // reference never splits a link); the round-2 hunt brief (real links are
 // stepped over whole); the one-line behaviour (pin
-// bug-dont-move-bracketed-text). The remedy is Jason's pick: refuse with
-// the link notice, or land after the link's end on the next line. These
-// tests ask only that the new reference sit outside every link and that
-// the defined link survive, so either remedy turns them green.
+// bug-dont-move-bracketed-text). The remedy was Jason's pick: he chose to
+// land after the link's end on the line where it ends, as a press in a
+// one-line link does (triage decision Q1, 2026-10-05). These tests ask
+// only that the new reference sit outside every link and that the defined
+// link survive.
 //
 // Cause: linkLikeEndAt in src/parsing/landing.ts returns -1 for a link
 // that does not end on the caret's line, so the press lands at the end of
 // the word inside the link text. The born-dead check passes it: a "[^1]"
 // in link text reads live, and the "link" verdict counts link reference
 // definitions, which did not change.
+//
+// Fixed 2026-10-05: linkLikeEndAt gives the line a link ends on as well as
+// the column, and the press lands after the link there, then walks the
+// closing marks and punctuation that follow as it does on one line. The
+// inline link takes the reference after its ")"; the defined shortcut
+// link takes it after its "]", where "[some\ntext][^1]" reads as a
+// reference link, so the press is refused with the link notice, as on one
+// line.
 
 const Settings = (footnotePlacement: FootnotePlacement) => ({
     insertAtEndOfWord: true,
@@ -73,19 +82,19 @@ function drawnLinks(lines: string[]): number {
 beforeEach(resetNotices);
 
 describe.each(["after", "none"] as const)("a link whose text runs over a line break, placement %s", (placement) => {
-    it.fails("inline link: the reference is not written into the link text", async () => {
+    it("inline link: the reference is not written into the link text", async () => {
         const lines = ["I said [some text", "more](http://u) here"];
         const doc = await press(lines, 10, placement);
-        // Today: ["I said [some[^1] text", "more](http://u) here", "", "[^1]: "]
+        // Before the fix: ["I said [some[^1] text", "more](http://u) here", "", "[^1]: "]
         expect(referenceOutsideLinks(doc.lines)).toBe(true);
     });
 
-    it.fails("defined shortcut link over two lines: the link survives the press", async () => {
+    it("defined shortcut link over two lines: the link survives the press", async () => {
         const lines = ["I said [some", "text] here", "", "[some text]: http://u"];
         // The reader draws it as one link, as Obsidian does.
         expect(drawnLinks(lines)).toBe(1);
         const doc = await press(lines, 10, placement);
-        // Today: ["I said [some[^1]", "text] here", ...]: no link drawn.
+        // Before the fix: ["I said [some[^1]", "text] here", ...]: no link drawn.
         expect(drawnLinks(doc.lines)).toBe(1);
     });
 });

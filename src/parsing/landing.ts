@@ -242,10 +242,11 @@ function unescapedIndex(text: string, mark: string, from: number): number {
 
 /**
  * The end of the link-like construct that holds column `ch` of `line`, as
- * `reading` reads the note, or -1 when it sits in none: an inline link
+ * `reading` reads the note, or null when it sits in none: an inline link
  * "[text](url)", a reference link "[text][ref]", an image, a wikilink, an
  * autolink "<...>", a bare web address, or an email address, from its
- * first character up to its last. A reference belongs after the whole
+ * first character up to its last. The end is the line the construct ends
+ * on and the column just past it. A reference belongs after the whole
  * construct, never inside it (Jason's landing rulings, 2026-09-15).
  *
  * The reading knows where each one ends because it reads the line the way
@@ -254,35 +255,39 @@ function unescapedIndex(text: string, mark: string, from: number): number {
  * walk of their own (hunt 2026-10-05, pins
  * bug-landing-paren-in-link-title and bug-email-and-image-alt-false-refusal;
  * the hand-written walk this replaced knew only some of those shapes). A
- * construct that runs on onto another line has no end on this one, so it
- * gives -1, and the press is judged where it lands.
+ * construct whose text runs on past a line break ends on a later line,
+ * and a press inside it lands after it there, as it does after a link on
+ * one line (Jason's triage decision Q1, 2026-10-05; hunt 2026-10-05,
+ * round 2, pin bug-press-in-two-line-link: the press used to land inside
+ * the link's text).
  *
  * A reference link or image counts only when the note defines its label.
  * The reader takes any "[...]" for a reference link, but one with no
  * "[label]: url" line is bracketed text that Obsidian shows as it is
  * written, and a reference may sit inside it: a caret in "some" of
- * "[some text]" lands at the end of the word, "[some[^1] text]", under
- * every placement (Jason, 2026-10-05; pin bug-dont-move-bracketed-text).
- * Taking the end of such text sent the press past the "]", where
- * "[some text][^1]" reads as a reference link and the press was refused.
+ * "[some text]" lands at the end of the word,
+ * "[some[^1] text]", under every placement (Jason, 2026-10-05; pin
+ * bug-dont-move-bracketed-text). Taking the end of such text sent the
+ * press past the "]", where "[some text][^1]" reads as a reference link
+ * and the press was refused.
  */
-export function linkLikeEndAt(reading: NoteReading, line: number, ch: number): number {
+export function linkLikeEndAt(reading: NoteReading, line: number, ch: number): { line: number; ch: number } | null {
     const link = reading.links.find(
         (candidate) =>
             (candidate.lookup === undefined || reading.linkLabels.has(candidate.lookup)) &&
             (candidate.startLine < line || (candidate.startLine === line && candidate.start <= ch)) &&
             (candidate.endLine > line || (candidate.endLine === line && ch < candidate.end)),
     );
-    return link === undefined || link.endLine !== line ? -1 : link.end;
+    return link === undefined ? null : { line: link.endLine, ch: link.end };
 }
 
 /** linkLikeEndAt for one line's text read on its own, as a note of one line: the end of the construct holding `offset`, or -1. */
 export function lineLinkLikeEndAt(text: string, offset: number): number {
-    return linkLikeEndAt(readNote([text]), 0, offset);
+    return linkLikeEndAt(readNote([text]), 0, offset)?.ch ?? -1;
 }
 
 /** linkLikeEndAt for a table cell's own text, read as the one cell of a one-row table (cellReading): the end of the construct holding `offset`, as an offset into `text`, or -1. */
 export function cellLinkLikeEndAt(text: string, offset: number): number {
     const end = linkLikeEndAt(cellReading(text), 0, offset + CellTextColumn);
-    return end === -1 ? -1 : end - CellTextColumn;
+    return end === null ? -1 : end.ch - CellTextColumn;
 }

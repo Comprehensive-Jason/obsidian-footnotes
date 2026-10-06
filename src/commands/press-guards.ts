@@ -116,7 +116,7 @@ export function warnProtectedCaretIfInside(
             return true;
         }
         // the same allowance for a caret inside a link on an ordinary line
-        if (!lineProtected && linkLikeEndAt(reading, line, cursorPosition.ch) !== -1) {
+        if (!lineProtected && linkLikeEndAt(reading, line, cursorPosition.ch) !== null) {
             return false;
         }
         // right at the start or end of a line, whether the caret is
