@@ -34,6 +34,15 @@ import { resolveTableCellCursor, type TableCellEditor } from "../../src/editor/t
 // character the cell shows as a hidden escape. For "\\", the cell shows a
 // backslash next, so the walk swallows both source backslashes for one
 // shown character and lands one column further on from then on.
+//
+// Live check settled from Obsidian's own code (2026-10-06): the cell
+// editor's source-to-cell conversion in Obsidian's app.js changes only an
+// escaped pipe (the last backslash of an odd run in front of a "|") and a
+// "<br>" outside inline code; every other backslash shows as itself, so
+// "\\" is two characters in the cell, as the tests below assume.
+//
+// Fix (2026-10-06): rawCellColumn in src/editor/table-cursor.ts walks the
+// raw cell by that conversion, not by comparing with the cell's text.
 
 /** resolveTableCellCursor for a one-cell body row: the source line, the text the cell editor shows, and the caret inside that text. */
 function resolve(lineText: string, cellText: string, head: number): ReturnType<typeof resolveTableCellCursor> {
@@ -69,7 +78,7 @@ function resolve(lineText: string, cellText: string, head: number): ReturnType<t
 }
 
 describe("a cell holding a literal escaped backslash", () => {
-    it.fails("a caret just inside the reference maps just inside it in the row", () => {
+    it("a caret just inside the reference maps just inside it in the row", () => {
         // the row in the note: | a\\b [^1] |   (two backslash characters)
         const line = "| a\\\\b [^1] |";
         const cellText = "a\\\\b [^1]";
@@ -78,7 +87,35 @@ describe("a cell holding a literal escaped backslash", () => {
         expect(resolve(line, cellText, head)?.ch).toBe(line.indexOf("[^") + 1);
     });
 
-    it.fails("a numbered press just inside a reference after a literal '\\\\' does not nest a new reference", async () => {
+    // Found while fixing (2026-10-06): the cell editor shows a "<br>" as a
+    // line break, one character for four (Obsidian's source-to-cell
+    // conversion in app.js), so the walk counted three columns short after
+    // one. A "<br>" inside inline code stays as it is.
+    it("a caret after a '<br>' maps past all four of its characters", () => {
+        const line = "| a<br>b [^1] |";
+        const cellText = "a\nb [^1]";
+        const head = cellText.indexOf("[^") + 1;
+        // Before the fix: 6, three columns short
+        expect(resolve(line, cellText, head)?.ch).toBe(line.indexOf("[^") + 1);
+    });
+
+    it("control: a '<br>' inside inline code is four characters in the cell too", () => {
+        const line = "| `a<br>b` [^1] |";
+        const cellText = "`a<br>b` [^1]";
+        const head = cellText.indexOf("[^") + 1;
+        expect(resolve(line, cellText, head)?.ch).toBe(line.indexOf("[^") + 1);
+    });
+
+    it("control: an escaped pipe after an escaped backslash still hides its backslash", () => {
+        // the row: | a\\\|b [^1] |   (three backslashes: an escaped
+        // backslash, then an escaped pipe); the cell shows a\\|b [^1]
+        const line = "| a\\\\\\|b [^1] |";
+        const cellText = "a\\\\|b [^1]";
+        const head = cellText.indexOf("[^") + 1;
+        expect(resolve(line, cellText, head)?.ch).toBe(line.indexOf("[^") + 1);
+    });
+
+    it("a numbered press just inside a reference after a literal '\\\\' does not nest a new reference", async () => {
         const lines = ["| Header |", "| --- |", "| left \\\\ [^note] |"];
         const shown = "left \\\\ [^note]";
         const head = shown.indexOf("]"); // between "e" and "]": inside the reference

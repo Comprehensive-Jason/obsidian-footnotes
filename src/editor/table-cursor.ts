@@ -252,33 +252,62 @@ export function resolveTableCellCursor(editor: Editor): EditorPosition | null {
 
     // The cell editor's text is the cell's source without the padding
     // spaces. Find where that text begins inside the raw line's cell, then
-    // walk the cell editor's caret offset forward through the raw text.
-    //
-    // The walk has to know about escapes: the cell editor shows "\|" as a
-    // plain "|", so every escaping backslash before the caret uses up a
-    // column of the raw line but no column of the cell editor. Plain
-    // addition landed one column short per escape, which read a caret just
-    // inside a reference as being OUTSIDE it and nested a new reference
-    // there (bug-table-escape-offset).
-    // The cell's text begins at its first non-space column. Searching for
-    // the cell editor's text inside the raw cell instead skipped the
-    // backslash of a leading escaped pipe, and a caret read raw rather
-    // than through cellCaret walked a stale offset onto the closing pipe
-    // (Claude sweep 2026-09-13).
+    // walk the cell editor's caret offset forward through the raw text
+    // (rawCellColumn). The cell's text begins at its first non-space
+    // column. Searching for the cell editor's text inside the raw cell
+    // instead skipped the backslash of a leading escaped pipe, and a caret
+    // read raw rather than through cellCaret walked a stale offset onto the
+    // closing pipe (Claude sweep 2026-09-13).
     const rawCell = lineText.slice(span.from, span.to);
-    const cellText = cellView.state.doc.toString();
     const start = rawCell.length - rawCell.trimStart().length;
-    const head = cellCaret(cellView);
-    let raw = start;
-    for (let c = 0; c < head && raw < rawCell.length; c++) {
-        if (rawCell[raw] === "\\" && rawCell[raw + 1] === cellText[c]) {
-            raw += 2; // the backslash, plus the character the cell shows
+    const ch = Math.min(span.from + rawCellColumn(rawCell, start, cellCaret(cellView)), span.to);
+    return { line, ch };
+}
+
+/**
+ * The column of the raw cell `raw` that column `shown` of the cell
+ * editor's text stands for, when the cell's text starts at column `from`
+ * of `raw`.
+ *
+ * Obsidian's cell editor shows a cell's source with two changes and no
+ * others (its source-to-cell conversion in app.js, read 2026-10-06): an
+ * escaped pipe "\|" shows as a plain "|", which hides the last backslash
+ * of an odd run of them in front of a pipe, and a "<br>" outside inline
+ * code shows as a line break. So each hidden backslash uses up a column of
+ * the raw line but none of the cell editor, and each "<br>" four columns
+ * for one. Plain addition landed one column short per escaped pipe, which
+ * read a caret just inside a reference as OUTSIDE it and nested a new
+ * reference there (bug-table-escape-offset). Every other character shows
+ * as itself, a backslash included: "\\" is two characters in the cell
+ * too. The walk used to take any backslash followed by the character the
+ * cell shows next for an escape, so it read "\\" as one character, and
+ * every caret after it one column too far on (hunt 2026-10-02, pin
+ * bug-press-table-cell-escaped-backslash).
+ */
+function rawCellColumn(raw: string, from: number, shown: number): number {
+    // the inline code spans, found as the cell editor finds them, since a
+    // "<br>" inside one stays as it is
+    const code = [...raw.slice(from).matchAll(/(`+)[^`]+\1/g)].map((match) => ({
+        start: from + match.index,
+        end: from + match.index + match[0].length,
+    }));
+    // whether the backslash at `at` ends an odd run of backslashes
+    const oddRunEndsAt = (at: number): boolean => {
+        let run = 0;
+        while (at - run >= from && raw[at - run] === "\\") run++;
+        return run % 2 === 1;
+    };
+    let at = from;
+    for (let c = 0; c < shown && at < raw.length; c++) {
+        if (raw[at] === "\\" && raw[at + 1] === "|" && oddRunEndsAt(at)) {
+            at += 2; // the hidden backslash, plus the pipe the cell shows
+        } else if (raw.slice(at, at + 4).toLowerCase() === "<br>" && !code.some((span) => span.start < at && span.end > at + 4)) {
+            at += 4; // one line break in the cell
         } else {
-            raw += 1;
+            at += 1;
         }
     }
-    const ch = Math.min(span.from + raw, span.to);
-    return { line, ch };
+    return at;
 }
 
 // One cell of the "| --- |" row that separates a table's header from its
