@@ -64,7 +64,7 @@ async function press(lines: string[], cursor: { line: number; ch: number }) {
 describe("a press inside a link over two lines, with a closing mark glued to a bare address after it", () => {
     // Now: from line 1, "text](http://u)==[^1]https://e.com more"; from
     // line 2, "text](http://u)[^1]==https://e.com more".
-    it.fails("lands where the one-line press on the second line lands", async () => {
+    it("lands where the one-line press on the second line lands", async () => {
         const lines = ["see [some", "text](http://u)==https://e.com more"];
         const fromLineOne = await press(lines, { line: 0, ch: 6 });
         const fromLineTwo = await press(lines, { line: 1, ch: 1 });
@@ -73,7 +73,7 @@ describe("a press inside a link over two lines, with a closing mark glued to a b
 
     // Now: from line 1, 'text](http://u)"[^1]me@x.org more'; from line 2,
     // 'text](http://u)[^1]"me@x.org more'.
-    it.fails("the same with an email glued to a closing quote", async () => {
+    it("the same with an email glued to a closing quote", async () => {
         const lines = ['see "[some', 'text](http://u)"me@x.org more'];
         const fromLineOne = await press(lines, { line: 0, ch: 7 });
         const fromLineTwo = await press(lines, { line: 1, ch: 1 });

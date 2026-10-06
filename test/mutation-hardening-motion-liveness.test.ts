@@ -375,6 +375,7 @@ describe("adjustFootnotePosition", () => {
             readingOf(lineText),
             lineText,
             wordPlugin(endOfWord),
+            ["", "", "", lineText],
         );
 
     // line 123 BlockStatement -> {} / -> false, and line 125's pair (the
@@ -437,6 +438,7 @@ describe("adjustFootnotePosition", () => {
                 readingOf("abc"),
                 "abc",
                 wordPlugin(false),
+                ["", "", "", "abc"],
             ),
         ).toBe(cursor);
     });

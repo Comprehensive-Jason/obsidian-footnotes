@@ -267,6 +267,7 @@ function multiCaretTargets(
             ctx.reading(),
             doc.getLine(range.head.line),
             plugin,
+            ctx.lines,
         ),
     );
     adjusted.sort(comparePositions);
