@@ -233,9 +233,12 @@ const nothingToConvert: ConversionToNormal = { converted: 0, definitions: 0, mer
  * Left alone, and counted in the result: an empty inline footnote (a
  * definition with no body is a footnote still being written), and one
  * inside a definition's body, where a reference would nest footnotes
- * (ADR 1). One whose body runs onto the next line is not converted: the
- * note reading lists only the inline footnotes that start and end on one
- * line. Protected text is never read.
+ * (ADR 1). One whose body runs over a line break of its paragraph ("text
+ * ^[an inline" / "note here] after") is left as it is too and counted
+ * among the skipped ones "on more than one line": a definition's text over
+ * two lines needs indented continuation lines, which nothing has ruled on
+ * yet (Jason's triage decision Q8, 2026-10-05). Protected text is never
+ * read.
  *
  * Then the lint-on-creation trigger runs when that setting is on, as it
  * does after every press that creates a footnote.
@@ -270,6 +273,19 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
                 continue;
             }
             spans.push({ line: i, open: span.open, close: span.close, body });
+        }
+        // An inline footnote that opens on this line and closes on a later
+        // one. The lookup above lists only the ones wholly on one line, so
+        // such a footnote went uncounted, and a note holding only one was
+        // told it had no inline footnotes to convert (hunt 2026-10-05 round
+        // 2, cluster R5). Each "^[" is asked whether an inline footnote opens
+        // there; one held inside another inline footnote is that one's text,
+        // not a footnote of its own, so it is not counted.
+        for (let at = lines[i].indexOf("^["); at !== -1; at = lines[i].indexOf("^[", at + 2)) {
+            const note = ctx.reading().inlineNoteHolding(i, at + 1);
+            if (note === null || note.line !== i || note.open !== at || note.closeLine === i) continue;
+            if (ctx.reading().inlineNoteHolding(i, at) !== null) continue;
+            skip("on more than one line");
         }
     }
     if (spans.length === 0) {
