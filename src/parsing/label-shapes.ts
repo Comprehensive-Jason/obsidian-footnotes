@@ -186,52 +186,84 @@ export function labelShapedLines(lines: string[]): { line: number; name: string;
 }
 
 /**
- * Whether the line under line `i` is shaped like a setext underline
- * ("===", "---", "-") inside the same containers as line `i`. Directly
- * under a one-line paragraph it makes a heading. Under a longer paragraph
- * it is plain text, or a break of its own, that a blank line above line
- * `i` would turn into a heading's underline.
+ * Whether the line under the label on line `i` is its setext underline:
+ * the "===" or "---" that, once a blank line goes in above the label,
+ * makes the label a heading's text instead of a definition. Directly
+ * under a one-line paragraph such a line makes a heading already. Under a
+ * longer paragraph it is plain text, which a blank line above the label
+ * turns into a heading's underline.
  *
- * Both lines are read from where their containers end, and the reading
- * says which containers those are (lineBlocks, without the line's own
- * block). So a "---" that ends the label's list item is a break of its
- * own, which a blank line above the label leaves alone, and a "===" that
- * carries on a quote's paragraph with no ">" in front still underlines
- * it. Judged from the margin, both came out the wrong way round, and an
- * underline under a label at a list item's content column of 4 or more
- * ("10. item") sat four spaces in and was no underline at all (hunt
+ * So the question is answered by reading the note with that blank line
+ * in place, the very note fix-lazy would write (a bare ">" line in a
+ * quote, as fix-lazy writes it): the label is underlined when that note
+ * reads it as no definition but as a heading that the line under it
+ * continues. Two conditions come with it, both read off the note as it
+ * is. The line under the label must sit in the label's own containers,
+ * with none of them starting on it (they may start on the label's line, a
+ * label on a list item's marker line), or it is no underline the label owns:
+ * a "---" at the left margin under a label lazy in a list item ends the
+ * list as a horizontal rule, and a "- ===" starts an item of its own, and
+ * Delete footnote everywhere must never cut either with the label. And a
+ * quick look at its text comes first, so a label with plain text under it
+ * costs no second reading.
+ *
+ * Before, the line under the label was judged in the containers the label
+ * sits in now, which is not where the blank line leaves it. A label lazy
+ * in a quote or a list item, at the left margin, has no marker of its own
+ * for that container, so the blank line ends the quote or item and the
+ * label becomes a top-level definition, while a "> ===" or "  ---" under
+ * it stays where it was, no underline at all. And the containers were
+ * compared with the marks where blocks start taken out, so a second list
+ * item "- ===" read as the label's own item. Both were filed underlined:
+ * fix-lazy left the label alone, and Delete footnote everywhere cut the
+ * line under it, a list item or a quoted line of the user's (hunt
+ * 2026-10-06, cycle 4, pins bug-underline-sibling-list-item and
+ * bug-underline-column-zero-lazy-into-container; live Obsidian 1.14.4,
+ * 2026-10-06). Reading the trial note also covers what the older checks
+ * did by hand: the label at a wide list item's content column (hunt
  * 2026-10-05, round 2, pins bug-underline-judged-from-margin and
- * bug-underlined-label-wide-item; live Obsidian 1.14.4, 2026-10-05).
- *
- * The underline is a run of "=" or of "-" and nothing else, from the very
- * start of the line's text inside its containers: no space in front, none
- * after. That is the shape Obsidian's parser (remark-parse 8) takes as an
- * underline. An indented "  ---" or a "--- " is a horizontal rule of its
- * own, and an indented "   ===" or a "=== " is plain text. The old test
- * allowed three spaces in front and any number after, so a lazy label
- * over such a line was taken for a heading's text: fix-lazy left it alone,
- * and Delete footnote everywhere cut the line under it too (hunt
- * 2026-10-06, cycle 3, pin bug-underline-regex-too-wide; live Obsidian
- * 1.14.4, 2026-10-06).
+ * bug-underlined-label-wide-item), and an indented "  ---" or a "--- "
+ * with a space after it, which is no underline (hunt 2026-10-06, cycle 3,
+ * pin bug-underline-regex-too-wide).
  */
 function underlinedAt(reading: NoteReading, lines: readonly string[], i: number): boolean {
-    if (i + 1 >= lines.length) return false;
-    const next = lines[i + 1].replace(/\r$/, "").slice(reading.containerEnd(i + 1));
-    return SetextUnderline.test(next) && containersOf(reading.lineBlocks[i]) === containersOf(reading.lineBlocks[i + 1]);
+    if (i + 1 >= lines.length || !UnderlineShaped.test(lines[i + 1].replace(/\r$/, ""))) return false;
+    if (containersOf(reading.lineBlocks[i]).replace(/\^/g, "") !== containersOf(reading.lineBlocks[i + 1])) return false;
+    const markers = (QuoteMarkers.exec(lines[i])?.[1] ?? "").trimEnd();
+    const trial = readNote([...lines.slice(0, i), markers, ...lines.slice(i)]);
+    // in the trial the label is on line i + 1 and the line under it on i + 2
+    const own = ownBlock(trial.lineBlocks[i + 1]);
+    return !trial.labelLines[i + 1] && /^\^heading\d$/.test(own) && ownBlock(trial.lineBlocks[i + 2]) === own.slice(1);
 }
 
 /**
- * A setext underline, the "===" or "---" line that turns the one-line
- * paragraph above it into a heading, as Obsidian's parser takes it: one
- * kind of mark repeated, alone on the line's text inside its containers,
- * with no space before or after (remark-parse 8,
- * lib/tokenize/heading-setext.js; live Obsidian 1.14.4, 2026-10-06).
+ * A loose first look at the line under a label: "=" or "-" marks, with
+ * nothing but quote markers and spaces around them. Whether the line
+ * really underlines the label is the trial reading's to say.
  */
-const SetextUnderline = /^(?:=+|-+)$/;
+const UnderlineShaped = /^[\s>]*(?:=+|-+)\s*$/;
 
-/** The containers in one line's entry of lineBlocks, outermost first, without the line's own block and without the marks where blocks start. */
+/**
+ * The blockquote markers in front of a label line. Inside a quote, a line
+ * holding nothing but those same ">" markers is what counts as a blank
+ * line, so the trial's blank line copies them, as fix-lazy's does
+ * (src/linting/rules/fix-lazy-definitions.ts).
+ */
+const QuoteMarkers = /^ {0,3}((?:>[ \t]?)*)/;
+
+/**
+ * The containers in one line's entry of lineBlocks, outermost first,
+ * without the line's own block. The "^" marks where blocks start stay,
+ * so a container that starts on a line (a new list item) never equals one
+ * that only carries on.
+ */
 function containersOf(blocks: string | undefined): string {
-    return (blocks ?? "").replace(/\^/g, "").split(" ").slice(0, -1).join(" ");
+    return (blocks ?? "").split(" ").slice(0, -1).join(" ");
+}
+
+/** The innermost block in one line's entry of lineBlocks, the line's own, with its "^" when it starts on that line. */
+function ownBlock(blocks: string | undefined): string {
+    return (blocks ?? "").split(" ").pop() ?? "";
 }
 
 /**

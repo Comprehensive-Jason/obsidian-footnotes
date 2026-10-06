@@ -48,27 +48,27 @@ import { readNote } from "../../src/parsing/note-reading";
 // the note with a blank line above the label, as fix-lazy does.
 
 describe("bug: a column-0 lazy label over an underline-shaped line inside the container it carries on", () => {
-    it.fails("a quoted '> ===' under a column-0 lazy label in the quote: Delete footnote everywhere keeps the line under the label", () => {
+    it("a quoted '> ===' under a column-0 lazy label in the quote: Delete footnote everywhere keeps the line under the label", () => {
         const lines = ["> Text[^1] here", "[^1]: def", "> ===", "", "More"];
         const plan = deleteFootnoteEverywhere(lines.join("\n"), "1") as { kind: string; markdown?: string };
         // Today the plan deletes, and its note reads "> Text here", "", "More".
         expect(plan.kind === "refused" || (plan.markdown ?? "").split("\n").includes("> ===")).toBe(true);
     });
 
-    it.fails("an item's horizontal rule '  ---' under a column-0 lazy label in the item: Delete footnote everywhere keeps the line under the label", () => {
+    it("an item's horizontal rule '  ---' under a column-0 lazy label in the item: Delete footnote everywhere keeps the line under the label", () => {
         const lines = ["- Text[^1] here", "[^1]: def", "  ---", "", "More"];
         const plan = deleteFootnoteEverywhere(lines.join("\n"), "1") as { kind: string; markdown?: string };
         // Today the plan deletes, and its note reads "- Text here", "", "More".
         expect(plan.kind === "refused" || (plan.markdown ?? "").split("\n").includes("  ---")).toBe(true);
     });
 
-    it.fails("a quoted '> ===' under a column-0 lazy label: fix-lazy inserts the blank line", () => {
+    it("a quoted '> ===' under a column-0 lazy label: fix-lazy inserts the blank line", () => {
         const lines = ["> Text[^1] here", "[^1]: def", "> ===", "", "More"];
         // Today fix-lazy returns the note unchanged.
         expect(fixLazyDefinitions(lines.join("\n"))).toBe(["> Text[^1] here", "", "[^1]: def", "> ===", "", "More"].join("\n"));
     });
 
-    it.fails("'- item' / '[^1]: def' / '  ===' is filed lazy and fix-lazy fixes it", () => {
+    it("'- item' / '[^1]: def' / '  ===' is filed lazy and fix-lazy fixes it", () => {
         const lines = ["- item", "[^1]: def", "  ==="];
         // Today the label is filed underlined, so the lazy list is empty.
         expect(lazyDefinitionLabelLines(lines)).toEqual([1]);

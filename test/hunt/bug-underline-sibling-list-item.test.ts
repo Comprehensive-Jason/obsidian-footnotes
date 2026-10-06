@@ -45,11 +45,11 @@ const Shapes: { what: string; lines: string[]; under: string }[] = [
 
 describe("bug: a sibling list item under a lazy label is taken for its underline", () => {
     for (const { what, lines, under } of Shapes) {
-        it.fails(`${what}: the label is lazy, not underlined`, () => {
+        it(`${what}: the label is lazy, not underlined`, () => {
             expect(labelShapedLines(lines)).toEqual([{ line: 1, name: "1", underlined: false }]);
         });
 
-        it.fails(`${what}: Delete footnote everywhere keeps the line under the label`, () => {
+        it(`${what}: Delete footnote everywhere keeps the line under the label`, () => {
             const plan = deleteFootnoteEverywhere(lines.join("\n"), "1") as { kind: string; markdown?: string };
             // Today the plan deletes, and its note reads "- Text here", "", "More".
             expect(plan.kind === "refused" || (plan.markdown ?? "").split("\n").includes(under)).toBe(true);
