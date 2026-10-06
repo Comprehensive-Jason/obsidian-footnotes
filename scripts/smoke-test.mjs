@@ -674,6 +674,55 @@ async function main() {
         }
     });
 
+    // A carried paste into the popup (hunt 2026-10-02, round 4, cluster U6;
+    // pin bug-carry-paste-into-popup-ignores-note). The popup's editor holds
+    // only [^2]'s text, and the embed joins every line of it into the note
+    // as [^2]'s own text, so the paste is planned against the whole note:
+    // the pasted [^1] clashes with the note's own [^1] and becomes [^3], and
+    // its definition goes into the note after the last definition, not into
+    // the popup. Both routes a paste can take are driven: the paste event,
+    // and the input-method route a phone keyboard's clipboard history takes
+    // (CodeMirror's input handlers, called in order the way CodeMirror
+    // calls them, until one takes the text).
+    for (const route of ["paste event", "input method"]) {
+        await test(`a carried paste into the popup renames a clashing footnote and puts its definition in the note (${route}, 2026-10-06)`, async () => {
+            resetSettings({ enablePopupEditor: true, carryFootnotesOnCopy: true });
+            await setupNote("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: ");
+            setCursorAndRun(0, 19, CMD_AUTONUM); // inside [^2]: opens its popup
+            const popupContent = `document.querySelector('.footnote-shortcut-popup:not(.footnote-shortcut-popup-loading) .cm-content')`;
+            await pollUntil("popup open on [^2]", `!!${popupContent}`, (v) => v === true);
+            await sleep(300);
+            const clipboard = jsLiteral("see x[^1]\n\n[^1]: their source");
+            const popupView = `(${EDITOR}).editor.cm.constructor.findFromDOM(${popupContent})`;
+            if (route === "paste event") {
+                action(
+                    `(() => { const dt = new DataTransfer(); dt.setData('text/plain', ${clipboard}); ` +
+                    `${popupContent}.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); })();`,
+                );
+            } else {
+                // when no handler takes the text, CodeMirror inserts it as typed
+                action(
+                    `(() => { const view = ${popupView}; const end = view.state.doc.length; ` +
+                    `const typed = () => view.state.update({ changes: { from: end, insert: ${clipboard} } }); ` +
+                    `for (const handler of view.state.facet(view.constructor.inputHandler)) { ` +
+                    `if (handler(view, end, end, ${clipboard}, typed)) return; } view.dispatch(typed()); })();`,
+                );
+            }
+            const expected = "Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: see x[^3]\n[^3]: their source";
+            // the main editor shows the note as the embed joins it, at once
+            await expectEditorText(expected);
+            const popupText = readJson(`${popupView}.state.doc.toString()`);
+            if (popupText !== "see x[^3]") throw new Error(`the popup holds ${jsLiteral(popupText)}, expected "see x[^3]"`);
+            // past the embed's own delayed save, then closed: the definition
+            // the paste put outside the popup stays
+            await sleep(2500);
+            action(`${popupContent}.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));`);
+            await pollUntil("popup closed", `!document.querySelector('.footnote-shortcut-popup')`, (v) => v === true);
+            await sleep(800);
+            await expectEditorText(expected);
+        });
+    }
+
     await test("popup opens promptly despite a definition-shaped decoy in a code span", async () => {
         // regression (reported 2026-08-26): the popup's buffer-caught-up
         // poll searched the RAW view buffer for "[^id]:", so a code-span
