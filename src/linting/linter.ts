@@ -44,8 +44,22 @@ import { invalidPrefixMessage, LintingCanceled, showNotice } from "../editor/not
 
 function configuredSectionHeading(plugin: FootnotePlugin): string {
     return plugin.settings.enableFootnoteSectionHeading
-        ? plugin.settings.footnoteSectionHeading
+        ? trimmedSectionHeading(plugin.settings.footnoteSectionHeading)
         : "";
+}
+
+/**
+ * The section heading setting without the blank lines at its start and
+ * end. The setting is a text box that takes several lines, so a line break
+ * after "# Footnotes" is one Enter away, and Obsidian stores it as typed.
+ * The lint finds the heading in the note line by line, so "# Footnotes"
+ * plus an empty line never matched the note's "# Footnotes" when nothing
+ * followed it, and every lint added the heading again (hunt 2026-10-02,
+ * pin bug-settings-section-heading-trailing-newline). A blank line at
+ * either end says nothing: the plugin always puts one around the heading.
+ */
+function trimmedSectionHeading(heading: string): string {
+    return heading.replace(/^(?:[ \t]*\r?\n)+/, "").replace(/(?:\r?\n[ \t]*)+$/, "");
 }
 
 /**
@@ -186,8 +200,9 @@ export function lintFootnotes(
     markdown: string,
     options: LintOptions = {},
 ): string {
-    if (options.sectionHeading && sectionHeadingProblem(options.sectionHeading) !== null) {
-        options = { ...options, sectionHeading: "" };
+    if (options.sectionHeading) {
+        const sectionHeading = trimmedSectionHeading(options.sectionHeading);
+        options = { ...options, sectionHeading: sectionHeadingProblem(sectionHeading) === null ? sectionHeading : "" };
     }
     // Notes can use any line endings. rewriteDocument converts them to plain
     // LF once here, so every step below sees the same thing, and puts the

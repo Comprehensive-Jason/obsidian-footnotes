@@ -38,6 +38,13 @@ import { fakePlugin } from "../helpers/fake-plugin";
 // Cause: the heading is matched against the note's lines with an exact
 // string compare, so "# Footnotes\n" never equals the line "# Footnotes".
 // The converter's own append already finds it (the control below passes).
+//
+// Fix (2026-10-06): linter.ts trims the blank lines at the start and end of
+// the setting (trimmedSectionHeading), both where the commands read the
+// setting and where the pure lint takes the heading as an option, so the
+// heading is matched as the note holds it. The first-footnote append in
+// src/commands/definition-append.ts still reads the setting untrimmed
+// (another group's file).
 
 /** The lint with the section heading set to `heading` and the main rules on. */
 function lint(md: string, heading: string): string {
@@ -56,7 +63,7 @@ function lint(md: string, heading: string): string {
 
 describe("a section heading setting ending in a line break", () => {
     for (const heading of ["# Footnotes\n", "# Footnotes\n\n", "---\n"]) {
-        it.fails(`${JSON.stringify(heading)}: linting twice changes nothing the second time`, () => {
+        it(`${JSON.stringify(heading)}: linting twice changes nothing the second time`, () => {
             const once = lint("Text[^1] here.\n\n[^1]: a", heading);
             // Today for "# Footnotes\n": the first lint gives one heading, the
             // second a second heading, the third moves one below the definition.
@@ -64,13 +71,13 @@ describe("a section heading setting ending in a line break", () => {
         });
     }
 
-    it.fails('"# Footnotes\\n": a note already holding "# Footnotes" keeps one heading after a lint', () => {
+    it('"# Footnotes\\n": a note already holding "# Footnotes" keeps one heading after a lint', () => {
         const out = lint("Text[^1] here.\n\n# Footnotes\n\n[^1]: a", "# Footnotes\n");
-        // Today: two "# Footnotes" lines.
+        // Before the fix: two "# Footnotes" lines.
         expect(out.split("\n").filter((l) => l === "# Footnotes")).toHaveLength(1);
     });
 
-    it.fails('"# Footnotes\\n" + Remove empty section heading: deleting the last footnote removes the heading', async () => {
+    it('"# Footnotes\\n" + Remove empty section heading: deleting the last footnote removes the heading', async () => {
         const doc = fakeEditor(["a[^1] b", "", "# Footnotes", "", "[^1]: one"], {
             wholeDoc: true,
             edits: true,
@@ -80,7 +87,7 @@ describe("a section heading setting ending in a line break", () => {
         await deleteFootnote(
             fakePlugin({ enableFootnoteSectionHeading: true, footnoteSectionHeading: "# Footnotes\n", removeEmptySectionHeading: true }, doc),
         );
-        // Today: ["a b", "", "# Footnotes"].
+        // Before the fix: ["a b", "", "# Footnotes"].
         expect(doc.lines).toEqual(["a b"]);
     });
 
