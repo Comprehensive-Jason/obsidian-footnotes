@@ -34,6 +34,10 @@ import { resetNotices } from "../helpers/notices";
 // Cause: moveCursorAndSetJumpPoint applies the changes first and then hands
 // vim the press position as it was BEFORE them (landDefinitionBackedInsertion
 // passes `origin`, read before the edit).
+//
+// Fix (2026-10-06): moveCursorAndSetJumpPoint maps the old caret through
+// the changes (mapPosition, text written right at it going after it)
+// before handing it to vim, so every caller is covered at once.
 
 const globalSlot = globalThis as unknown as { activeWindow?: unknown };
 let hadActiveWindow = false;
@@ -77,7 +81,7 @@ function vimPlugin(doc: unknown): FootnotePlugin {
 }
 
 describe("the vim jump point of a press whose definition lands above the caret", () => {
-    it.fails("records the press position in the note as it is after the edit", async () => {
+    it("records the press position in the note as it is after the edit", async () => {
         const lines = ["Intro[^1] here.", "", "## Notes", "", "[^1]: one", "", "## Later", "", "More prose here."];
         const doc = fakeEditor(lines, { cursor: { line: 8, ch: 4 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(vimPlugin(doc));

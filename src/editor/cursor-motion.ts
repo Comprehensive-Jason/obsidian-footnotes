@@ -1,7 +1,8 @@
 import { Editor, EditorChange, EditorPosition } from "obsidian";
 
 import type FootnotePlugin from "../main";
-import { safeInsertionCh } from "./insertion-liveness";
+import { docLines } from "./doc-context";
+import { mapPosition, safeInsertionCh } from "./insertion-liveness";
 import { FootnotePlacement, lineLinkLikeEndAt, linkLikeEndAt, punctuationAt, referenceLandingAfter } from "../parsing/landing";
 import type { NoteReading } from "../parsing/note-reading";
 import {
@@ -35,6 +36,17 @@ export function moveCursorAndSetJumpPoint(
         cmView.focus();
     }
 
+    // getConfig is undocumented API, like the vim internals below
+    const vim = Boolean((plugin.app.vault as VaultWithConfig).getConfig?.("vimMode"));
+    // Vim places its jump point in the note as it is after the changes, so
+    // the old caret goes through them first: a definition added above it
+    // moves it down a line, and Ctrl-O came back one line too high (hunt
+    // 2026-10-02, pin bug-press-vim-jump-point-stale). Text written right at
+    // the old caret goes after it, so Ctrl-O comes back to where the press
+    // was, in front of the new reference.
+    const jumpFrom =
+        vim && changes && changes.length > 0 ? mapPosition(docLines(doc), changes, oldCursorPos, -1) : oldCursorPos;
+
     if (changes && changes.length > 0) {
         // the text edits and the cursor move must go out as ONE
         // transaction. While a table cell is being edited (the table editor
@@ -55,12 +67,11 @@ export function moveCursorAndSetJumpPoint(
         doc.scrollIntoView({ from: newCursorPos, to: newCursorPos }, true);
     }
 
-    // if the user has vim mode on, add this move to vim's jump list.
-    // getConfig is undocumented API, like the vim internals below
-    if ((plugin.app.vault as VaultWithConfig).getConfig?.("vimMode")) {
+    // if the user has vim mode on, add this move to vim's jump list
+    if (vim) {
         (activeWindow as WindowWithVim).CodeMirrorAdapter?.Vim.getVimGlobalState_().jumpList.add(
             (doc as EditorWithCm).cm?.cm, // yes, ".cm.cm": vim wants the inner editor, two levels down
-            oldCursorPos,
+            jumpFrom,
             newCursorPos,
         );
     }
