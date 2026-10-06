@@ -1,4 +1,5 @@
 // Imported from the Kimi K3 cycle 2 hunt of 2026-09-16 (OpenCode worktree); 4 of 6 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
+// All six pass since 2026-10-06: the reader swap of 2026-10-03 fixed the bug, and the last test only asked about a line the note does not have (see that test).
 import { describe, expect, it } from "vitest";
 
 import { computeNextFootnoteNumber } from "../../src/parsing/footnote-grammar";
@@ -62,19 +63,27 @@ describe("an indented chunk directly after a table", () => {
         expect(readNote("para\n\n    code[^1]\n\nafter".split("\n")).protectedLines[2]).toBe(true);
     });
 
-    it.fails("a definition under a table keeps its OWN continuation lines: the block walker and the reference scan agree", () => {
+    it("a definition under a table keeps its OWN continuation lines: the reading and the orphan cut agree", () => {
         // the [^12] label is a definition (A2); its indented continuation
-        // lines belong to it even across a blank. The block walker says so
+        // lines belong to it even across a blank. The block walker said so
         // (findDefinitionBlocks) but scanDocument's inDefinition tracking
         // never saw the label as a definition, so the continuation after
-        // the blank is read as indented code: the [^22] in it is dead to
-        // the reference scan while its twin in the other block is live,
-        // and orphan deletion eats one [^22] and keeps the other.
+        // the blank was read as indented code: the [^22] in it was dead to
+        // the reference scan while its twin in the other block was live,
+        // and orphan deletion ate one [^22] and kept the other.
+        // Since the reader swap (2026-10-03) one reading answers both
+        // questions, and Obsidian agrees: [^12] runs from line 9 to line 12
+        // and both [^22] are live (saved answer
+        // pin:bug-indented-code-after-table#1). The test used to ask about
+        // index 13, line 14, which the note does not have, so it could
+        // never pass; the continuation after the blank is line 12, index 11
+        // (lines counted from 1, indexes from 0; Group L, 2026-10-06).
         const doc =
             "[^21]: first\n    continuation\n\n    second para[^22]\n\n" +
             "| a | b |\n| --- | --- |\n| c[^12] | d |\n[^12]: def\n    continuation\n\n    second para[^22]";
         const lines = doc.split("\n");
-        expect(readNote(lines).protectedLines[13]).toBe(false);
+        expect(readNote(lines).protectedLines[11]).toBe(false);
+        expect(readNote(lines).referencesOn(11).map((o) => o.name)).toEqual(["22"]);
         expect(removeOrphanedFootnoteReferences(doc)).toBe(
             "[^21]: first\n    continuation\n\n    second para\n\n" +
             "| a | b |\n| --- | --- |\n| c[^12] | d |\n[^12]: def\n    continuation\n\n    second para",
