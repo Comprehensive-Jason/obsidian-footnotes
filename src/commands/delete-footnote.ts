@@ -236,7 +236,9 @@ export async function deleteFootnote(plugin: FootnotePlugin) {
                         const markdown = withEmptySectionHeadingRemoved(plugin, plan.markdown);
                         replaceMinimal(doc, before, markdown, mdView);
                         showNotice(deleteFootnoteNotice(target, plan.references, plan.definitions));
-                        noticeLintAlerts(plugin, markdown);
+                        // no lint ran, so an orphan the deletion left is
+                        // named even while a delete toggle is on
+                        noticeLintAlerts(plugin, markdown, false);
                     }
                 }
             });

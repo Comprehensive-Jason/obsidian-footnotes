@@ -362,7 +362,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
     // anything that creates a footnote lints, when that setting is on;
     // otherwise the alerts alone speak (ADR 2)
     if (lintAfterFootnoteCreation(plugin, doc, false) === null && !plugin.settings.lintOnFootnoteCreation) {
-        noticeLintAlerts(plugin, doc.getValue());
+        noticeLintAlerts(plugin, doc.getValue(), false);
     }
     return result;
 }
@@ -419,7 +419,7 @@ export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
                     skippedText,
                 result.skipped.length > 0 ? 8000 : undefined,
             );
-            noticeLintAlerts(plugin, markdown);
+            noticeLintAlerts(plugin, markdown, false);
         });
     }, "Move the cursor into the note's text to convert its footnotes.");
 }

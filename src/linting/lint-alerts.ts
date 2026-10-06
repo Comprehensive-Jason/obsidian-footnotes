@@ -213,11 +213,20 @@ const MergeLeftAsTheyAre = "the lint left them as they are, because merging them
 // left it, and why. A single-rule command such as Move definitions to
 // bottom also ends here, and an orphan a full lint WOULD delete is not
 // reported after one of those: the next lint takes it, as before.
+//
+// That holds only for text a lint, or one of its rules, has just
+// produced. After a command that runs no lint at all (Delete footnote
+// everywhere, a conversion, a carried paste with Lint on footnote creation
+// off), `afterLint` is false, and the alert speaks as it does with the
+// toggle off: nothing has deleted the orphan, and nothing may until the
+// user lints (hunt 2026-10-02, round 4, cluster A4, pin
+// bug-lint-delete-everywhere-orphan-unreported).
 function noticeOrphanedReferences(
     plugin: FootnotePlugin,
     markdown: string,
     prefix: string,
     precomputed: { lines: string[] },
+    afterLint: boolean,
 ) {
     // a reference whose name is invalid (a "#", a backtick) is the
     // invalid-name alert's to report; naming it here as well would ask
@@ -227,7 +236,7 @@ function noticeOrphanedReferences(
         (name) => footnoteNameProblem(name) === null,
     );
     if (names.length === 0) return;
-    if (plugin.settings.lintDeleteOrphanedReferences) {
+    if (afterLint && plugin.settings.lintDeleteOrphanedReferences) {
         // Each orphan is judged on its own by the rule now (Kimi hunt
         // cycle 4, 2026-09-16), so the ones it would still leave are the
         // refused ones: those are named, and one the next lint deletes is
@@ -256,15 +265,18 @@ function noticeOrphanedReferences(
 
 // Orphaned definitions that were kept get an alert as well (ruling: Jason,
 // 2026-08-10). Every kind of orphan is either deleted or reported; none is
-// quietly left in place.
+// quietly left in place. `afterLint` works as for orphaned references
+// above: after Delete footnote everywhere, a definition only the deleted
+// footnote's text cited is named even with the toggle on.
 function noticeOrphanedDefinitions(
     plugin: FootnotePlugin,
     markdown: string,
     precomputed: { lines: string[] },
+    afterLint: boolean,
 ) {
     let names = orphanedFootnoteDefinitionNames(markdown, precomputed);
     if (names.length === 0) return;
-    if (plugin.settings.lintDeleteOrphanedDefinitions) {
+    if (afterLint && plugin.settings.lintDeleteOrphanedDefinitions) {
         // With the toggle ON, an orphaned definition still in the note is
         // one the rule refused to cut (the cut would change how a nearby
         // line is read, take a callout's title or a comment's closer with
@@ -603,19 +615,24 @@ function noticeDefinitionsInsideTables(markdown: string) {
 // lint-on-footnote-creation on (2026-08-11 review, a speed fix). The
 // definition starts were added to the shared bundle on 2026-09-09, when the
 // prose-label rule turned out to have quietly added seven more repeats.
-export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string) {
+//
+// `afterLint` says whether a lint, or one of its rules, produced
+// `markdown`. A command that runs none passes false, so an alert that
+// counts on a rule having had its turn speaks instead (see
+// noticeOrphanedReferences).
+export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string, afterLint = true) {
     // Every one of the alerts is looking for text containing "[^", so a
     // note without those two characters anywhere cannot trigger any of them
     if (!markdown.includes("[^")) return;
     const prefix = orphanSafePrefixFor(plugin, markdown);
     const lines = normalizeEol(markdown).text.split("\n");
     noticeEmptyReferences(markdown, prefix);
-    noticeOrphanedReferences(plugin, markdown, prefix, { lines });
+    noticeOrphanedReferences(plugin, markdown, prefix, { lines }, afterLint);
     noticeLazyDefinitions(lines);
     noticeUnderlinedDefinitions(lines);
     noticeCommentedDefinitions(markdown);
     noticeDefinitionsInsideTables(markdown);
-    noticeOrphanedDefinitions(plugin, markdown, { lines });
+    noticeOrphanedDefinitions(plugin, markdown, { lines }, afterLint);
     noticeUngatheredDefinitions(plugin, markdown);
     noticeDuplicateDefinitions(plugin, markdown, { lines });
     noticeNestedFootnotes(lines);

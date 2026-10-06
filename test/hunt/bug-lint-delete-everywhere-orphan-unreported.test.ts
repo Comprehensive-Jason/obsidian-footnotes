@@ -31,6 +31,13 @@ import { messages, resetNotices } from "../helpers/notices";
 // came out of a full lint, so it stays quiet about any orphan the rule
 // would have deleted. No lint runs after this command, so nobody deletes
 // it either.
+//
+// Fix (2026-10-06): noticeLintAlerts takes afterLint, false from the
+// commands that run no lint (Delete footnote everywhere, both conversions,
+// the creation lint's other-note branch); then the orphan alerts speak as
+// with their toggles off. The carried paste's call (carry-footnotes-
+// hooks.ts, lintAfterPaste) still passes nothing, so a paste with Lint on
+// footnote creation off is not covered yet.
 
 const LINES = ["a[^n] b", "", "[^n]: see[^m]", "[^m]: cited only by n"];
 
@@ -47,12 +54,12 @@ function editor() {
 beforeEach(resetNotices);
 
 describe("Delete footnote everywhere and the definition it leaves orphaned", () => {
-    it.fails("with Delete orphaned definitions on, the definition left orphaned is either deleted or named", async () => {
+    it("with Delete orphaned definitions on, the definition left orphaned is either deleted or named", async () => {
         const doc = editor();
         await deleteFootnote(fakePlugin({ ...DEFAULT_SETTINGS, lintDeleteOrphanedDefinitions: true }, doc));
         const stillThere = doc.getValue().includes("[^m]: cited only by n");
         const named = messages().some((m) => m.includes('"[^m]"') && m.includes("nothing references"));
-        // Today: still there, and not named.
+        // Before the fix: still there, and not named.
         expect(!stillThere || named).toBe(true);
     });
 

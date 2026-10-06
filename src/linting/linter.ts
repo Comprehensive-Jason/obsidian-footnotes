@@ -743,7 +743,7 @@ export function lintAfterFootnoteCreation(
     const target = safeLintTarget(plugin);
     if (!target) return null;
     if (target.doc !== edited) {
-        noticeLintAlerts(plugin, edited.getValue());
+        noticeLintAlerts(plugin, edited.getValue(), false);
         return null;
     }
     const doc = target.doc;
