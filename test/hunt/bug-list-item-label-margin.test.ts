@@ -1,6 +1,7 @@
 // Imported from the Kimi K3 cycle 3 hunt of 2026-09-16 (OpenCode worktree); 5 of 7 tests carry it.fails: 0 were red there and marked on import, the rest the hunter marked itself.
 // RESOLVED 2026-09-20 by Jason's ruling 1 (option b): a definition inside a list item is recognized by the orphan-reference alert and its deletion, the hotkey's navigate-or-create decision, and the renamers (reindex leaves the name alone, the rename command refuses); it is still never moved and never forms a block.
-// VERIFIED IN READING VIEW 2026-09-16, NOT YET FIXED: a label indented into a list item (absolute indent 4 under "- item", 7 under "10. item") renders as a definition, and one indented 6 under "- item" is code, exactly as pinned. The plugin has never recognized definitions inside list items (labels read relative to the document margin, like the C22 quoted-definition rule); fixing it touches every label reader, so it waits for Jason's ruling on whether definitions inside list items are in scope.
+// All seven pass since 2026-10-06: the reader swap of 2026-10-03 reads these labels as Obsidian does, and the one test that asked the old block walker now asks the reading (see that test).
+// VERIFIED IN READING VIEW 2026-09-16, NOT YET FIXED AT THE TIME: a label indented into a list item (absolute indent 4 under "- item", 7 under "10. item") renders as a definition, and one indented 6 under "- item" is code, exactly as pinned. The plugin has never recognized definitions inside list items (labels read relative to the document margin, like the C22 quoted-definition rule); fixing it touches every label reader, so it waits for Jason's ruling on whether definitions inside list items are in scope.
 import { describe, expect, it } from "vitest";
 
 import { orphanedFootnoteReferenceNames } from "../../src/linting/rules/remove-orphaned-references";
@@ -53,9 +54,19 @@ describe("a definition label indented into a list item (relative indent 1-3)", (
         expect(startsOf("10. item\n\n       [^1]: def\n\nuse[^1]")[2]).toBe(true);
     });
 
-    it.fails("the block walker finds the block, so the reference is not an orphan", () => {
+    it("the reading finds the definition, so the reference is not an orphan, and it is no block to move", () => {
+        // This test used to ask for a block, from the block walker the
+        // reader swap replaced (2026-10-03). Ruling 1 says an in-item
+        // definition never forms a block, and the reading's blocks are only
+        // the definitions it may move, so the question is now whether the
+        // reading lists the definition at all. Obsidian reads [^1] as a
+        // definition on line 3 alone (saved answer
+        // pin:bug-list-item-label-margin#1), and so does the reading; the
+        // block list stays empty (Group L, 2026-10-06).
         const lines = "- item\n\n    [^1]: def\n\nuse[^1]".split("\n");
-        expect(readNote(lines).blocks.map((b) => b.name)).toEqual(["1"]);
+        const reading = readNote(lines);
+        expect(reading.definitions.map((d) => [d.name, d.start, d.end, d.movable])).toEqual([["1", 2, 2, false]]);
+        expect(reading.blocks).toEqual([]);
     });
 
     it("the missing-definition alert stays silent about it", () => {
