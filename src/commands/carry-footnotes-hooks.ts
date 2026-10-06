@@ -451,17 +451,25 @@ function landCarriedText(
     // the second finds the text in front of the definitions inside it.
     if (landsInProtectedText(cleared, noteFrom, inNote(normalizeEol(pasted).text)) || landsInProtectedText(cleared, noteFrom, inNote(body))) return false;
     // The body is planned where it lands, with any blank line in front of
-    // it already there: the planner reads its footnotes in place (renames
-    // only change names, so the blank lines asOwnParagraph wants are the
-    // same before and after them).
+    // it and after it already there: the planner reads its footnotes in
+    // place (renames only change names, so the blank lines asOwnParagraph
+    // wants are the same before and after them). The blank line after the
+    // text is there so that a label right under the text stays a
+    // definition; planned without it, the planner read that label as more
+    // of the text's paragraph (a lazy label), so a paste right above its
+    // own definition added a renamed copy instead of reusing it, and one
+    // right above the shown copy of a name defined twice was pointed at
+    // the hidden first copy (hunt 2026-10-06 cycle 4, cluster K1, pin
+    // bug-paste-planner-reads-label-lazy).
     const landing = asOwnParagraph(cleared, noteFrom, inNote(body));
-    const plan = planCarriedPaste(cleared.join("\n"), landing.text, carried, noteFrom);
+    const after = landing.after;
+    const plan = planCarriedPaste(cleared.join("\n"), landing.text + inNote(after), carried, noteFrom);
     // a text that carries nothing is only landed to rename a definition of
     // its own; with nothing to rename, the paste is the editor's own
     if (carried.length === 0 && plan.renamed === 0) return false;
-    // the pasted text as the editor gets it, and as the note reads it
-    const text = fromNote(plan.body);
-    const after = landing.after;
+    // the pasted text as the editor gets it, and as the note reads it, the
+    // blank line after it taken back off: it goes in as an edit of its own
+    const text = fromNote(plan.body.slice(0, plan.body.length - inNote(after).length));
     // a blank line after the text goes in as an edit of its own, so the
     // caret can land at the end of the text, before it
     const editsAt = (start: EditorPosition, end: EditorPosition, inserted: string, blank: string): EditorChange[] =>

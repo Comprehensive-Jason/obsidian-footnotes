@@ -91,7 +91,7 @@ beforeEach(() => {
 });
 
 describe("bug: the paste planner reads the label right under the pasted text as lazy", () => {
-    it.fails("copy a sentence and paste it on the empty line right above its own definition reuses the definition", () => {
+    it("copy a sentence and paste it on the empty line right above its own definition reuses the definition", () => {
         const note = ["Para one[^1].", "", "[^1]: one"];
         const clip = copy(note, { line: 0, ch: 0 }, { line: 0, ch: 13 });
         expect(clip).toBe("Para one[^1].\n\n[^1]: one");
@@ -103,7 +103,7 @@ describe("bug: the paste planner reads the label right under the pasted text as 
         expect(back.lines.join("\n")).not.toContain("[^2]");
     });
 
-    it.fails("a line-wise copy pasted at the start of its definition's label line reuses the definition", () => {
+    it("a line-wise copy pasted at the start of its definition's label line reuses the definition", () => {
         // the text ends in a line break, and the caret is at column 0 of the label
         const note = ["Text[^2].", "", "[^2]: beta"];
         const clip = copy(note, { line: 0, ch: 0 }, { line: 1, ch: 0 });
@@ -113,7 +113,7 @@ describe("bug: the paste planner reads the label right under the pasted text as 
         expect(back.lines.filter((line) => line.endsWith(": beta"))).toEqual(["[^2]: beta"]);
     });
 
-    it.fails("a paste right above the shown copy of a name defined twice is not merged into the hidden first copy", () => {
+    it("a paste right above the shown copy of a name defined twice is not merged into the hidden first copy", () => {
         // [^1] is defined twice; Obsidian shows the last, "two". The pasted
         // [^1] "one" (from another note) must not be pointed at [^1],
         // which shows "two" after the paste.
@@ -124,7 +124,7 @@ describe("bug: the paste planner reads the label right under the pasted text as 
         expect(back.lines).not.toContain("See[^1].");
     });
 
-    it.fails("through the keyboard's clipboard history: text committed on the empty line right above its own definition reuses the definition", () => {
+    it("through the keyboard's clipboard history: text committed on the empty line right above its own definition reuses the definition", () => {
         const note = ["Para one[^1].", "", "[^1]: one"];
         const doc = fakeEditor(note, { wholeDoc: true, edits: true, cursor: { line: 1, ch: 0 } });
         const handle = carriedInputHandler(fakePlugin(settings, doc), () => doc);
