@@ -84,18 +84,18 @@ describe("a pasted reference cited twice, whose name the destination does not de
     });
 
     // Now: "a[^2] b[^1] c[^2]".
-    it.fails("the planner keeps [^9] when the text cites it twice", () => {
+    it("the planner keeps [^9] when the text cites it twice", () => {
         expect(planCarriedPaste("Dest.", "a[^9] b[^1] c[^9]", [one("1", "[^1]: one")])).toMatchObject({ body: "a[^9] b[^1] c[^9]", renamedCites: new Map() });
     });
 
     // Now: "a[^2] b[^1]", and the carried definition cites [^2].
-    it.fails("the planner keeps [^9] when the text cites it once and a carried definition cites it once", () => {
+    it("the planner keeps [^9] when the text cites it once and a carried definition cites it once", () => {
         expect(planCarriedPaste("Dest.", "a[^9] b[^1]", [one("1", "[^1]: see [^9]")])).toMatchObject({ body: "a[^9] b[^1]", renamedCites: new Map() });
     });
 
     // Now: "Dest.Smith says[^smith-2] and[^1] again[^smith-2].", and the
     // toast names "[^smith-2]".
-    it.fails("the plugin's copy pasted into another note: the text arrives as copied and the toast names [^smith]", () => {
+    it("the plugin's copy pasted into another note: the text arrives as copied and the toast names [^smith]", () => {
         // [^smith]'s label has no blank line above it, so it carries on the
         // paragraph and defines nothing, and the copy carries no definition for it
         const src = ["Smith says[^smith] and[^1] again[^smith].", "", "[^1]: one", "", "A paragraph.", "[^smith]: lazy under the paragraph above"];
@@ -111,14 +111,14 @@ describe("a pasted reference cited twice, whose name the destination does not de
     });
 
     // Now: "Dest. a[^3] b[^1] c[^3]".
-    it.fails("a clipboard from another app citing [^2] twice and defining [^1]", () => {
+    it("a clipboard from another app citing [^2] twice and defining [^1]", () => {
         const doc = editor(["Dest."], { line: 0, ch: 5 });
         handlePaste(pluginIn(doc), clipboardEvent(" a[^2] b[^1] c[^2]\n\n[^1]: one") as never, doc);
         expect(doc.lines[0], JSON.stringify({ lines: doc.lines, m: messages() })).toBe("Dest. a[^2] b[^1] c[^2]");
     });
 
     // Now: "Dest. a[^3] b[^1] c[^3]".
-    it.fails("the same text from the phone keyboard's clipboard history", () => {
+    it("the same text from the phone keyboard's clipboard history", () => {
         const doc = editor(["Dest."], { line: 0, ch: 5 });
         const off = doc.posToOffset({ line: 0, ch: 5 });
         carriedInputHandler(pluginIn(doc), () => doc)({} as never, off, off, " a[^2] b[^1] c[^2]\n\n[^1]: one");
@@ -127,7 +127,7 @@ describe("a pasted reference cited twice, whose name the destination does not de
 
     // Now: "End.Move me[^x-2] and[^1] and again[^x-2].", while
     // "Intro A[^x]." still cites [^x].
-    it.fails("drafting: a paragraph citing a not-yet-defined [^x] twice, cut and pasted elsewhere in its note, still cites the same [^x] as the paragraph left behind", () => {
+    it("drafting: a paragraph citing a not-yet-defined [^x] twice, cut and pasted elsewhere in its note, still cites the same [^x] as the paragraph left behind", () => {
         const note = ["Intro A[^x].", "", "Move me[^x] and[^1] and again[^x].", "", "[^1]: one", "", "End."];
         const doc = editor(note, { line: 2, ch: 0 }, { line: 2, ch: note[2].length });
         const ev = clipboardEvent();

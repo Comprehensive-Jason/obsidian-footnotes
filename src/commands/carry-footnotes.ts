@@ -323,11 +323,11 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     const lines = normalizeEol(destination).text.split("\n");
     const reading = readNote(lines);
 
-    // The names the destination defines, which a pasted name may not keep,
-    // and every name it uses, references too, which a new name avoids
-    // (folded).
-    const taken = new Set<string>();
-    for (const block of reading.definitions) taken.add(block.name.toLowerCase());
+    // The names the destination defines; the names a pasted name may not
+    // keep, which start as those; and every name it uses, references too,
+    // which a new name avoids (folded).
+    const definedThere = new Set(reading.definitions.map((block) => block.name.toLowerCase()));
+    const taken = new Set(definedThere);
     const used = new Set(taken);
     for (let i = 0; i < lines.length; i++) {
         for (const occurrence of reading.referencesOn(i)) used.add(occurrence.name.toLowerCase());
@@ -405,12 +405,16 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     // the destination does not define it, so no rename may land on it.
     // Renaming onto one made two pasted footnotes into one (hunt
     // 2026-10-02, pin bug-carry-rename-ignores-body-names). One the
-    // destination defines is renamed below, after the definitions.
+    // destination defines is renamed below, after the definitions. A name
+    // cited twice is asked about the destination both times: asked about
+    // `taken`, which the first sight had just added it to, the second sight
+    // found it taken and renamed it (hunt 2026-10-08 cycle 6, cluster Z15,
+    // pin bug-paste-renames-undefined-cite-twice).
     const cites: string[] = [];
     for (const name of [...bodyCites, ...carried.flatMap((_, i) => citedIn(i))]) {
         const folded = name.toLowerCase();
         if (defined.has(folded)) continue;
-        if (taken.has(folded)) cites.push(name);
+        if (definedThere.has(folded)) cites.push(name);
         else {
             taken.add(folded);
             used.add(folded);
