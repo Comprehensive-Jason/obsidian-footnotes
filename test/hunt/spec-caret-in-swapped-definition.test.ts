@@ -19,14 +19,16 @@ import { lintFootnotes } from "../../src/linting/linter";
 // the second line of [^2]'s definition, as the fold and the second pane
 // do.
 // Why it is a question and not a bug: the caret sits in a definition the
-// lint moved and renamed, so the manual sheet's promise for "an unchanged
-// line" does not cover it. The editor's caret rides on the lint's edits,
+// lint moved (and, in the swap, renamed), so the manual sheet's promise
+// for "an unchanged line" does not cover it. The editor's caret rides on the lint's edits,
 // which are left small on purpose so the caret on the line being typed
 // stays put, while a fold and a second pane read a separate line map
 // (findMovedDefinitions's comment in src/editor/document-diff.ts). Whether the editor's own
 // caret should follow a moved definition, stay in its place, or go to the
-// definition's label is a product decision for Jason. It is narrow: only a
-// swap of two definitions that each run over more than one line does this.
+// definition's label is a product decision for Jason. It is not narrow: a
+// definition the move gathers to the bottom does it too, one line or more,
+// which is the everyday way of writing a footnote by hand with lint on
+// save (hunt 2026-10-08, cycle 6, cluster Z21, the second group below).
 //
 // The "slot swap" is reindex's move: the definitions stay in their places
 // ("slots") and their texts trade places so the order follows the
@@ -98,4 +100,33 @@ describe("reindex's slot swap", () => {
         const after = lintFootnotes(before, {});
         expect(mapCaret(before, after, 3, "    cont one".length)).toEqual({ line: 5, ch: "    cont one".length });
     });
+});
+
+// The cases below came from hunt cycle 6, cluster Z21. They show the same
+// caret behaviour without any swap: the user is typing at the end of a
+// definition in the middle of the note and saves, and the default lint
+// gathers that definition at the bottom. The caret lands at column 0 of
+// "Para two.", the paragraph that was under the definition, so the next
+// keystroke goes into the user's prose. A second pane's caret on that line
+// follows the definition (the controls).
+describe("the move to the bottom, with the caret in the gathered definition", () => {
+    const Cases = [
+        { what: "a one-line definition", before: "Para one.[^1]\n\n[^1]: my note\n\nPara two.", line: 2, text: "[^1]: my note" },
+        { what: "a definition over two lines", before: "Para one.[^1]\n\n[^1]: my note\n    second line\n\nPara two.", line: 3, text: "    second line" },
+    ];
+    for (const { what, before, line, text } of Cases) {
+        it(`control (${what}): the lint moves it, and a second pane on that line follows it`, () => {
+            const after = lintFootnotes(before, {});
+            const b = after.split("\n");
+            expect(b.indexOf(text)).toBeGreaterThan(line);
+            expect(lineMapper(lineDiffChanges(before, after), before)(line)).toBe(b.indexOf(text));
+        });
+
+        // Now: { line: 2, ch: 0 }, the start of "Para two."
+        it.fails(`spec question (${what}): the editor's caret at the end of the line follows it too`, () => {
+            const after = lintFootnotes(before, {});
+            const b = after.split("\n");
+            expect(mapCaret(before, after, line, text.length)).toEqual({ line: b.indexOf(text), ch: text.length });
+        });
+    }
 });
