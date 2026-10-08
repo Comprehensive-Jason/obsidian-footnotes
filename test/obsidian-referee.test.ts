@@ -50,6 +50,10 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 //   indented code (Jason's ruling B1); a definition gathered under the
 //   section heading of a note that ends in an open fence or comment; and a
 //   quote holding indented code moved into a definition.
+// - gate-s45-live: where a press on the last word of bracketed text that is
+//   no link now lands (Jason's ruling Q2, 2026-10-07), asked of the live app
+//   on 2026-10-08: a reference inside the brackets, with and without a
+//   period after them, and an inline footnote there, with text and empty.
 //
 // The comparison is the live oracle's own (scripts/oracle/compare.mts), so a
 // note agrees here exactly when `npm run oracle -- check --reader` would find
@@ -58,7 +62,7 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 // notes, run the live oracle with --answers (TESTING.md) and add the file to
 // AnswerFiles.
 
-const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes", "swap34-probes", "h2-live-probes", "gate-s3-live"];
+const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes", "swap34-probes", "h2-live-probes", "gate-s3-live", "gate-s45-live"];
 
 /**
  * Notes on which the reader and Obsidian still disagree, by id, with the

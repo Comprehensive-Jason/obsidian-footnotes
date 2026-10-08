@@ -1,0 +1,6 @@
+[
+{"id":"gs45:q2-ref-inside","text":"as noted [see p. 5[^1]] here\n\n[^1]: one","defs":[["1",2,0,2]],"refs":[["1",0,18]],"code":[]},
+{"id":"gs45:q2-ref-inside-before","text":"[see p. 5[^1]].\n\n[^1]: one","defs":[["1",2,0,2]],"refs":[["1",0,9]],"code":[]},
+{"id":"gs45:q2-inline-inside","text":"see [sic^[a note]] now","defs":[],"refs":[],"code":[]},
+{"id":"gs45:q2-inline-empty-inside","text":"see [sic^[]] now","defs":[],"refs":[["",0,8]],"code":[]}
+]
