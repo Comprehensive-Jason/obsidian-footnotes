@@ -249,6 +249,33 @@ function setCursorAndRun(line, ch, commandId) {
     );
 }
 
+// Selects `from` to `to` in the smoke note and cuts it the way Ctrl+X
+// does: a cut event carrying a clipboard, dispatched on the editor. The
+// plugin's cut hook listens on the document before the editor (capture),
+// and the editor's own cut runs after it unless the plugin took the cut.
+// Returns the text the cut put on the clipboard.
+async function cutRange(from, to) {
+    action(
+        `(() => { const v=${EDITOR}; v.editor.focus(); v.editor.setSelection(${jsLiteral(from)}, ${jsLiteral(to)}); ` +
+        `window.__smokeCutText = null; const dt = new DataTransfer(); ` +
+        `v.editor.cm.contentDOM.dispatchEvent(new ClipboardEvent('cut', { clipboardData: dt, bubbles: true, cancelable: true })); ` +
+        `window.__smokeCutText = dt.getData('text/plain'); })();`,
+    );
+    return pollUntil("the cut's clipboard text", `window.__smokeCutText`, (v) => typeof v === "string" && v !== "");
+}
+
+// Pastes `text` at the smoke note's caret the way Ctrl+V does: a paste
+// event carrying a clipboard, dispatched on the editor, which Obsidian
+// hands to the plugin as its editor-paste event. With `at`, the caret is
+// put there first; without it, the paste goes where the caret already is.
+function pasteText(text, at = null) {
+    const place = at === null ? "" : `v.editor.setCursor(${jsLiteral(at)}); `;
+    action(
+        `(() => { const v=${EDITOR}; v.editor.focus(); ${place}const dt = new DataTransfer(); dt.setData('text/plain', ${jsLiteral(text)}); ` +
+        `v.editor.cm.contentDOM.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); })();`,
+    );
+}
+
 function setSettings(patch) {
     action(
         `Object.assign(app.plugins.plugins['${PLUGIN_ID}'].settings, ${jsLiteral(patch)});`,
@@ -2767,6 +2794,86 @@ async function main() {
         setCursorAndRun(0, 0, CMD_LINT);
         await expectEditorText("$x[^9].$ real.[^1]\n\n[^1]: one");
     });
+
+    // Cutting the first line of a list, a quote, or a callout's body that
+    // cites a footnote goes through, its definition carried on the
+    // clipboard (hunt 2026-10-08, cycle 6, cluster Z19; pin
+    // bug-cut-first-line-of-block-refused). It was refused with "Nothing
+    // was cut: it would change how Obsidian reads the text around it.",
+    // since the line under it then starts the block. The line is selected
+    // with its line break, as Shift+Down selects it.
+    for (const [what, note, line, expected] of [
+        ["the first bullet", "- a[^1]\n- b\n\nAfter.\n\n[^1]: one", 0, "- b\n\nAfter."],
+        ["the first quote line", "> a[^1]\n> b\n\nAfter.\n\n[^1]: one", 0, "> b\n\nAfter."],
+        ["the first line of a callout's body", "> [!note] Title\n> a[^1]\n> b\n\nAfter.\n\n[^1]: one", 1, "> [!note] Title\n> b\n\nAfter."],
+    ]) {
+        await test(`cutting ${what}, which cites a footnote, takes its definition along (2026-10-08, Z19)`, async () => {
+            resetSettings({ carryFootnotesOnCopy: true });
+            await setupNote(note);
+            const clip = await cutRange({ line, ch: 0 }, { line: line + 1, ch: 0 });
+            await expectEditorText(expected);
+            if (!clip.includes("[^1]: one")) throw new Error(`the clipboard holds ${jsLiteral(clip)}, without the definition`);
+        });
+    }
+
+    // A footnoted bullet cut and pasted at the start of the list's first
+    // item lands there with its definition (hunt 2026-10-08, cycle 6,
+    // cluster Z19; pin bug-paste-before-first-item-refused). It was refused
+    // with "Nothing was pasted: it would change how Obsidian reads the text
+    // around it.", and the item was only on the clipboard.
+    await test("a footnoted bullet cut and pasted above the list's first item lands there (2026-10-08, Z19)", async () => {
+        resetSettings({ carryFootnotesOnCopy: true });
+        await setupNote("- a\n- b[^1]\n- c\n\nAfter.\n\n[^1]: one");
+        const clip = await cutRange({ line: 1, ch: 0 }, { line: 2, ch: 0 });
+        await expectEditorText("- a\n- c\n\nAfter.");
+        pasteText(clip, { line: 0, ch: 0 });
+        await expectEditorText("- b[^1]\n- a\n- c\n\nAfter.\n\n[^1]: one");
+    });
+
+    // A cut that starts at the end of a definition's line and takes the
+    // definition and the paragraph citing it leaves the caret on the
+    // emptied line, and pasting straight back gives the note back (hunt
+    // 2026-10-08, cycle 6, cluster Z16; pin bug-cut-caret-past-empty-line-end).
+    // The caret was left past the end of that empty line, so the paste was
+    // planned afresh. Whether the real editor clamps that caret or throws
+    // is what this checks.
+    await test("a cut from the end of a definition's line, pasted straight back, gives the note back (2026-10-08, Z16)", async () => {
+        resetSettings({ carryFootnotesOnCopy: true });
+        const note = "Intro\n\n[^a]: def\n\nPara[^a].";
+        await setupNote(note);
+        const clip = await cutRange({ line: 2, ch: 9 }, { line: 4, ch: 9 });
+        await expectEditorText("Intro\n\n");
+        const caret = readJson(`(${EDITOR}).editor.getCursor()`);
+        if (!caret || caret.line !== 2 || caret.ch !== 0) throw new Error(`the cut left the caret at ${jsLiteral(caret)}, not at the start of the emptied line`);
+        pasteText(clip);
+        await expectEditorText(note);
+    });
+
+    // A press at the end of a line ending in a block id (" ^water1") lands
+    // in front of the id, so the block stays registered and "[[#^water1]]"
+    // keeps resolving (hunt 2026-10-08, cycle 6, cluster Z12; pin
+    // bug-press-after-block-id; docs/obsidian-reading-rules.md D4). Written
+    // after the id, the reference hid the block from the metadata cache.
+    for (const [key, command, expected] of [
+        ["numbered", CMD_AUTONUM, "Oysters filter water.[^1] ^water1\n\nSee [[#^water1]].\n\n[^1]: "],
+        ["inline", CMD_INLINE, "Oysters filter water.^[] ^water1\n\nSee [[#^water1]]."],
+    ]) {
+        await test(`the ${key} key at the end of a line ending in a block id keeps the block linkable (2026-10-08, Z12)`, async () => {
+            resetSettings();
+            const line = "Oysters filter water. ^water1";
+            await setupNote(`${line}\n\nSee [[#^water1]].`);
+            setCursorAndRun(0, line.length, command);
+            await expectEditorText(expected);
+            action(`window.__blockSaved = false; (async () => { await (${EDITOR}).save(); window.__blockSaved = true; })();`);
+            await pollUntil("note saved to disk", `window.__blockSaved`, (v) => v === true);
+            await pollUntil(
+                "the metadata cache registering block water1",
+                `(() => { const v=${EDITOR}; const c = app.metadataCache.getFileCache(v.file); ` +
+                `return !!(c && c.blocks && c.blocks.water1) && v.editor.getValue() === ${jsLiteral(expected)}; })()`,
+                (v) => v === true,
+            );
+        });
+    }
 
     // LAST before cleanup: this test flips the view mode, and a failure
     // between flip and flip-back must not poison the tests after it
