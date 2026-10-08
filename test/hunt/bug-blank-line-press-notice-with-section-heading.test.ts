@@ -83,7 +83,7 @@ describe("ruling B2's refusal keeps its notice with the Section heading setting 
 
     // Now: refused, the note unchanged, with "No footnote was created: it
     // would change how Obsidian reads the text around it."
-    it.fails("Section heading on, no heading in the note yet: the same refusal shows the block-syntax notice", async () => {
+    it("Section heading on, no heading in the note yet: the same refusal shows the block-syntax notice", async () => {
         expect(await pressAt(note, 1, 0, headingOn)).toEqual(note);
         expect(messages()).toEqual([Formatting]);
     });

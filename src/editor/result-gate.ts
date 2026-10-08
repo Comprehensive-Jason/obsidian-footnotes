@@ -1369,7 +1369,18 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
             const was = oldMiddle.slice(run.aStart, run.aEnd);
             const is = newMiddle.slice(run.bStart, run.bEnd);
             const usersText = was.some((line) => lineInRanges(oldSide.usersText, line)) || is.some((line) => lineInRanges(newSide.usersText, line));
-            if (!usersText && becameLazy(was, is)) return formatting(is.find((line) => lazyLines(newSide).has(line)) ?? is[0]);
+            // A line of the stretch that is not the user's own text may not
+            // become a lazy label, whatever text sits next to it. Asked only
+            // of a stretch with none of the user's text, it let a press on
+            // the blank line above a definition through check 5 when the
+            // section heading the press writes, declared as text from
+            // outside the note, fell in the same stretch: the definition
+            // went lazy, and check 1 refused it with the catch-all notice
+            // instead of the formatting one (Jason's ruling B2; hunt
+            // 2026-10-08 cycle 7, cluster Y2, pin
+            // bug-blank-line-press-notice-with-section-heading).
+            const notUsers = (side: Side) => (line: number) => !lineInRanges(side.usersText, line);
+            if (becameLazy(was.filter(notUsers(oldSide)), is.filter(notUsers(newSide)))) return formatting(is.find((line) => lazyLines(newSide).has(line)) ?? is[0]);
             const pairs = usersText || was.length !== is.length ? Math.min(1, was.length, is.length) : was.length;
             for (let k = 0; k < pairs; k++) {
                 if (!usersText && reworded(was[k], is[k])) return refuse("other", 5, `line ${String(is[k])}: ${(newSide.lines[is[k]] ?? "").slice(0, 60)}`);
