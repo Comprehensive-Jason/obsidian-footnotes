@@ -110,7 +110,7 @@ describe("a cut that starts at the end of the definition it takes", () => {
     const note = ["Intro", "", "[^a]: def", "", "Para[^a]."];
 
     // Now: the caret is at { line: 2, ch: 9 } on the empty line 2.
-    it.fails("the caret it leaves is inside the line it is on", () => {
+    it("the caret it leaves is inside the line it is on", () => {
         const c = cut(note, { line: 2, ch: 9 }, { line: 4, ch: 9 });
         expect(c.taken).toBe(true);
         expect(c.lines).toEqual(["Intro", "", ""]);
@@ -119,7 +119,7 @@ describe("a cut that starts at the end of the definition it takes", () => {
 
     // Now: "Intro", "", "", "", "Para[^a].", "", "[^a]: def". The paste is
     // made at the end of the empty line, where the editor shows the caret.
-    it.fails("pasted straight back where the editor shows the caret (the end of that empty line), the note comes back exactly", () => {
+    it("pasted straight back where the editor shows the caret (the end of that empty line), the note comes back exactly", () => {
         const c = cut(note, { line: 2, ch: 9 }, { line: 4, ch: 9 });
         const at = { line: c.caret.line, ch: Math.min(c.caret.ch, c.lines[c.caret.line].length) };
         const back = paste(c.lines, at, c.clip);
@@ -127,7 +127,7 @@ describe("a cut that starts at the end of the definition it takes", () => {
     });
 
     // Now: the caret is at { line: 0, ch: 19 } on the empty line 0.
-    it.fails("a definition of two lines, cut from the end of its continuation line: the caret is inside its line", () => {
+    it("a definition of two lines, cut from the end of its continuation line: the caret is inside its line", () => {
         const twoLines = ["[^note]: alpha", "    continued alpha", "", "alpha[^Note].", "", "tail"];
         const c = cut(twoLines, { line: 1, ch: 19 }, { line: 3, ch: 13 });
         expect(c.taken).toBe(true);

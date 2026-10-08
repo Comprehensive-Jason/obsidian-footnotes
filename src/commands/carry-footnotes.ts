@@ -928,9 +928,16 @@ export function planCut(
     // the nearest place left, the end of a definition or the start of the
     // next paragraph, and a paste there joined the text onto it.
     const { removed, kept, keptLine } = definitionsToCut(joined, candidates, (dead, out) => judgeEdit(lines, out, intent(dead)).pass, from.line);
-    const text = keepingLine(kept, tidy(kept.join("\n")).split("\n"), keptLine).join("\n");
-    const refused = !judgeEdit(lines, text.split("\n"), intent(removed)).pass;
-    return { carried, missing, text, caret: { line: keptLine, ch: from.ch }, removed: removed.length, refused };
+    const out = keepingLine(kept, tidy(kept.join("\n")).split("\n"), keptLine);
+    const refused = !judgeEdit(lines, out, intent(removed)).pass;
+    // The caret never sits past the end of its line. A cut that starts at
+    // the end of a definition it takes empties the caret's line, and the
+    // caret goes to the start of that empty line. Left at the column the
+    // selection started at, it pointed past the line's end, where the
+    // editor cannot put a caret, so a paste back there was never one (hunt
+    // 2026-10-08 cycle 6, cluster Z16, pin bug-cut-caret-past-empty-line-end).
+    const caret = { line: keptLine, ch: Math.min(from.ch, out[keptLine].length) };
+    return { carried, missing, text: out.join("\n"), caret, removed: removed.length, refused };
 }
 
 /**
