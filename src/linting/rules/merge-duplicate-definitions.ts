@@ -3,7 +3,6 @@ import { normalizeEol, removeLineRanges } from "../../parsing/line-edits";
 import { Definition, readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
-import { definitionsHeldBy } from "./remove-orphaned-definitions";
 
 // Duplicate footnote definitions: two or more "[^x]:" definition blocks for
 // the same name, treating upper and lower case as the same.
@@ -100,7 +99,14 @@ export function duplicateFootnoteDefinitionNames(
  */
 export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
     if (!markdown.includes("[^")) return markdown;
-    return rewriteDocument(markdown, (text, { lines, definitions, blocks }) => {
+    return rewriteDocument(markdown, (text, { lines, definitions, blocks, reading }) => {
+        // Whether the last line of `copy` sits in a block inside the
+        // footnote other than its own paragraph: a quote, a list, a table,
+        // code, or a definition held inside it. The note's reading lists
+        // the blocks each line belongs to, outermost first, the copy's
+        // footnoteDefinition among them.
+        const endsInBlock = (copy: Definition) =>
+            reading.lineBlocks[copy.end].replace(/\^/g, "").split(" ").slice(1).some((block) => block !== "paragraph");
         const groups = new Map<string, Definition[]>();
         for (const block of definitions) {
             const folded = block.name.toLowerCase();
@@ -135,19 +141,23 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
                     piece.push(lines[i]);
                 }
                 if (piece.length === 0) continue;
-                // When the copy above ends with a definition held inside it
-                // (an indented "[^b]: inner" on its last lines), a line
-                // straight under that would continue the held definition's
-                // text, and b would read "inner two". A blank line first
+                // When the copy above ends inside a block of its own other
+                // than a paragraph, a line straight under it would join
+                // that block. After a definition held inside the copy (an
+                // indented "[^b]: inner" on its last lines) b would read
+                // "inner two" (hunt 2026-10-05 round 2, pin
+                // bug-merge-into-held-definition); after a quote, a
+                // callout, or a list the text was drawn inside the quote or
+                // the last bullet (live Obsidian 1.14.4, 2026-10-08; hunt
+                // 2026-10-08 cycle 6, cluster Z20, pin
+                // bug-merge-text-joins-quote-or-list). A blank line first
                 // makes the merged text a paragraph of the first copy's
-                // own, after the held definition (hunt 2026-10-05 round 2,
-                // pin bug-merge-into-held-definition). That goes for every
-                // copy the text lands under, not only the first: a middle
-                // copy ending in a held definition took the third copy's
-                // text the same way (hunt 2026-10-06, cycle 5, pin
+                // own, after that block. That goes for every copy the text
+                // lands under, not only the first: a middle copy ending in
+                // a held definition took the third copy's text the same
+                // way (hunt 2026-10-06, cycle 5, pin
                 // bug-merge-held-definition-middle-copy).
-                const heldAtEnd = above;
-                if (piece[0] !== "" && definitionsHeldBy(definitions, heldAtEnd).some((held) => held.end === heldAtEnd.end)) piece.unshift("");
+                if (piece[0] !== "" && endsInBlock(above)) piece.unshift("");
                 appended.push(...piece);
                 above = duplicate;
             }

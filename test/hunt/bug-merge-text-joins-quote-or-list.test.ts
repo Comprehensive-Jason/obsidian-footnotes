@@ -63,13 +63,13 @@ describe("merging a later copy under a first copy that ends in a quote or a list
 
         // Now: "    See also Jones." straight under the quote's or the list's
         // last line, read as part of it.
-        it.fails(`${what}: the merged text stays out of the quote or list (a paragraph of its own in the footnote)`, () => {
+        it(`${what}: the merged text stays out of the quote or list (a paragraph of its own in the footnote)`, () => {
             const merged = mergeDuplicateFootnoteDefinitions(doc);
             const blocks = blocksOf(merged, "See also Jones.");
             expect(blocks, JSON.stringify(merged)).not.toMatch(/blockquote|listItem/);
         });
 
-        it.fails(`${what}: the lint with Merge duplicate definitions on does the same`, () => {
+        it(`${what}: the lint with Merge duplicate definitions on does the same`, () => {
             const out = lintFootnotes(doc, { mergeDuplicateDefinitions: true });
             expect(blocksOf(out, "See also Jones."), JSON.stringify(out)).not.toMatch(/blockquote|listItem/);
         });
