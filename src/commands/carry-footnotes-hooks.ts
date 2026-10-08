@@ -706,7 +706,10 @@ function landCarriedText(
         .join(", ");
     let notice = `Pasted with ${total} footnote definition${total === 1 ? "" : "s"}: ${said}.`;
     if (missing.length > 0) {
-        notice += ` ${missing.map(quotedReference).join(", ")} ${missing.length === 1 ? "has" : "have"} no definition to carry.`;
+        // a reference renamed out of the way of a footnote the note defines
+        // is named by its new name (Jason's ruling X10, 2026-10-07)
+        const named = missing.map((name) => plan.renamedCites.get(name.toLowerCase()) ?? name);
+        notice += ` ${named.map(quotedReference).join(", ")} ${named.length === 1 ? "has" : "have"} no definition to carry.`;
     }
     showNotice(notice, missing.length > 0 ? 8000 : undefined);
     // the note as the paste left it, which in the popup is not the editor's text

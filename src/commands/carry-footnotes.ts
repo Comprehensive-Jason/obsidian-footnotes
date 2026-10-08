@@ -277,6 +277,8 @@ export interface CarriedPastePlan {
     repointed: number;
     /** incoming names the destination already used for a different body, given a new name */
     renamed: number;
+    /** names the paste cites without defining them that the destination defines, folded, to the name each was given (not counted in `renamed`) */
+    renamedCites: ReadonlyMap<string, string>;
 }
 
 /**
@@ -295,10 +297,23 @@ export interface CarriedPastePlan {
  *   paste's own merges made, equals the text of a definition the
  *   destination shows. Its references are pointed at the existing name,
  *   whatever its label, and the block is not added.
- * - Kept: a name nothing in the destination uses, as a definition or a
- *   reference, and that no name settled before it has taken.
+ * - Kept: a name the destination does not define, and that no name
+ *   settled before it has taken. A reference the destination has with no
+ *   definition does not take its name, so a definition cut and pasted
+ *   elsewhere in its note keeps its name and serves the reference it left
+ *   behind (Jason's ruling C27, 2026-10-07). Before, every name the
+ *   destination used, as a definition or a reference, was taken, and such
+ *   a paste came out renamed, its reference left with no definition.
  * - Renamed: any other, a number to the smallest free number, a name to
- *   name-2, name-3, and so on.
+ *   name-2, name-3, and so on. A name given in a rename is one the
+ *   destination does not use at all, references included, so a rename
+ *   never lands on a reference that has no definition.
+ *
+ * A name the paste cites without defining it (a reference that travelled
+ * without its definition) keeps its name unless the destination defines
+ * it; then it is renamed the same way, so it does not quietly cite the
+ * destination's footnote (Jason's ruling X10, 2026-10-07), and
+ * `renamedCites` says what it became, for the toast that names it.
  *
  * The renames are made in the body and inside the carried blocks (labels
  * and references alike), so a carried definition that cites another keeps
@@ -308,11 +323,14 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     const lines = normalizeEol(destination).text.split("\n");
     const reading = readNote(lines);
 
-    // Every name the destination uses (definitions and references, folded).
+    // The names the destination defines, which a pasted name may not keep,
+    // and every name it uses, references too, which a new name avoids
+    // (folded).
     const taken = new Set<string>();
     for (const block of reading.definitions) taken.add(block.name.toLowerCase());
+    const used = new Set(taken);
     for (let i = 0; i < lines.length; i++) {
-        for (const occurrence of reading.referencesOn(i)) taken.add(occurrence.name.toLowerCase());
+        for (const occurrence of reading.referencesOn(i)) used.add(occurrence.name.toLowerCase());
     }
 
     // The pasted body, read where it lands. Read on its own, a body whose
@@ -383,12 +401,20 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
         define(definition.name);
         heldIn(i).forEach(define);
     });
-    // A name the paste cites without defining it keeps its spelling, and
-    // whatever the destination means by it, so no rename may land on it.
+    // A name the paste cites without defining it keeps its spelling where
+    // the destination does not define it, so no rename may land on it.
     // Renaming onto one made two pasted footnotes into one (hunt
-    // 2026-10-02, pin bug-carry-rename-ignores-body-names).
+    // 2026-10-02, pin bug-carry-rename-ignores-body-names). One the
+    // destination defines is renamed below, after the definitions.
+    const cites: string[] = [];
     for (const name of [...bodyCites, ...carried.flatMap((_, i) => citedIn(i))]) {
-        if (!defined.has(name.toLowerCase())) taken.add(name.toLowerCase());
+        const folded = name.toLowerCase();
+        if (defined.has(folded)) continue;
+        if (taken.has(folded)) cites.push(name);
+        else {
+            taken.add(folded);
+            used.add(folded);
+        }
     }
 
     // Merges first. A block's text is compared as it reads once the
@@ -468,6 +494,19 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     const assigned = new Set<string>();
     let renamed = 0;
     const occupied = (folded: string) => taken.has(folded) || assigned.has(folded);
+    // a new name: one the destination does not use at all, and no name
+    // given so far has
+    const fresh = (folded: string) => !used.has(folded) && !assigned.has(folded);
+    const newName = (incoming: string): string => {
+        if (/^\d+$/.test(incoming)) {
+            let n = 1;
+            while (!fresh(String(n))) n++;
+            return String(n);
+        }
+        let k = 2;
+        while (!fresh(`${incoming.toLowerCase()}-${k}`)) k++;
+        return `${incoming}-${k}`;
+    };
     // an incoming name keeps its spelling when the destination and the
     // names given so far leave it free, and is renamed otherwise
     const settle = (incoming: string) => {
@@ -475,15 +514,7 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
         if (finalName.has(folded)) return;
         let name = incoming;
         if (occupied(folded)) {
-            if (/^\d+$/.test(incoming)) {
-                let n = 1;
-                while (occupied(String(n))) n++;
-                name = String(n);
-            } else {
-                let k = 2;
-                while (occupied(`${folded}-${k}`)) k++;
-                name = `${incoming}-${k}`;
-            }
+            name = newName(incoming);
             renamed++;
         }
         finalName.set(folded, name);
@@ -496,6 +527,16 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
         settle(definition.name);
         heldIn(i).forEach(settle);
     });
+    // then the names the paste cites that the destination defines
+    const renamedCites = new Map<string, string>();
+    for (const cited of cites) {
+        const folded = cited.toLowerCase();
+        if (finalName.has(folded)) continue;
+        const name = newName(cited);
+        finalName.set(folded, name);
+        assigned.add(name.toLowerCase());
+        renamedCites.set(folded, name);
+    }
     carried.forEach((definition, i) => {
         if (merged.has(definition.name.toLowerCase())) return;
         definitions.push({ name: finalName.get(definition.name.toLowerCase()) as string, lines: renamedLines(definition.lines, blockSyntax(i), finalName) });
@@ -509,6 +550,7 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
         reused: merged.size,
         repointed,
         renamed,
+        renamedCites,
     };
 }
 

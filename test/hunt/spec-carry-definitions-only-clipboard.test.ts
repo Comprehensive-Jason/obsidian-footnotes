@@ -66,8 +66,13 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
+// Answered (Jason's ruling C27, 2026-10-07; stage 4 of the result gate
+// design, 2026-10-08): when a paste carries a definition, a name counts as
+// taken only when the destination defines it. A reference with no
+// definition no longer forces a rename, so the pasted definition keeps its
+// name and serves that reference. The test was it.fails until then.
 describe("spec question: a clipboard that is only a definition line, pasted where its reference has none", () => {
-    it.fails("pasting [^1]: one into a note whose [^1] reference has no definition supplies that definition, not a renamed orphan", () => {
+    it("pasting [^1]: one into a note whose [^1] reference has no definition supplies that definition, not a renamed orphan", () => {
         const dest = editor(["x[^1]", "", ""], { line: 2, ch: 0 });
         handlePaste(fakePlugin(on, dest), clipboardEvent("[^1]: one") as never, dest);
         expect(dest.lines.join("\n")).toContain("[^1]: one");
@@ -138,6 +143,12 @@ function pairing(lines: string[]): string[] {
 // at the caret it left, writes the note before the cut back exactly, names
 // and blank lines included, so the paste back below gives the note back.
 // The test was it.fails until then; what it did before is described above.
+//
+// And the copy pasted over itself (Jason's ruling C27, 2026-10-07; stage 4
+// of the result gate design, 2026-10-08): when a paste carries a
+// definition, a name counts as taken only when the destination defines it.
+// With the selection gone, nothing defines [^1], so the pasted definition
+// keeps its name and serves Text[^1]. That test was it.fails until then.
 describe("spec question: a definition line cut or copied within one note and pasted back keeps serving its reference", () => {
     const note = ["Text[^1]. More[^2].", "", "[^1]: one", "", "[^2]: two"];
 
@@ -154,7 +165,7 @@ describe("spec question: a definition line cut or copied within one note and pas
         expect(readNote(back.lines).definitions.map((d) => d.name).sort(), ctx).toEqual(["1", "2"]);
     });
 
-    it.fails("copy a definition's line and paste it over itself (an accidental Ctrl+C, Ctrl+V)", () => {
+    it("copy a definition's line and paste it over itself (an accidental Ctrl+C, Ctrl+V)", () => {
         const from = { line: 2, ch: 0 };
         const to = { line: 3, ch: 0 };
         const back = paste(note, from, copy(note, from, to), to);

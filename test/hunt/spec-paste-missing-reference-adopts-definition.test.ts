@@ -28,6 +28,13 @@ import { handleCopy, handlePaste, resetCarryRegister } from "../../src/commands/
 // already uses for something else is renamed ... so the pasted footnotes
 // come out unique with no setup", and "names any reference that
 // travelled without a definition".
+//
+// Answered (Jason's ruling X10, 2026-10-07; stage 4 of the result gate
+// design, 2026-10-08): renamed out of the way, as a colliding carried name
+// is (numbers to the smallest free number, names to name-2, name-3), and
+// the toast's "has no definition to carry" names the new name. The first
+// test was it.fails until then; the second, which took the opposite
+// answer, now holds the toast naming the new name.
 
 /** A line and a character in it. */
 type Pos = { line: number; ch: number };
@@ -82,12 +89,14 @@ beforeEach(() => {
 });
 
 describe("spec question: a reference that had no definition does not adopt the destination's", () => {
-    it.fails("pasted [^9] (undefined at the source) does not resolve to the destination's [^9]", () => {
+    it("pasted [^9] (undefined at the source) does not resolve to the destination's [^9]", () => {
         const text = copy(["a[^9] b[^1]", "", "[^1]: one"], { line: 0, ch: 0 }, { line: 0, ch: 11 });
         expect(text).toBe("a[^9] b[^1]\n\n[^1]: one");
         const lines = pasteRegister(["x[^9]", "", "[^9]: theirs"], { line: 0, ch: 5 }, text);
-        // Today: ["x[^9]a[^9] b[^1]", "", "[^9]: theirs", "[^1]: one"]
+        // Before the ruling: ["x[^9]a[^9] b[^1]", "", "[^9]: theirs", "[^1]: one"]
         expect(lines[0]).not.toBe("x[^9]a[^9] b[^1]");
+        expect(lines[0]).toBe("x[^9]a[^2] b[^1]");
+        expect(messages()).toContain('Pasted with 1 footnote definition: 1 added. "[^2]" has no definition to carry.');
     });
 });
 
@@ -104,12 +113,16 @@ describe("spec question: a reference that had no definition does not adopt the d
 // foreign face since 5379d63, which gave a clipboard from another app the
 // notice.)
 describe("spec question: the toast for a pasted reference the destination defines", () => {
-    it.fails("a foreign clipboard citing [^9] with a definition for [^1] only, pasted into a note that defines [^9]: the toast does not call [^9] undefined", () => {
+    // Answered by the same ruling: this face took the other answer, so its
+    // test went; the toast now names the new name, which has no definition
+    // (before: '"[^9]" has no definition to carry.', with [^9] showing the
+    // destination's footnote).
+    it("a foreign clipboard citing [^9] with a definition for [^1] only, pasted into a note that defines [^9]: the toast names [^9]'s new name", () => {
         const doc = ed(["Dest.", "", "[^9]: nine"], { line: 0, ch: 5 });
         const e = clip([" a[^9] b[^1]", "", "[^1]: one"].join("\n"));
         expect(handlePaste(on(doc), e as never, doc)).toBe(true);
+        expect(doc.lines[0]).toBe("Dest. a[^2] b[^1]");
         const toast = messages().find((m) => m.startsWith("Pasted with")) ?? "";
-        // Today: 'Pasted with 1 footnote definition: 1 added. "[^9]" has no definition to carry.'
-        expect(toast, JSON.stringify({ lines: doc.lines, toasts: messages() })).not.toContain("no definition to carry");
+        expect(toast, JSON.stringify({ lines: doc.lines, toasts: messages() })).toBe('Pasted with 1 footnote definition: 1 added. "[^2]" has no definition to carry.');
     });
 });

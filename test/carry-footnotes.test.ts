@@ -120,6 +120,7 @@ describe("planCarriedPaste", () => {
             reused: 0,
             repointed: 0,
             renamed: 0,
+            renamedCites: new Map(),
         });
     });
 
@@ -161,6 +162,7 @@ describe("planCarriedPaste", () => {
             reused: 0,
             repointed: 0,
             renamed: 1,
+            renamedCites: new Map(),
         });
     });
 
@@ -189,10 +191,50 @@ describe("planCarriedPaste", () => {
         });
     });
 
-    it("treats a name only referenced in the destination as taken", () => {
+    // A name counts as taken only when the destination defines it (Jason's
+    // ruling C27, 2026-10-07; stage 4 of the result gate design): a
+    // reference left behind with no definition no longer forces a rename,
+    // so a definition cut and pasted elsewhere in its note keeps its name.
+    // Before, a name only referenced in the destination was taken, and the
+    // pasted definition came out as [^2], with "orphan[^1]" still pointing
+    // at nothing.
+    it("keeps a name the destination only references, so the pasted definition serves that reference", () => {
         expect(planCarriedPaste("orphan[^1]", "a[^1]", [one("1", "[^1]: uno")])).toMatchObject({
-            body: "a[^2]",
+            body: "a[^1]",
+            definitions: [one("1", "[^1]: uno")],
+            renamed: 0,
+        });
+    });
+
+    it("a name given in a rename still avoids every name the destination uses, references included", () => {
+        expect(planCarriedPaste("x[^1] dangling[^2]\n\n[^1]: one", "a[^1]", [one("1", "[^1]: uno")])).toMatchObject({
+            body: "a[^3]",
+            definitions: [one("3", "[^3]: uno")],
             renamed: 1,
+        });
+    });
+
+    // A pasted reference that travelled without a definition, whose name
+    // the destination defines for something else, is renamed out of the
+    // way, as a colliding carried name is (Jason's ruling X10, 2026-10-07).
+    // Before, it kept its name and quietly cited the destination's footnote.
+    it("renames a cited name the paste does not define when the destination defines it", () => {
+        expect(planCarriedPaste("x[^9]\n\n[^9]: theirs", "a[^9] b[^1]", [one("1", "[^1]: one")])).toMatchObject({
+            body: "a[^2] b[^1]",
+            definitions: [one("1", "[^1]: one")],
+            renamed: 0,
+            renamedCites: new Map([["9", "2"]]),
+        });
+        expect(planCarriedPaste("x[^note]\n\n[^note]: theirs", "a[^note] b[^1]", [one("1", "[^1]: one")])).toMatchObject({
+            body: "a[^note-2] b[^1]",
+            renamedCites: new Map([["note", "note-2"]]),
+        });
+    });
+
+    it("keeps a cited name the paste does not define when the destination does not define it either", () => {
+        expect(planCarriedPaste("x[^9]", "a[^9] b[^1]", [one("1", "[^1]: one")])).toMatchObject({
+            body: "a[^9] b[^1]",
+            renamedCites: new Map(),
         });
     });
 });
