@@ -327,10 +327,30 @@ function changedRuns(a: readonly string[], b: readonly string[], anchorA: (i: nu
         lineUp(lastA + 1, toA, lastB + 1, toB, next);
     };
     lineUp(0, a.length, 0, b.length, [
-        [anchorA, anchorB, lineKey],
+        [anchorA, anchorB, (line) => lineKey(unmarked(line))],
         [() => true, () => true, (line) => line],
     ]);
     return runs;
+}
+
+/** The marks editWindows puts at the end of a line holding a renamed footnote: the one for the note before, then the one for the note after. */
+const RenamedMarks = ["\u0000before", "\u0000after"] as const;
+
+/**
+ * `line` without the mark editWindows puts on a line holding a renamed
+ * footnote. The mark keeps such a line from ever reading as unchanged, but
+ * the line still lines up with itself by its text without footnotes, as
+ * any line whose footnotes alone changed does. Keyed with its mark, it
+ * found no partner, a definition the lint moved past it was lined up
+ * instead, and a list's line went into the stretches as one taken out and
+ * one written in, which check 5 compared with nothing: the lint joined two
+ * lists around a moved definition whenever it also renumbered a footnote
+ * (hunt 2026-10-08 cycle 7, cluster Y6, pin
+ * bug-lint-rename-moves-definition-between-lists).
+ */
+function unmarked(line: string): string {
+    for (const mark of RenamedMarks) if (line.endsWith(mark)) return line.slice(0, -mark.length);
+    return line;
 }
 
 /** Whether the checks look at the stretches the edit can have changed alone (editWindows); off only in the test that holds them to the whole note's verdict. */
@@ -378,8 +398,8 @@ function editWindows(oldSide: Side, newSide: Side, renamed: ReadonlyMap<string, 
         const lines = holding(side, names);
         return lines.size === 0 ? side.lines : side.lines.map((line, i) => (lines.has(i) ? line + mark : line));
     };
-    const a = marked(oldSide, new Set(renamed.keys()), "\u0000before");
-    const b = marked(newSide, new Set(renamed.values()), "\u0000after");
+    const a = marked(oldSide, new Set(renamed.keys()), RenamedMarks[0]);
+    const b = marked(newSide, new Set(renamed.values()), RenamedMarks[1]);
     const labelsAlike = oldSide.reading.linkLabels.size === newSide.reading.linkLabels.size && [...oldSide.reading.linkLabels].every((label) => newSide.reading.linkLabels.has(label));
     if (!labelsAlike) {
         oldSide.windows = [{ from: 0, to: a.length }];

@@ -89,7 +89,7 @@ describe("the default lint, a rename, and a definition between two lists", () =>
     // Now: "- Oysters grow.[^1]", "", "- Tides rise.[^2]", "- Tides
     // fall.[^2]", one loose list of three, with "[^src]: Smith 2020." moved
     // to the bottom.
-    it.fails("bullets: the lint keeps the two lists apart", () => {
+    it("bullets: the lint keeps the two lists apart", () => {
         const after = lintFootnotes(everyday, defaults);
         expect(lists(after), JSON.stringify(after.split("\n"))).toEqual(["bullets, 1 items", "bullets, 2 items"]);
     });
@@ -102,7 +102,7 @@ describe("the default lint, a rename, and a definition between two lists", () =>
 
     // The smallest shape. Now: "Intro.[^a]", "", "- one.[^1]", "",
     // "- two.[^1]", "", "[^a]: A.", "[^1]: B.", one loose list of two.
-    it.fails("smallest: a footnote the lint renumbers, cited in both lists", () => {
+    it("smallest: a footnote the lint renumbers, cited in both lists", () => {
         const note = ["Intro[^a].", "", "- one[^2].", "", "[^a]: A.", "", "- two[^2].", "", "[^2]: B."].join("\n");
         const after = lintFootnotes(note, defaults);
         expect(lists(after), JSON.stringify(after.split("\n"))).toEqual(["bullets, 1 items", "bullets, 1 items"]);
@@ -141,7 +141,7 @@ describe("the gate on its own: a definition moved out from between two lists", (
 
     // The root pin. Now the gate passes this edit (pass: true) once it is
     // told [^2] was renamed to [^1].
-    it.fails("with [^2] renamed to [^1], the gate still refuses the join", () => {
+    it("with [^2] renamed to [^1], the gate still refuses the join", () => {
         const renamedAndMoved = ["Intro[^a].", "", "- one[^1]", "", "- two[^1]", "", "[^a]: A.", "[^1]: B."];
         expect(judgeEdit(before, renamedAndMoved, { renamed: new Map([["2", "1"]]) }).pass).toBe(false);
     });
