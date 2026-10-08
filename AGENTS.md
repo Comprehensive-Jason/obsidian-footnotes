@@ -25,7 +25,7 @@ Jason's standing rulings for this repo. Each one was made after the thing went w
 
 ## Dev environment
 
-`docs/agents/dev-setup.md` holds what the environment cannot tell you: the sandbox vault and hot-reload, how to drive the live app through the Obsidian CLI without touching Jason's open notes, the table-cell and mobile-emulation gotchas, and the release and beta flow. Read it before any live-app work or release step.
+`docs/agents/dev-setup.md` holds what the environment cannot tell you: the sandbox vault and hot-reload, how to drive the live app through the Obsidian CLI without touching Jason's open notes, the table-cell and mobile-emulation gotchas, and the release and beta flow. Read it before any live-app work (on your desktop, or on a headless Linux machine set up as it describes) or release step.
 
 ## Agent skills
 

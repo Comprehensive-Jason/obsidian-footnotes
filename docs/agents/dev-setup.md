@@ -37,6 +37,46 @@ Two proven techniques:
 - **Debug capture** (cracked the table bug, 2026-07-15): temporarily instrument the command to snapshot the state in question into `window.__footnoteDebug`, build in place, have Jason perform the real gesture once, read the snapshot through eval, then remove the instrumentation. A real gesture beats a scripted approximation.
 - **Ground truth for ambiguous markdown**: `metadataCache.getFileCache(f).sections` says exactly how Obsidian classifies a block (yaml versus thematic break, code versus continuation). Rendering claims are settled against Reading view.
 
+## A headless live app on a Linux machine (optional)
+
+The live checks and the smoke suite can run against a second Obsidian on a Linux machine with no monitor (a server, a VM, a spare PC), so automated runs do not load the machine you work on or touch your own notes. Everything above about the CLI still applies. This is how to set one up; a maintainer's own machine names and paths belong in their local notes, not here.
+
+**Install** (Debian or Ubuntu): the Obsidian `.deb` from the obsidianmd/obsidian-releases GitHub releases (check it against the release's published sha256), plus `xvfb` (the virtual display), `xdotool` (clicks and keys), `imagemagick` (screenshots), and optionally `x11vnc` (to watch it). The `.deb` does not declare every library Electron needs: on Ubuntu 24.04 it also needed `libasound2t64`, and it exits with code 127 until that is installed (`ldd /opt/Obsidian/obsidian | grep "not found"` lists what is missing).
+
+**A vault of its own.** Copy the sandbox vault (the notes and `.obsidian`, without `node_modules`) to a folder outside any sync tool, so nothing the automation writes reaches anyone's devices. Clone this repo into its `.obsidian/plugins/obsidian-footnotes`, `npm ci`, `npm run build`, and keep the hot-reload plugin enabled so a new `main.js` reloads itself. If the clone is only for testing, disable pushing from it (`git remote set-url --push origin no-push`) and move work in and out through your own machine.
+
+**Register the vault and turn the CLI on before the first start.** Write `~/.config/obsidian/obsidian.json` with the vault and the CLI flag: `{"vaults": {"<16 hex digits>": {"path": "<vault folder>", "ts": <now in ms>, "open": true}}, "cli": true}`.
+
+**Run it as a user service** on a virtual display with a fixed auth file, so other tools can reach the display:
+
+```ini
+[Service]
+Environment=DISPLAY=:99
+Environment=XAUTHORITY=%t/obsidian-headless.xauth
+ExecStart=/usr/bin/xvfb-run --server-num=99 --auth-file=%t/obsidian-headless.xauth --server-args="-screen 0 1600x1000x24" /usr/bin/obsidian
+Restart=on-failure
+CPUQuota=200%
+MemoryMax=4G
+```
+
+**The first start** shows "Do you trust the author of this vault?". Take a screenshot (`DISPLAY=:99 XAUTHORITY=$XDG_RUNTIME_DIR/obsidian-headless.xauth import -window root shot.png`), find "Trust author and enable plugins", and click it with `xdotool mousemove <x> <y> click 1` under the same two variables. Check with `obsidian vault=Obsidian-Plugin-Sandbox eval "code=Object.keys(app.plugins.plugins).join()"`.
+
+**The CLI needs the display too.** Obsidian's CLI is the app itself, so without `DISPLAY` and `XAUTHORITY` every call fails with exit 1 and prints nothing (2026-10-06). Put a wrapper named `obsidian` earlier on the PATH than `/usr/bin` that sets both and execs `/usr/bin/obsidian "$@"`, so `npm run test:smoke` and `npm run oracle` work unchanged. A non-interactive ssh shell may not have that folder on its PATH, so call the wrapper by its full path there.
+
+**The smoke suite** runs from the clone inside that vault, since it finds its vault from its own path: `npm run build && npm run test:smoke`. The first run after Obsidian starts can time out a few tests that pass on a rerun (2026-10-06).
+
+**One app, one probe at a time.** Parallel agents never drive it; one session runs live probes serially. Put probe notes in a folder of their own, reuse one leaf (`app.workspace.getLeaf(false)`, then `leaf.setViewState({type: "markdown", state: {file, mode: "preview"}})`), and delete the folder and any dotfile afterwards. Never detach the last leaf: the workspace is left with no tab group and every later open fails with "No tab group found" until the app restarts (2026-10-06). Load longer scripts with the dotfile loader of rule 4, store results on `window`, and read them in a second eval.
+
+**Copying files in over ssh:** quote a remote path that holds a space as one argument (`scp f "host:vault/Probe notes/"`); a backslash-escaped space made a folder literally named with the backslash (2026-10-06).
+
+**Watching it:** `x11vnc -display :99 -auth $XDG_RUNTIME_DIR/obsidian-headless.xauth -localhost -once` on the machine, and a VNC viewer through `ssh -L 5900:localhost:5900 <host>`.
+
+**Recording what it says.** An answer that should last becomes a saved answer in `test/obsidian-answers/` (listed in `AnswerFiles` in `test/obsidian-referee.test.ts`) and, where it settles a rule, a line in `docs/obsidian-reading-rules.md`.
+
+**Check before you claim.** Any claim about how Reading view draws a note is checked on a live app (or against the reading rules and saved answers) before it goes into a question for the maintainer. On 2026-10-08 an unchecked claim that "---" under a continuation line makes a heading was wrong (rule D3).
+
+**Agents running there unattended** as `claude -p` jobs do not show up in Claude's Remote Control (a print-mode run cannot register with it), so whoever starts them needs their own way to see when each ends.
+
 ## Table cells
 
 Obsidian's table editor runs a sub-editor per focused cell that syncs back asynchronously.
