@@ -159,13 +159,20 @@ export function definitionLabelWithName(line: string, masked: string) {
  * a "%%" on their line, which no blank line can ever make a definition
  * (Kimi hunt cycle 1, 2026-09-16: fix-lazy pushed a blank line in above
  * such a label on every lint).
+ *
+ * `range`, when given, limits the lines looked at to `from` up to (not
+ * including) `to`, and `reading` is the note's reading when the caller
+ * already has it: the result gate asks about a few lines of a long note
+ * (result-gate.ts).
  */
-export function labelShapedLines(lines: string[]): { line: number; name: string; underlined: boolean }[] {
-    const reading = readNote(lines);
+export function labelShapedLines(lines: string[], range?: { from: number; to: number }, reading: NoteReading = readNote(lines)): { line: number; name: string; underlined: boolean }[] {
     const out: { line: number; name: string; underlined: boolean }[] = [];
+    const first = Math.max(0, range?.from ?? 0);
+    const last = Math.min(lines.length, range?.to ?? lines.length);
     // where each line starts, to place a label among the comments
     let offset = 0;
-    for (let i = 0; i < lines.length; offset += lines[i].length + 1, i++) {
+    for (let i = 0; i < first; i++) offset += lines[i].length + 1;
+    for (let i = first; i < last; offset += lines[i].length + 1, i++) {
         if (reading.labelLines[i] || !lines[i].includes("[^") || reading.definitionAt(i) !== null) continue;
         const textStart = reading.containerEnd(i);
         const hit = definitionLabelWithName(lines[i].slice(textStart), reading.maskedLine(i).slice(textStart));
@@ -271,9 +278,10 @@ function ownBlock(blocks: string | undefined): string {
  * text as far as Obsidian is concerned (the prose-label rule), which a
  * blank line above would make a definition. A label with a setext
  * underline under it is not here (underlinedDefinitionLabelLines).
+ * `range` and `reading` as for labelShapedLines.
  */
-export function lazyDefinitionLabelLines(lines: string[]): number[] {
-    return labelShapedLines(lines)
+export function lazyDefinitionLabelLines(lines: string[], range?: { from: number; to: number }, reading?: NoteReading): number[] {
+    return labelShapedLines(lines, range, reading)
         .filter((label) => !label.underlined)
         .map((label) => label.line);
 }

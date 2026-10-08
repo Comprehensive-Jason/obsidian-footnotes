@@ -1,3 +1,5 @@
+import { oldChecksSuspended, shadowRule } from "../../editor/result-gate";
+import { footnotesRenamed } from "../rule-intents";
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { nameForBody } from "../../parsing/footnote-grammar";
 import { keepsEveryFootnote, NoteReading } from "../../parsing/note-reading";
@@ -135,10 +137,14 @@ function referenceAppearanceOrder(reading: NoteReading, lineCount: number): stri
  * `options` chooses whether named footnotes are renumbered or given names,
  * the note's prefix, and whether orphans keep their own slots.
  */
-export function reindexFootnotes(
-    markdown: string,
-    options: ReindexOptions = {},
-): string {
+export function reindexFootnotes(markdown: string, options: ReindexOptions = {}): string {
+    // while a test records, the result goes to the result gate too
+    // (shadow mode, shadowRule in result-gate.ts)
+    return shadowRule("lint:reindex", markdown, () => reindexFootnotesAsWritten(markdown, options), footnotesRenamed);
+}
+
+/** The rule itself, which the exported function above runs. */
+function reindexFootnotesAsWritten(markdown: string, options: ReindexOptions): string {
     // One pass is not always enough. Moving definition blocks around
     // changes the order in which references INSIDE those blocks appear, and
     // the next pass then renumbers those. So this runs again and again
@@ -290,7 +296,10 @@ function reindexOnce(
         // A rename that would turn a footnote into plain text (a "$"
         // prefix pairing with an earlier dollar, keepsEveryFootnote) is
         // left out, and the definitions are only put in order.
-        const rewritten = keepsEveryFootnote(lines, renamed) ? renamed : lines;
+        // Shadow mode switches the old checks off for a moment, to see
+        // what the rule would do without them (oldChecksSuspended in
+        // result-gate.ts).
+        const rewritten = oldChecksSuspended() || keepsEveryFootnote(lines, renamed) ? renamed : lines;
 
         // Swap the definition blocks between the places definitions already
         // sit, so that they read in appearance order. Only the definitions
@@ -368,7 +377,7 @@ function reindexOnce(
         // 2026-10-06, cycle 4, pin bug-end-dollar-line-swallows-definition).
         // Such a swap is not made: the footnotes are renamed, and their
         // definitions stay in the order they were in.
-        if (definitionsReadDifferently(rewritten, out).length > 0 || !protectedTextAlike(rewritten, out)) return rewritten.join("\n");
+        if (!oldChecksSuspended() && (definitionsReadDifferently(rewritten, out).length > 0 || !protectedTextAlike(rewritten, out))) return rewritten.join("\n");
         return out.join("\n");
     });
 }

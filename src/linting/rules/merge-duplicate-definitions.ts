@@ -1,3 +1,5 @@
+import { oldChecksSuspended, shadowRule } from "../../editor/result-gate";
+import { duplicatesMerged } from "../rule-intents";
 import { normalizeEol, removeLineRanges } from "../../parsing/line-edits";
 import { Definition, readNote } from "../../parsing/note-reading";
 import { protectedTextAlike, rewriteDocument } from "../rewrite-document";
@@ -91,6 +93,13 @@ export function duplicateFootnoteDefinitionNames(
  * bug-merge-between-lists-joins-them).
  */
 export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
+    // while a test records, the result goes to the result gate too
+    // (shadow mode, shadowRule in result-gate.ts)
+    return shadowRule("lint:merge", markdown, () => mergeDuplicateFootnoteDefinitionsAsWritten(markdown), duplicatesMerged);
+}
+
+/** The rule itself, which the exported function above runs. */
+function mergeDuplicateFootnoteDefinitionsAsWritten(markdown: string): string {
     if (!markdown.includes("[^")) return markdown;
     return rewriteDocument(markdown, (text, { lines, definitions, blocks }) => {
         const groups = new Map<string, Definition[]>();
@@ -125,12 +134,15 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
             };
             // (a table copy that comes FIRST stays the survivor and takes the
             // others' prose under its rows, as before)
-            if (group.slice(1).some(holdsTable)) continue;
+            // Shadow mode switches the old checks off for a moment, to see
+            // what the rule would do without them (oldChecksSuspended in
+            // result-gate.ts).
+            if (!oldChecksSuspended() && group.slice(1).some(holdsTable)) continue;
             // Cutting this name's duplicates, together with the ones already
             // taken, must leave every other line reading as it did.
             const cuts = group.slice(1).map((duplicate) => ({ start: duplicate.start, end: duplicate.end }));
             const trial = [...doomed, ...cuts].sort((a, b) => a.start - b.start);
-            if (linesReadDifferently(lines, { lines, ranges: trial }, removeLineRanges(lines, trial))) continue;
+            if (!oldChecksSuspended() && linesReadDifferently(lines, { lines, ranges: trial }, removeLineRanges(lines, trial))) continue;
             const base = group[0];
             const appended: string[] = [];
             // the copy whose lines the next copy's text lands under: the
@@ -186,7 +198,7 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
             // takes those lines in (hunt 2026-10-06, cycle 4, pin
             // bug-end-dollar-line-swallows-definition). Such a name is
             // left as written, and the duplicate alert names it.
-            if (!protectedTextAlike(lines, mergedLines(lines, appends, trial))) continue;
+            if (!oldChecksSuspended() && !protectedTextAlike(lines, mergedLines(lines, appends, trial))) continue;
             doomed = trial;
             appendAfter = appends;
         }

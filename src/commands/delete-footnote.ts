@@ -8,6 +8,7 @@ import { MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { showNotice } from "../editor/notice";
+import { shadowGate } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { replaceMinimal } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
@@ -169,11 +170,19 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     // note as it was. A deleted definition's label line that keeps only its
     // list marker counts as cut, like a line a reference was cut from: it
     // may lose the definition, and nothing else may change with it.
-    if (references > 0 && readsDifferently(lines, cutLines.map((line, i) => (definitionCut.lines[i] === lines[i] ? line : lines[i])))) {
+    const referencesCut = cutLines.map((line, i) => (definitionCut.lines[i] === lines[i] ? line : lines[i]));
+    // shadow mode: the result gate judges each half as the old checks do (result-gate.ts)
+    const shadow = (old: string | null, after: string[]) => {
+        shadowGate("delete", old, () => ({ before: lines, after, intent: { removed: [name] } }));
+    };
+    if (references > 0 && readsDifferently(lines, referencesCut)) {
+        shadow("references read differently", referencesCut);
         return { kind: "refused", reason: `Nothing was deleted: removing ${quotedReference(name)}${byHand}` };
     }
     const out = removeLineRanges(cutLines, blocks);
-    if (linesReadDifferently(lines, { lines: cutLines, ranges: blocks }, out)) {
+    const refused = linesReadDifferently(lines, { lines: cutLines, ranges: blocks }, out);
+    shadow(refused ? "lines read differently" : null, out);
+    if (refused) {
         return {
             kind: "refused",
             reason: `Nothing was deleted: removing the ${quotedDefinitionLabel(name)} definition${byHand}`,

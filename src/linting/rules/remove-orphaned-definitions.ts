@@ -1,3 +1,4 @@
+import { EditIntent, oldChecksSuspended, shadowRule } from "../../editor/result-gate";
 import { blankQuoteLine, definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../../parsing/line-edits";
 import { Definition, linesReadAlike, NoteReading, readNote } from "../../parsing/note-reading";
 import { FootnoteRule } from "../rule";
@@ -216,7 +217,10 @@ export function orphanedDefinitionBlocks(lines: string[]): Definition[] {
 function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[]): string[] | null {
     const cut = definitionCuts(lines, dead);
     const out = removeLineRanges(cut.lines, cut.ranges);
-    return linesReadDifferently(lines, cut, out) ? null : out;
+    // Shadow mode switches the old checks off for a moment, to see
+    // what the rule would do without them (oldChecksSuspended in
+    // result-gate.ts).
+    return !oldChecksSuspended() && linesReadDifferently(lines, cut, out) ? null : out;
 }
 
 /**
@@ -288,6 +292,18 @@ function stillUnused(reading: NoteReading, blocks: readonly Definition[]): Defin
  * text, and everything that is referenced, stays exactly where it is.
  */
 export function removeOrphanedFootnoteDefinitions(markdown: string): string {
+    // while a test records, the result goes to the result gate too
+    // (shadow mode, shadowRule in result-gate.ts)
+    return shadowRule("lint:orphan-definitions", markdown, () => removeOrphanedFootnoteDefinitionsAsWritten(markdown), orphanedDefinitionsRemoved);
+}
+
+/** What Delete orphaned definitions means to change, for the result gate: the names whose definitions nothing references, chains followed. */
+function orphanedDefinitionsRemoved(before: string[]): EditIntent {
+    return { removed: [...new Set(orphanedDefinitionBlocks(before).map((block) => block.name.toLowerCase()))] };
+}
+
+/** The rule itself, which the exported function above runs. */
+function removeOrphanedFootnoteDefinitionsAsWritten(markdown: string): string {
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");
     if (orphanedDefinitionBlocks(lines).length === 0) return markdown;

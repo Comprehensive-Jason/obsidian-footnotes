@@ -1,3 +1,5 @@
+import { oldChecksSuspended, shadowRule } from "../../editor/result-gate";
+import { lazyLabelsDefined } from "../rule-intents";
 import { lazyDefinitionLabelLines } from "../../parsing/label-shapes";
 import { linesReadAlike, readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
@@ -49,6 +51,13 @@ const QuoteMarkers = /^ {0,3}((?:>[ \t]?)*)/;
  * hidden definitions comes back byte for byte as it went in.
  */
 export function fixLazyDefinitions(markdown: string): string {
+    // while a test records, the result goes to the result gate too
+    // (shadow mode, shadowRule in result-gate.ts)
+    return shadowRule("lint:fix-lazy", markdown, () => fixLazyDefinitionsAsWritten(markdown), lazyLabelsDefined);
+}
+
+/** The rule itself, which the exported function above runs. */
+function fixLazyDefinitionsAsWritten(markdown: string): string {
     // A label the pass skipped (its blank line would have swallowed
     // protected text) can become safe once a LATER insertion in the same
     // pass changes the note, so one pass could leave a label that the next
@@ -95,7 +104,11 @@ function fixLazyDefinitionsOnce(markdown: string): string {
             // more blank line each time (the runtime swap, 2026-10-03; found
             // by the adjacency property). Nor is one that changes which text
             // is protected, or how the lines after the label read.
-            if (protectedTextChanged(lines, trial) || !readNote(trial).labelLines[at + 1] || linesAfterReadDifferently(lines, trial, at)) {
+            // Shadow mode switches the old checks off for a moment, to see
+            // what the rule would do without them (oldChecksSuspended in
+            // result-gate.ts).
+            const held = !oldChecksSuspended() && (protectedTextChanged(lines, trial) || linesAfterReadDifferently(lines, trial, at));
+            if (held || !readNote(trial).labelLines[at + 1]) {
                 skipped.add(at);
                 continue;
             }

@@ -11,6 +11,7 @@ import {
 } from "../editor/obsidian-internals";
 import { popupCanBind, PopupWaitingNotice, retryUntilShown } from "./popup-retry";
 import { replaceMinimal } from "../editor/write-back";
+import { shadowGate } from "../editor/result-gate";
 import { readNote } from "../parsing/note-reading";
 
 import { showNotice } from "../editor/notice";
@@ -660,6 +661,9 @@ export async function openFootnotePopup(
             const bounds = definitionSection(current, footnoteId, label);
             if (!bounds) return false;
             const updated = current.slice(0, bounds.start) + section + current.slice(bounds.end);
+            // shadow mode: the result gate judges the save-back, which no
+            // old check looked at (result-gate.ts)
+            shadowGate("popup:save", null, () => ({ before: current.split("\n"), after: updated.split("\n"), intent: { rewritten: [footnoteId] } }));
             if (updated !== current) replaceMinimal(editor, current, updated, mdView);
             embed.dirty = false;
             return true;

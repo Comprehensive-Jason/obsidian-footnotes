@@ -13,6 +13,7 @@ import {
 import { DocContext, docContext, referenceOccurrenceAtCursor } from "../editor/doc-context";
 import { bareInsertionVerdict, readInlineFootnoteFromClipboard } from "./inline-footnotes";
 import { pressLineVerdict, ProtectedCreationNotice, simulatedContext } from "../editor/insertion-liveness";
+import { shadowGate } from "../editor/result-gate";
 import { shouldJumpFromDefinitionToReference, shouldJumpFromReferenceToDefinition } from "./navigation";
 import { propertiesWidgetOwnsFocus, readingViewActive, viewEditor } from "../editor/obsidian-internals";
 import { warnTableEdgeCaretIfOutside, caretGuardsHandled, warnDefinitionCaretIfInside, warnProtectedCaretIfInside } from "./press-guards";
@@ -265,6 +266,13 @@ function insertInlineText(
         // which an empty line right under one does once it is filled.
         const after = simulatedContext(doc, at, text);
         const verdict = pressLineVerdict(ctx.reading(), after, [at], text) ?? bareInsertionVerdict(after, [at], text);
+        shadowGate("press:inline", verdict === "live" ? null : verdict, () => ({
+            before: ctx.lines,
+            beforeReading: ctx.reading(),
+            after: after.lines,
+            // the paste key's text comes from the clipboard
+            intent: { created: [{ kind: "inline", text, at: [at], fromOutside: text !== "^[]" }] },
+        }));
         if (refusedCreation(verdict, ProtectedCreationNotice)) return;
         const newCursorPos = { line: at.line, ch: at.ch + caretOffsetInText };
         moveCursorAndSetJumpPoint(doc, cursorPosition, newCursorPos, plugin, [

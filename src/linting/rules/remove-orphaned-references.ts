@@ -1,3 +1,5 @@
+import { oldChecksSuspended, shadowRule } from "../../editor/result-gate";
+import { orphanedReferencesRemoved } from "../rule-intents";
 import { LineEdit, linesReadAlike, readNote } from "../../parsing/note-reading";
 import { labelShapedLines, lazyDefinitionLabelLines } from "../../parsing/label-shapes";
 import { normalizeEol, restoreEol } from "../../parsing/line-edits";
@@ -160,10 +162,14 @@ export function orphanedFootnoteReferenceNames(
  * it. Spaces the line already ended with stay, because two of them at the
  * end of a line are a markdown line break the user typed on purpose.
  */
-export function removeOrphanedFootnoteReferences(
-    markdown: string,
-    orphanSafePrefix = "",
-): string {
+export function removeOrphanedFootnoteReferences(markdown: string, orphanSafePrefix = ""): string {
+    // while a test records, the result goes to the result gate too
+    // (shadow mode, shadowRule in result-gate.ts)
+    return shadowRule("lint:orphan-references", markdown, () => removeOrphanedFootnoteReferencesAsWritten(markdown, orphanSafePrefix), orphanedReferencesRemoved);
+}
+
+/** The rule itself, which the exported function above runs. */
+function removeOrphanedFootnoteReferencesAsWritten(markdown: string, orphanSafePrefix: string): string {
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");
     const reading = readNote(lines);
@@ -194,7 +200,10 @@ export function removeOrphanedFootnoteReferences(
     // that speaks in names. The whole set is tried first, since that is
     // the common case and costs one scan.
     const all = lines.map((line, i) => orphansOn(i).reduce((text, { start, end }) => cutOne(text, start, end), line));
-    if (!readsDifferently(lines, all)) return restoreEol(all.join("\n"), eol);
+    // Shadow mode switches the old checks off for a moment, to see
+    // what the rule would do without them (oldChecksSuspended in
+    // result-gate.ts).
+    if (oldChecksSuspended() || !readsDifferently(lines, all)) return restoreEol(all.join("\n"), eol);
 
     const orphanNames: string[] = [];
     for (let i = 0; i < lines.length; i++) {
@@ -216,7 +225,7 @@ export function removeOrphanedFootnoteReferences(
                 .reduce((text, { start, end }) => cutOne(text, start, end), line),
         );
         if (trial.every((line, i) => line === current[i])) continue;
-        if (readsDifferently(current, trial)) continue;
+        if (!oldChecksSuspended() && readsDifferently(current, trial)) continue;
         current = trial;
     }
     if (current === lines) return markdown;

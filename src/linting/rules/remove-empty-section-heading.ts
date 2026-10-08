@@ -1,3 +1,5 @@
+import { shadowRule } from "../../editor/result-gate";
+import { movesOnly } from "../rule-intents";
 import { findLineRunEnd, normalizeEol, restoreEol } from "../../parsing/line-edits";
 import { readNote } from "../../parsing/note-reading";
 
@@ -21,6 +23,13 @@ import { readNote } from "../../parsing/note-reading";
  * With no heading configured, or none in the note, nothing changes.
  */
 export function removeEmptySectionHeading(markdown: string, sectionHeading: string): string {
+    // while a test records, the result goes to the result gate too
+    // (shadow mode, shadowRule in result-gate.ts)
+    return shadowRule("lint:empty-heading", markdown, () => removeEmptySectionHeadingAsWritten(markdown, sectionHeading), movesOnly);
+}
+
+/** The rule itself, which the exported function above runs. */
+function removeEmptySectionHeadingAsWritten(markdown: string, sectionHeading: string): string {
     if (sectionHeading === "") return markdown;
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");

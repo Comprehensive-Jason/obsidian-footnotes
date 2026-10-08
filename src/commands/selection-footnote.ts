@@ -27,6 +27,7 @@ import {
 import { maskInlineRegions, readCell } from "../parsing/cell-reading";
 import { cellImageStarts, imageStartsOn } from "../parsing/landing";
 import { linesReadAlike, NoteReading, readNote } from "../parsing/note-reading";
+import { shadowGate } from "../editor/result-gate";
 import {
     autonumFootnoteId,
     landCellDefinitionAppend,
@@ -341,6 +342,7 @@ export function selectionPressHandled(
     const text = rangeText(ctx.lines, trimmed.from, trimmed.to);
     const table = tableVerdict(ctx, trimmed.from, trimmed.to);
     if (table === "cuts") {
+        shadowRefusedSelection("table", plugin, ctx, trimmed, text, command);
         showNotice(TableSelectionNotice, 8000);
         return true;
     }
@@ -362,6 +364,7 @@ export function selectionPressHandled(
             (definition) => trimmed.from.line <= definition.end && trimmed.to.line >= definition.start,
         )
     ) {
+        shadowRefusedSelection("inside a definition", plugin, ctx, trimmed, text, command);
         showNotice(NestedFootnoteNotice, 8000);
         return true;
     }
@@ -369,6 +372,7 @@ export function selectionPressHandled(
     // a reference, a placeholder, or an inline footnote (nesting is
     // prevented plugin-wide, 2026-08-24).
     if (selectionTouchesFootnote(ctx, trimmed.from, trimmed.to)) {
+        shadowRefusedSelection("touches a footnote", plugin, ctx, trimmed, text, command);
         showNotice(NestedFootnoteNotice, 8000);
         return true;
     }
@@ -390,6 +394,7 @@ export function selectionPressHandled(
         selectionCutsProtectedText(ctx, trimmed.from, trimmed.to) ||
         replacementReclassifiesDoc(ctx, trimmed.from, trimmed.to, replacement)
     ) {
+        shadowRefusedSelection("protected text or a line read differently", plugin, ctx, trimmed, text, command);
         showNotice(ProtectedSelectionNotice, 8000);
         return true;
     }
@@ -449,6 +454,43 @@ export interface CellSelection {
     to: number;
     text: string;
     lead: string;
+}
+
+/**
+ * Shadow mode (result-gate.ts): a selection one of the checks above refused
+ * (`why`) before any edit was worked out, judged by the result gate as the
+ * conversion would have written it: the selected text replaced by an
+ * inline footnote holding it, or by a reference with the text moved into
+ * its definition (named "gate-probe" here, which no real footnote is).
+ */
+function shadowRefusedSelection(
+    why: string,
+    plugin: FootnotePlugin,
+    ctx: DocContext,
+    range: { from: EditorPosition; to: EditorPosition },
+    text: string,
+    command: FootnoteCommandKind,
+): void {
+    shadowGate("selection:before-edit", why, () => {
+        if (command === "inline") {
+            const wrap = `^[${sanitizeInlineFootnoteContent(text)}]`;
+            return {
+                before: ctx.lines,
+                beforeReading: ctx.reading(),
+                after: simulateChanges(ctx.lines, [{ from: range.from, to: range.to, text: wrap }]),
+                intent: { created: [{ kind: "inline", text: wrap, at: [range.from] }] },
+            };
+        }
+        const body = indentDefinitionBody(text);
+        const name = "gate-probe";
+        const plan = planDefinitionAppend({ lines: ctx.lines, edits: [{ from: range.from, to: range.to, text: `[^${name}]` }], footnoteId: name, plugin, body });
+        return {
+            before: ctx.lines,
+            beforeReading: ctx.reading(),
+            after: plan.final,
+            intent: { created: [{ kind: "footnote", name, references: [plan.edits[0].start], definition: { line: plan.labelLine, lines: body.split("\n").length } }] },
+        };
+    });
 }
 
 /**
@@ -935,6 +977,12 @@ function convertMainSelectionToInline(
     const text = `^[${sanitizeInlineFootnoteContent(selection.text)}]`;
     const simulated = contextOfLines(simulateChanges(ctx.lines, [{ from: selection.from, to: selection.to, text }]));
     const verdict = pressLineVerdict(ctx.reading(), simulated, [selection.from], text) ?? bareInsertionVerdict(simulated, [selection.from], text);
+    shadowGate("selection:inline", verdict === "live" ? null : verdict, () => ({
+        before: ctx.lines,
+        beforeReading: ctx.reading(),
+        after: simulated.lines,
+        intent: { created: [{ kind: "inline", text, at: [selection.from] }] },
+    }));
     if (refusedCreation(verdict, ProtectedSelectionNotice)) return;
     const after = { line: selection.from.line, ch: selection.from.ch + text.length };
     moveCursorAndSetJumpPoint(doc, selection.from, after, plugin, [
@@ -995,6 +1043,12 @@ function convertMainSelection(
         definitionLabelLine: plan.labelLine,
         definitionBodyExtraLines: body.split("\n").length - 1,
     });
+    shadowGate("selection:footnote", verdict === "live" ? null : verdict, () => ({
+        before: ctx.lines,
+        beforeReading: ctx.reading(),
+        after: plan.final,
+        intent: { created: [{ kind: "footnote", name: footnoteId, references: [plan.edits[0].start], definition: { line: plan.labelLine, lines: body.split("\n").length } }] },
+    }));
     if (refusedCreation(verdict, ProtectedSelectionNotice)) return;
 
     landDefinitionBackedInsertion({
@@ -1047,6 +1101,11 @@ function convertCellSelection(
     // row (Kimi hunt cycle 3, 2026-09-16; the numbered cell press had the
     // same bug, sheet 05). So the note is read again here.
     const plan = planDefinitionAppend({ lines: docLines(doc), edits: [], footnoteId, plugin, body: selection.text });
+    shadowGate("cell:definition", null, () => ({
+        before: docLines(doc),
+        after: plan.final,
+        intent: { created: [{ kind: "footnote", name: footnoteId, references: [], definition: { line: plan.labelLine, lines: selection.text.split("\n").length } }] },
+    }));
     landCellDefinitionAppend({
         plugin,
         doc,

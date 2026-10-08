@@ -3,7 +3,7 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 import { docArb } from "./arbitraries";
-import { CreatedFootnote, EditIntent, GateReason, judgeEdit, NotePosition, NoteRange } from "../src/editor/result-gate";
+import { CreatedFootnote, EditIntent, GateReason, judgeEdit, NotePosition, NoteRange, useEditWindows } from "../src/editor/result-gate";
 
 // The result gate (src/editor/result-gate.ts, ADR 0003): a note compared
 // with itself always passes, and each of the six checks has a refusing and
@@ -160,6 +160,19 @@ describe("check 5: block shape", () => {
         expect(reasonOf(before, after, press("1", 0, 0, 2))).toBe("formatting");
     });
 
+    it("passes a selection of a whole table or heading, whose reference stands where the block was (Jason's ruling, sheet 05, 2026-09-09; pin bug-block-first-line-on-label)", () => {
+        const table = ["Before.", "", "| a | b |", "| --- | --- |", "| c | d |", "", "After."];
+        const converted = ["Before.", "", "[^1]", "", "After.", "", "[^1]: | a | b |", "    | --- | --- |", "    | c | d |"];
+        expect(reasonOf(table, converted, { created: [{ kind: "footnote", name: "1", references: [{ line: 2, ch: 0 }], definition: { line: 6, lines: 3 } }] })).toBe("pass");
+        expect(reasonOf(["# Heading", "", "text"], ["[^1]", "", "text", "", "[^1]: # Heading"], press("1", 0, 0, 4))).toBe("pass");
+    });
+
+    it("refuses a selection that takes a table's last row with the text under it (Jason's ruling, 2026-09-04; the manual table tests)", () => {
+        const before = ["", "| a | b |", "| --- | --- |", "| 1 | 2 |", "", "after the table"];
+        const after = ["", "| a | b |", "| --- | --- |", "[^1]", "", "[^1]: | 1 | 2 |", "    ", "    after the table"];
+        expect(reasonOf(before, after, { created: [{ kind: "footnote", name: "1", references: [{ line: 3, ch: 0 }], definition: { line: 5, lines: 3 } }] })).toBe("formatting");
+    });
+
     it("passes a press inside a quote", () => {
         expect(reasonOf(["> quoted text"], ["> quoted text[^1]", "", "[^1]: "], press("1", 0, 13, 2))).toBe("pass");
     });
@@ -208,4 +221,96 @@ describe("check 1: untouched footnotes read the same", () => {
         const after = ["Text[^1]", "", "[^1]: a", "[^2]: b", "==="];
         expect(reasonOf(before, after, { defined: ["1", "2"] })).not.toBe("pass");
     });
+});
+
+describe("what each kind of action may change", () => {
+    it("a merge folds a copy into the first (merged), but not one whose table would turn into text (pin bug-merge-duplicate-flattens-table)", () => {
+        const before = ["use[^1]", "", "[^1]: first", "", "tail", "", "[^1]: second"];
+        expect(reasonOf(before, ["use[^1]", "", "[^1]: first", "    second", "", "tail"], { merged: ["1"] })).toBe("pass");
+        const table = ["use[^1]", "", "[^1]: first", "", "tail", "", "[^1]: | a | b |", "| --- |", "| x | y |"];
+        const flattened = ["use[^1]", "", "[^1]: first", "    | a | b |", "| --- |", "| x | y |", "", "tail"];
+        expect(reasonOf(table, flattened, { merged: ["1"] })).toBe("formatting");
+    });
+
+    it("Convert normal to inline turns a definition into an inline footnote where its reference was (inlined)", () => {
+        const before = ["Text[^1] and `code`.", "", "[^1]: see `x` here"];
+        expect(reasonOf(before, ["Text^[see `x` here] and `code`."], { inlined: ["1"], inlineCreated: 1 })).toBe("pass");
+    });
+
+    it("the punctuation rule moves a footnote inside a definition past its full stop (footnotesMoved)", () => {
+        expect(reasonOf(["A[^1]", "", "[^1]: word[^2].", "[^2]: two"], ["A[^1]", "", "[^1]: word.[^2]", "[^2]: two"])).toBe("other");
+        expect(reasonOf(["A[^1]", "", "[^1]: word[^2].", "[^2]: two"], ["A[^1]", "", "[^1]: word.[^2]", "[^2]: two"], { footnotesMoved: true })).toBe("pass");
+    });
+
+    it("a selection that moves an empty placeholder into the new definition nests it (pin selection-to-footnote, placeholders)", () => {
+        expect(reasonOf(["keep [^] here"], ["[^1]", "", "[^1]: keep [^] here"], press("1", 0, 0, 2))).toBe("nested");
+    });
+
+    it("a table row keeps its cells (Jason's ruling on partial-table selections, 2026-09-04)", () => {
+        const before = ["| a | b |", "| --- | --- |", "| one | two |"];
+        expect(reasonOf(before, ["| a | b |", "| --- | --- |", "| [^1] |", "", "[^1]: one | two"], press("1", 2, 2, 4))).toBe("formatting");
+        expect(reasonOf(before, ["| a | b |", "| --- | --- |", "| one[^1] | two |", "", "[^1]: "], press("1", 2, 5, 4))).toBe("pass");
+    });
+
+    it("an edit that leaves a lazy label behind changes the note on the next lint (pin bug-lint-orphan-cut-leaves-lazy-label)", () => {
+        const before = ["a[^8]", "", "prose", "[^8][^9]: x", "", "[^8]: d"];
+        expect(reasonOf(before, ["a[^8]", "", "prose", "[^8]: x", "", "[^8]: d"], { removed: ["9"] })).toBe("formatting");
+    });
+
+    it("a press on a blank line that pulls the line below into a paragraph is refused; pasted text joining it is the user's own", () => {
+        expect(reasonOf(["Para one.", "", "Para two."], ["Para one.", "[^1]", "Para two.", "", "[^1]: "], press("1", 1, 0, 4))).toBe("formatting");
+        const pasted: NoteRange = { from: { line: 1, ch: 0 }, to: { line: 1, ch: 7 } };
+        expect(reasonOf(["Para one.", "", "Para two."], ["Para one.", "", "a[^1] b", "Para two.", "", "[^1]: one"], {
+            insertedText: [{ ...pasted, from: { line: 2, ch: 0 }, to: { line: 2, ch: 7 } }],
+            created: [{ kind: "footnote", name: "1", references: [], definition: { line: 5, lines: 1 } }],
+        })).toBe("pass");
+    });
+
+    it("a press on a blank line above a definition would hide the definition", () => {
+        expect(reasonOf(["text[^1]", "", "[^1]: d"], ["text[^1]", "[^]", "[^1]: d"], { created: [{ kind: "placeholder", text: "[^]", at: [{ line: 1, ch: 0 }] }] })).toBe("formatting");
+    });
+
+    it("the paste key's clipboard text is the action's own; a selection's text is not", () => {
+        const inline = (text: string, fromOutside: boolean): EditIntent => ({ created: [{ kind: "inline", text, at: [{ line: 0, ch: 9 }], fromOutside }] });
+        expect(reasonOf(["Some text after."], ["Some text^[see https://example.com/page] after."], inline("^[see https://example.com/page]", true))).toBe("pass");
+        expect(reasonOf(["a $x$ b"], ["a^[$x$] b"], { created: [{ kind: "inline", text: "^[$x$]", at: [{ line: 0, ch: 1 }] }] })).toBe("pass");
+    });
+});
+
+describe("the stretches the gate looks at", () => {
+    it("never change a verdict but check 5's: the gate looking at the stretches an edit can have changed says what it says looking at the whole note", () => {
+        const lineArb = fc.constantFrom("", "text", "more text[^1]", "[^1]: def", "    indented", "> quote", "- item", "# Heading", "===", "---", "$$", "```", "| a | b |", "| --- | --- |", "%%", "[^2]: two", "[ref]: http://u", "see [x][ref]", "[^]", "^[inline]");
+        const editArb = fc.record({ at: fc.nat(), kind: fc.constantFrom("replace", "insert", "delete", "press"), line: lineArb });
+        fc.assert(
+            fc.property(docArb, fc.array(editArb, { minLength: 1, maxLength: 3 }), (doc, edits) => {
+                const before = doc.split("\n");
+                const after = [...before];
+                let intent: EditIntent = {};
+                for (const edit of edits) {
+                    const at = edit.at % (after.length + 1);
+                    if (edit.kind === "replace" && at < after.length) after[at] = edit.line;
+                    else if (edit.kind === "insert") after.splice(at, 0, edit.line);
+                    else if (edit.kind === "delete" && at < after.length) after.splice(at, 1);
+                    else if (edit.kind === "press" && at < after.length) {
+                        const ch = after[at].length;
+                        after[at] += "[^99]";
+                        after.push("", "[^99]: ");
+                        intent = press("99", at, ch, after.length - 1);
+                    }
+                }
+                const windowed = judgeEdit(before, after, intent);
+                useEditWindows(false);
+                const whole = judgeEdit(before, after, intent);
+                useEditWindows(true);
+                // Check 5 lines up the lines that changed, and an edit can
+                // often be lined up more than one way: the whole note's
+                // line-up can pair a deleted line with an added one that the
+                // stretches pair with nothing. So a verdict of check 5 may
+                // differ; every other check must agree.
+                const byLineUp = (verdict: typeof whole) => !verdict.pass && verdict.check === 5;
+                if (windowed.pass !== whole.pass && !byLineUp(windowed) && !byLineUp(whole)) expect.fail(JSON.stringify({ before, after, intent, windowed, whole }));
+            }),
+            { numRuns: 1000 },
+        );
+    }, 120_000);
 });

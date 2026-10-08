@@ -6,6 +6,7 @@ import { footnoteNameProblem, quotedReference } from "../parsing/footnote-gramma
 import { DocContext, docContext } from "../editor/doc-context";
 import { footnotePrefixFromEditor, footnotePrefixProblem } from "../parsing/footnote-prefix";
 import { simulateChanges } from "../editor/insertion-liveness";
+import { shadowGate } from "../editor/result-gate";
 import { Definition, readNote } from "../parsing/note-reading";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { withEditableEditor } from "./insert-or-navigate-footnotes";
@@ -223,7 +224,13 @@ export function planFootnoteRename(
     }
     if (changes.length === 0) return { kind: "noop" };
 
-    if (!renameSurvives(ctx, changes, oldFolded, newName, referenceLines, definitions, labelLines)) {
+    const survives = renameSurvives(ctx, changes, oldFolded, newName, referenceLines, definitions, labelLines);
+    shadowGate("rename", survives ? null : "dead", () => ({
+        before: ctx.lines,
+        after: simulateChanges(ctx.lines, changes),
+        intent: { renamed: new Map([[oldName, newName]]) },
+    }));
+    if (!survives) {
         return { kind: "dead" };
     }
     return { kind: "renamed", changes, count: changes.length, newName, prefixAdded };

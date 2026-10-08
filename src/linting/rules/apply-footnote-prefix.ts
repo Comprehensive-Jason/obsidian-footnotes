@@ -1,3 +1,5 @@
+import { oldChecksSuspended, shadowRule } from "../../editor/result-gate";
+import { footnotesRenamed } from "../rule-intents";
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { computeNextFootnoteNumber } from "../../parsing/footnote-grammar";
 import { keepsEveryFootnote } from "../../parsing/note-reading";
@@ -41,6 +43,13 @@ import { FootnoteRule } from "../rule";
  * such a run before it reaches this point.
  */
 export function applyFootnotePrefix(markdown: string, prefix: string): string {
+    // while a test records, the result goes to the result gate too
+    // (shadow mode, shadowRule in result-gate.ts)
+    return shadowRule("lint:apply-prefix", markdown, () => applyFootnotePrefixAsWritten(markdown, prefix), footnotesRenamed);
+}
+
+/** The rule itself, which the exported function above runs. */
+function applyFootnotePrefixAsWritten(markdown: string, prefix: string): string {
     if (!prefix || footnotePrefixProblem(prefix) !== null) return markdown;
     const prefixFolded = prefix.toLowerCase();
 
@@ -115,7 +124,10 @@ export function applyFootnotePrefix(markdown: string, prefix: string): string {
         const candidates = [...existingIds].filter((id) => renameFor(id) !== null);
         const all = new Set(candidates);
         const rewritten = rewriteWith(all);
-        if (keepsEveryFootnote(lines, rewritten)) return rewritten.join("\n");
+        // Shadow mode switches the old checks off for a moment, to see
+        // what the rule would do without them (oldChecksSuspended in
+        // result-gate.ts).
+        if (oldChecksSuspended() || keepsEveryFootnote(lines, rewritten)) return rewritten.join("\n");
 
         // A rename can turn a footnote into plain text: a "$" in the prefix
         // pairs with a dollar amount nearby, and "$6 [^a$note]" reads as

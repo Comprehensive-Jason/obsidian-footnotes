@@ -10,6 +10,7 @@ import {
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
 import { adjustFootnotePosition, comparePositions } from "../editor/cursor-motion";
 import { planDefinitionAppend } from "./definition-append";
+import { shadowGate } from "../editor/result-gate";
 import { contextOfLines, DocContext, docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
 import {
     bareInsertionVerdict,
@@ -383,6 +384,14 @@ function insertReferenceAtEveryCaret(
         footnoteId,
         definitionLabelLine: plan.labelLine,
     });
+    shadowGate("multi:numbered", verdict === "live" ? null : verdict, () => ({
+        before: ctx.lines,
+        beforeReading: ctx.reading(),
+        after: plan.final,
+        intent: {
+            created: [{ kind: "footnote", name: footnoteId, references: plan.edits.map((edit) => edit.start), definition: { line: plan.labelLine, lines: 1 } }],
+        },
+    }));
     if (refusedCreation(verdict, ProtectedCreationNotice)) return;
 
     landDefinitionBackedInsertion({
@@ -430,6 +439,12 @@ function insertSkeletonAtEveryCaret(
     const anchors = simulatedAnchors(ctx.lines, changes, targets.map((_, index) => index), simulated);
     const after = contextOfLines(simulated);
     const verdict = pressLineVerdict(ctx.reading(), after, anchors, text) ?? bareInsertionVerdict(after, anchors, text);
+    shadowGate(text.startsWith("^[") ? "multi:inline" : "multi:named", verdict === "live" ? null : verdict, () => ({
+        before: ctx.lines,
+        beforeReading: ctx.reading(),
+        after: simulated,
+        intent: { created: [text.startsWith("^[") ? { kind: "inline", text, at: anchors, fromOutside: text !== "^[]" } : { kind: "placeholder", text, at: anchors }] },
+    }));
     if (refusedCreation(verdict, ProtectedCreationNotice)) return;
     // The targets arrive in the order they appear in the note, so
     // anchors[0] is the first footnote.

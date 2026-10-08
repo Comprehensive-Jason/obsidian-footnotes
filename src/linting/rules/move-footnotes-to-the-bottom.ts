@@ -1,3 +1,5 @@
+import { oldChecksSuspended, shadowRule } from "../../editor/result-gate";
+import { movesOnly } from "../rule-intents";
 import { findLineRunEnd, normalizeEol, removeLineRanges } from "../../parsing/line-edits";
 import { Definition, readNote } from "../../parsing/note-reading";
 import { linesReadDifferently } from "./remove-orphaned-definitions";
@@ -63,10 +65,14 @@ function preserveLeadingThematicBreak(
  * untouched: anything added at the end would land inside that region and
  * stop being a definition at all.
  */
-export function moveFootnoteDefinitionsToBottom(
-    markdown: string,
-    sectionHeading = "",
-): string {
+export function moveFootnoteDefinitionsToBottom(markdown: string, sectionHeading = ""): string {
+    // while a test records, the result goes to the result gate too
+    // (shadow mode, shadowRule in result-gate.ts)
+    return shadowRule("lint:move", markdown, () => moveFootnoteDefinitionsToBottomAsWritten(markdown, sectionHeading), movesOnly);
+}
+
+/** The rule itself, which the exported function above runs. */
+function moveFootnoteDefinitionsToBottomAsWritten(markdown: string, sectionHeading: string): string {
     return rewriteDocument(markdown, (text, view) => {
         const moved = gathered(text, view, sectionHeading);
         // A move must leave every definition reading as it did, as Obsidian
@@ -82,7 +88,10 @@ export function moveFootnoteDefinitionsToBottom(
         // bug-moved-definition-joins-list-item). Either way the note comes
         // back untouched, and the move alert names the definitions
         // (definitionsHoldingTheMoveBack).
-        return moved !== text && definitionsReadDifferently(view.lines, moved.split("\n")).length > 0 ? text : moved;
+        // Shadow mode switches the old checks off for a moment, to see
+        // what the rule would do without them (oldChecksSuspended in
+        // result-gate.ts).
+        return moved !== text && !oldChecksSuspended() && definitionsReadDifferently(view.lines, moved.split("\n")).length > 0 ? text : moved;
     });
 }
 
@@ -119,7 +128,7 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
     // text, because an unclosed code fence or comment runs on to the end
     // of the file. Moving definitions in there would cut them off from
     // their references.
-    if (reading.openRegionFrom !== -1) return text;
+    if (reading.openRegionFrom !== -1 && !oldChecksSuspended()) return text;
 
     // Packed label to label, except after a block whose last line is
     // a lazy continuation (a plain column-0 line): the next label
@@ -143,7 +152,7 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
     // and the move alert names the definitions that held it back
     // (definitionsHoldingTheMoveBack).
     const body = bodyWithout(lines, blocks);
-    if (linesReadDifferently(lines, { lines, ranges: blocks }, body)) return text;
+    if (!oldChecksSuspended() && linesReadDifferently(lines, { lines, ranges: blocks }, body)) return text;
 
     // The section-heading setting is markdown that may run over
     // SEVERAL lines, such as "---\n## Footnotes". So the search

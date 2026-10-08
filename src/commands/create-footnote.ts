@@ -44,6 +44,7 @@ import { warnDefinitionCaretIfInside, warnTableEdgeCaretIfOutside, warnProtected
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
 import { BlockSyntaxNotice, InsideLinkNotice, NestedFootnoteNotice, showNotice } from "../editor/notice";
+import { CreatedFootnote, shadowGate } from "../editor/result-gate";
 
 /**
  * The refusal for a creation whose result is not "live" (see
@@ -162,6 +163,22 @@ function dispatchCellEditIfLive(
         fewerLinksDrawn(readCell(cellText).reading, after.reading, linkLabels)
             ? "link"
             : landingVerdict(after.reading, 0, start, after.line.slice(start, after.column(from + text.length)));
+    // shadow mode: the result gate judges the cell as a one-row table with
+    // the note's link reference definitions under it (result-gate.ts)
+    shadowGate("cell:write", verdict === "live" ? null : verdict, () => {
+        const links = [...linkLabels].map((label) => `[${label}]: https://example.com`);
+        const note = (line: string) => [line, "| --- |", "", ...links];
+        const written = after.line.slice(start, after.column(from + text.length));
+        const at = [{ line: 0, ch: start }];
+        // text written at the caret, not over a selection, comes from the
+        // key itself or the clipboard
+        const created: CreatedFootnote = written.startsWith("^[")
+            ? { kind: "inline", text: written, at, fromOutside: from === to && written !== "^[]" }
+            : caretOffsetInText < text.length
+              ? { kind: "placeholder", text: written, at }
+              : { kind: "footnote", name: written.slice(2, -1), references: at };
+        return { before: note(readCell(cellText).line), after: note(after.line), intent: { created: [created] } };
+    });
     if (refusedCreation(verdict, ProtectedCreationNotice)) return false;
     cell.dispatch({
         changes: { from, to, insert: text },
@@ -507,6 +524,11 @@ export function createAutonumFootnote(
         // table, outside the cell's own editor, so it is safe under the
         // issue #28 rule.
         const plan = planDefinitionAppend({ lines: docLines(doc), edits: [], footnoteId, plugin });
+        shadowGate("cell:definition", null, () => ({
+            before: docLines(doc),
+            after: plan.final,
+            intent: { created: [{ kind: "footnote", name: footnoteId, references: [], definition: { line: plan.labelLine, lines: 1 } }] },
+        }));
         landCellDefinitionAppend({
             plugin,
             doc,
@@ -550,6 +572,12 @@ export function createAutonumFootnote(
         footnoteId,
         definitionLabelLine: plan.labelLine,
     });
+    shadowGate("press:numbered", verdict === "live" ? null : verdict, () => ({
+        before: ctx.lines,
+        beforeReading: ctx.reading(),
+        after: plan.final,
+        intent: { created: [{ kind: "footnote", name: footnoteId, references: [plan.edits[0].start], definition: { line: plan.labelLine, lines: 1 } }] },
+    }));
     if (refusedCreation(verdict, ProtectedCreationNotice)) return true;
 
     landDefinitionBackedInsertion({
@@ -634,6 +662,12 @@ export function createMatchingFootnoteDefinition(
             footnoteId,
             definitionLabelLine: plan.labelLine,
         });
+        shadowGate("press:definition", verdict === "live" ? null : verdict, () => ({
+            before: ctx.lines,
+            beforeReading: ctx.reading(),
+            after: plan.final,
+            intent: { created: [{ kind: "footnote", name: footnoteId, references: [], definition: { line: plan.labelLine, lines: 1 } }] },
+        }));
         if (refusedCreation(verdict, ProtectedCreationNotice)) return true;
         landDefinitionBackedInsertion({
             plugin,
@@ -768,6 +802,12 @@ export function createFootnoteReference(
     const verdict =
         pressLineVerdict(ctx.reading(), after, [cursorPosition], emptyReference) ??
         bareInsertionVerdict(after, [cursorPosition], emptyReference);
+    shadowGate("press:named", verdict === "live" ? null : verdict, () => ({
+        before: ctx.lines,
+        beforeReading: ctx.reading(),
+        after: after.lines,
+        intent: { created: [{ kind: "placeholder", text: emptyReference, at: [cursorPosition] }] },
+    }));
     if (refusedCreation(verdict, ProtectedCreationNotice)) return true;
     const newCursorPos = {
         line: cursorPosition.line,

@@ -1,3 +1,5 @@
+import { oldChecksSuspended, shadowRule } from "../../editor/result-gate";
+import { footnotesMovedPastPunctuation } from "../rule-intents";
 import { definitionLabelIn } from "../../parsing/label-shapes";
 import { ClosingMarkChars, FootnotePlacement, imageStartsOn, punctuationAt, referenceLandingAfter } from "../../parsing/landing";
 import { NoteReading, readNote } from "../../parsing/note-reading";
@@ -213,6 +215,13 @@ function swapInSegment(
  * inline code and frontmatter are left alone.
  */
 export function footnoteAfterPunctuation(markdown: string, placement: FootnotePlacement = "after"): string {
+    // while a test records, the result goes to the result gate too
+    // (shadow mode, shadowRule in result-gate.ts)
+    return shadowRule("lint:punctuation", markdown, () => footnoteAfterPunctuationAsWritten(markdown, placement), footnotesMovedPastPunctuation);
+}
+
+/** The rule itself, which the exported function above runs. */
+function footnoteAfterPunctuationAsWritten(markdown: string, placement: FootnotePlacement): string {
     if (placement === "none") return markdown;
     // Each move is worked out on the line as it was, so a move can leave a
     // footnote next to punctuation that only a second pass sees: under
@@ -310,7 +319,10 @@ function placedOnce(markdown: string, placement: "after" | "before"): string {
         // kinds apart; cycle 4, pin bug-placement-before-two-kind-changes).
         const keepsFootnotes = (of: NoteReading, ofLines: readonly string[], i: number) =>
             within(footnotesOn(reading, lines, i), footnotesOn(of, ofLines, i));
-        if (result.some((line, i) => line !== lines[i])) {
+        // Shadow mode switches the old checks off for a moment, to see
+        // what the rule would do without them (oldChecksSuspended in
+        // result-gate.ts).
+        if (!oldChecksSuspended() && result.some((line, i) => line !== lines[i])) {
             const after = readNote(result);
             for (let i = 0; i < result.length; i++) {
                 if (result[i] === lines[i] || keepsFootnotes(after, result, i)) continue;

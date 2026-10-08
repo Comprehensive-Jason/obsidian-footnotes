@@ -8,6 +8,7 @@ import { Editor, EditorChange, MarkdownView } from "obsidian";
 import type FootnotePlugin from "../main";
 import { docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
 import { showNotice } from "../editor/notice";
+import { CreatedFootnote, shadowGate } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { replaceMinimal, writeChanges } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
@@ -192,10 +193,23 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
     // that changes how Obsidian reads a line it was not asked to touch is
     // refused whole rather than half done.
     const byHand = "Converting would change how Obsidian reads the text around a footnote. Convert it by hand.";
-    if (readsDifferently(lines, replaced, "rewrite")) return unchanged(named, byHand);
+    // shadow mode: the result gate judges the conversion as the old checks do (result-gate.ts)
+    const shadow = (old: string | null, after: string[]) => {
+        shadowGate("convert:to-inline", old, () => ({
+            before: lines,
+            after,
+            intent: { inlined: eligible.map(({ block }) => block.name), inlineCreated: eligible.reduce((n, { refs: its }) => n + its.length, 0) },
+        }));
+    };
+    if (readsDifferently(lines, replaced, "rewrite")) {
+        shadow("references read differently", replaced);
+        return unchanged(named, byHand);
+    }
     const dead = eligible.map(({ block }) => block).sort((a, b) => a.start - b.start);
     const out = removeLineRanges(replaced, dead);
-    if (linesReadDifferently(replaced, { lines: replaced, ranges: dead }, out)) return unchanged(named, byHand);
+    const refused = linesReadDifferently(replaced, { lines: replaced, ranges: dead }, out);
+    shadow(refused ? "lines read differently" : null, out);
+    if (refused) return unchanged(named, byHand);
 
     return {
         markdown: restoreEol(out.join("\n"), eol),
@@ -345,6 +359,24 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
     // through the shared write-back, so a folded section the conversion
     // edits stays folded and a second pane on the note stays where it was
     // (hunt 2026-10-02, round 4, cluster U2)
+    // shadow mode: the result gate judges the conversion, which no old
+    // check looked at (result-gate.ts); each name's definition is one line,
+    // the first at the label line the append planned, the others under it
+    shadowGate("convert:to-normal", null, () => ({
+        before: lines,
+        after: plan.final,
+        intent: {
+            created: ids.map(
+                (id, k): CreatedFootnote => ({
+                    kind: "footnote",
+                    name: id,
+                    references: spans.flatMap((span, s) => (idOf.get(span.body) === id ? [plan.edits[s].start] : [])),
+                    definition: { line: plan.labelLine + k, lines: 1 },
+                }),
+            ),
+            inlineRemoved: spans.length,
+        },
+    }));
     const offsetChanges = plan.changes
         .map((change) => ({ from: doc.posToOffset(change.from), to: doc.posToOffset(change.to ?? change.from), text: change.text }))
         .sort((a, b) => a.from - b.from);
