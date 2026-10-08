@@ -630,14 +630,24 @@ function containersOf(blocks: string): string {
  * above it: a line written into the blank line between two paragraphs
  * joins them, as Obsidian reads it (Jason's ruling B1, 2026-10-08;
  * docs/obsidian-reading-rules.md G1). A paragraph split in two is a line
- * read differently, unless `split`: next to text the user writes in
- * themselves (a paste), whose own blank lines may split it. Two lists that
- * become one, or a table, code, a list, a quote, or a heading that stops
- * being one, is a line read differently too.
+ * read differently, and so are two lists that become one, or a table,
+ * code, a list, a quote, or a heading that stops being one.
+ *
+ * Next to the user's own text, taken out or written in (`nextToUsersText`:
+ * a cut, a paste), only the blocks count, not where each starts. Taking
+ * out a list's first item leaves the next item to start the list, and an
+ * item pasted above the first one starts the list in its place; the
+ * editor does the same with or without the plugin (hunt 2026-10-08, cycle
+ * 6, pins bug-cut-first-line-of-block-refused and
+ * bug-paste-before-first-item-refused). A line that stops being a list
+ * item or a quote is still read differently: "2. second" under a pasted
+ * paragraph joins that paragraph, since "2." cannot interrupt one
+ * (docs/obsidian-reading-rules.md B5).
  */
-function sameKind(was: string, is: string, split = false): boolean {
+function sameKind(was: string, is: string, nextToUsersText = false): boolean {
     const carriedOn = (blocks: string) => blocks.replace(/\^paragraph$/, "paragraph");
-    return was === is || carriedOn(was) === is || (split && was === carriedOn(is));
+    const blocksAlone = (blocks: string) => blocks.replace(/\^/g, "");
+    return was === is || carriedOn(was) === is || (nextToUsersText && blocksAlone(was) === blocksAlone(is));
 }
 
 /**
@@ -1070,10 +1080,12 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
         // label's paragraph may become the table the user meant, as
         // fix-lazy's own comment says.
         if (defined.size > 0 && lazyLineReadsAlike(was, is) && /(?:^| )\^?table$/.test(is)) return true;
-        // text the action writes in from outside (a paste) is the user's
-        // own, doing what it does in any editor next to the lines around it
-        const nextToWritten = lineInRanges(newSide.usersText, j - 1) || lineInRanges(newSide.usersText, j + 1);
-        return sameKind(was, is, nextToWritten);
+        // text the action takes out or writes in from outside (a cut, a
+        // paste) is the user's own, doing what it does in any editor next
+        // to the lines around it
+        const nextToUsersText =
+            lineInRanges(newSide.usersText, j - 1) || lineInRanges(newSide.usersText, j + 1) || lineInRanges(oldSide.usersText, i - 1) || lineInRanges(oldSide.usersText, i + 1);
+        return sameKind(was, is, nextToUsersText);
     };
     // a table row keeps its cells: text taken across a "|" leaves the row
     // a cell short (Jason's ruling on partial-table selections, 2026-09-04)

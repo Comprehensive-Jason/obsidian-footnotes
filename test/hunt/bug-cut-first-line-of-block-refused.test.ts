@@ -105,50 +105,50 @@ describe("a whole-line cut of a block's first line that cites a footnote", () =>
     });
 
     // Each case below is refused now, with the note left as it was.
-    it.fails("the first item of a list: '- a[^1]' over '- b'", () => {
+    it("the first item of a list: '- a[^1]' over '- b'", () => {
         const c = cut(["- a[^1]", "- b", "", "[^1]: one"], line0, line1);
         expect(refused()).toEqual([]);
         expect(c.clip).toContain("[^1]: one");
         expect(c.lines[0]).toBe("- b");
     });
 
-    it.fails("the first item of an ordered list", () => {
+    it("the first item of an ordered list", () => {
         const c = cut(["1. a[^1]", "2. b", "", "[^1]: one"], line0, line1);
         expect(refused()).toEqual([]);
         expect(c.lines[0]).toBe("2. b");
     });
 
-    it.fails("the first item of a list under a heading, its footnote cited again elsewhere (the definition stays)", () => {
+    it("the first item of a list under a heading, its footnote cited again elsewhere (the definition stays)", () => {
         const c = cut(["# H", "", "- a[^1]", "- b", "", "Text[^1].", "", "[^1]: one"], { line: 2, ch: 0 }, { line: 3, ch: 0 });
         expect(refused()).toEqual([]);
         expect(c.lines).toEqual(["# H", "", "- b", "", "Text[^1].", "", "[^1]: one"]);
     });
 
-    it.fails("the first line of a quote: '> a[^1]' over '> b'", () => {
+    it("the first line of a quote: '> a[^1]' over '> b'", () => {
         const c = cut(["> a[^1]", "> b", "", "[^1]: one"], line0, line1);
         expect(refused()).toEqual([]);
         expect(c.lines[0]).toBe("> b");
     });
 
-    it.fails("the first line of a two-line paragraph: 'a[^1]' over 'b'", () => {
+    it("the first line of a two-line paragraph: 'a[^1]' over 'b'", () => {
         const c = cut(["a[^1]", "b", "", "[^1]: one"], line0, line1);
         expect(refused()).toEqual([]);
         expect(c.lines[0]).toBe("b");
     });
 
-    it.fails("the first item's text alone (no line break), leaving an empty line above '- b'", () => {
+    it("the first item's text alone (no line break), leaving an empty line above '- b'", () => {
         const c = cut(["- a[^1]", "- b", "", "[^1]: one"], line0, { line: 0, ch: 7 });
         expect(refused()).toEqual([]);
         expect(c.lines.slice(0, 2)).toEqual(["", "- b"]);
     });
 
-    it.fails("the first task of a task list: '- [ ] a[^1]' over '- [ ] b'", () => {
+    it("the first task of a task list: '- [ ] a[^1]' over '- [ ] b'", () => {
         const c = cut(["- [ ] a[^1]", "- [ ] b", "", "[^1]: one"], line0, line1);
         expect(refused()).toEqual([]);
         expect(c.lines[0]).toBe("- [ ] b");
     });
 
-    it.fails("the first body line of a callout: '> a[^1]' under '> [!note] Title'", () => {
+    it("the first body line of a callout: '> a[^1]' under '> [!note] Title'", () => {
         const c = cut(["> [!note] Title", "> a[^1]", "> b", "", "[^1]: one"], line1, { line: 2, ch: 0 });
         expect(refused()).toEqual([]);
         expect(c.lines.slice(0, 2)).toEqual(["> [!note] Title", "> b"]);

@@ -117,7 +117,7 @@ describe("a whole-line paste of a footnoted item in front of a list's first item
     });
 
     // Each case below pastes nothing now, with the refusal notice.
-    it.fails("moving a list item to the top: '- b[^1]' cut from a tight list, pasted at the start of '- a'", () => {
+    it("moving a list item to the top: '- b[^1]' cut from a tight list, pasted at the start of '- a'", () => {
         const c = cut(["- a", "- b[^1]", "- c", "", "[^1]: one"], { line: 1, ch: 0 }, { line: 2, ch: 0 });
         expect(c.taken).toBe(true);
         const result = paste(c.lines, { line: 0, ch: 0 }, c.clip);
@@ -126,13 +126,13 @@ describe("a whole-line paste of a footnoted item in front of a list's first item
         expect(result.lines).toContain("[^1]: one");
     });
 
-    it.fails("moving an ordered item to the top: '2. b[^1]' pasted at the start of '1. a'", () => {
+    it("moving an ordered item to the top: '2. b[^1]' pasted at the start of '1. a'", () => {
         const result = paste(["1. a", "3. c", "", "[^9]: other"], { line: 0, ch: 0 }, "2. b[^1]\n\n[^1]: one\n");
         expect(refused()).toEqual([]);
         expect(result.lines.slice(0, 3)).toEqual(["2. b[^1]", "1. a", "3. c"]);
     });
 
-    it.fails("moving an item to the top of a loose list: '- b[^1]' cut and pasted at the start of '- a'", () => {
+    it("moving an item to the top of a loose list: '- b[^1]' cut and pasted at the start of '- a'", () => {
         const list = ["- a", "", "- b[^1]", "", "- c", "", "[^1]: one"];
         const c = cut(list, { line: 2, ch: 0 }, { line: 3, ch: 0 });
         expect(c.taken).toBe(true);
