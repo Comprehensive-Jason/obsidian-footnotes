@@ -5,6 +5,7 @@ import { contextOfLines, DocContext, definitionNames } from "../editor/doc-conte
 import { composeChanges, mapPosition, simulateChanges, simulatedAnchors } from "../editor/insertion-liveness";
 import { definitionLabel } from "../parsing/footnote-grammar";
 import { trimmedSectionHeading } from "../linting/linter";
+import { labelOutrunsLookahead } from "../linting/rules/move-footnotes-to-the-bottom";
 import { findLineRunEnd } from "../parsing/line-edits";
 import { readNote } from "../parsing/note-reading";
 
@@ -106,15 +107,17 @@ export function buildDefinitionAppend(
         // closer one of its lines opened) needs a blank line before the
         // new label, or that label reads as more paragraph text and the
         // new footnote is born lazy; move-to-bottom keeps the same blank
-        // (GLM hunt cycle 3, 2026-09-16).
+        // (GLM hunt cycle 3, 2026-09-16). So does a block too long for the
+        // new label to end it (labelOutrunsLookahead).
         const lastText = lines[lastLine];
         const paragraphTail =
             lastLine > last.start &&
             !isProtected[lastLine] &&
             lastText.trim() !== "" &&
             !/^(?: {4}|\t)/.test(lastText);
-        let text = paragraphTail ? `\n\n[^${footnoteId}]: ` : `\n[^${footnoteId}]: `;
-        const cursor = { line: lastLine + (paragraphTail ? 2 : 1), ch: text.length - 1 };
+        const blankFirst = paragraphTail || labelOutrunsLookahead(lines, last.start, lastLine, definitionLabel(footnoteId).length);
+        let text = blankFirst ? `\n\n[^${footnoteId}]: ` : `\n[^${footnoteId}]: `;
+        const cursor = { line: lastLine + (blankFirst ? 2 : 1), ch: text.length - 1 };
         if (needsSeparator(lastLine)) text += "\n";
         return {
             change: {

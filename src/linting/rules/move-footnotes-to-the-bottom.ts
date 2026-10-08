@@ -44,6 +44,29 @@ function preserveLeadingThematicBreak(
 }
 
 /**
+ * How far into a definition Obsidian looks for what ends it: 1,024
+ * characters, counted from the start of its label line (remark-footnotes'
+ * maxSlice; docs/obsidian-reading-rules.md E4, live 2026-10-03).
+ */
+const DefinitionLookahead = 1024;
+
+/**
+ * Whether a label written on the line right under `lines[from..to]`, the
+ * definition whose label is on line `from`, would end past that look-ahead,
+ * when the label ends at column `labelEnd` of its own line. Obsidian then
+ * reads the label as more of the definition above it, not as a new
+ * definition, so a rule that writes a label there puts a blank line in
+ * front of it: a blank line ends a definition at any length. A footnote of
+ * about 170 words is enough (hunt 2026-10-08, cycle 6, cluster Z8, pin
+ * bug-press-after-long-footnote-refused).
+ */
+export function labelOutrunsLookahead(lines: readonly string[], from: number, to: number, labelEnd: number): boolean {
+    let at = 0;
+    for (let line = from; line <= to; line++) at += lines[line].length + 1;
+    return at + labelEnd > DefinitionLookahead;
+}
+
+/**
  * Gather every footnote definition block into the note's footnote section,
  * leaving the blocks in the order they were already in. Putting them in a
  * different order is reindexFootnotes' job, not this one.
@@ -110,11 +133,13 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
     // directly under such a line would read as more lazy text and
     // stop rendering, so a blank line keeps it a definition (Kimi hunt
     // cycle 3, 2026-09-16: the move demoted the second footnote and
-    // fix-lazy fought it back every lint).
+    // fix-lazy fought it back every lint). The same goes for a block too
+    // long for the next label to end it (labelOutrunsLookahead).
     const packed: string[] = [];
     blocks.forEach((block, index) => {
         packed.push(lines.slice(block.start, block.end + 1).join("\n"));
-        if (endsInLazyLine(reading, lines, block) && index < blocks.length - 1) packed.push("");
+        if (index === blocks.length - 1) return;
+        if (endsInLazyLine(reading, lines, block) || labelOutrunsLookahead(lines, block.start, block.end, blocks[index + 1].labelEnd)) packed.push("");
     });
     const definitions = packed.join("\n");
     const body = bodyWithout(lines, blocks);

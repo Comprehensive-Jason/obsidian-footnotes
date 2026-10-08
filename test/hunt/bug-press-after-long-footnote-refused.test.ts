@@ -82,8 +82,8 @@ describe("a press in a note whose last footnote is longer than 1,024 characters"
         expect(`[^1]: ${longBody}`.length).toBeGreaterThan(1100);
     });
 
-    // Now: nothing changes, and the notice blames protected text.
-    it.fails("the numbered key creates footnote 2 with a live definition and no protected-text notice", async () => {
+    // Before the fix (2026-10-08): nothing changes, and the notice blames protected text.
+    it("the numbered key creates footnote 2 with a live definition and no protected-text notice", async () => {
         const lines = ["The tendency of the rate of profit to fall[^1] is contested, and so is its cause.", "", `[^1]: ${longBody}`];
         const ch = lines[0].indexOf(" and so");
         const doc = fakeEditor([...lines], { wholeDoc: true, edits: true, cursor: { line: 0, ch } });
@@ -93,9 +93,9 @@ describe("a press in a note whose last footnote is longer than 1,024 characters"
         expect(messages().join(" ")).not.toContain("protected text");
     });
 
-    // Now: nothing changes. Each paragraph is well under the limit, but the
+    // Before the fix (2026-10-08): nothing changes. Each paragraph is well under the limit, but the
     // footnote as a whole is over it.
-    it.fails("the numbered key creates footnote 2 after a footnote of three paragraphs, about 1,170 characters in all", async () => {
+    it("the numbered key creates footnote 2 after a footnote of three paragraphs, about 1,170 characters in all", async () => {
         const lines = [
             "The tendency of the rate of profit to fall[^1] is contested, and so is its cause.",
             "",
@@ -115,8 +115,8 @@ describe("a press in a note whose last footnote is longer than 1,024 characters"
         expect(doc.lines[at - 1].trim()).toBe("");
     });
 
-    // Now: the inline footnote stays as it is, and the command is refused.
-    it.fails("Convert inline to normal appends a live definition after it", () => {
+    // Before the fix (2026-10-08): the inline footnote stays as it is, and the command is refused.
+    it("Convert inline to normal appends a live definition after it", () => {
         const lines = ["The tendency[^1] is contested^[see Heinrich 2013] today.", "", `[^1]: ${longBody}`];
         const doc = fakeEditor([...lines], { wholeDoc: true, edits: true, cursor: { line: 0, ch: 0 } });
         convertInlineFootnotesToNormal(fakePlugin(settings, doc), doc);
