@@ -86,7 +86,20 @@ handled even when it only shows a refusal.
 
 **Guard**:
 A check that refuses a press with a toast instead of editing (protected
-text, definition interiors, invalid names).
+text, definition interiors, invalid names), judged on the note before
+the edit.
+
+**Result gate**:
+The one check every edit passes after it is worked out and before it is
+written: the note after must read the same as the note before, except
+for what the action meant to change. A refused command changes nothing;
+the lint holds that change back and names it.
+_Avoid_: verdict, liveness check, reads-differently check
+
+**Paste back**:
+A paste of the plugin's own last cut into the note that cut left
+unchanged, at the place the cut left the caret. It restores the note as
+it was before the cut.
 
 **Jump**:
 Moving the caret between a reference and its definition — the
