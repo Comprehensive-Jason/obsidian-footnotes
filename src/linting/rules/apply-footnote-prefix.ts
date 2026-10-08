@@ -1,4 +1,4 @@
-import { rulePasses } from "../rule-gate";
+import { holdBack, rulePasses } from "../rule-gate";
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { computeNextFootnoteNumber } from "../../parsing/footnote-grammar";
 
@@ -132,6 +132,8 @@ export function applyFootnotePrefix(markdown: string, prefix: string): string {
             kept.add(id);
             if (!rulePasses(lines, rewriteWith(kept), { renamed: renames(kept) })) kept.delete(id);
         }
+        // the renames refused are named in the lint's alert (ADR 0002)
+        holdBack("prefix", candidates.filter((id) => !kept.has(id)));
         return rewriteWith(kept).join("\n");
     });
 }

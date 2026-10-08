@@ -1,4 +1,4 @@
-import { rulePasses } from "../rule-gate";
+import { holdBack, rulePasses } from "../rule-gate";
 import { definitionLabelIn } from "../../parsing/label-shapes";
 import { ClosingMarkChars, FootnotePlacement, imageStartsOn, punctuationAt, referenceLandingAfter } from "../../parsing/landing";
 import { NoteReading } from "../../parsing/note-reading";
@@ -102,6 +102,8 @@ function swapInSegment(
     // bug-placement-before-two-units-two-lints). `carried` holds such a
     // run's text until the next run is placed.
     let carried = "";
+    // the units of the carried run, so a refused move names them too
+    let carriedUnits: readonly MovableUnit[] = [];
     let k = 0;
     while (k < units.length) {
         // Units written back to back move as one run. Anything the grammar
@@ -113,10 +115,12 @@ function swapInSegment(
         const start = units[k].start;
         const end = units[last].end;
         const loneReference = last === k && units[k].reference && carried === "";
+        const runUnits = [...carriedUnits, ...units.slice(k, last + 1)];
         k = last + 1;
         // the run's text, with a run carried to it in front
         const run = carried + original.slice(start, end);
         carried = "";
+        carriedUnits = [];
         // Whether this run, written at `at` with the character `next` right
         // after it, is a definition label: a SINGLE reference followed by
         // ":" with nothing but whitespace, quote markers, or dead text
@@ -183,7 +187,11 @@ function swapInSegment(
             if (placement === "after" && start > 0 && (punctuationAt(masked, start - 1, images) || ClosingMarkChars.includes(masked[start - 1]))) return null;
             return { before: original.slice(copied, start) + original.slice(end, punctuationEnd), after: "", to: punctuationEnd };
         })();
-        if (move === null || !keeps(out + move.before + run + move.after + original.slice(move.to))) {
+        const refused = move !== null && !keeps(out + move.before + run + move.after + original.slice(move.to));
+        if (move === null || refused) {
+            // a move the result gate refused is named in the lint's alert
+            // (ADR 0002; heldBackBy in rule-gate.ts)
+            if (refused) holdBack("punctuation", runUnits.map((unit) => unitLabel(run, unit, runUnits)));
             out += original.slice(copied, start) + run;
             copied = end;
             continue;
@@ -192,12 +200,28 @@ function swapInSegment(
             // a forward move up to the next run: go on with it
             out += move.before;
             carried = run;
+            carriedUnits = runUnits;
         } else {
             out += move.before + run + move.after;
         }
         copied = move.to;
     }
     return out + original.slice(copied);
+}
+
+/**
+ * How the lint's alert names `unit`, one of the `units` written back to
+ * back as `run`: a reference by its name, an inline footnote by its text.
+ */
+function unitLabel(run: string, unit: MovableUnit, units: readonly MovableUnit[]): string {
+    // where the unit sits in the run: after the units before it
+    let at = 0;
+    for (const other of units) {
+        if (other === unit) break;
+        at += other.end - other.start;
+    }
+    const text = run.slice(at, at + unit.end - unit.start);
+    return unit.reference ? text.slice(2, -1) : text;
 }
 
 /**

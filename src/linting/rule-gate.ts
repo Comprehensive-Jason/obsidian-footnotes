@@ -85,6 +85,43 @@ export function gatedLint(text: string, lint: () => string, checkedFirst = false
 const fold = (name: string): string => name.toLowerCase();
 
 /**
+ * The rules that hold a change back inside their own work, where the
+ * note after the lint does not show what they meant: the punctuation
+ * rule's moves, apply prefix's renames, and reindex's renames
+ * (renumbering, or naming a footnote after its text) and the order of its
+ * definitions. The lint names what they hold back (ADR 0002; stage 5 of
+ * the result gate design, 2026-10-08).
+ */
+export type HoldingRule = "punctuation" | "prefix" | "rename" | "order";
+
+/** What the rules have held back so far, while heldBackBy watches, or null. */
+let holds: Map<HoldingRule, string[]> | null = null;
+
+/**
+ * Note that `rule` held back its change to the footnotes `names` (each
+ * kept once, whatever its case). It costs nothing unless heldBackBy is
+ * watching, so a rule calls it wherever the gate refuses it.
+ */
+export function holdBack(rule: HoldingRule, names: readonly string[]): void {
+    if (holds === null) return;
+    const list = holds.get(rule) ?? [];
+    for (const name of names) if (!list.some((kept) => fold(kept) === fold(name))) list.push(name);
+    holds.set(rule, list);
+}
+
+/** What the rules run by `run` hold back (holdBack), by rule. */
+export function heldBackBy(run: () => void): Map<HoldingRule, string[]> {
+    const watched = new Map<HoldingRule, string[]>();
+    holds = watched;
+    try {
+        run();
+    } finally {
+        holds = null;
+    }
+    return watched;
+}
+
+/**
  * What the rules of one lint have meant, together, as one intent for the
  * gate. The rules run one after another, and a rule that renames footnotes
  * (apply prefix, reindex) runs after the ones that remove, merge, or define

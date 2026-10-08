@@ -12,7 +12,7 @@ import {
     referenceShapes,
     referenceText,
 } from "../parsing/footnote-grammar";
-import { configuredSectionHeading, sectionHeadingProblem } from "./linter";
+import { configuredSectionHeading, heldByTheLint, lastLintHeldBack, lintOptionsFromSettings, sectionHeadingProblem } from "./linter";
 import { labelInsideTable } from "./rewrite-document";
 import { duplicateFootnoteDefinitionNames, mergeDuplicateFootnoteDefinitions } from "./rules/merge-duplicate-definitions";
 import { definitionsHoldingTheMoveBack } from "./rules/move-footnotes-to-the-bottom";
@@ -128,7 +128,8 @@ function noticeEmptyReferences(markdown: string, prefix: string) {
 }
 
 /**
- * Format names for a notice as `"[^a]", "[^b]", "[^c]"`.
+ * Format names for a notice as `"[^a]", "[^b]", "[^c]"`, and an inline
+ * footnote, which has no name, by its text: `"^[a note]"`.
  *
  * EVERY name is spelled out, each in quotes, matching every other notice
  * that names a footnote (Jason asked for that consistency, 2026-09-04). The
@@ -136,7 +137,7 @@ function noticeEmptyReferences(markdown: string, prefix: string) {
  * them to go and fix them (his L-series pass, 2026-09-08).
  */
 function referenceList(names: string[]): string {
-    return names.map(quotedReference).join(", ");
+    return names.map((name) => (name.startsWith("^[") ? `"${name}"` : quotedReference(name))).join(", ");
 }
 
 /**
@@ -197,9 +198,15 @@ function leftInPlace(them: "it" | "them", doing: "deleting" | "moving" = "deleti
     return `the lint left ${them} in place, because ${doing} ${them} would change how Obsidian reads the lines around ${them}.`;
 }
 
+// The same reason for a change the lint left undone where nothing moved:
+// `doing` is what it held back from (merging, renaming).
+function leftAsTheyAre(them: "it" | "them", doing: string): string {
+    return `the lint left ${them} as ${them === "it" ? "it is" : "they are"}, because ${doing} ${them} would change how Obsidian reads the lines around ${them}.`;
+}
+
 // Why the lint left a duplicate's copies alone with merging on (Jason,
 // 2026-10-05; see noticeDuplicateDefinitions).
-const MergeLeftAsTheyAre = "the lint left them as they are, because merging them would change how Obsidian reads the lines around them.";
+const MergeLeftAsTheyAre = leftAsTheyAre("them", "merging");
 
 // The alert half of "Delete orphaned references". While that toggle is off,
 // the lint reports orphaned references instead of deleting them: an orphan
@@ -331,6 +338,46 @@ function noticeUngatheredDefinitions(plugin: FootnotePlugin, markdown: string) {
             ? `This note has a footnote definition the lint could not move to the bottom (${referenceList(names)}), and ${leftInPlace("it", "moving")} Move it by hand, and the next lint gathers the rest.`
             : `This note has ${names.length} footnote definitions the lint could not move to the bottom (${referenceList(names)}), and ${leftInPlace("them", "moving")} Move them by hand, and the next lint gathers the rest.`,
         8000,
+    );
+}
+
+// The changes the result gate held back inside the punctuation rule, apply
+// prefix, and reindex, where the note after the lint does not show them:
+// a reference left on the wrong side of its punctuation, a footnote left
+// without the note's prefix, footnotes reindex left unnumbered or unnamed,
+// and definitions it left out of order. Each used to be held back without a word
+// (ADR 0002, the lint is never silent; stage 5 of the result gate
+// design, 2026-10-08). They are named with the general "left in place"
+// or "left as it is" reason, and no advice: doing it by hand would change
+// the note's reading the same way. Only after a lint that held something
+// back (lastLintHeldBack), since a lint the gate passed whole held nothing.
+function noticeHeldChanges(plugin: FootnotePlugin, markdown: string, afterLint: boolean) {
+    if (!afterLint || !lastLintHeldBack(markdown)) return;
+    const heading = configuredSectionHeading(plugin);
+    const held = heldByTheLint(markdown, lintOptionsFromSettings(plugin, sectionHeadingProblem(heading) === null ? heading : "", markdown));
+    const say = (names: string[] | undefined, one: (list: string) => string, many: (count: number, list: string) => string) => {
+        if (!names || names.length === 0) return;
+        showNotice(names.length === 1 ? one(referenceList(names)) : many(names.length, referenceList(names)), 8000);
+    };
+    say(
+        held.get("punctuation"),
+        (list) => `This note has a footnote reference the lint could not move to the other side of its punctuation (${list}), and ${leftInPlace("it", "moving")}`,
+        (count, list) => `This note has ${count} footnote references the lint could not move to the other side of their punctuation (${list}), and ${leftInPlace("them", "moving")}`,
+    );
+    say(
+        held.get("prefix"),
+        (list) => `This note has a footnote the lint could not give the note's prefix (${list}), and ${leftAsTheyAre("it", "renaming")}`,
+        (count, list) => `This note has ${count} footnotes the lint could not give the note's prefix (${list}), and ${leftAsTheyAre("them", "renaming")}`,
+    );
+    say(
+        held.get("rename"),
+        (list) => `This note has a footnote the lint could not rename (${list}), and ${leftAsTheyAre("it", "renaming")}`,
+        (count, list) => `This note has ${count} footnotes the lint could not rename (${list}), and ${leftAsTheyAre("them", "renaming")}`,
+    );
+    say(
+        held.get("order"),
+        (list) => `This note has a footnote definition the lint could not put in order (${list}), and ${leftInPlace("it", "moving")}`,
+        (count, list) => `This note has ${count} footnote definitions the lint could not put in order (${list}), and ${leftInPlace("them", "moving")}`,
     );
 }
 
@@ -631,6 +678,7 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string, after
     noticeDefinitionsInsideTables(markdown);
     noticeOrphanedDefinitions(plugin, markdown, { lines }, afterLint);
     noticeUngatheredDefinitions(plugin, markdown);
+    noticeHeldChanges(plugin, markdown, afterLint);
     noticeDuplicateDefinitions(plugin, markdown, { lines });
     noticeNestedFootnotes(lines);
     noticeInvalidNames(lines);

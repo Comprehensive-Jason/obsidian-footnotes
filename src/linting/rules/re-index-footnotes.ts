@@ -1,4 +1,4 @@
-import { rulePasses } from "../rule-gate";
+import { holdBack, rulePasses } from "../rule-gate";
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { nameForBody } from "../../parsing/footnote-grammar";
 import { NoteReading } from "../../parsing/note-reading";
@@ -288,7 +288,10 @@ function reindexOnce(
         // Renames the result gate refuses (a "$" prefix pairing with an
         // earlier dollar turns a footnote into plain text) are not made, and
         // the definitions are only put in order.
-        const rewritten = rulePasses(lines, renamed, { renamed: renames }) ? renamed : lines;
+        const renamesPass = rulePasses(lines, renamed, { renamed: renames });
+        const rewritten = renamesPass ? renamed : lines;
+        // renames refused are named in the lint's alert (ADR 0002)
+        if (!renamesPass) holdBack("rename", [...renames].filter(([from, to]) => from !== to.toLowerCase()).map(([from]) => from));
 
         // Swap the definition blocks between the places definitions already
         // sit, so that they read in appearance order. Only the definitions
@@ -366,7 +369,12 @@ function reindexOnce(
         // 2026-10-06, cycle 4, pin bug-end-dollar-line-swallows-definition).
         // A swap the result gate refuses is not made: the footnotes are
         // renamed, and their definitions stay in the order they were in.
-        if (!rulePasses(rewritten, out, {})) return rewritten.join("\n");
+        if (!rulePasses(rewritten, out, {})) {
+            // named in the lint's alert by the names they now go by (ADR 0002)
+            const shown = (name: string) => (renamesPass ? (renames.get(name.toLowerCase()) ?? name) : name);
+            holdBack("order", blocks.filter((block, slot) => sorted[slot] !== block).map((block) => shown(block.name)));
+            return rewritten.join("\n");
+        }
         return out.join("\n");
     });
 }

@@ -10,7 +10,7 @@ import { jumpToFootnoteDefinition } from "../commands/navigation";
 import { docContext } from "../editor/doc-context";
 import { replaceMinimal } from "../editor/write-back";
 import { rewriteDocument } from "./rewrite-document";
-import { GatedLint, gatedLint } from "./rule-gate";
+import { GatedLint, gatedLint, heldBackBy, HoldingRule } from "./rule-gate";
 import { definitionLabel, quotedReference } from "../parsing/footnote-grammar";
 import { footnotePrefix, footnotePrefixProblem } from "../parsing/footnote-prefix";
 import { FootnotePlacement } from "../parsing/landing";
@@ -485,6 +485,42 @@ export function lintNote(plugin: FootnotePlugin, markdown: string, sectionHeadin
     const after = gatedLintFootnotes(markdown, options, checkedFirst);
     lastLint = { options: written, text: after.text, file, checked: after.checked };
     return after.text;
+}
+
+/**
+ * Whether the lint that gave `markdown` was the plugin's last lint and had
+ * to hold a change back, so the lint's alerts ask the rules what they held
+ * (heldByTheLint). A lint the result gate passed in one gathered run held
+ * nothing back: every rule made every change it meant to, and the note it
+ * gave asks for no more.
+ */
+export function lastLintHeldBack(markdown: string): boolean {
+    return lastLint !== null && lastLint.checked && lastLint.text === markdown;
+}
+
+/**
+ * What the punctuation rule, apply prefix, and reindex hold back on
+ * `markdown`, a note the lint has settled, by rule (heldBackBy in
+ * rule-gate.ts): each rule is run the way the lint runs it with
+ * `options`, and on a settled note every change it still means to make
+ * is one the result gate refuses. The lint's alerts name them (ADR 0002;
+ * stage 5 of the result gate design, 2026-10-08).
+ */
+export function heldByTheLint(markdown: string, options: LintOptions): Map<HoldingRule, string[]> {
+    return heldBackBy(() => {
+        if (options.fixPunctuation ?? true) footnoteAfterPunctuationRule.apply(markdown, { placement: options.placement });
+        const notePrefix = options.applyNotePrefix ? footnotePrefix(markdown) : "";
+        const validPrefix = notePrefix && footnotePrefixProblem(notePrefix) === null ? notePrefix : "";
+        if (options.applyNotePrefix && validPrefix) applyFootnotePrefixRule.apply(markdown, { prefix: validPrefix });
+        if (options.reindex ?? true) {
+            reIndexFootnotesRule.apply(markdown, {
+                ...options.reindexOptions,
+                prefix: validPrefix,
+                leaveOrphansInPlace: options.removeOrphanedDefinitions ?? false,
+                leaveDuplicatesInPlace: options.mergeDuplicateDefinitions ?? false,
+            });
+        }
+    });
 }
 
 /**
