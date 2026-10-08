@@ -8,7 +8,7 @@
 // here from markdown-scan.ts in step 4 of the runtime swap, 2026-10-03,
 // when the rest of that file went).
 
-import { NoteReading, readNote } from "./note-reading";
+import { Definition, NoteReading, readNote } from "./note-reading";
 
 /**
  * A footnote definition at the start of a line ("[^x]: …"). Up to three
@@ -151,9 +151,18 @@ export function definitionLabelWithName(line: string, masked: string) {
  * cut an inline footnote in two), in code, or anywhere else Obsidian reads
  * no footnote, and no blank line makes that a definition.
  *
- * Left out besides: a line inside a definition's body, where a blank line
- * would make the label a definition nested in that one, which the plugin
- * never makes (ADR 0001); labels written inside a "%%" comment (hidden
+ * A label inside another definition's text counts only when a blank line
+ * above would make it a definition beside that one (besideWithBlankAbove).
+ * That is a label typed straight under a footnote longer than Obsidian's
+ * 1,024-character look-ahead, which Obsidian reads as more of the long
+ * footnote (docs/obsidian-reading-rules.md E4). It used to be left out
+ * with every line inside a definition, so the lint neither fixed it nor
+ * named it, and the orphan rule cut its "[^2]" out (hunt 2026-10-08,
+ * cycle 7, cluster Y7, pin bug-label-past-lookahead-not-lazy).
+ *
+ * Left out besides: a label a blank line would make a definition nested
+ * in the one around it, which the plugin never makes (ADR 0001); labels
+ * written inside a "%%" comment (hidden
  * text, not a definition one blank line short of working; a reference
  * there is live, so the comment is checked on its own); and labels behind
  * a "%%" on their line, which no blank line can ever make a definition
@@ -173,7 +182,7 @@ export function labelShapedLines(lines: string[], range?: { from: number; to: nu
     let offset = 0;
     for (let i = 0; i < first; i++) offset += lines[i].length + 1;
     for (let i = first; i < last; offset += lines[i].length + 1, i++) {
-        if (reading.labelLines[i] || !lines[i].includes("[^") || reading.definitionAt(i) !== null) continue;
+        if (reading.labelLines[i] || !lines[i].includes("[^")) continue;
         const textStart = reading.containerEnd(i);
         const hit = definitionLabelWithName(lines[i].slice(textStart), reading.maskedLine(i).slice(textStart));
         if (!hit || hit.label.afterCloser) continue;
@@ -181,6 +190,8 @@ export function labelShapedLines(lines: string[], range?: { from: number; to: nu
         if (!reading.referencesOn(i).some((reference) => reference.start === labelStart)) continue;
         const at = offset + labelStart;
         if (reading.comments.some((comment) => comment.from <= at && at < comment.to)) continue;
+        const owner = reading.definitionAt(i);
+        if (owner !== null && !besideWithBlankAbove(lines, i, owner)) continue;
         // a "===" or "---" under the label makes it a heading's text (or,
         // inside a longer paragraph, plain text a blank line above would
         // turn INTO a heading), so a blank line above cannot fix it (Kimi
@@ -190,6 +201,23 @@ export function labelShapedLines(lines: string[], range?: { from: number; to: nu
         out.push({ line: i, name: hit.name, underlined });
     }
     return out;
+}
+
+/**
+ * Whether the label on line `i`, read as more text of the definition
+ * `owner`, becomes a definition of its own once a blank line goes in above
+ * it, and not one nested in `owner`. The question is answered by reading
+ * the note with that blank line in place, the very note fix-lazy would
+ * write (a bare ">" line in a quote). A label indented four spaces under
+ * the long footnote would join that footnote's text after the blank line,
+ * as a footnote nested in it, so it does not count.
+ */
+function besideWithBlankAbove(lines: readonly string[], i: number, owner: Definition): boolean {
+    const markers = (QuoteMarkers.exec(lines[i])?.[1] ?? "").trimEnd();
+    const trial = readNote([...lines.slice(0, i), markers, ...lines.slice(i)]);
+    // in the trial the label is on line i + 1
+    const made = trial.labelOn(i + 1);
+    return made !== null && made.container.footnotes <= owner.container.footnotes;
 }
 
 /**

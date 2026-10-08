@@ -72,13 +72,18 @@ const names = (text: string) => readNote(text.split("\n")).definitions.map((d) =
 const note = ["Text[^1] and[^2] here.", "", `[^1]: ${Long}`, "[^2]: Capital, vol. 3."].join("\n");
 
 describe("Delete orphaned references on, a label straight under a long footnote", () => {
-    // Now: "Text[^1] and here.", "", "[^1]: <long>", ": Capital, vol. 3.".
-    it.fails("keeps the reference to footnote 2 and its label", () => {
+    // Before c7fix-C: "Text[^1] and here.", "", "[^1]: <long>", ": Capital, vol. 3.".
+    it("keeps the reference to footnote 2 and its label", () => {
         const out = lintFootnotes(note, { removeOrphanedReferences: true });
         expect(out).toContain("and[^2]");
         expect(out).toContain("[^2]: Capital, vol. 3.");
     });
 
+    // Still open after c7fix-C: fix-lazy finds the label now, but the
+    // result gate refuses its blank line, since footnote 1 loses the
+    // label's line from its text (check 1 compares footnote 1's text
+    // before and after; src/editor/result-gate.ts). So the reference and
+    // the label stay, and the alert says to add the blank line.
     it.fails("ends with footnote 2 defined", () => {
         const out = lintFootnotes(note, { removeOrphanedReferences: true });
         expect(names(out)).toEqual(["1", "2"]);
@@ -88,10 +93,10 @@ describe("Delete orphaned references on, a label straight under a long footnote"
 describe("default settings, the same note: what the user is told", () => {
     beforeEach(resetNotices);
 
-    // Now the lint leaves the note as it was, and the alerts say "Write its
+    // Before c7fix-C the lint left the note as it was, and the alerts said "Write its
     // definition or delete the reference" for [^2] and that [^1] holds a
     // nested footnote.
-    it.fails("the lint fixes it, or the alert names the label and says to add a blank line", () => {
+    it("the lint fixes it, or the alert names the label and says to add a blank line", () => {
         const out = lintFootnotes(note);
         noticeLintAlerts(fakePlugin({}), out);
         const fixed = names(out).includes("2");
@@ -101,7 +106,8 @@ describe("default settings, the same note: what the user is told", () => {
     });
 
     // Now: footnote 2 runs over lines 3 and 4, with "[^3]: Heinrich
-    // 2013." as its lazy text, and footnote 3 has no definition.
+    // 2013." as its lazy text, and footnote 3 has no definition. Still
+    // open after c7fix-C, for the result gate's reason above.
     it.fails("packed by hand: short, long, short", () => {
         const packed = ["One[^1] two[^2] three[^3].", "", "[^1]: Brenner 2006.", `[^2]: ${Long}`, "[^3]: Heinrich 2013."].join("\n");
         const out = lintFootnotes(packed);
@@ -118,12 +124,14 @@ describe("a label written straight under a long footnote by the old append", () 
         expect(names(old)).toEqual(["a"]);
     });
 
-    // Now fix-lazy gives the note back unchanged.
+    // Now fix-lazy gives the note back unchanged. Still open after
+    // c7fix-C, for the result gate's reason above.
     it.fails("fix-lazy gives b its definition back", () => {
         expect(names(fixLazyDefinitions(old))).toEqual(["a", "b"]);
     });
 
     // Now the default lint moves only the period; [^b] stays undefined.
+    // Still open after c7fix-C, for the result gate's reason above.
     it.fails("the default lint gives b its definition back", () => {
         expect(names(lintFootnotes(old))).toEqual(["a", "b"]);
     });
