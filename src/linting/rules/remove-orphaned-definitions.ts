@@ -1,6 +1,6 @@
-import { EditIntent, oldChecksSuspended, shadowRule } from "../../editor/result-gate";
-import { blankQuoteLine, definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../../parsing/line-edits";
-import { Definition, linesReadAlike, NoteReading, readNote } from "../../parsing/note-reading";
+import { rulePasses } from "../rule-gate";
+import { definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../../parsing/line-edits";
+import { Definition, NoteReading, readNote } from "../../parsing/note-reading";
 import { FootnoteRule } from "../rule";
 
 // Deleting orphaned definitions, as a rule of its own (2026-08-10).
@@ -206,11 +206,8 @@ export function orphanedDefinitionBlocks(lines: string[]): Definition[] {
     return orphanedBlocks(scanReferences(lines));
 }
 
-/**
- * Whether taking `dead` out of a note, leaving `out`, may go ahead: `cut`
- * is the cut as definitionCuts gives it.
- */
-type CutAccepted = (dead: readonly Definition[], out: string[], cut: { lines: string[]; ranges: readonly { start: number; end: number }[] }) => boolean;
+/** Whether taking `dead` out of a note, leaving `out`, may go ahead. */
+type CutAccepted = (dead: readonly Definition[], out: string[]) => boolean;
 
 /**
  * `lines` with `dead` cut out (definitionCuts, removeLineRanges), or null
@@ -219,7 +216,7 @@ type CutAccepted = (dead: readonly Definition[], out: string[], cut: { lines: st
 function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[], accepts: CutAccepted): string[] | null {
     const cut = definitionCuts(lines, dead);
     const out = removeLineRanges(cut.lines, cut.ranges);
-    return accepts(dead, out, cut) ? out : null;
+    return accepts(dead, out) ? out : null;
 }
 
 /**
@@ -230,12 +227,13 @@ function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[], acc
  * bug-orphan-rule-cuts-footnote-cited-by-kept-orphan).
  *
  * A candidate stays when `accepts` refuses taking it out: by default when
- * that would change how Obsidian reads a line that stays: a definition
- * between two lists keeps them apart, and with it gone the lists join into
- * one, a second numbered list running on from the first one's numbers.
- * Such a definition stays in the note, where the lint's alert names it as
- * an orphan (Jason, 2026-10-05, triage decision Q2). The cut hands in the
- * result gate's verdict on the whole cut instead (planCut).
+ * the result gate refuses it (rule-gate.ts), as when it would change how
+ * Obsidian reads a line that stays: a definition between two lists keeps
+ * them apart, and with it gone the lists join into one, a second numbered
+ * list running on from the first one's numbers. Such a definition stays in
+ * the note, where the lint's alert names it as an orphan (Jason,
+ * 2026-10-05, triage decision Q2). The cut hands in the gate's verdict on
+ * the whole cut instead (planCut).
  *
  * The candidates go all at once when that is clean. Otherwise they are
  * taken one at a time, as many as can go cleanly. Whatever stays keeps
@@ -246,9 +244,7 @@ function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[], acc
 export function definitionsToCut(
     lines: string[],
     candidates: readonly Definition[],
-    // Shadow mode switches the old checks off for a moment, to see what the
-    // rule would do without them (oldChecksSuspended in result-gate.ts).
-    accepts: CutAccepted = (_dead, out, cut) => oldChecksSuspended() || !linesReadDifferently(lines, cut, out),
+    accepts: CutAccepted = (dead, out) => rulePasses(lines, out, { removed: dead.map((block) => block.name) }),
 ): { removed: Definition[]; kept: string[] } {
     const reading = readNote(lines);
     const all = stillUnused(reading, candidates);
@@ -298,24 +294,13 @@ function stillUnused(reading: NoteReading, blocks: readonly Definition[]): Defin
  * text, and everything that is referenced, stays exactly where it is.
  */
 export function removeOrphanedFootnoteDefinitions(markdown: string): string {
-    // while a test records, the result goes to the result gate too
-    // (shadow mode, shadowRule in result-gate.ts)
-    return shadowRule("lint:orphan-definitions", markdown, () => removeOrphanedFootnoteDefinitionsAsWritten(markdown), orphanedDefinitionsRemoved);
-}
-
-/** What Delete orphaned definitions means to change, for the result gate: the names whose definitions nothing references, chains followed. */
-function orphanedDefinitionsRemoved(before: string[]): EditIntent {
-    return { removed: [...new Set(orphanedDefinitionBlocks(before).map((block) => block.name.toLowerCase()))] };
-}
-
-/** The rule itself, which the exported function above runs. */
-function removeOrphanedFootnoteDefinitionsAsWritten(markdown: string): string {
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");
     if (orphanedDefinitionBlocks(lines).length === 0) return markdown;
-    // The same promise the orphan-reference rule makes: a deletion that
-    // changes how Obsidian reads a line it did not touch is refused, and
-    // that orphan stays for the user to sort out (the alert names it).
+    // The same promise the orphan-reference rule makes: a deletion the
+    // result gate refuses (rule-gate.ts), one that changes how Obsidian
+    // reads a line it did not touch, is not made, and that orphan stays for
+    // the user to sort out (the alert names it).
     // Cutting a block can put the line below it under a setext underline
     // or a blank line, which turns a lazy label there into a real
     // definition that the NEXT lint then deletes as an orphan, so lint
@@ -340,56 +325,6 @@ function removeOrphanedFootnoteDefinitionsAsWritten(markdown: string): string {
     }
     if (current === lines) return markdown;
     return restoreEol(current.join("\n"), eol);
-}
-
-/**
- * Whether cutting whole lines out of `before` changed how Obsidian reads
- * any line it kept. `cut` is the cut as definitionCuts gives it: the lines
- * with every label on a list marker's line trimmed back to the marker, and
- * the ranges of whole lines removed; `out` is the result. A kept line must
- * read as it did (linesReadAlike), and a trimmed marker line may only lose
- * the definition it held. The kept lines are walked in step with the
- * result; a blank line the cut collapsed is skipped over.
- *
- * Cutting a block can put the line below it under a setext underline or a
- * blank line, which turns a lazy label there into a real definition (Kimi
- * hunt cycle 2, 2026-09-16), and emptying a marker line right under a
- * paragraph leaves a "-" that makes the paragraph a heading (hunt
- * 2026-10-02, cluster D5).
- *
- * Shared with the Delete footnote command, which cuts a definition block
- * the same way (T4, 2026-09-21), and the conversion to inline footnotes.
- */
-export function linesReadDifferently(
-    before: string[],
-    cut: { lines: string[]; ranges: readonly { start: number; end: number }[] },
-    out: string[],
-): boolean {
-    const readingBefore = readNote(before);
-    const readingAfter = readNote(out);
-    const removed = new Set<number>();
-    for (const range of cut.ranges) for (let i = range.start; i <= range.end; i++) removed.add(i);
-    let j = 0;
-    for (let i = 0; i < before.length; i++) {
-        if (removed.has(i)) continue;
-        const kept = cut.lines[i];
-        // a blank line removeLineRanges put in (in front of a "---" the cut
-        // would have promoted to the note's first line, or between a kept
-        // paragraph and a setext underline) keeps the kept line reading as
-        // it did, so it is stepped over (GLM hunt cycle 11, 2026-09-16:
-        // the guard's own blank made the rule refuse a clean cut)
-        while (j < out.length && out[j] === "" && kept !== "") j++;
-        if (out[j] !== kept) {
-            // a blank line the cut merged away, or dropped from the end of
-            // the note (removeLineRanges takes the separator blank with a
-            // block cut from the end); a quote's blank line (">") likewise
-            if (kept.trim() === "" || blankQuoteLine(kept)) continue;
-            return true;
-        }
-        if (!linesReadAlike(readingBefore, i, readingAfter, j, kept === before[i] ? "none" : "cut")) return true;
-        j++;
-    }
-    return false;
 }
 
 /** This rule's catalogue entry. */

@@ -155,10 +155,6 @@ export interface NoteReading {
     readonly openRegionFrom: number;
     /** One entry per line: the blocks the line belongs to, outermost first, marked where each starts (FootnoteFacts.lineBlocks). */
     readonly lineBlocks: readonly string[];
-    /** The stretches of protected text and "%%" comments that touch `line`, each as its kind, with a "^" where it starts on this line, in order. */
-    lineSpans(line: number): readonly string[];
-    /** The live references on `line`, by name in lower case, in order. */
-    lineReferences(line: number): readonly string[];
     /**
      * The live references on `line`, in order (the runtime swap, step 3,
      * 2026-10-03). A reference is live where Obsidian reads one: not in
@@ -206,81 +202,6 @@ export interface NoteReading {
      * 2026-10-04).
      */
     insideLink(line: number, ch: number): boolean;
-}
-
-/**
- * How an edit may have changed a line it touched, for linesReadAlike:
- * "none" for a line the edit left alone, "cut" for one it only took text
- * out of (a reference, a definition's label after a list marker), and
- * "rewrite" for one whose text it replaced (a reference turned into an
- * inline footnote).
- */
-export type LineEdit = "none" | "cut" | "rewrite";
-
-/**
- * Whether `after` reads as many live references and as many definitions as
- * `before`: a rename must leave every footnote a footnote. A name that
- * gains a "$" (a footnote-prefix "a$") can pair with a dollar earlier on
- * its line: "$6 [^ch-2]" is a price and a reference, "$6 [^a$ch-2]" is
- * math to Obsidian, and the footnote is gone (found by the conservation
- * property, the runtime swap step 2, 2026-10-03).
- */
-export function keepsEveryFootnote(before: readonly string[], after: readonly string[]): boolean {
-    const count = (lines: readonly string[]) => {
-        const reading = readNote(lines);
-        return `${reading.references.filter((reference) => reference.live).length}:${reading.definitions.length}`;
-    };
-    return count(before) === count(after);
-}
-
-/** Whether every entry of `part` is in `whole`, as many times. */
-function within(part: readonly string[], whole: readonly string[]): boolean {
-    const left = new Map<string, number>();
-    for (const item of whole) left.set(item, (left.get(item) ?? 0) + 1);
-    for (const item of part) {
-        const n = left.get(item) ?? 0;
-        if (n === 0) return false;
-        left.set(item, n - 1);
-    }
-    return true;
-}
-
-/**
- * Whether line `j` of `after` reads as line `i` of `before` did, as far as
- * the edit between the two allows (the reclassification guards of the
- * orphan rules, Delete footnote everywhere, and the conversions; the
- * runtime swap, step 2, 2026-10-03).
- *
- * A line the edit left alone must read exactly as before: the same blocks
- * around it and starting on it, the same protected text and "%%" comments,
- * the same live references. A line the edit only cut text out of may lose
- * things but gain none: its blocks are the ones it had, or the outer ones
- * of them (an emptied line keeps only its containers, a list marker's line
- * whose definition went keeps only the item), and it holds no protected
- * text and no reference it did not hold. So "#[^9] tail" may not become a
- * heading, "[Smith][^1](2020)" may not become a link, and "[[^1]^2]" may
- * not become a reference to footnote 2. A line whose text was replaced
- * must stay in the same blocks; what is inside it is the edit's own.
- */
-export function linesReadAlike(before: NoteReading, i: number, after: NoteReading, j: number, edit: LineEdit): boolean {
-    const blocksBefore = before.lineBlocks[i] ?? "";
-    const blocksAfter = after.lineBlocks[j] ?? "";
-    if (edit === "rewrite") return blocksBefore === blocksAfter;
-    if (edit === "none") {
-        // a blank line has nothing to read: which container it falls in
-        // (the end of one list item or the gap before the next) changes
-        // nothing, and a change to a block around it shows on that block's
-        // own lines
-        if (before.maskedLine(i).trim() === "" && after.maskedLine(j).trim() === "" && !before.protectedLines[i] && !after.protectedLines[j]) return true;
-        return (
-            blocksBefore === blocksAfter &&
-            before.lineSpans(i).join(" ") === after.lineSpans(j).join(" ") &&
-            before.lineReferences(i).join(" ") === after.lineReferences(j).join(" ")
-        );
-    }
-    // the blocks after are the outer part of the blocks before
-    if (blocksAfter !== "" && blocksBefore !== blocksAfter && !blocksBefore.startsWith(blocksAfter + " ")) return false;
-    return within(after.lineSpans(j), before.lineSpans(i)) && within(after.lineReferences(j), before.lineReferences(i));
 }
 
 /** How many notes the reading remembers. A press reads the note as it is and as it will be after the edit, a lint passes each rule's output to the next, and asking where an unclosed region starts reads the note with a line added, so a handful covers them. */
@@ -623,8 +544,6 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
     let commentLines: readonly boolean[] | null = null;
     let openRegion: number | null = null;
     let tableRowLines: readonly boolean[] | null = null;
-    // every stretch of protected text and "%%" comment touching each line
-    let spanKinds: string[][] | null = null;
     // the live references, the labels, and the outermost inline footnotes
     // on each line, in order, worked out the first time something asks
     let referencesByLine: ReferenceOccurrence[][] | null = null;
@@ -690,16 +609,6 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
             return tableRowLines;
         },
         lineBlocks: Object.freeze(facts.lineBlocks),
-        lineSpans(line) {
-            if (spanKinds === null) {
-                spanKinds = Array.from({ length: lineCount }, () => [] as string[]);
-                for (const span of facts.protectedSpans) {
-                    for (let l = span.startLine; l <= lastLineOf(span); l++) spanKinds[l].push(l === span.startLine ? `^${span.kind}` : span.kind);
-                }
-            }
-            return spanKinds[line] ?? [];
-        },
-        lineReferences: (line) => referencesOn(line).map((reference) => reference.name.toLowerCase()),
         referencesOn,
         referenceAt: (line, ch) => referencesOn(line).find((reference) => ch > reference.start && ch < reference.end) ?? null,
         labelsOn(line) {

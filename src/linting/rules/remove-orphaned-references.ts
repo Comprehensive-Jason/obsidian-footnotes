@@ -1,7 +1,6 @@
-import { oldChecksSuspended, shadowRule } from "../../editor/result-gate";
-import { orphanedReferencesRemoved } from "../rule-intents";
-import { LineEdit, linesReadAlike, readNote } from "../../parsing/note-reading";
-import { labelShapedLines, lazyDefinitionLabelLines } from "../../parsing/label-shapes";
+import { rulePasses } from "../rule-gate";
+import { readNote } from "../../parsing/note-reading";
+import { labelShapedLines } from "../../parsing/label-shapes";
 import { normalizeEol, restoreEol } from "../../parsing/line-edits";
 import { FootnoteRule } from "../rule";
 
@@ -163,13 +162,6 @@ export function orphanedFootnoteReferenceNames(
  * end of a line are a markdown line break the user typed on purpose.
  */
 export function removeOrphanedFootnoteReferences(markdown: string, orphanSafePrefix = ""): string {
-    // while a test records, the result goes to the result gate too
-    // (shadow mode, shadowRule in result-gate.ts)
-    return shadowRule("lint:orphan-references", markdown, () => removeOrphanedFootnoteReferencesAsWritten(markdown, orphanSafePrefix), orphanedReferencesRemoved);
-}
-
-/** The rule itself, which the exported function above runs. */
-function removeOrphanedFootnoteReferencesAsWritten(markdown: string, orphanSafePrefix: string): string {
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");
     const reading = readNote(lines);
@@ -191,20 +183,29 @@ function removeOrphanedFootnoteReferencesAsWritten(markdown: string, orphanSafeP
             .reverse();
     if (!lines.some((_, i) => orphansOn(i).length > 0)) return markdown;
 
-    // A cut that changes how Obsidian reads ANY line is refused, and the
-    // orphan stays for the user to sort out (readsDifferently says why).
+    // The result gate judges the cuts (rule-gate.ts), and one it refuses,
+    // one that changes how Obsidian reads any line but by losing the
+    // reference, is not made, and the orphan stays for the user to sort
+    // out. Deleting reference text can change how Obsidian reads a line far
+    // away: emptying the paragraph between a definition and an indented
+    // block turns that block from indented CODE into a continuation line of
+    // the definition, because Obsidian carries a definition on across any
+    // number of blank lines (verified against metadataCache, 2026-08-10;
+    // found by the idempotence property). Emptying the line above a lazy
+    // label would turn that label into a real definition (second review,
+    // 2026-09-09). A leftover marker can turn a line into a block of
+    // another kind: "#[^9] tail" is prose and "# tail" a heading (Kimi hunt
+    // cycle 4, 2026-09-16; hunt 2026-10-02, cluster E11). And cutting "[^9]"
+    // out of "[^8][^9]: x" under a line of prose leaves "[^8]: x", which
+    // reads the same, but the next lint's fix for lazy labels would make it
+    // a second definition of footnote 8 (hunt 2026-10-02, cluster P4).
     //
     // Each orphaned NAME is judged on its own, all of its references
     // together: one refused cut used to veto every safe one in the note
     // (Kimi hunt cycle 4), and a name half deleted would confuse the alert
     // that speaks in names. The whole set is tried first, since that is
-    // the common case and costs one scan.
+    // the common case and costs one judgment.
     const all = lines.map((line, i) => orphansOn(i).reduce((text, { start, end }) => cutOne(text, start, end), line));
-    // Shadow mode switches the old checks off for a moment, to see
-    // what the rule would do without them (oldChecksSuspended in
-    // result-gate.ts).
-    if (oldChecksSuspended() || !readsDifferently(lines, all)) return restoreEol(all.join("\n"), eol);
-
     const orphanNames: string[] = [];
     for (let i = 0; i < lines.length; i++) {
         for (const { name } of reading.referencesOn(i)) {
@@ -214,6 +215,8 @@ function removeOrphanedFootnoteReferencesAsWritten(markdown: string, orphanSafeP
             }
         }
     }
+    if (rulePasses(lines, all, { removed: orphanNames })) return restoreEol(all.join("\n"), eol);
+
     let current = lines;
     for (const folded of orphanNames) {
         const now = readNote(current);
@@ -225,7 +228,7 @@ function removeOrphanedFootnoteReferencesAsWritten(markdown: string, orphanSafeP
                 .reduce((text, { start, end }) => cutOne(text, start, end), line),
         );
         if (trial.every((line, i) => line === current[i])) continue;
-        if (!oldChecksSuspended() && readsDifferently(current, trial)) continue;
+        if (!rulePasses(current, trial, { removed: [folded] })) continue;
         current = trial;
     }
     if (current === lines) return markdown;
@@ -249,49 +252,6 @@ export function cutOne(line: string, start: number, end: number): string {
     if (line[copied] === " " && (head === "" || head.endsWith(" "))) copied++;
     const tail = line.slice(copied);
     return tail === "" ? head.replace(/[ \t]+$/, "") : head + tail;
-}
-
-/**
- * Whether an edit that keeps every line where it was (`before` and
- * `after` have the same length) changed how Obsidian reads any line of
- * the note: a line the edit did not touch must read exactly as it did,
- * and a line it touched may only lose things (linesReadAlike in
- * note-reading.ts says what that means). `touched` says how the edited
- * lines changed: "cut" when text was only taken out of them (an orphaned
- * reference, a deleted footnote's references), "rewrite" when it was
- * replaced (a reference turned into an inline footnote).
- *
- * Deleting reference text can change how Obsidian reads a line far away.
- * Emptying the paragraph between a definition and an indented block turns
- * that block from indented CODE into a continuation line of the
- * definition, because Obsidian carries a definition on across any number
- * of blank lines. (Verified against metadataCache, 2026-08-10; found by
- * the idempotence property.) Emptying the line above a lazy label would
- * turn that label into a real definition (second review, 2026-09-09). A
- * leftover marker can turn a line into a block of another kind: "#[^9]
- * tail" is prose and "# tail" a heading, "[^9]> q" prose and "> q" a
- * quote (Kimi hunt cycle 4, 2026-09-16; hunt 2026-10-02, cluster E11). An
- * emptied line can split a paragraph in two, or leave a "-" that makes the
- * line above a heading (clusters D3, D4); and the text left behind can
- * become a link or another reference ("[Smith](2020)", "[^2]"; clusters
- * D8, D9). Comparing the note reading of the two texts line by line
- * catches all of these the same way (the runtime swap, step 2,
- * 2026-10-03).
- */
-function readsDifferently(before: string[], after: string[], touched: LineEdit = "cut"): boolean {
-    const readingBefore = readNote(before);
-    const readingAfter = readNote(after);
-    for (let i = 0; i < before.length; i++) {
-        if (!linesReadAlike(readingBefore, i, readingAfter, i, before[i] === after[i] ? "none" : touched)) return true;
-    }
-    // Nor may an edited line become a lazy label, a line shaped like a
-    // definition that Obsidian reads as paragraph text: cutting "[^9]" out
-    // of "[^8][^9]: x" under a line of prose leaves "[^8]: x", which reads
-    // the same, but the next lint's fix for lazy labels would give it its
-    // blank line and make it a second definition of footnote 8, so lint
-    // twice would not be lint once (hunt 2026-10-02, cluster P4).
-    const lazyBefore = new Set(lazyDefinitionLabelLines(before));
-    return lazyDefinitionLabelLines(after).some((line) => before[line] !== after[line] && !lazyBefore.has(line));
 }
 
 /**

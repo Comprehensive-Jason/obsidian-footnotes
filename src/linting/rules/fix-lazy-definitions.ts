@@ -1,7 +1,6 @@
-import { oldChecksSuspended, shadowRule } from "../../editor/result-gate";
-import { lazyLabelsDefined } from "../rule-intents";
+import { rulePasses } from "../rule-gate";
 import { lazyDefinitionLabelLines } from "../../parsing/label-shapes";
-import { linesReadAlike, readNote } from "../../parsing/note-reading";
+import { readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
@@ -24,20 +23,27 @@ import { FootnoteRule } from "../rule";
 // When the setting is off, nothing is inserted and the lazy-definition lint
 // alert reports the line instead. (Ruling: Jason, 2026-09-09.)
 //
-// One label the rule leaves alone even when the setting is on: a lazy label
-// whose blank line would make the definition SWALLOW protected text below
-// it. An indented code chunk two lines under the label is code while the
-// label is prose, but the moment the label becomes a definition, that
-// chunk (indented, after a blank line) reads as the definition's
-// continuation, and the code is gone. The lint's promise that protected
-// text survives untouched outranks the fix, so such a label stays lazy and
-// the alert names it (found by the lint properties, 2026-09-15; the same
-// swallowing as the pinned move-to-bottom finding).
-//
-// Nor does it fix a label whose blank line would change how the lines
-// after it read, such as the next item of a list the label sits in (see
-// linesAfterReadDifferently below; Jason's triage decision Q7,
-// 2026-10-05).
+// The result gate judges each blank line before it goes in (rule-gate.ts),
+// and a label whose blank line it refuses stays lazy, and the alert names
+// it. Such as a label whose blank line would make the definition SWALLOW
+// protected text below it: an indented code chunk two lines under the
+// label is code while the label is prose, but the moment the label becomes
+// a definition, that chunk (indented, after a blank line) reads as the
+// definition's continuation, and the code is gone (found by the lint
+// properties, 2026-09-15). Or one whose blank line would change how the
+// lines after it read: under "1. one", "[^a]: lazy", "2. two", a numbered
+// item that does not start at 1 cannot break into a paragraph, so the
+// blank line would make "2. two" (and every item after it) part of the
+// footnote's text, and under "- one", "[^a]: lazy", "- two" it would split
+// the list in two (live Obsidian 1.14.4, 2026-10-05; Jason's triage
+// decision Q7, 2026-10-05). Or one whose blank line would make a heading:
+// two lazy labels in one paragraph with a "===" under the second, where
+// the first would become a definition and the second, over its "===", a
+// level 1 heading the note never had (hunt 2026-10-06, cycle 5, pin
+// bug-fix-lazy-makes-heading-of-next-label), or a heading inside the new
+// definition's own text (Jason's ruling on Q24 and list B, B6). The rest of
+// the label's own paragraph may become the definition's text, or
+// definitions and tables of their own: that is what the user meant.
 
 // The blockquote markers in front of a label line. Inside a quote, a line
 // holding nothing but those same ">" markers is what counts as a blank
@@ -51,13 +57,6 @@ const QuoteMarkers = /^ {0,3}((?:>[ \t]?)*)/;
  * hidden definitions comes back byte for byte as it went in.
  */
 export function fixLazyDefinitions(markdown: string): string {
-    // while a test records, the result goes to the result gate too
-    // (shadow mode, shadowRule in result-gate.ts)
-    return shadowRule("lint:fix-lazy", markdown, () => fixLazyDefinitionsAsWritten(markdown), lazyLabelsDefined);
-}
-
-/** The rule itself, which the exported function above runs. */
-function fixLazyDefinitionsAsWritten(markdown: string): string {
     // A label the pass skipped (its blank line would have swallowed
     // protected text) can become safe once a LATER insertion in the same
     // pass changes the note, so one pass could leave a label that the next
@@ -102,13 +101,22 @@ function fixLazyDefinitionsOnce(markdown: string): string {
             // turns the "$$" line into a math block that takes the label
             // in), is not inserted: it used to be inserted on every lint, one
             // more blank line each time (the runtime swap, 2026-10-03; found
-            // by the adjacency property). Nor is one that changes which text
-            // is protected, or how the lines after the label read.
-            // Shadow mode switches the old checks off for a moment, to see
-            // what the rule would do without them (oldChecksSuspended in
-            // result-gate.ts).
-            const held = !oldChecksSuspended() && (protectedTextChanged(lines, trial) || linesAfterReadDifferently(lines, trial, at));
-            if (held || !readNote(trial).labelLines[at + 1]) {
+            // by the adjacency property). Nor is one the result gate
+            // refuses: what it means is the labels it makes definitions,
+            // this one and any lazy label under it that a definition now
+            // takes in as a label of its own.
+            const reading = readNote(trial);
+            if (!reading.labelLines[at + 1]) {
+                skipped.add(at);
+                continue;
+            }
+            const defined = lazy
+                .map((line) => (line >= at ? line + 1 : line))
+                .flatMap((line) => {
+                    const label = reading.labelLines[line] ? reading.labelOn(line) : null;
+                    return label === null ? [] : [label.name];
+                });
+            if (!rulePasses(lines, trial, { defined })) {
                 skipped.add(at);
                 continue;
             }
@@ -118,62 +126,6 @@ function fixLazyDefinitionsOnce(markdown: string): string {
         }
         return lines.join("\n");
     });
-}
-
-/**
- * Whether inserting a line above the label on line `at` of `before` (giving
- * `after`) changes how a line below the label reads, other than the rest of
- * the label's own paragraph. Those lines (the ones under the label that
- * continue its paragraph, with no block of their own starting on them, as
- * "more text" under "Some prose", "[^1]: def") may read differently: they
- * become the definition's text, or definitions and tables of their own,
- * which is what the user meant. Every line from the first one that starts
- * a block of its own, or a blank line, must read exactly as it did.
- *
- * "1. one", "[^a]: lazy", "2. two" is the case that asked for this: a
- * numbered item that does not start at 1 cannot break into a paragraph, so
- * the blank line made "2. two" (and every item after it) part of the
- * footnote's text, and the list lost them (live Obsidian 1.14.4,
- * 2026-10-05). Under "- one", "[^a]: lazy", "- two" the blank line would
- * split the list in two. Such a label is left lazy and the lazy-label
- * alert names it (hunt 2026-10-05 round 2, cluster L13; Jason's triage
- * decision Q7, 2026-10-05).
- */
-function linesAfterReadDifferently(before: string[], after: string[], at: number): boolean {
-    const readingBefore = readNote(before);
-    const readingAfter = readNote(after);
-    let i = at + 1;
-    // the rest of the label's paragraph; a "^" in a line's blocks marks a
-    // block starting on it
-    while (i < before.length && before[i].trim() !== "" && !(readingBefore.lineBlocks[i] ?? "").includes("^")) {
-        // None of those lines may start a heading. Two lazy labels in one
-        // paragraph with a "===" under the second: the blank line made the
-        // first a definition, and the second, over its "===", a level 1
-        // heading the note never had (hunt 2026-10-06, cycle 5, pin
-        // bug-fix-lazy-makes-heading-of-next-label). Such a label is left
-        // lazy and the lazy-label alert names it.
-        if (/(?:^| )\^heading\d$/.test(readingAfter.lineBlocks[i + 1] ?? "")) return true;
-        i++;
-    }
-    // line i of `before` is line i + 1 of `after`, below the inserted line
-    for (; i < before.length; i++) {
-        if (!linesReadAlike(readingBefore, i, readingAfter, i + 1, "none")) return true;
-    }
-    return false;
-}
-
-/**
- * Whether the set of protected lines (code, math, comments, frontmatter)
- * reads differently after a trial insertion: a protected line that went
- * live, or a live line that became protected. Compared as sorted lists of
- * line contents, so the inserted line's shift does not matter.
- */
-function protectedTextChanged(before: string[], after: string[]): boolean {
-    const pick = (lines: string[]) => {
-        const flags = readNote(lines).protectedLines;
-        return lines.filter((_line, i) => flags[i]).sort().join("\n");
-    };
-    return pick(before) !== pick(after);
 }
 
 export const fixLazyDefinitionsRule: FootnoteRule = {

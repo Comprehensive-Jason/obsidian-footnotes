@@ -46,8 +46,13 @@ import { readNote } from "../../src/parsing/note-reading";
 // bug-remove-def-creates-setext-heading (2026-07-17) ruled that changing
 // a note's heading structure behind the user's back is a defect.
 //
-// The assertions below are written for "no new heading", so they are red
-// today.
+// The assertions below are written for "no new heading".
+//
+// Answered (Jason's ruling B6, 2026-10-08, stage 3 of the result gate
+// design): the rule leaves the label alone, and the lazy-label alert names
+// it. The result gate refuses the blank line, since the line under the
+// label would become a heading's underline. The two tests were it.fails
+// until then.
 
 /** The innermost block in one line's entry of the reading's lineBlocks, with its "^" when it starts on that line. */
 const ownBlock = (blocks: string | undefined): string => (blocks ?? "").split(" ").pop() ?? "";
@@ -57,11 +62,11 @@ const headingLines = (lines: string[]): number => readNote(lines).lineBlocks.fil
 
 describe("fix-lazy's blank line over a label with an indented '===' under it", () => {
     const Cases = [
-        // Now the result is "Text[^1] here", "", "[^1]: def", "    ===",
-        // "", "after", the very note Obsidian was asked about.
+        // Before the ruling the result was "Text[^1] here", "", "[^1]: def",
+        // "    ===", "", "after", the very note Obsidian was asked about.
         { what: "top level, '===' indented four spaces", lines: ["Text[^1] here", "[^1]: def", "    ===", "", "after"] },
-        // Now a blank line goes in above "  [^1]: def", which becomes a
-        // definition in the outer list item with a heading inside it.
+        // Before the ruling a blank line went in above "  [^1]: def", which
+        // became a definition in the outer list item with a heading inside it.
         { what: "at an outer list item's content column, under a nested item", lines: ["- a", "  - b[^1]", "  [^1]: def", "    ==="] },
     ];
 
@@ -70,9 +75,10 @@ describe("fix-lazy's blank line over a label with an indented '===' under it", (
             expect(headingLines(lines)).toBe(0);
         });
 
-        it.fails(`${what}: the fix does not leave a setext heading inside the new definition`, () => {
+        it(`${what}: the fix does not leave a setext heading inside the new definition`, () => {
             const out = fixLazyDefinitions(lines.join("\n")).split("\n");
             expect(headingLines(out)).toBe(0);
+            expect(out).toEqual(lines);
         });
     }
 });

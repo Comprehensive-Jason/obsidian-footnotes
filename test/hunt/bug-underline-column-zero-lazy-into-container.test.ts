@@ -39,6 +39,16 @@ import { readNote } from "../../src/parsing/note-reading";
 // bug-underline-regex-too-wide's: a refusal would do, cutting the line
 // under the label would not.
 //
+// Since stage 3 of the result gate design (2026-10-08) fix lazy
+// definitions leaves the quoted and the "  ===" labels lazy again, now
+// because the result gate refuses their blank line, and the lazy-label
+// alert names them (Jason's ruling B6, 2026-10-08): in the quote, the blank
+// line would split "> ===" off into a quote of its own, and under the item,
+// "def" over "  ===" would be a level 1 heading inside the footnote (live
+// Obsidian 1.14.4 on sprout, 2026-10-08, for "- item" / "" / "[^1]: def" /
+// "  ===" and for "[^1]: def" over "   ==="; Reading view draws "def" as a
+// heading in the footnote). The two fix-lazy tests below hold that.
+//
 // Cause: underlinedAt in src/parsing/label-shapes.ts judges the line under
 // the label inside the containers the label sits in now. A lazy label has
 // no marker of its own for the quote or item it carries on, and a blank
@@ -62,17 +72,18 @@ describe("bug: a column-0 lazy label over an underline-shaped line inside the co
         expect(plan.kind === "refused" || (plan.markdown ?? "").split("\n").includes("  ---")).toBe(true);
     });
 
-    it("a quoted '> ===' under a column-0 lazy label: fix-lazy inserts the blank line", () => {
+    it("a quoted '> ===' under a column-0 lazy label: fix-lazy leaves it lazy, since its blank line would split the quote (Jason's ruling B6)", () => {
         const lines = ["> Text[^1] here", "[^1]: def", "> ===", "", "More"];
-        // Today fix-lazy returns the note unchanged.
-        expect(fixLazyDefinitions(lines.join("\n"))).toBe(["> Text[^1] here", "", "[^1]: def", "> ===", "", "More"].join("\n"));
+        expect(lazyDefinitionLabelLines(lines)).toEqual([1]);
+        expect(fixLazyDefinitions(lines.join("\n"))).toBe(lines.join("\n"));
     });
 
-    it("'- item' / '[^1]: def' / '  ===' is filed lazy and fix-lazy fixes it", () => {
+    it("'- item' / '[^1]: def' / '  ===' is filed lazy, and fix-lazy leaves it, since its blank line would make a heading in the footnote (Jason's ruling B6)", () => {
         const lines = ["- item", "[^1]: def", "  ==="];
-        // Today the label is filed underlined, so the lazy list is empty.
+        // Before 6081d8b the label was filed underlined, so the lazy list was empty.
         expect(lazyDefinitionLabelLines(lines)).toEqual([1]);
-        const out = fixLazyDefinitions(lines.join("\n"));
-        expect(readNote(out.split("\n")).definitions.length).toBe(1);
+        expect(fixLazyDefinitions(lines.join("\n"))).toBe(lines.join("\n"));
+        // the blank line would make "def" over "  ===" a heading
+        expect(readNote(["- item", "", "[^1]: def", "  ==="]).lineBlocks[2]).toMatch(/\^heading1$/);
     });
 });

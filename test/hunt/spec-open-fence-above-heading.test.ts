@@ -32,11 +32,17 @@ import { definitionsHoldingTheMoveBack } from "../../src/linting/rules/move-foot
 // src/linting/rules/move-footnotes-to-the-bottom.ts (gathered and
 // definitionsHoldingTheMoveBack both return early when
 // reading.openRegionFrom is set, before looking for the heading).
+//
+// Answered (Jason's ruling on list A, 2026-10-08, stage 3 of the result
+// gate design): the move's guard is gone and the result gate judges the
+// move, so [^c] is gathered under the heading, where it stays a definition
+// (live answers gs3:a1-fence and gs3:a1-comment, rule F6). The test was
+// it.fails until then.
 
 describe("a definition above the section heading when the note ends in an open fence", () => {
-    // Now: the lint leaves "[^c]: def" above the heading, and
-    // definitionsHoldingTheMoveBack gives [].
-    it.fails("a definition above the heading is gathered under it, or named, when the note ends in an open fence", () => {
+    // Before the ruling the lint left "[^c]: def" above the heading, and
+    // definitionsHoldingTheMoveBack gave [].
+    it("a definition above the heading is gathered under it, or named, when the note ends in an open fence", () => {
         const note = "Text[^c].\n\n[^c]: def\n\n## Footnotes\n\nAfter text\n\n```\ncode";
         const linted = lintFootnotes(note, { sectionHeading: "## Footnotes" });
         const gathered = linted.indexOf("[^c]: def") > linted.indexOf("## Footnotes");

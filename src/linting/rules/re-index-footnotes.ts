@@ -1,9 +1,8 @@
-import { oldChecksSuspended, shadowRule } from "../../editor/result-gate";
-import { footnotesRenamed } from "../rule-intents";
+import { rulePasses } from "../rule-gate";
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { nameForBody } from "../../parsing/footnote-grammar";
-import { keepsEveryFootnote, NoteReading } from "../../parsing/note-reading";
-import { definitionsReadDifferently, endsInLazyLine, movedDefinitions, protectedTextAlike, rewriteDocument } from "../rewrite-document";
+import { NoteReading } from "../../parsing/note-reading";
+import { endsInLazyLine, movedDefinitions, rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
 import { FootnoteRule } from "../rule";
 
@@ -138,13 +137,6 @@ function referenceAppearanceOrder(reading: NoteReading, lineCount: number): stri
  * the note's prefix, and whether orphans keep their own slots.
  */
 export function reindexFootnotes(markdown: string, options: ReindexOptions = {}): string {
-    // while a test records, the result goes to the result gate too
-    // (shadow mode, shadowRule in result-gate.ts)
-    return shadowRule("lint:reindex", markdown, () => reindexFootnotesAsWritten(markdown, options), footnotesRenamed);
-}
-
-/** The rule itself, which the exported function above runs. */
-function reindexFootnotesAsWritten(markdown: string, options: ReindexOptions): string {
     // One pass is not always enough. Moving definition blocks around
     // changes the order in which references INSIDE those blocks appear, and
     // the next pass then renumbers those. So this runs again and again
@@ -293,13 +285,10 @@ function reindexOnce(
         // changing is in the map, so no footnote can be renamed onto
         // another one's name.
         const renamed = lines.map((line, i) => rewriteFootnoteNames(reading, i, line, (name) => renames.get(name.toLowerCase()) ?? null));
-        // A rename that would turn a footnote into plain text (a "$"
-        // prefix pairing with an earlier dollar, keepsEveryFootnote) is
-        // left out, and the definitions are only put in order.
-        // Shadow mode switches the old checks off for a moment, to see
-        // what the rule would do without them (oldChecksSuspended in
-        // result-gate.ts).
-        const rewritten = oldChecksSuspended() || keepsEveryFootnote(lines, renamed) ? renamed : lines;
+        // Renames the result gate refuses (a "$" prefix pairing with an
+        // earlier dollar turns a footnote into plain text) are not made, and
+        // the definitions are only put in order.
+        const rewritten = rulePasses(lines, renamed, { renamed: renames }) ? renamed : lines;
 
         // Swap the definition blocks between the places definitions already
         // sit, so that they read in appearance order. Only the definitions
@@ -375,9 +364,9 @@ function reindexOnce(
         // after it there, and the "$$" opens a math block that swallows
         // the definitions below (live Obsidian 1.14.4, 2026-10-06; hunt
         // 2026-10-06, cycle 4, pin bug-end-dollar-line-swallows-definition).
-        // Such a swap is not made: the footnotes are renamed, and their
-        // definitions stay in the order they were in.
-        if (!oldChecksSuspended() && (definitionsReadDifferently(rewritten, out).length > 0 || !protectedTextAlike(rewritten, out))) return rewritten.join("\n");
+        // A swap the result gate refuses is not made: the footnotes are
+        // renamed, and their definitions stay in the order they were in.
+        if (!rulePasses(rewritten, out, {})) return rewritten.join("\n");
         return out.join("\n");
     });
 }

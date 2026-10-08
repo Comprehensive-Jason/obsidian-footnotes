@@ -1,10 +1,9 @@
-import { oldChecksSuspended, shadowRule } from "../../editor/result-gate";
-import { duplicatesMerged } from "../rule-intents";
+import { rulePasses } from "../rule-gate";
 import { normalizeEol, removeLineRanges } from "../../parsing/line-edits";
 import { Definition, readNote } from "../../parsing/note-reading";
-import { protectedTextAlike, rewriteDocument } from "../rewrite-document";
+import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
-import { definitionsHeldBy, linesReadDifferently } from "./remove-orphaned-definitions";
+import { definitionsHeldBy } from "./remove-orphaned-definitions";
 
 // Duplicate footnote definitions: two or more "[^x]:" definition blocks for
 // the same name, treating upper and lower case as the same.
@@ -85,21 +84,21 @@ export function duplicateFootnoteDefinitionNames(
  *
  * Anything inside protected text is never a definition. Where a duplicate is
  * cut out, the lines close up through removeLineRanges, the same as any
- * other definition block deletion. A name whose duplicates cannot be cut
- * out without changing how Obsidian reads the lines around them (one
- * sitting between two lists, whose cut would join the lists) is left as
- * written too, the promise every rule that cuts definitions makes
- * (linesReadDifferently; hunt 2026-10-05 round 2, pin
- * bug-merge-between-lists-joins-them).
+ * other definition block deletion. Each name's merge, with the ones already
+ * made, goes to the result gate (rule-gate.ts), and a name whose merge it
+ * refuses is left as written, and the duplicate alert names it: one whose
+ * copies cannot be cut out without changing how Obsidian reads the lines
+ * around them, such as one sitting between two lists, whose cut would join
+ * the lists (hunt 2026-10-05 round 2, pin
+ * bug-merge-between-lists-joins-them); one whose copy holds a table on its
+ * label line, which folded into indented lines would turn into text (GLM
+ * hunt cycle 7, 2026-09-16, pin bug-merge-duplicate-flattens-table); and
+ * one whose last copy ends in a "$$" line that ends the note, which merged
+ * into a first copy with lines after it opens a math block that takes
+ * those lines in (hunt 2026-10-06, cycle 4, pin
+ * bug-end-dollar-line-swallows-definition).
  */
 export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
-    // while a test records, the result goes to the result gate too
-    // (shadow mode, shadowRule in result-gate.ts)
-    return shadowRule("lint:merge", markdown, () => mergeDuplicateFootnoteDefinitionsAsWritten(markdown), duplicatesMerged);
-}
-
-/** The rule itself, which the exported function above runs. */
-function mergeDuplicateFootnoteDefinitionsAsWritten(markdown: string): string {
     if (!markdown.includes("[^")) return markdown;
     return rewriteDocument(markdown, (text, { lines, definitions, blocks }) => {
         const groups = new Map<string, Definition[]>();
@@ -115,34 +114,14 @@ function mergeDuplicateFootnoteDefinitionsAsWritten(markdown: string): string {
         // ranges of lines the duplicates occupy, to be cut out.
         let appendAfter = new Map<number, string[]>();
         let doomed: { start: number; end: number }[] = [];
-        for (const group of groups.values()) {
+        // the names merged so far
+        const merged: string[] = [];
+        for (const [name, group] of groups) {
             if (group.length < 2 || group.some((block) => !blocks.includes(block))) continue;
-            // A copy whose table starts on its label line ("[^1]: | a | b |"
-            // with the delimiter row under it) cannot be folded into
-            // indented continuation lines: the header would become body
-            // text and the rows a paragraph of literal pipes, so the table
-            // Reading view shows inside the footnote would be gone (GLM
-            // hunt cycle 7, 2026-09-16). Such a duplicate stays as written
-            // and the duplicate alert names it.
-            const holdsTable = (block: Definition): boolean => {
-                const next = lines[block.start + 1] ?? "";
-                return (
-                    lines[block.start].slice(block.labelEnd).includes("|") &&
-                    block.end > block.start &&
-                    /^ {0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/.test(next)
-                );
-            };
-            // (a table copy that comes FIRST stays the survivor and takes the
-            // others' prose under its rows, as before)
-            // Shadow mode switches the old checks off for a moment, to see
-            // what the rule would do without them (oldChecksSuspended in
-            // result-gate.ts).
-            if (!oldChecksSuspended() && group.slice(1).some(holdsTable)) continue;
-            // Cutting this name's duplicates, together with the ones already
-            // taken, must leave every other line reading as it did.
+            // this name's duplicates cut out, together with the ones
+            // already taken
             const cuts = group.slice(1).map((duplicate) => ({ start: duplicate.start, end: duplicate.end }));
             const trial = [...doomed, ...cuts].sort((a, b) => a.start - b.start);
-            if (!oldChecksSuspended() && linesReadDifferently(lines, { lines, ranges: trial }, removeLineRanges(lines, trial))) continue;
             const base = group[0];
             const appended: string[] = [];
             // the copy whose lines the next copy's text lands under: the
@@ -192,13 +171,9 @@ function mergeDuplicateFootnoteDefinitionsAsWritten(markdown: string): string {
             }
             const appends = new Map(appendAfter);
             if (appended.length > 0) appends.set(base.end, appended);
-            // The merged note must protect the same text as before. A copy
-            // whose last line is a "$$" that ends the note, merged into a
-            // first copy with lines after it, opens a math block there that
-            // takes those lines in (hunt 2026-10-06, cycle 4, pin
-            // bug-end-dollar-line-swallows-definition). Such a name is
-            // left as written, and the duplicate alert names it.
-            if (!oldChecksSuspended() && !protectedTextAlike(lines, mergedLines(lines, appends, trial))) continue;
+            // the result gate judges this name's merge with the ones made
+            if (!rulePasses(lines, mergedLines(lines, appends, trial), { merged: [...merged, name] })) continue;
+            merged.push(name);
             doomed = trial;
             appendAfter = appends;
         }

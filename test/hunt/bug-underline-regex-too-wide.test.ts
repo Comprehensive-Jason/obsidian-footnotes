@@ -39,19 +39,27 @@ import { readNote } from "../../src/parsing/note-reading";
 // alone from column 0 of the container's text. The note reading agrees
 // (the controls below).
 //
+// Since stage 3 of the result gate design (2026-10-08) fix lazy
+// definitions leaves the label over "   ===" lazy, and the lazy-label alert
+// names it: with the blank line in, "def" over "   ===" is a level 1
+// heading inside the footnote (live Obsidian 1.14.4 on sprout, 2026-10-08:
+// Reading view draws "def" as a heading in the footnote), which the result
+// gate refuses (Jason's ruling B6, 2026-10-08). The other three shapes are
+// still fixed.
+//
 // Cause: underlinedAt in src/parsing/label-shapes.ts tests the line under
 // the label with /^ {0,3}(?:=+|-+) *$/, which allows up to three spaces in
 // front and any number after.
 
-const Shapes: { what: string; under: string; block: RegExp }[] = [
-    { what: "an indented thematic break", under: "  ---", block: /^\^thematicBreak$/ },
-    { what: "a thematic break with a trailing space", under: "--- ", block: /^\^thematicBreak$/ },
-    { what: "an indented '==='", under: "   ===", block: /^paragraph$/ },
-    { what: "a '===' with a trailing space", under: "=== ", block: /^paragraph$/ },
+const Shapes: { what: string; under: string; block: RegExp; fixed: boolean }[] = [
+    { what: "an indented thematic break", under: "  ---", block: /^\^thematicBreak$/, fixed: true },
+    { what: "a thematic break with a trailing space", under: "--- ", block: /^\^thematicBreak$/, fixed: true },
+    { what: "an indented '==='", under: "   ===", block: /^paragraph$/, fixed: false },
+    { what: "a '===' with a trailing space", under: "=== ", block: /^paragraph$/, fixed: true },
 ];
 
 describe("an underline-shaped line that Obsidian reads as no underline", () => {
-    for (const { what, under, block } of Shapes) {
+    for (const { what, under, block, fixed: fixes } of Shapes) {
         const lines = ["Text[^1] here", "[^1]: def", under, "", "More"];
         const fixed = ["Text[^1] here", "", "[^1]: def", under, "", "More"];
 
@@ -66,8 +74,8 @@ describe("an underline-shaped line that Obsidian reads as no underline", () => {
             expect(lazyDefinitionLabelLines(lines)).toEqual([1]);
         });
 
-        it(`${what}: fix-lazy inserts the blank line`, () => {
-            expect(fixLazyDefinitions(lines.join("\n"))).toBe(fixed.join("\n"));
+        it(`${what}: fix-lazy inserts the blank line${fixes ? "" : ", unless it would make a heading in the footnote (Jason's ruling B6)"}`, () => {
+            expect(fixLazyDefinitions(lines.join("\n"))).toBe((fixes ? fixed : lines).join("\n"));
         });
 
         it(`${what}: Delete footnote everywhere keeps the line under the label`, () => {

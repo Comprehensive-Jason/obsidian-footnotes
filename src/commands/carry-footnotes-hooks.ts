@@ -548,7 +548,7 @@ function landCarriedText(
     const noteEdits = editsAt(noteFrom, noteTo, inNote(text), inNote(after));
     let changes: EditorChange[] = noteEdits;
     let noteAfter: string[] | null = null;
-    // the line of the note after the paste where the carried definitions start, for shadow mode
+    // the line of the note after the paste where the carried definitions start, for the result gate
     let appendedFrom: number | null = null;
     const textLines = text.split("\n");
     let end: EditorPosition =

@@ -1,5 +1,4 @@
-import { shadowRule } from "../../editor/result-gate";
-import { movesOnly } from "../rule-intents";
+import { rulePasses } from "../rule-gate";
 import { findLineRunEnd, normalizeEol, restoreEol } from "../../parsing/line-edits";
 import { readNote } from "../../parsing/note-reading";
 
@@ -20,16 +19,11 @@ import { readNote } from "../../parsing/note-reading";
  * it, so the note ends on its last line of text. A heading that prose,
  * a definition, or another heading follows is not an empty footnote
  * section and is left alone, as is a look-alike inside code or a comment.
- * With no heading configured, or none in the note, nothing changes.
+ * With no heading configured, or none in the note, nothing changes, and
+ * nor does it when the result gate refuses taking the heading out
+ * (rule-gate.ts).
  */
 export function removeEmptySectionHeading(markdown: string, sectionHeading: string): string {
-    // while a test records, the result goes to the result gate too
-    // (shadow mode, shadowRule in result-gate.ts)
-    return shadowRule("lint:empty-heading", markdown, () => removeEmptySectionHeadingAsWritten(markdown, sectionHeading), movesOnly);
-}
-
-/** The rule itself, which the exported function above runs. */
-function removeEmptySectionHeadingAsWritten(markdown: string, sectionHeading: string): string {
     if (sectionHeading === "") return markdown;
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");
@@ -42,5 +36,6 @@ function removeEmptySectionHeadingAsWritten(markdown: string, sectionHeading: st
     }
     let start = end - headingLines.length + 1;
     while (start > 0 && lines[start - 1].trim() === "") start--;
-    return restoreEol(lines.slice(0, start).join("\n"), eol);
+    const out = lines.slice(0, start);
+    return rulePasses(lines, out, {}) ? restoreEol(out.join("\n"), eol) : markdown;
 }

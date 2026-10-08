@@ -172,7 +172,7 @@ export function removeLineRanges(
 }
 
 /** Whether `line` is a blank line of a quote: quote markers (">") and spaces, nothing else. */
-export function blankQuoteLine(line: string): boolean {
+function blankQuoteLine(line: string): boolean {
     return /^ {0,3}>[ >]*$/.test(line) && line.trimEnd().endsWith(">");
 }
 

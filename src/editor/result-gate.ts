@@ -28,10 +28,11 @@
 // reading of (editWindows), so a press on a long note costs it little more
 // than one on a short note.
 //
-// While the old shape-by-shape checks still decide (stage 2 of the build,
-// "shadow mode"), every write path also hands its edit to shadowGate at
-// the bottom of this file, which judges it only when a test has installed
-// a recorder, so users pay nothing for it.
+// Every write path asks it before it writes, and refuses with the notice
+// for the reason it gives (stage 3 of the build, 2026-10-08); the lint's
+// rules ask through rule-gate.ts. It replaced about twenty checks that
+// each judged one command's results, and the shadow mode in which it ran
+// beside them (stage 2, 2026-10-07) went with them.
 
 import { lineKey, unmatchedRuns } from "./document-diff";
 import { tableRowCellSpans } from "./table-cursor";
@@ -268,8 +269,13 @@ function changedRuns(a: readonly string[], b: readonly string[], anchorA: (i: nu
     // then, in each stretch between two lines lined up, by `next` (or,
     // with none left, taken as one change when the stretches differ)
     const lineUp = (fromA: number, toA: number, fromB: number, toB: number, levels: readonly [(i: number) => boolean, (j: number) => boolean][]): void => {
-        const same = toA - fromA === toB - fromB && a.slice(fromA, toA).every((line, k) => line === b[fromB + k]);
-        if (same) return;
+        // compared in place: most stretches between two lined-up lines are
+        // empty, and a press lines up every line of a long note
+        if (toA - fromA === toB - fromB) {
+            let k = 0;
+            while (fromA + k < toA && a[fromA + k] === b[fromB + k]) k++;
+            if (fromA + k === toA) return;
+        }
         if (levels.length === 0) {
             runs.push({ aStart: fromA, aEnd: toA, bStart: fromB, bEnd: toB });
             return;
@@ -1256,152 +1262,4 @@ function untouchedVerdict(
     for (const [text, n] of inlineAfter) come += Math.max(0, n - (inlineBefore.get(text) ?? 0));
     if (gone > names.inlineRemoved || come > names.inlineCreated) return refuse("other", 1, "an inline footnote");
     return Pass;
-}
-
-// Shadow mode (stage 2 of the result gate design, 2026-10-07). Every write
-// path calls shadowGate next to its old checks, which still decide. The
-// gate is asked only while a test has installed a recorder
-// (setGateRecorder), so the plugin as users run it does no more work than
-// before: each call costs one check of a variable.
-
-/**
- * One edit as the recorder sees it: the write path it came from, what the
- * old checks decided (null when they let it through, otherwise why they
- * refused), what the gate decided, how long the gate took, and the note
- * before and after, cut down to the lines around the edit.
- */
-export interface GateRecord {
-    path: string;
-    old: string | null;
-    verdict: GateVerdict;
-    milliseconds: number;
-    before: string;
-    after: string;
-    intent: string;
-    /** The whole edit, for a test that wants to judge it again. */
-    edit: ShadowEdit | null;
-}
-
-/** What receives each record (see setGateRecorder). */
-export type GateRecorder = (record: GateRecord) => void;
-
-let recorder: GateRecorder | null = null;
-
-/** Installs `next` to receive a record of every edit a write path hands to shadowGate, or, with null, stops recording. Only tests install one. */
-export function setGateRecorder(next: GateRecorder | null): void {
-    recorder = next;
-}
-
-/** The edit a write path hands to shadowGate: the note before, the note after, and what the action meant. */
-export interface ShadowEdit {
-    before: readonly string[];
-    after: readonly string[];
-    intent: EditIntent;
-    /** the reading of `before`, when the write path has it */
-    beforeReading?: NoteReading;
-}
-
-/**
- * Asks the gate about an edit while a recorder is installed, and records
- * its answer next to the old checks' (`old`: null when they let the edit
- * through, otherwise why they refused). `edit` is only called then, so a
- * write path pays nothing for working out the note after its edit when no
- * test is recording. Nothing the gate does can change the edit: a gate
- * that throws is recorded as a refusal by check 0.
- */
-export function shadowGate(path: string, old: string | null, edit: () => ShadowEdit | null): void {
-    if (recorder === null) return;
-    let shown: ShadowEdit | null = null;
-    let verdict: GateVerdict;
-    // the gate's own time, without working out the edit for it
-    let milliseconds = 0;
-    try {
-        shown = edit();
-        if (shown === null) return;
-        const start = performance.now();
-        verdict = judgeEdit(shown.before, shown.after, shown.intent, shown.beforeReading);
-        milliseconds = performance.now() - start;
-    } catch (error) {
-        verdict = refuse("other", 0, `the gate threw: ${String(error)}`);
-    }
-    const [before, after] = shown === null ? ["", ""] : excerpts(shown.before, shown.after);
-    recorder({ path, old, verdict, milliseconds, before, after, intent: shown === null ? "" : describeIntent(shown.intent), edit: shown });
-}
-
-/** The two notes cut down to the lines from three before the first difference to three after the last one, each line with its number. */
-function excerpts(before: readonly string[], after: readonly string[]): [string, string] {
-    let head = 0;
-    while (head < before.length && head < after.length && before[head] === after[head]) head++;
-    let tail = 0;
-    while (tail < before.length - head && tail < after.length - head && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
-    const cut = (lines: readonly string[]) => {
-        const from = Math.max(0, head - 3);
-        const to = Math.min(lines.length, lines.length - tail + 3);
-        return lines
-            .slice(from, to)
-            .map((line, i) => `${String(from + i).padStart(4)}| ${line}`)
-            .join("\n");
-    };
-    return [cut(before), cut(after)];
-}
-
-/** An intent written out for a record, Maps and all. */
-function describeIntent(intent: EditIntent): string {
-    return JSON.stringify(intent, (_key, value: unknown): unknown => (value instanceof Map ? Object.fromEntries(value as Map<string, string>) : value));
-}
-
-/**
- * Whether the old result checks are switched off for the moment. Only
- * shadowRule switches them off, and only while a recorder is installed, to
- * see what an edit would have been without them: each old check that
- * holds a lint rule's change back asks this first and lets the change
- * through while it is true. In the plugin as users run it, it is always
- * false.
- */
-let suspended = false;
-
-/** Whether the old result checks are switched off (see suspended above). */
-export function oldChecksSuspended(): boolean {
-    return suspended;
-}
-
-/**
- * Runs `run`, the edit of the write path `path` (a lint rule), on the note
- * `markdown`, and returns what it returns, showing it to the gate while a
- * recorder is installed (shadowResult).
- */
-export function shadowRule(path: string, markdown: string, run: () => string, intentOf: (before: string[], after: string[]) => EditIntent): string {
-    const result = run();
-    shadowResult(path, markdown, result, run, intentOf);
-    return result;
-}
-
-/**
- * While a recorder is installed, records `result`, what the write path
- * `path` made of the note `markdown`, for the gate, and runs the edit again
- * (`run`) with the old result checks switched off: when that comes out
- * differently, the old checks held something back, and the edit they held
- * back is recorded as one they refused. `intentOf` says what the edit
- * meant, from the notes before and after it.
- */
-function shadowResult(path: string, markdown: string, result: string, run: () => string, intentOf: (before: string[], after: string[]) => EditIntent): void {
-    if (recorder === null || suspended) return;
-    const lines = (text: string) => text.replace(/\r\n/g, "\n").split("\n");
-    const record = (old: string | null, after: string) => {
-        shadowGate(path, old, () => {
-            const [b, a] = [lines(markdown), lines(after)];
-            return { before: b, after: a, intent: intentOf(b, a) };
-        });
-    };
-    if (result !== markdown) record(null, result);
-    suspended = true;
-    let unchecked: string | null = null;
-    try {
-        unchecked = run();
-    } catch {
-        // an edit that cannot be worked out with its checks off is simply not compared
-    } finally {
-        suspended = false;
-    }
-    if (unchecked !== null && unchecked !== result) record("held back", unchecked);
 }

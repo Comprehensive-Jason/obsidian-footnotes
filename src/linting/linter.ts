@@ -10,6 +10,7 @@ import { jumpToFootnoteDefinition } from "../commands/navigation";
 import { docContext } from "../editor/doc-context";
 import { replaceMinimal } from "../editor/write-back";
 import { rewriteDocument } from "./rewrite-document";
+import { gatedLint } from "./rule-gate";
 import { definitionLabel, quotedReference } from "../parsing/footnote-grammar";
 import { footnotePrefix, footnotePrefixProblem } from "../parsing/footnote-prefix";
 import { FootnotePlacement } from "../parsing/landing";
@@ -385,8 +386,10 @@ export function lintFootnotes(
     };
     // Notes can use any line endings. rewriteDocument converts them to plain
     // LF once here, so every step below sees the same thing, and puts the
-    // note's original endings back once on the way out.
-    return rewriteDocument(markdown, (text) => {
+    // note's original endings back once on the way out. The result gate
+    // judges the whole lint once, and only when it refuses that are the
+    // rules' changes judged one by one (gatedLint in rule-gate.ts).
+    return rewriteDocument(markdown, (text) => gatedLint(text, () => {
         let result = lintOnce(text);
         // Reindex can take away the reason the move left the definitions
         // where they were. Gathered in the order written, a label indented
@@ -407,7 +410,7 @@ export function lintFootnotes(
             result = lintOnce(moved);
         }
         return result;
-    });
+    }));
 }
 
 /**

@@ -163,7 +163,7 @@ export interface FootnoteFacts {
      * line of a paragraph at the top level, "paragraph" one of its later
      * lines, and "" a blank line outside every container. Comparing these
      * before and after an edit says whether the edit changed how Obsidian
-     * reads a line (see linesReadAlike in note-reading.ts).
+     * reads a line (check 5 of the result gate, result-gate.ts).
      */
     lineBlocks: string[];
     /**

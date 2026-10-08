@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { lintFootnotes } from "../../src/linting/linter";
 import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
-import { protectedTextAlike } from "../../src/linting/rewrite-document";
+import { judgeEdit } from "../../src/editor/result-gate";
 import { readNote } from "../../src/parsing/note-reading";
 
 // BUG (annoyance): a definition at the end of the note whose last line is
@@ -38,20 +38,24 @@ import { readNote } from "../../src/parsing/note-reading";
 // follow it. At the end of the note there is no such blank line; moved up
 // the note, there is one, so the check says the protected text changed.
 // Reindex then refuses its swap, and the merge refuses the name.
+//
+// Since stage 3 of the result gate design (2026-10-08) the result gate
+// judges the swap and the merge in protectedTextAlike's place, and it does
+// not count blank lines in protected text either; the root test asks it.
 
 /** The note's definition names, in order. */
 const names = (text: string): string[] => readNote(text.split("\n")).definitions.map((d) => d.name);
 
 describe("a lazy %% tail blocks the merge and the reindex swap", () => {
     // Now: false.
-    it("the root: protectedTextAlike says a %% tail moved up the note changed the protected text", () => {
+    it("the root: the result gate passes a %% tail moved up the note (it was protectedTextAlike until stage 3 of the result gate design)", () => {
         const before = "Text[^1] and[^2].\n\n[^2]: one\n[^1]: two\n%%".split("\n");
         const after = "Text[^1] and[^2].\n\n[^1]: two\n%%\n\n[^2]: one".split("\n");
         // Every definition reads the same in both: names, containers, and lines.
         expect(readNote(after).definitions.map((d) => after.slice(d.start, d.end + 1).join("|")).sort()).toEqual(
             readNote(before).definitions.map((d) => before.slice(d.start, d.end + 1).join("|")).sort(),
         );
-        expect(protectedTextAlike(before, after)).toBe(true);
+        expect(judgeEdit(before, after, {})).toEqual({ pass: true });
     });
 
     // Now: ["2", "1"]. At 4572859: "Text[^1] and[^2].\n\n[^1]: two\n%%\n\n[^2]: one".

@@ -1,8 +1,7 @@
-import { oldChecksSuspended, shadowRule } from "../../editor/result-gate";
-import { footnotesMovedPastPunctuation } from "../rule-intents";
+import { rulePasses } from "../rule-gate";
 import { definitionLabelIn } from "../../parsing/label-shapes";
 import { ClosingMarkChars, FootnotePlacement, imageStartsOn, punctuationAt, referenceLandingAfter } from "../../parsing/landing";
-import { NoteReading, readNote } from "../../parsing/note-reading";
+import { NoteReading } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
@@ -215,13 +214,6 @@ function swapInSegment(
  * inline code and frontmatter are left alone.
  */
 export function footnoteAfterPunctuation(markdown: string, placement: FootnotePlacement = "after"): string {
-    // while a test records, the result goes to the result gate too
-    // (shadow mode, shadowRule in result-gate.ts)
-    return shadowRule("lint:punctuation", markdown, () => footnoteAfterPunctuationAsWritten(markdown, placement), footnotesMovedPastPunctuation);
-}
-
-/** The rule itself, which the exported function above runs. */
-function footnoteAfterPunctuationAsWritten(markdown: string, placement: FootnotePlacement): string {
     if (placement === "none") return markdown;
     // Each move is worked out on the line as it was, so a move can leave a
     // footnote next to punctuation that only a second pass sees: under
@@ -292,73 +284,35 @@ function placedOnce(markdown: string, placement: "after" | "before"): string {
             );
         };
         const result = lines.map((_line, i) => rewriteLine(i));
-        // A move must leave every footnote it moves a footnote, as a press
-        // must (check 6 of the result gate, result-gate.ts). Stepping over
-        // the "]" of bracketed text that is no link turns
-        // "[some text[^1]] here" into "[some text][^1] here", which reads
-        // as a reference link with the label "^1", so the footnote's only
-        // reference is gone (hunt 2026-10-05, round 2, pin
-        // bug-punctuation-steps-over-bracket); so does stepping over a "!"
-        // in front of "(sic)", which makes an image (pin
-        // bug-placement-after-builds-image). A move stays on its line, so
-        // the note as the moves leave it is read once, and only a line
-        // that holds fewer footnotes than before is done again, each move
-        // on it made only if the line still holds them all after it. The
-        // lint's next rule reads the same note, so the check reads nothing
-        // the lint would not read anyway.
-        //
-        // Each footnote is checked for by what it is, not counted: every
-        // reference by its name, every inline footnote by its whole
-        // "^[...]" text. A move can turn one kind into the other, and two
-        // such moves on one line, in opposite directions, kept both counts
-        // the same: under "before", "mc^.[^1]" became "mc^[^1].", an inline
-        // footnote "^[^1]" in place of the reference, and "[.^[note]"
-        // became "[^[note].", a reference named "[note" in place of the
-        // inline footnote (hunt 2026-10-06, cycle 3, pin
-        // bug-placement-before-changes-footnote-kind, which counted the
-        // kinds apart; cycle 4, pin bug-placement-before-two-kind-changes).
-        const keepsFootnotes = (of: NoteReading, ofLines: readonly string[], i: number) =>
-            within(footnotesOn(reading, lines, i), footnotesOn(of, ofLines, i));
-        // Shadow mode switches the old checks off for a moment, to see
-        // what the rule would do without them (oldChecksSuspended in
-        // result-gate.ts).
-        if (!oldChecksSuspended() && result.some((line, i) => line !== lines[i])) {
-            const after = readNote(result);
-            for (let i = 0; i < result.length; i++) {
-                if (result[i] === lines[i] || keepsFootnotes(after, result, i)) continue;
-                result[i] = rewriteLine(i, (line) => {
-                    const trial = [...result];
-                    trial[i] = line;
-                    return keepsFootnotes(readNote(trial), trial, i);
-                });
-            }
+        // The result gate judges the moves (rule-gate.ts). A move must
+        // leave every footnote it moves a footnote, as a press must (check
+        // 6 of the result gate). Stepping over the "]" of bracketed text
+        // that is no link turns "[some text[^1]] here" into
+        // "[some text][^1] here", which reads as a reference link with the
+        // label "^1", so the footnote's only reference is gone (hunt
+        // 2026-10-05, round 2, pin bug-punctuation-steps-over-bracket); so
+        // does stepping over a "!" in front of "(sic)", which makes an
+        // image (pin bug-placement-after-builds-image). Under "before",
+        // "mc^.[^1]" became "mc^[^1].", an inline footnote "^[^1]" in place
+        // of the reference (hunt 2026-10-06, cycle 3, pin
+        // bug-placement-before-changes-footnote-kind). A move stays on its
+        // line, so when the gate refuses the whole pass, each line is
+        // judged on its own, and a line it refuses is done again, each move
+        // on it made only if the gate passes the line with it.
+        const intent = { footnotesMoved: true };
+        if (!result.some((line, i) => line !== lines[i]) || rulePasses(lines, result, intent)) return result.join("\n");
+        const kept = [...lines];
+        const withLine = (i: number, line: string) => {
+            const trial = [...kept];
+            trial[i] = line;
+            return trial;
+        };
+        for (let i = 0; i < result.length; i++) {
+            if (result[i] === lines[i]) continue;
+            kept[i] = rulePasses(lines, withLine(i, result[i]), intent) ? result[i] : rewriteLine(i, (line) => rulePasses(lines, withLine(i, line), intent));
         }
-        return result.join("\n");
+        return kept.join("\n");
     });
-}
-
-/**
- * The footnotes on line `i` of `lines` as `reading` reads them, each as
- * what it is: a reference by its name ("[^1]"), an inline footnote by its
- * whole text ("^[note]").
- */
-function footnotesOn(reading: NoteReading, lines: readonly string[], i: number): string[] {
-    return [
-        ...reading.referencesOn(i).map((reference) => `[^${reference.name}]`),
-        ...reading.inlineNotesOn(i).map((note) => lines[i].slice(note.open, note.close + 1)),
-    ];
-}
-
-/** Whether every entry of `part` is in `whole`, as many times. */
-function within(part: readonly string[], whole: readonly string[]): boolean {
-    const left = new Map<string, number>();
-    for (const item of whole) left.set(item, (left.get(item) ?? 0) + 1);
-    for (const item of part) {
-        const n = left.get(item) ?? 0;
-        if (n === 0) return false;
-        left.set(item, n - 1);
-    }
-    return true;
 }
 
 /** This rule's catalogue entry. The id matches obsidian-linter's file name; the option is the placement setting. */

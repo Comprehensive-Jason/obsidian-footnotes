@@ -1,8 +1,6 @@
-import { oldChecksSuspended, shadowRule } from "../../editor/result-gate";
-import { footnotesRenamed } from "../rule-intents";
+import { rulePasses } from "../rule-gate";
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { computeNextFootnoteNumber } from "../../parsing/footnote-grammar";
-import { keepsEveryFootnote } from "../../parsing/note-reading";
 
 import { rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
@@ -43,13 +41,6 @@ import { FootnoteRule } from "../rule";
  * such a run before it reaches this point.
  */
 export function applyFootnotePrefix(markdown: string, prefix: string): string {
-    // while a test records, the result goes to the result gate too
-    // (shadow mode, shadowRule in result-gate.ts)
-    return shadowRule("lint:apply-prefix", markdown, () => applyFootnotePrefixAsWritten(markdown, prefix), footnotesRenamed);
-}
-
-/** The rule itself, which the exported function above runs. */
-function applyFootnotePrefixAsWritten(markdown: string, prefix: string): string {
     if (!prefix || footnotePrefixProblem(prefix) !== null) return markdown;
     const prefixFolded = prefix.toLowerCase();
 
@@ -118,29 +109,28 @@ function applyFootnotePrefixAsWritten(markdown: string, prefix: string): string 
             allowed.has(id.toLowerCase()) ? renameFor(id) : null;
         const rewriteWith = (allowed: ReadonlySet<string>) =>
             lines.map((line, i) => rewriteFootnoteNames(reading, i, line, renameOnly(allowed)));
+        // the renames of `allowed`, for the result gate
+        const renames = (allowed: ReadonlySet<string>) => new Map([...allowed].map((id) => [id, renameFor(id) ?? id]));
 
         // Every footnote this rule would rename, lower-cased, in the order
         // the note first names them.
         const candidates = [...existingIds].filter((id) => renameFor(id) !== null);
         const all = new Set(candidates);
         const rewritten = rewriteWith(all);
-        // Shadow mode switches the old checks off for a moment, to see
-        // what the rule would do without them (oldChecksSuspended in
-        // result-gate.ts).
-        if (oldChecksSuspended() || keepsEveryFootnote(lines, rewritten)) return rewritten.join("\n");
+        if (rulePasses(lines, rewritten, { renamed: renames(all) })) return rewritten.join("\n");
 
         // A rename can turn a footnote into plain text: a "$" in the prefix
         // pairs with a dollar amount nearby, and "$6 [^a$note]" reads as
-        // math. Only the renames that do that are refused; the rest still
-        // happen, taken one at a time in the order the note names them, each
-        // kept when the note still holds every footnote with it. Refusing
+        // math. Only the renames the result gate refuses are not made; the
+        // rest still happen, taken one at a time in the order the note names
+        // them, each kept when the gate passes the note with it. Refusing
         // them all used to leave a plain "[^1]" for the next lint to prefix,
         // so one lint did not settle the note (found by the idempotence
         // property in CI, 2026-10-04; test/lint-dollar-prefix-settles.test.ts).
         const kept = new Set<string>();
         for (const id of candidates) {
             kept.add(id);
-            if (!keepsEveryFootnote(lines, rewriteWith(kept))) kept.delete(id);
+            if (!rulePasses(lines, rewriteWith(kept), { renamed: renames(kept) })) kept.delete(id);
         }
         return rewriteWith(kept).join("\n");
     });

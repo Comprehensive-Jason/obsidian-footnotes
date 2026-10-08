@@ -26,8 +26,5 @@ export default defineConfig({
         // may take, and gives `npm run tests:stop` its stop switch
         // (Jason, 2026-10-06: leftover test runs took 95% of the laptop).
         globalSetup: ["scripts/test-run-guard.mjs"],
-        // Shadow mode's recorder for the result gate: does nothing unless
-        // FOOTNOTES_GATE_RECORD names a folder (test/helpers/gate-recorder-setup.ts).
-        setupFiles: ["test/helpers/gate-recorder-setup.ts"],
     },
 });

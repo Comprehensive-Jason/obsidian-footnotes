@@ -34,6 +34,15 @@ import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-fo
 // unclosed "%%" by accident, usually a comment the writer never closed. In
 // such a note the rule is silently off for as long as the "%%" stays open,
 // and no alert says so.
+//
+// Answered (Jason's ruling on list A, 2026-10-08, stage 3 of the result
+// gate design): reading one. The guard is gone; the result gate judges the
+// move, and under the heading the definitions stay definitions, the fence
+// or comment running from its opener to the end (live Obsidian 1.14.4 on
+// sprout, 2026-10-08, answers gs3:a1-fence and gs3:a1-comment, rule F6).
+// The "reading one" tests were it.fails, and the "reading two" tests,
+// which held the old guard, are gone. How Reading view draws the gathered
+// note is on the manual lint-rules sheet for Jason to look at.
 
 const HEADING = "# Footnotes";
 
@@ -60,14 +69,10 @@ const appendSlotLine = (...tail: string[]) => {
 describe("a mid-note heading with an unclosed code fence at the end", () => {
     const doc = noteEndingIn("```", "unclosed code");
 
-    it.fails("reading one: the definitions gather under the heading", () => {
+    it("reading one: the definitions gather under the heading", () => {
         expect(moveFootnoteDefinitionsToBottom(doc, HEADING)).toBe(
             gatheredNote("```", "unclosed code"),
         );
-    });
-
-    it("reading two, what the code does today: the note comes back untouched", () => {
-        expect(moveFootnoteDefinitionsToBottom(doc, HEADING)).toBe(doc);
     });
 
     it("the creation path uses the heading slot in the same note", () => {
@@ -87,14 +92,14 @@ describe("a mid-note heading with an unclosed %% comment at the end", () => {
     // the shape a person actually hits by accident
     const doc = noteEndingIn("%%", "open comment");
 
-    it.fails("reading one: the definitions gather under the heading", () => {
+    it("reading one: the definitions gather under the heading", () => {
         expect(moveFootnoteDefinitionsToBottom(doc, HEADING)).toBe(
             gatheredNote("%%", "open comment"),
         );
     });
 
-    it("reading two, what the code does today: the note comes back untouched", () => {
-        expect(moveFootnoteDefinitionsToBottom(doc, HEADING)).toBe(doc);
+    it("with no section heading, the definitions would land in the comment, so the note comes back untouched", () => {
+        expect(moveFootnoteDefinitionsToBottom(doc, "")).toBe(doc);
     });
 
     it("the creation path uses the heading slot here too", () => {

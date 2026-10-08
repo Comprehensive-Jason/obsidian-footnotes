@@ -1,9 +1,8 @@
-import { oldChecksSuspended, shadowRule } from "../../editor/result-gate";
-import { movesOnly } from "../rule-intents";
+import { judgeEdit } from "../../editor/result-gate";
+import { rulePasses } from "../rule-gate";
 import { findLineRunEnd, normalizeEol, removeLineRanges } from "../../parsing/line-edits";
 import { Definition, readNote } from "../../parsing/note-reading";
-import { linesReadDifferently } from "./remove-orphaned-definitions";
-import { definitionsReadDifferently, DocumentView, endsInLazyLine, movedDefinitions, rewriteDocument } from "../rewrite-document";
+import { DocumentView, endsInLazyLine, movedDefinitions, rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
 // The obsidian-linter plugin's "move footnotes to the bottom" rule,
@@ -61,56 +60,38 @@ function preserveLeadingThematicBreak(
  * note, and the heading, if one is configured, is put in above them. Blank
  * lines always separate them from the text around them.
  *
- * A note that ends inside an unclosed code fence or comment comes back
- * untouched: anything added at the end would land inside that region and
- * stop being a definition at all.
+ * The result gate judges the move (rule-gate.ts), and a move it refuses is
+ * not made: the note comes back untouched, and the move alert names the
+ * definitions (definitionsHoldingTheMoveBack). A note that ends inside an
+ * unclosed code fence or comment is one: definitions gathered at its end
+ * would land inside that region and stop being definitions at all. Under
+ * a section heading above the region they stay definitions, and the move
+ * is made (Jason's ruling on list A, 2026-10-08; live answers
+ * gs3:a1-fence and gs3:a1-comment).
  */
 export function moveFootnoteDefinitionsToBottom(markdown: string, sectionHeading = ""): string {
-    // while a test records, the result goes to the result gate too
-    // (shadow mode, shadowRule in result-gate.ts)
-    return shadowRule("lint:move", markdown, () => moveFootnoteDefinitionsToBottomAsWritten(markdown, sectionHeading), movesOnly);
-}
-
-/** The rule itself, which the exported function above runs. */
-function moveFootnoteDefinitionsToBottomAsWritten(markdown: string, sectionHeading: string): string {
     return rewriteDocument(markdown, (text, view) => {
         const moved = gathered(text, view, sectionHeading);
         // A move must leave every definition reading as it did, as Obsidian
         // reads the note: still a definition, in the same container, with
-        // the same lines (definitionsReadDifferently). Where the end of the
-        // note sits inside something only Obsidian's reading knows about (a
-        // "$$" line under a paragraph opens a math block to the end of the
-        // note, recorded fact 1c658e2), the gathered definitions would land
-        // inside it and stop being footnotes (the runtime swap, 2026-10-03;
-        // found by the adjacency property). And a label indented one to
-        // three spaces, gathered under a note that ends in a list item,
+        // the same lines, and every other line as it was. Where the end of
+        // the note sits inside something only Obsidian's reading knows about
+        // (a "$$" line under a paragraph opens a math block to the end of
+        // the note, recorded fact 1c658e2), the gathered definitions would
+        // land inside it and stop being footnotes (the runtime swap,
+        // 2026-10-03; found by the adjacency property). A label indented one
+        // to three spaces, gathered under a note that ends in a list item,
         // would join that item (hunt 2026-10-06, cycle 4, pin
-        // bug-moved-definition-joins-list-item). Either way the note comes
-        // back untouched, and the move alert names the definitions
-        // (definitionsHoldingTheMoveBack).
-        // Shadow mode switches the old checks off for a moment, to see
-        // what the rule would do without them (oldChecksSuspended in
-        // result-gate.ts).
-        return moved !== text && !oldChecksSuspended() && definitionsReadDifferently(view.lines, moved.split("\n")).length > 0 ? text : moved;
+        // bug-moved-definition-joins-list-item). And a definition can be all
+        // that keeps "   thin prose" under a list item from becoming that
+        // item's second paragraph, and the indented code under it from
+        // waking up as live text (found by the conservation property, the
+        // runtime swap step 2, 2026-10-03).
+        return moved !== text && !rulePasses(text.split("\n"), moved.split("\n"), {}) ? text : moved;
     });
 }
 
-/**
- * The definitions the move would read differently in their new place
- * (the rule's check above), gathered under `sectionHeading` as the rule
- * gathers them. Empty when the move changes nothing.
- */
-function misreadByGathering(markdown: string, sectionHeading: string): readonly Definition[] {
-    let misread: readonly Definition[] = [];
-    rewriteDocument(markdown, (text, view) => {
-        const moved = gathered(text, view, sectionHeading);
-        if (moved !== text) misread = definitionsReadDifferently(view.lines, moved.split("\n"));
-        return text;
-    });
-    return misread;
-}
-
-/** The note with its movable definitions gathered under the section heading or at the end, before the check above. */
+/** The note with its movable definitions gathered under the section heading or at the end, before the result gate judges it. */
 function gathered(text: string, view: DocumentView, sectionHeading: string): string {
     const lines = view.lines;
 
@@ -124,12 +105,6 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
     const isProtected = reading.protectedLines;
     if (blocks.length === 0) return text;
 
-    // A line added at the end of the note would be inside protected
-    // text, because an unclosed code fence or comment runs on to the end
-    // of the file. Moving definitions in there would cut them off from
-    // their references.
-    if (reading.openRegionFrom !== -1 && !oldChecksSuspended()) return text;
-
     // Packed label to label, except after a block whose last line is
     // a lazy continuation (a plain column-0 line): the next label
     // directly under such a line would read as more lazy text and
@@ -142,17 +117,7 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
         if (endsInLazyLine(reading, lines, block) && index < blocks.length - 1) packed.push("");
     });
     const definitions = packed.join("\n");
-
-    // Taking the definitions out must leave every other line reading as it
-    // did, the promise the orphan rules make for their cuts: a definition
-    // can be all that keeps "   thin prose" under a list item from
-    // becoming that item's second paragraph, and the indented code under
-    // it from waking up as live text (found by the conservation property,
-    // the runtime swap step 2, 2026-10-03). Such a note is left as it is,
-    // and the move alert names the definitions that held it back
-    // (definitionsHoldingTheMoveBack).
     const body = bodyWithout(lines, blocks);
-    if (!oldChecksSuspended() && linesReadDifferently(lines, { lines, ranges: blocks }, body)) return text;
 
     // The section-heading setting is markdown that may run over
     // SEVERAL lines, such as "---\n## Footnotes". So the search
@@ -305,6 +270,9 @@ export function definitionsHoldingTheMoveBack(markdown: string, sectionHeading =
     while (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
     const reading = readNote(lines);
     const blocks = movedDefinitions(reading);
+    // A note that ends inside an open fence or comment, whose move the
+    // gate refuses, holds no definition back that moving by hand would
+    // help: the definitions have nowhere to go there.
     if (blocks.length === 0 || reading.openRegionFrom !== -1) return [];
     // definitions that already close the note, with nothing but blank
     // lines among them, have nowhere to go, so nothing was held back
@@ -312,22 +280,29 @@ export function definitionsHoldingTheMoveBack(markdown: string, sectionHeading =
     let alreadyGathered = true;
     for (let i = blocks[0].start; i < lines.length && alreadyGathered; i++) alreadyGathered = inBlock(i) || lines[i].trim() === "";
     if (alreadyGathered) return [];
-    const holdsBack = (cut: readonly Definition[]): boolean => linesReadDifferently(lines, { lines, ranges: cut }, bodyWithout(lines, cut));
-    // When taking the definitions out leaves the lines around them reading
-    // as they did, the gathered note may still read a definition
-    // differently in its new place, the rule's own check; then the
-    // definitions it reads differently are named (hunt 2026-10-06, cycle
-    // 4, pin bug-moved-definition-joins-list-item). That gathering goes
-    // under the lint's section heading, as the rule's does. Worked out at
-    // the end of the note instead, it named a definition the lint had just
-    // gathered under the heading, above a list it would join only at the
-    // end (hunt 2026-10-06, cycle 5, pin bug-move-alert-ignores-heading).
-    let holding: readonly Definition[];
-    if (holdsBack(blocks)) {
-        const one = blocks.filter((block) => holdsBack([block]));
-        holding = one.length > 0 ? one : blocks;
-    } else {
-        holding = misreadByGathering(lines.join("\n"), sectionHeading);
+    // the move as the rule makes it, under the lint's section heading (pin
+    // bug-move-alert-ignores-heading), judged as the rule judges it
+    const note = lines.join("\n");
+    let moved = note;
+    rewriteDocument(note, (text, view) => {
+        moved = gathered(text, view, sectionHeading);
+        return text;
+    });
+    if (moved === note) return [];
+    const verdict = judgeEdit(lines, moved.split("\n"), {});
+    if (verdict.pass) return [];
+    // The definitions whose own move the gate refuses, judged as taken out
+    // of the note one at a time, such as one between two lists, whose move
+    // would join the lists; when no one alone does but all together do,
+    // every one; otherwise the one the refusal names, as a definition that
+    // would read differently in its new place, or every one (hunt
+    // 2026-10-06, cycle 4, pin bug-moved-definition-joins-list-item).
+    const holdsBack = (cut: readonly Definition[]): boolean => !judgeEdit(lines, bodyWithout(lines, cut), { removed: cut.map((block) => block.name) }).pass;
+    let holding: readonly Definition[] = blocks.filter((block) => holdsBack([block]));
+    if (holding.length === 0) {
+        const named = /^\[\^(.+)\]$/.exec(verdict.detail)?.[1];
+        const misread = named ? blocks.filter((block) => block.name.toLowerCase() === named) : [];
+        holding = misread.length > 0 ? misread : blocks;
     }
     const names: string[] = [];
     for (const block of holding) {
