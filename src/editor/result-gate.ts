@@ -1236,17 +1236,30 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
                 if (usersText ? containersOf(wasBlocks) !== containersOf(isBlocks) : !sameKind(wasBlocks, isBlocks) || !sameCells(was[k], is[k])) return formatting(is[k]);
             }
             // Lines the edit runs into one: what is left of the last of
-            // them now ends that one line, and must keep its own kind of
-            // block there: prose stays prose, a table row a row, a heading
-            // a heading. Its containers are the first line's, since the
-            // edit joined the two lines. A selection from prose into a
+            // them now ends that one line, and must read there as it did.
+            // It keeps its own kind of block (prose stays prose, a table
+            // row a row, a heading a heading) and its containers (a quote
+            // line stays in its quote, a list item's line in its list), and
+            // the last line may not have started a block of its own other
+            // than a paragraph: its marker ("- ", "> ", "3. ", a callout's
+            // title) went with the selection, so the rest of that block
+            // would join the first line's. A selection from prose into a
             // table's last row left the rest of the row on the prose's
             // line, read as prose, and only the first line was compared
             // (hunt 2026-10-08, cycle 6, pin
-            // bug-selection-into-table-last-row-converts).
+            // bug-selection-into-table-last-row-converts). A selection
+            // ending inside the next block's marker, or taking the marker
+            // and part of its text, left that text without its marker
+            // (Jason's ruling Q25, 2026-10-08; cluster Z6). A selection of
+            // whole blocks leaves nothing of the last line, so it is not
+            // compared here.
             const last = was[was.length - 1];
             if (!usersText && was.length > 1 && is.length === 1 && holdsTextOfLast(oldText(was[0]), oldText(last), newText(is[0]))) {
-                if (ownKind(oldSide.reading.lineBlocks[last] ?? "") !== ownKind(newSide.reading.lineBlocks[is[0]] ?? "")) return formatting(is[0]);
+                const lastBlocks = oldSide.reading.lineBlocks[last] ?? "";
+                const joined = newSide.reading.lineBlocks[is[0]] ?? "";
+                const unmarked = (blocks: string) => containersOf(blocks).replace(/\^/g, "");
+                const startsBlock = lastBlocks.split(" ").some((kind) => kind.startsWith("^") && kind !== "^paragraph");
+                if (ownKind(lastBlocks) !== ownKind(joined) || unmarked(lastBlocks) !== unmarked(joined) || startsBlock) return formatting(is[0]);
             }
             // A line the edit adds may join the paragraph next to it, as a
             // reference written on the blank line under a paragraph does;

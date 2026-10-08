@@ -4,7 +4,7 @@ import type FootnotePlugin from "../main";
 import { docLines } from "./doc-context";
 import { mapPosition, safeInsertionCh } from "./insertion-liveness";
 import { FootnotePlacement, imageStartsOn, lineLinkLikeEndAt, linkLikeEndAt, punctuationAt, referenceLandingAfter } from "../parsing/landing";
-import type { NoteReading } from "../parsing/note-reading";
+import { NoteReading, readNote } from "../parsing/note-reading";
 import {
     EditorWithCm,
     VaultWithConfig,
@@ -273,6 +273,29 @@ export function startOfWordOffset(text: string, offset: number): number {
  */
 const TrailingBlockId = /[ \t]+\^[A-Za-z0-9-]+$/;
 
+/**
+ * Where a reference that would land at column `ch` of `line` goes instead
+ * when the punctuation right in front of it ends a link-like construct
+ * that would take that punctuation in, and the reference with it: in
+ * front of the punctuation, if the construct keeps its end there and the
+ * reference is live. Otherwise `ch`. Both spots are asked of the note as
+ * it would read with the reference written in ("[^1]" stands in for it),
+ * so only a press after punctuation that follows a link pays for the two
+ * readings.
+ */
+function inFrontOfTakenPunctuation(reading: NoteReading, lines: readonly string[], line: number, ch: number): number {
+    const text = lines[line] ?? "";
+    let start = ch;
+    while (start > 0 && punctuationAt(text, start - 1)) start--;
+    if (start === ch || start === 0 || linkLikeEndAt(reading, line, start - 1)?.ch !== start) return ch;
+    // the note with a reference written at column `at` of the line, read
+    const withReference = (at: number) => readNote(lines.map((written, i) => (i === line ? `${written.slice(0, at)}[^1]${written.slice(at)}` : written)));
+    if (linkLikeEndAt(withReference(ch), line, start - 1)?.ch === start) return ch;
+    const inFront = withReference(start);
+    const live = inFront.referencesOn(line).some((reference) => reference.start === start);
+    return live && linkLikeEndAt(inFront, line, start - 1)?.ch === start ? start : ch;
+}
+
 /** Move the insertion point so a footnote goes in only at the end of a
  * word, and never where an escape or an inline-footnote opener would
  * swallow it (safeInsertionCh in insertion-liveness). `reading` is the
@@ -322,6 +345,16 @@ export function adjustFootnotePosition(
         );
         if (landing !== cursorPosition.ch) {
             cursorPosition = { line: cursorPosition.line, ch: landing };
+        }
+        // An email address takes in a period that a reference follows
+        // (docs/obsidian-reading-rules.md D8), so a press after the period
+        // that ends one was refused as part of a link. It lands in front of
+        // the period instead, under After and Before: "Write to
+        // me@example.com." gives "me@example.com[^1]." (Jason's ruling Q30,
+        // 2026-10-08; hunt 2026-10-08 cycle 6, cluster Z17). Don't move
+        // writes where it is told, so it still refuses there.
+        if (plugin.settings.footnotePlacement !== "none") {
+            cursorPosition = { line: cursorPosition.line, ch: inFrontOfTakenPunctuation(reading, lines, cursorPosition.line, cursorPosition.ch) };
         }
     }
     // A block id is the " ^water1" at the end of a line that lets other

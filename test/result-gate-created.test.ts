@@ -9,9 +9,10 @@ import { EditIntent, GateReason, judgeEdit, NotePosition } from "../src/editor/r
 // 2026-08-25 scoped Stryker run showed surviving when only the call sites
 // were tested: the definition must start at EXACTLY the given label line
 // AND take in every line written for it, and EVERY reference must read at
-// EXACTLY its place under EXACTLY the given name. The press's notice is the
-// same for "dead" and "protected" (refusedCreation in create-footnote.ts),
-// so those cases accept either.
+// EXACTLY its place under EXACTLY the given name. Those cases accept
+// either "dead" or "protected": both refuse, and which one a shape gives
+// only picks the notice (refusedCreation in create-footnote.ts; the two
+// were the same notice until 2026-10-08).
 //
 // Each case spells out the note as the press leaves it: "alpha bravo", "",
 // "tail" with "[^1]" written after "alpha" and "\n\n[^1]: " appended after

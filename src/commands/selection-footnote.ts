@@ -16,7 +16,7 @@ import { sanitizeInlineFootnoteContent } from "./inline-footnotes";
 import { simulateChanges } from "../editor/insertion-liveness";
 import { readCell } from "../parsing/cell-reading";
 import { cellImageStarts, imageStartsOn } from "../parsing/landing";
-import { NoteReading } from "../parsing/note-reading";
+import { NoteReading, readNote } from "../parsing/note-reading";
 import { GateReason, judgeEdit } from "../editor/result-gate";
 import {
     autonumFootnoteId,
@@ -132,13 +132,15 @@ export const SelectionFormattingNotice =
  * or cuts into a footnote, is told so whatever reason the gate gave
  * (`selected`, from selectedNotice): those were the first things checked
  * before the gate decided, and they name what the user selected. Otherwise
- * protected text, and anything the conversion meant to create that would
- * not be live, is the selection cutting through protected text, and a
- * line's formatting is the selection taking part of it.
+ * protected text is the selection cutting through protected text, and a
+ * line's formatting is the selection taking part of it. Anything the
+ * conversion meant to create that would not be live for another reason
+ * gets the press's own notice for it (ruling 7 of the cycle 6 rulings,
+ * 2026-10-08; it borrowed the protected-text notice until then).
  */
 function selectionNotices(selected: string | null): Partial<Record<GateReason, string>> {
     if (selected !== null) return { nested: selected, protected: selected, link: selected, formatting: selected, dead: selected, other: selected };
-    return { protected: ProtectedSelectionNotice, dead: ProtectedSelectionNotice, formatting: SelectionFormattingNotice };
+    return { protected: ProtectedSelectionNotice, formatting: SelectionFormattingNotice };
 }
 
 /**
@@ -256,7 +258,7 @@ export function selectionPressHandled(
         // cell's own text holds no block syntax and never contains a pipe,
         // so the only things that can come before the selection are prose
         // or the start of the cell.
-        const replaceFrom = absorbLeadingSpace(cellText, from, 0);
+        const replaceFrom = absorbLeadingSpace(cellText, from, 0, command !== "inline");
         const lead = cellText.slice(replaceFrom, from);
         if (command === "inline") {
             const wrapped = `^[${sanitizeInlineFootnoteContent(text)}]`;
@@ -340,6 +342,17 @@ export function selectionPressHandled(
             ),
         };
     }
+    // A list item's line selected whole, as a triple-click selects it (its
+    // line break is taken back off by the trimming above), converts the
+    // item's text: the selection starts where the line's block syntax ends,
+    // so the bullet stays and holds the reference ("- [^1]"). Taken whole,
+    // the first bullet of a list was refused for taking part of the line's
+    // formatting, and a later bullet left a bare "[^1]" that read as more
+    // of the bullet above (Jason's ruling Q27, 2026-10-08; hunt 2026-10-08
+    // cycle 6, cluster Z11).
+    if (wholeListItemLine(ctx.reading(), ctx.lines, trimmed.from, trimmed.to)) {
+        trimmed.from = { line: trimmed.from.line, ch: ctx.reading().blockSyntaxEnd(trimmed.from.line) };
+    }
     // The inline key works within a single line only. A selection that
     // spans lines is sent to the numbered and named keys, which put the
     // text in a definition instead (2026-08-20).
@@ -391,7 +404,7 @@ export function selectionPressHandled(
             ? { line: trimmed.from.line, ch: 0 }
             : {
                   line: trimmed.from.line,
-                  ch: absorbLeadingSpace(firstLine, trimmed.from.ch, ctx.reading().blockSyntaxEnd(trimmed.from.line)),
+                  ch: absorbLeadingSpace(firstLine, trimmed.from.ch, ctx.reading().blockSyntaxEnd(trimmed.from.line), command !== "inline"),
               };
     const replaceTo = table ? { line: trimmed.to.line, ch: lastLine.length } : trimmed.to;
     const selection: ConvertedSelection = {
@@ -467,15 +480,49 @@ export interface CellSelection {
  * pattern of its own here (hunt 2026-10-05, pin
  * bug-selection-eats-marker-space: the pattern this replaced knew no
  * callout marker and no task box but "[ ]", "[x]", and "[X]").
+ *
+ * The space also stays where a reference glued to the text in front would
+ * be dead and one after the space is live: after bracketed text, "Smith
+ * [2020][^1]" is a reference link to Obsidian (docs/obsidian-reading-rules.md
+ * D7), and a bare web address takes a reference glued to it in. Selecting
+ * "argues this." in "Smith [2020] argues this." gives "Smith [2020] [^1]"
+ * (Jason's ruling Q26, 2026-10-08; hunt 2026-10-08 cycle 6, cluster Z10).
+ * Before, the selection was refused with the link notice. The line is read
+ * on its own for this, both ways, so a line that reads as code alone has
+ * no live reference either way and the space goes as before. Only a
+ * reference is asked about (`reference`): an inline footnote glued to "]"
+ * is read before the link, so "Smith [2020]^[argues this.]" stays as it is.
  */
-export function absorbLeadingSpace(line: string, ch: number, syntaxEnd: number): number {
+export function absorbLeadingSpace(line: string, ch: number, syntaxEnd: number, reference = true): number {
     const before = line.slice(0, ch);
     const run = before.match(/[ \t]+$/);
     if (!run) return ch;
     const prose = before.slice(0, before.length - run[0].length);
     if (prose === "" || prose.length < syntaxEnd) return ch;
     if (prose.endsWith("|")) return ch;
+    // whether a reference written at the end of `text` is live there
+    const liveAtEnd = (text: string) => readNote([`${text}[^1]`]).referencesOn(0).some((reference) => reference.start === text.length);
+    if (reference && !liveAtEnd(prose) && liveAtEnd(before)) return ch;
     return ch - run[0].length;
+}
+
+/**
+ * Whether the selection from `from` to `to` is one line of the note, all
+ * of it, and that line starts a list item with text after its marker
+ * ("- First point", "2. Second", "- [ ] task"; NoteReading.blockSyntaxEnd
+ * says where the marker ends).
+ */
+function wholeListItemLine(reading: NoteReading, lines: readonly string[], from: EditorPosition, to: EditorPosition): boolean {
+    const line = lines[from.line] ?? "";
+    const syntaxEnd = reading.blockSyntaxEnd(from.line);
+    return (
+        from.line === to.line &&
+        line.slice(0, from.ch).trim() === "" &&
+        line.slice(to.ch).trim() === "" &&
+        from.ch < syntaxEnd &&
+        syntaxEnd < to.ch &&
+        (reading.lineBlocks[from.line] ?? "").split(" ").includes("^listItem")
+    );
 }
 
 /**

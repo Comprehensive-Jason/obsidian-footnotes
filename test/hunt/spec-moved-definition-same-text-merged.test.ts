@@ -10,7 +10,7 @@ import { handleCopy, handleCut, handlePaste, resetCarryRegister } from "../../sr
 // the user moves the second one's definition within the note, should the
 // paste keep it under its own name, or reuse the first one?
 //
-// What it does now: the note reads "One[^1]. Two[^2].", then
+// What it did before the ruling: the note reads "One[^1]. Two[^2].", then
 // "[^1]: Smith 2020, p. 4." and "[^2]: Smith 2020, p. 4.". The user cuts
 // [^2]'s definition line (Shift+Down, then Ctrl+X) and pastes it at the
 // end of the note. The paste finds [^1] with the same text and reuses it,
@@ -43,6 +43,12 @@ import { handleCopy, handleCut, handlePaste, resetCarryRegister } from "../../sr
 // call.
 //
 // Hunt 2026-10-08, cycle 6. Cluster Z14, triage question Q29.
+//
+// Answered (Jason's ruling Q29, 2026-10-08): a pasted definition whose
+// name the destination cites but does not define keeps its name, even
+// when another footnote there has the same text. Everywhere else
+// same-text footnotes still merge (Q13 stands). The tests below were
+// it.fails until then; what the paste did before is described above.
 //
 // Origin: pre-existing (the reuse); the README sentence it contradicts
 // came with bb15044.
@@ -122,19 +128,27 @@ beforeEach(() => {
 });
 
 describe("spec question: a definition moved within its note, whose text another definition shares", () => {
-    // Now: nothing is pasted in, and Two[^2] cites nothing.
-    it.fails("cut with Shift+Down and pasted at the end of the note, it keeps serving Two[^2]", () => {
+    // Before the ruling: nothing was pasted in, and Two[^2] cited nothing.
+    it("cut with Shift+Down and pasted at the end of the note, it keeps serving Two[^2]", () => {
         const note = ["One[^1]. Two[^2].", "", "[^1]: Smith 2020, p. 4.", "[^2]: Smith 2020, p. 4.", "", "Last.", ""];
         const c = cut(note, { line: 3, ch: 0 }, { line: 4, ch: 0 });
         const back = paste(c.lines, { line: c.lines.length - 1, ch: 0 }, c.clip);
         expect(back.lines.join("\n"), JSON.stringify({ c, lines: back.lines, m: messages() })).toMatch(/^\[\^2\]: Smith 2020, p\. 4\.$/m);
     });
 
-    // Now: the same, in a note that never had [^2]'s definition.
-    it.fails("a definition line copied from another note into one citing [^2] with no definition, whose [^1] has the same text, fills the gap", () => {
+    // Before the ruling: the same, in a note that never had [^2]'s definition.
+    it("a definition line copied from another note into one citing [^2] with no definition, whose [^1] has the same text, fills the gap", () => {
         const text = copy(["Elsewhere[^2].", "", "[^2]: Smith 2020, p. 4."], { line: 2, ch: 0 }, { line: 2, ch: 23 }, "a.md");
         const back = paste(["One[^1]. Two[^2].", "", "[^1]: Smith 2020, p. 4.", ""], { line: 3, ch: 0 }, text, "b.md");
         expect(back.lines.join("\n"), JSON.stringify({ lines: back.lines, m: messages() })).toMatch(/^\[\^2\]: Smith 2020, p\. 4\.$/m);
+    });
+
+    // Q13 stands: where nothing in the destination waits for [^2], a
+    // same-text definition is still reused under the destination's name.
+    it("control: pasted into a note that does not cite [^2], it is merged into the same-text [^1]", () => {
+        const text = copy(["Elsewhere[^2].", "", "[^2]: Smith 2020, p. 4."], { line: 2, ch: 0 }, { line: 2, ch: 23 }, "a.md");
+        const back = paste(["One[^1].", "", "[^1]: Smith 2020, p. 4.", ""], { line: 3, ch: 0 }, text, "b.md");
+        expect(back.lines).toEqual(["One[^1].", "", "[^1]: Smith 2020, p. 4.", ""]);
     });
 
     it("control: with different texts the moved definition keeps its name and serves Two[^2]", () => {

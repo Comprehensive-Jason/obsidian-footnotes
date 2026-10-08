@@ -12,7 +12,7 @@ import { DEFAULT_SETTINGS } from "../../src/settings";
 // that ends in an email address is refused. Should it land in front of
 // the period instead?
 //
-// What it does now: "Write to me@example.com.", the caret at the end of
+// What it did before the ruling: "Write to me@example.com.", the caret at the end of
 // the line after the period, default settings (After). The press is
 // refused with "No footnote was created: Obsidian would read it as part of
 // a link." The refusal is right about the spot it would write:
@@ -38,6 +38,14 @@ import { DEFAULT_SETTINGS } from "../../src/settings";
 // the link (rule D8), so the plugin does nothing wrong. Whether After
 // should give way to Before in this one shape, rather than refuse, is a
 // product decision for Jason.
+//
+// Answered (Jason's ruling Q30, 2026-10-08), option (a), under After and
+// Before: the press lands in front of the period, "Write to
+// me@example.com[^1].". Live (rule D8), "me@example.com.[^1]" and
+// "me@example.com. [^1]" both let the link take the period. The After
+// tests below were it.fails until then; what the press did before is
+// described above. Don't move writes where it is told, so it still
+// refuses there.
 //
 // Hunt 2026-10-08, cycle 6. Cluster Z17, triage question Q30. The hunter
 // expected "Write to me@example.com.[^1]"; the live answers refuted that.
@@ -77,13 +85,33 @@ describe("a press at the end of a sentence ending in an email address", () => {
         expect(doc.lines).toEqual(["Write to me@example.com[^1].", "", "More text.", "", "[^1]: "]);
     });
 
-    // Now: refused with the link notice, and the note is unchanged.
-    it.fails.each([
+    // Before the ruling: refused with the link notice, and the note unchanged.
+    it.each([
         ["after the period", line.length],
         ["on the address", "Write to me@example.com".length],
     ])("spec (a): under After, a press with the caret %s lands in front of the period", async (_where, ch) => {
         const doc = await press(ch);
         expect(messages()).toEqual([]);
         expect(doc.lines).toEqual(["Write to me@example.com[^1].", "", "More text.", "", "[^1]: "]);
+    });
+
+    // Before the ruling: refused with the link notice, since Before moves a
+    // reference only from a word.
+    it("under Before, a press with the caret after the period lands in front of it", async () => {
+        const doc = await press(line.length, "before");
+        expect(messages()).toEqual([]);
+        expect(doc.lines).toEqual(["Write to me@example.com[^1].", "", "More text.", "", "[^1]: "]);
+    });
+
+    it("control: under Don't move, a press after the period is still refused", async () => {
+        const doc = await press(line.length, "none");
+        expect(doc.lines).toEqual([line, "", "More text."]);
+        expect(messages().length).toBe(1);
+    });
+
+    it("control: after a link's period the press lands after it as before", async () => {
+        const doc = fakeEditor(["See [the log](https://example.com).", "", "More text."], { cursor: { line: 0, ch: 35 }, edits: true, wholeDoc: true, words: true });
+        await insertAutonumFootnote(fakePlugin({ ...DEFAULT_SETTINGS, enablePopupEditor: false }, doc));
+        expect(doc.lines[0]).toBe("See [the log](https://example.com).[^1]");
     });
 });

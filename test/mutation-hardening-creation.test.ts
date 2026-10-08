@@ -27,6 +27,7 @@ import {
 import {
 } from "../src/commands/rename-footnote";
 import { ProtectedCreationNotice } from "../src/editor/insertion-liveness";
+import { DeadFootnoteNotice } from "../src/editor/notice";
 import { TableCellEditor } from "../src/editor/table-cursor";
 
 // Mutation hardening for the creation trio (Stryker re-baseline 2026-08-12:
@@ -977,9 +978,11 @@ describe("the inline selection conversion", () => {
             selectionPressHandled(fakePlugin(doc), doc, null, "inline"),
         ).not.toThrow();
         expect(doc.lines).toEqual(before);
-        // in the selection's words since 2026-09-16 (B27: what the user
-        // did was select, so the advice to take all of it or none fits)
-        expect(noticed(ProtectedSelectionNotice)).toBe(true);
+        // Expectation changed (ruling 7 of the cycle 6 rulings,
+        // 2026-10-08): the gate's reason here is "dead", which has its own
+        // notice now. It was the selection's protected-text notice (B27,
+        // 2026-09-16), though no code or math is in the way.
+        expect(noticed(DeadFootnoteNotice)).toBe(true);
     });
 });
 

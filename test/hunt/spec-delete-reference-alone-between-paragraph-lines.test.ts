@@ -10,7 +10,7 @@ import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 // reference stands alone on a line between two lines of a paragraph:
 // should it delete the reference and take the emptied line out too?
 //
-// What it does now: "The tide rose." and "Oysters closed." with a blank
+// What it did before the ruling: "The tide rose." and "Oysters closed." with a blank
 // line between them. A press on the blank line writes "[^1]" there, which
 // is allowed (Jason's ruling B1, 2026-10-08: the line joins the two into
 // one paragraph of three lines). Delete footnote everywhere on [^1] then
@@ -36,6 +36,10 @@ import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 // else, is Jason's call.
 //
 // Hunt 2026-10-08, cycle 6. Cluster Z13, triage question Q28.
+//
+// Answered (Jason's ruling Q28, 2026-10-08), option (a): the reference is
+// deleted with the line it emptied. The spec test below was it.fails until
+// then; what the command did before is described above.
 //
 // Origin: pre-existing.
 //
@@ -71,9 +75,19 @@ describe("Delete footnote everywhere on a reference alone on a paragraph's line"
         expect(plan).toEqual({ kind: "deleted", markdown: "The tide rose.\nOysters closed.", references: 1, definitions: 1 });
     });
 
-    // Now: { kind: "refused" }, with the "Delete it by hand." reason.
-    it.fails("spec (a): it is deleted, and the emptied line goes with it", () => {
+    // Before the ruling: { kind: "refused" }, with the "Delete it by hand." reason.
+    it("spec (a): it is deleted, and the emptied line goes with it", () => {
         const plan = deleteFootnoteEverywhere(["The tide rose.", "[^1]", "Oysters closed.", "", "[^1]: Tide tables."].join("\n"), "1");
         expect(plan).toEqual({ kind: "deleted", markdown: "The tide rose.\nOysters closed.", references: 1, definitions: 1 });
+    });
+
+    it("the same under a list item, where the reference's line carries on the item's text", () => {
+        const plan = deleteFootnoteEverywhere(["- The tide rose.", "  [^1]", "- Oysters closed.", "", "[^1]: Tide tables."].join("\n"), "1");
+        expect(plan).toEqual({ kind: "deleted", markdown: "- The tide rose.\n- Oysters closed.", references: 1, definitions: 1 });
+    });
+
+    it("control: a line that keeps other text after the cut stays", () => {
+        const plan = deleteFootnoteEverywhere(["The tide rose.", "[^1] then fell.", "Oysters closed.", "", "[^1]: Tide tables."].join("\n"), "1");
+        expect(plan).toEqual({ kind: "deleted", markdown: "The tide rose.\nthen fell.\nOysters closed.", references: 1, definitions: 1 });
     });
 });

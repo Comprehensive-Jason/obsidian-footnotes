@@ -156,6 +156,17 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
         return hits.reduce((kept, { start, end }) => cutOne(kept, start, end), line);
     });
     if (references === 0 && definitions === 0) return { kind: "nothing" };
+    // A line the reference cuts leave blank, with text right above it and
+    // right below it, goes too. A reference alone on a line between two
+    // lines of text is part of one paragraph with them (a press on the
+    // blank line between two paragraphs writes one there, Jason's ruling
+    // B1), and an empty line left in its place would split that paragraph
+    // in two, so the deletion was refused. Without the line, the note reads
+    // as it did (Jason's ruling Q28, 2026-10-08; hunt 2026-10-08 cycle 6,
+    // cluster Z13). An emptied line with a blank line next to it stays, as
+    // before.
+    const hasText = (i: number) => i >= 0 && i < lines.length && !cut.has(i) && lines[i].trim() !== "";
+    const emptied = cutLines.flatMap((line, i) => (line !== lines[i] && !cut.has(i) && line.trim() === "" && hasText(i - 1) && hasText(i + 1) ? [{ start: i, end: i }] : []));
 
     // The promise the two orphan rules make, kept here too: the result gate
     // judges the deletion, and one that changes how Obsidian reads text it
@@ -169,12 +180,15 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     // The reference cuts are judged on their own first, so the toast can
     // say which half was refused; then the whole deletion, against the
     // note as it was.
-    const referencesCut = cutLines.map((line, i) => (definitionCut.lines[i] === lines[i] ? line : lines[i]));
+    const referencesCut = removeLineRanges(
+        cutLines.map((line, i) => (definitionCut.lines[i] === lines[i] ? line : lines[i])),
+        emptied,
+    );
     const intent = { removed: [name] };
     if (references > 0 && !judgeEdit(lines, referencesCut, intent, reading).pass) {
         return { kind: "refused", reason: `Nothing was deleted: removing ${quotedReference(name)}${byHand}` };
     }
-    const out = removeLineRanges(cutLines, blocks);
+    const out = removeLineRanges(cutLines, [...blocks, ...emptied].sort((a, b) => a.start - b.start));
     if (!judgeEdit(lines, out, intent, reading).pass) {
         return {
             kind: "refused",

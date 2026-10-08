@@ -47,6 +47,14 @@ export const BlockSyntaxNotice = NoFootnoteCreated + "a footnote here would brea
  * protected-text notice. */
 export const InsideLinkNotice = NoFootnoteCreated + "Obsidian would read it as part of a link.";
 
+/** A press whose new footnote Obsidian would not read as one, for no
+ * reason a more particular notice names: not protected text, not a link
+ * (the result gate's reason "dead"). It borrowed the protected-text
+ * notice, which named code or math that was not there (Jason's wording,
+ * ruling 7 of the cycle 6 rulings, 2026-10-08; hunt 2026-10-08 cycle 6,
+ * cluster Z8). */
+export const DeadFootnoteNotice = NoFootnoteCreated + "Obsidian wouldn't read it as a footnote here.";
+
 /** The end of every refusal for an edit that would change how Obsidian
  * reads the note somewhere it was not asked to: the result gate's general
  * reason, when no more particular one fits (Jason's wording, 2026-10-08).
