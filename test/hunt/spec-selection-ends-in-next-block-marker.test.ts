@@ -68,11 +68,20 @@ async function pressOver(lines: string[], anchor: EditorPosition, head: EditorPo
 beforeEach(resetNotices);
 
 describe("a selection from one paragraph that ends inside the next block's formatting", () => {
-    // Now, in order: "Para one[^1]ding text", "Para one[^1] text here", and
-    // "Para one[^1]ird item text", with the taken "# Hea", "> Quoted", or
-    // "3. th" drawn as a heading, a quote, or a numbered list in footnote 1.
+    // Refused since the fix for cluster Z5 (2026-10-08, the c6fix-A run):
+    // the gate now compares what is left of the selection's last line, and
+    // the heading's leftover "ding text" would read as prose. This answers
+    // the heading case as option (a) as a side effect; the cases below are
+    // still open for Jason's ruling.
+    it("ending inside a heading's '# ' refuses", async () => {
+        const lines = ["Para one here", "", "# Heading text"];
+        expect(await pressOver(lines, { line: 0, ch: 9 }, { line: 2, ch: 5 })).toEqual(lines);
+    });
+
+    // Now, in order: "Para one[^1] text here" and "Para one[^1]ird item
+    // text", with the taken "> Quoted" or "3. th" drawn as a quote or a
+    // numbered list in footnote 1.
     it.fails.each<[string, string[], EditorPosition, EditorPosition]>([
-        ["a heading's '# '", ["Para one here", "", "# Heading text"], { line: 0, ch: 9 }, { line: 2, ch: 5 }],
         ["a quote's '> '", ["Para one here", "", "> Quoted text here"], { line: 0, ch: 9 }, { line: 2, ch: 8 }],
         ["a numbered item's '3. '", ["Para one here", "", "3. third item text"], { line: 0, ch: 9 }, { line: 2, ch: 5 }],
     ])("ending inside %s refuses", async (_what, lines, anchor, head) => {

@@ -70,14 +70,14 @@ describe("a selection from the prose above a table into its last row", () => {
 
     // Now: "before[^1]e | two |", and footnote 1 holds "the table", the
     // header, the delimiter, and "| on".
-    it.fails("from 'the table' to inside the last row's first cell refuses with the table notice", async () => {
+    it("from 'the table' to inside the last row's first cell refuses with the table notice", async () => {
         expect(await pressOver(table, { line: 0, ch: 7 }, { line: 4, ch: 4 })).toEqual(table);
         expect(noticed(TableSelectionNotice)).toBe(true);
     });
 
     // Now: "[^1] two |", and footnote 1 holds the first line, the header,
     // the delimiter, and "| one |".
-    it.fails("from the start of the prose through the header and delimiter and into the last row refuses with the table notice", async () => {
+    it("from the start of the prose through the header and delimiter and into the last row refuses with the table notice", async () => {
         expect(await pressOver(table, { line: 0, ch: 0 }, { line: 4, ch: 7 })).toEqual(table);
         expect(noticed(TableSelectionNotice)).toBe(true);
     });

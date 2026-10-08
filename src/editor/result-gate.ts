@@ -650,6 +650,26 @@ function sameKind(was: string, is: string, nextToUsersText = false): boolean {
     return was === is || carriedOn(was) === is || (nextToUsersText && blocksAlone(was) === blocksAlone(is));
 }
 
+/** The innermost of a line's blocks, its own kind, without the mark for where it starts. */
+function ownKind(blocks: string): string {
+    return (blocks.split(" ").pop() ?? "").replace(/^\^/, "");
+}
+
+/**
+ * Whether the line `merged`, which an edit made of the lines `first` to
+ * `last` (a selection across lines, replaced by its reference), still
+ * holds text of `last`: it holds more than the start of `first`, and it
+ * ends as `last` does. Each is compared by its text without footnotes
+ * (lineKey). A selection that takes the whole of `last` leaves the start
+ * of `first` alone.
+ */
+function holdsTextOfLast(first: string, last: string, merged: string): boolean {
+    const [start, end, line] = [lineKey(first), lineKey(last), lineKey(merged)];
+    let fromStart = 0;
+    while (fromStart < line.length && line[fromStart] === start[fromStart]) fromStart++;
+    return fromStart < line.length && end !== "" && line.endsWith(end[end.length - 1]);
+}
+
 /**
  * Whether a line of a lazy label's paragraph reads, once fix-lazy has made
  * the label a definition (`is`), as it did before (`was`): it carried on
@@ -668,8 +688,7 @@ function lazyLineReadsAlike(was: string, is: string): boolean {
     // definition's text; one that started a block of its own must read as
     // it did (Jason's triage decision Q7, 2026-10-05)
     if (was.includes("^")) return false;
-    const own = (blocks: string) => (blocks.split(" ").pop() ?? "").replace(/^\^/, "");
-    return own(was) === own(is) || (own(was) === "paragraph" && own(is) === "table");
+    return ownKind(was) === ownKind(is) || (ownKind(was) === "paragraph" && ownKind(is) === "table");
 }
 
 /** The lazy labels among the lines the checks look at on `side` (lazyDefinitionLabelLines), worked out the first time they are asked for. */
@@ -1161,6 +1180,19 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
                 const wasBlocks = oldSide.reading.lineBlocks[was[k]] ?? "";
                 const isBlocks = newSide.reading.lineBlocks[is[k]] ?? "";
                 if (usersText ? containersOf(wasBlocks) !== containersOf(isBlocks) : !sameKind(wasBlocks, isBlocks) || !sameCells(was[k], is[k])) return formatting(is[k]);
+            }
+            // Lines the edit runs into one: what is left of the last of
+            // them now ends that one line, and must keep its own kind of
+            // block there: prose stays prose, a table row a row, a heading
+            // a heading. Its containers are the first line's, since the
+            // edit joined the two lines. A selection from prose into a
+            // table's last row left the rest of the row on the prose's
+            // line, read as prose, and only the first line was compared
+            // (hunt 2026-10-08, cycle 6, pin
+            // bug-selection-into-table-last-row-converts).
+            const last = was[was.length - 1];
+            if (!usersText && was.length > 1 && is.length === 1 && holdsTextOfLast(oldText(was[0]), oldText(last), newText(is[0]))) {
+                if (ownKind(oldSide.reading.lineBlocks[last] ?? "") !== ownKind(newSide.reading.lineBlocks[is[0]] ?? "")) return formatting(is[0]);
             }
             // A line the edit adds may join the paragraph next to it, as a
             // reference written on the blank line under a paragraph does;
