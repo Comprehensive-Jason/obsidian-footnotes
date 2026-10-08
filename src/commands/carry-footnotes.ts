@@ -371,6 +371,26 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     const shownBlocks = [...shown.values()].sort((a, b) => a.start - b.start || a.labelStart - b.labelStart);
     const shownShapes = destinationShapes(host, shownBlocks);
     const existing = new Map(shownBlocks.map((block, k) => [block.name.toLowerCase(), { name: block.name, shape: shownShapes[k] }]));
+    // The names the destination cites and does not define: its gaps. They
+    // are read with the body landed, the body's own references left out,
+    // and any definition in the landed note counts, one whose label the
+    // body completes included. Read without the body, a definition the cut
+    // left right under a line of text is a lazy label (a line that carries
+    // on the paragraph above it), so its name would read as a gap, and
+    // pasting the copied text over itself would add a second copy of the
+    // definition (seen in the cycle-5 round-trip survey while this rule was
+    // built, 2026-10-08).
+    const ownReference = (line: number, occurrence: ReferenceOccurrence) => {
+        const i = line - landing.line;
+        return at !== undefined && i >= 0 && i < bodyLines.length && occurrence.start >= landing.shift(i) && occurrence.start < landing.shift(i) + bodyLines[i].length;
+    };
+    const definedHere = new Set(host.reading.definitions.map((block) => block.name.toLowerCase()));
+    const gaps = new Set<string>();
+    for (let line = 0; line < host.lines.length; line++) {
+        for (const occurrence of host.reading.referencesOn(line)) {
+            if (!ownReference(line, occurrence) && !definedHere.has(occurrence.name.toLowerCase())) gaps.add(occurrence.name.toLowerCase());
+        }
+    }
     // the shown definitions by their text set aside, in note order
     const byText = new Map<string, { name: string; shape: Shape }[]>();
     for (const offered of existing.values()) byText.set(offered.shape.text, [...(byText.get(offered.shape.text) ?? []), offered]);
@@ -450,8 +470,16 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     // stand alone, and dropping both lost the footnote (hunt 2026-10-02,
     // pin bug-carry-duplicate-clipboard-name-dropped). Both copies then
     // land under one name, the last still the one shown.
+    //
+    // A carried definition whose name fills one of the destination's gaps
+    // is never merged: it keeps its name and serves the reference waiting
+    // for it, even when another footnote there has the same text. Merged,
+    // it pointed nothing at the waiting reference, so a definition cut and
+    // pasted elsewhere in its note left its reference with no definition
+    // (Jason's ruling Q29, 2026-10-08; hunt 2026-10-08 cycle 6, cluster
+    // Z14). Everywhere else same-text footnotes still merge (Q13).
     const merged = new Map<string, string>();
-    const unmerged = new Set<string>();
+    const unmerged = new Set(carried.map((definition) => definition.name.toLowerCase()).filter((name) => gaps.has(name)));
     const blockOf = new Map(carried.map((definition, i) => [definition.name.toLowerCase(), i]));
     const shapes = carried.map((definition, i) => shapeOf(definition.lines, blockReadings[i].labelOn(0)?.labelEnd ?? 0, blockSyntax(i)));
     // whether carried block `i` reads as the destination's `offered` once
