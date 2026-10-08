@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
-import { resetNotices } from "../helpers/notices";
+import { noticed, resetNotices } from "../helpers/notices";
+import { NestedFootnoteNotice } from "../../src/editor/notice";
 import { pasteInlineFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { readNote } from "../../src/parsing/note-reading";
 
@@ -30,6 +31,12 @@ import { readNote } from "../../src/parsing/note-reading";
 //
 // Source of truth: docs/adr/0001-no-nested-footnotes.md ("We refuse to
 // create nesting anywhere") and CONTEXT.md's Nested footnote entry.
+//
+// Answered (Jason's ruling B4, 2026-10-08, stage 3 of the result gate
+// design): the press is refused with the nesting notice and nothing is
+// pasted; the result gate decides it (a reference inside an inline
+// footnote is a footnote inside a footnote). The tests were it.fails until
+// then.
 
 // Makes navigator.clipboard.readText hand back `text`.
 function stubClipboard(text: string) {
@@ -61,17 +68,21 @@ afterEach(() => {
 });
 
 describe("spec question: the paste-as-inline key with a reference in the clipboard", () => {
-    it.fails("does not nest a reference inside the new inline footnote", async () => {
+    it("does not nest a reference inside the new inline footnote: the press is refused", async () => {
         stubClipboard("a[^1] b\n\n[^1]: one");
         const doc = fakeEditor(["x"], { wholeDoc: true, edits: true, cursor: { line: 0, ch: 1 } });
         await pasteInlineFootnote(fakePlugin({ ...base }, doc));
         expect(nestedReferences(doc.lines)).toEqual([]);
+        expect(doc.lines).toEqual(["x"]);
+        expect(noticed(NestedFootnoteNotice)).toBe(true);
     });
 
-    it.fails("multi-caret paste-as-inline with the same clipboard does not nest either", async () => {
+    it("multi-caret paste-as-inline with the same clipboard does not nest either: refused", async () => {
         stubClipboard("a[^1] b\n\n[^1]: one");
         const doc = fakeEditor(["x y"], { wholeDoc: true, edits: true, carets: [{ line: 0, ch: 1 }, { line: 0, ch: 3 }] });
         await pasteInlineFootnote(fakePlugin({ ...base }, doc));
         expect(nestedReferences(doc.lines)).toEqual([]);
+        expect(doc.lines).toEqual(["x y"]);
+        expect(noticed(NestedFootnoteNotice)).toBe(true);
     });
 });

@@ -28,39 +28,41 @@ import {
     listExistingFootnoteDefinitions,
     referenceOccurrenceAtCursor,
 } from "../editor/doc-context";
-import { bareInsertionVerdict, landingVerdict } from "./inline-footnotes";
-import {
-    fewerLinksDrawn,
-    InsertionVerdict,
-    ProtectedCreationNotice,
-    safeInsertionCh,
-    simulatedContext,
-    pressLineVerdict,
-    verifyLiveFootnoteInsertion,
-} from "../editor/insertion-liveness";
+import { ProtectedCreationNotice, safeInsertionCh, simulateChanges } from "../editor/insertion-liveness";
 import { lintAfterFootnoteCreation } from "../linting/linter";
 import { maskInlineRegions, readCell } from "../parsing/cell-reading";
 import { warnDefinitionCaretIfInside, warnTableEdgeCaretIfOutside, warnProtectedCaretIfInside } from "./press-guards";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
-import { BlockSyntaxNotice, InsideLinkNotice, NestedFootnoteNotice, showNotice } from "../editor/notice";
-import { CreatedFootnote, shadowGate } from "../editor/result-gate";
+import { BlockSyntaxNotice, InsideLinkNotice, NestedFootnoteNotice, ReadsDifferentlyNotice, showNotice } from "../editor/notice";
+import { CreatedFootnote, GateReason, GateVerdict, judgeEdit } from "../editor/result-gate";
 
 /**
- * The refusal for a creation whose result is not "live" (see
- * verifyLiveFootnoteInsertion): a reference that would land inside a
- * definition gets the nesting notice, the same one a caret inside a
- * definition gets; one that Obsidian would read as part of a link, or that
- * would undo a link reference definition, gets the link notice (Jason's
- * ruling, 2026-10-04); one that would be read as a definition's label gets
- * the block-syntax notice (Jason, 2026-10-05); and anything else that would
- * be born dead gets `deadNotice`. Shared by every press that writes a
- * reference. True means the press was refused.
+ * Shows the notice for a creation the result gate refused (judgeEdit in
+ * result-gate.ts), and reports whether it refused. Each reason the gate
+ * gives has its notice (the design's table; Jason, 2026-10-08): a
+ * footnote inside a footnote gets the nesting notice, the one a caret
+ * inside a definition gets; protected text, the protected-text notice; a
+ * link, the link notice (Jason's ruling, 2026-10-04); a line's
+ * formatting, the block-syntax notice (Jason, 2026-10-05); something the
+ * press meant to create that would not be live, the protected-text
+ * notice, which says where such a footnote dies; and anything else, the
+ * general one. A selection conversion speaks in its own words for some
+ * reasons, and hands them in as `notices`. Shared by every press that
+ * creates a footnote. True means the press was refused.
  */
-export function refusedCreation(verdict: InsertionVerdict, deadNotice: string): boolean {
-    if (verdict === "live") return false;
-    const notices = { nested: NestedFootnoteNotice, link: InsideLinkNotice, label: BlockSyntaxNotice, dead: deadNotice };
-    showNotice(notices[verdict], 8000);
+export function refusedCreation(verdict: GateVerdict, notices: Partial<Record<GateReason, string>> = {}): boolean {
+    if (verdict.pass) return false;
+    const byReason: Record<GateReason, string> = {
+        nested: NestedFootnoteNotice,
+        protected: ProtectedCreationNotice,
+        link: InsideLinkNotice,
+        formatting: BlockSyntaxNotice,
+        dead: ProtectedCreationNotice,
+        other: ReadsDifferentlyNotice,
+        ...notices,
+    };
+    showNotice(byReason[verdict.reason], 8000);
     return true;
 }
 
@@ -68,8 +70,8 @@ export function refusedCreation(verdict: InsertionVerdict, deadNotice: string): 
 // steps a press falls through, each one either handling the press or
 // passing it along. These are the steps that make a footnote: mint a
 // reference, append its definition, then hand off to the popup or jump to
-// the definition. Every step is checked against the insertion-liveness
-// helpers before any edit is sent to the editor.
+// the definition. Every step hands the note as its edit would leave it to
+// the result gate (result-gate.ts) before any edit is sent to the editor.
 //
 // Apart from the wiring in main.ts, this module is the only place that
 // imports the linter, because creation is where the lint-on-creation
@@ -81,9 +83,8 @@ export function refusedCreation(verdict: InsertionVerdict, deadNotice: string): 
 // the cell's caret `caretOffsetInText` characters into the text it
 // inserted, with focus still in the cell.
 //
-// Returns false when the insertion was refused because it would be
-// born-dead, meaning it would not be a real footnote the moment it landed
-// (see the liveness check). Nothing at all is written in that case, so
+// Returns false when the result gate refused the insertion (see
+// dispatchCellEditIfLive). Nothing at all is written in that case, so
 // code that pairs this with a definition append must skip the append too.
 //
 // `linkLabels` are the labels of the note's link reference definitions
@@ -119,7 +120,17 @@ export function insertInTableCell(
     return dispatchCellEditIfLive(cell, text, at, at, caretOffsetInText, linkLabels);
 }
 
-/** Replaces the range `from` up to `to` inside a table cell you are actively editing with `text`. This is how a conversion writes into a cell (issue #35). It refuses a born-dead result, or one that loses a link, just as insertInTableCell does (`linkLabels` are the note's link labels, as there). The range being replaced is the cell's own selection, so the end-of-word adjustment does not apply here. */
+/**
+ * Replaces the range `from` up to `to` inside a table cell you are
+ * actively editing with `text`. This is how a conversion writes into a
+ * cell (issue #35). The result gate judges it just as it judges
+ * insertInTableCell's text (`linkLabels` are the note's link labels, as
+ * there). `conversion` says what the conversion moves into a definition
+ * (`body`, none for an inline footnote, whose text stays in the cell) and
+ * the notices it refuses with in its own words. The range being replaced
+ * is the cell's own selection, so the end-of-word adjustment does not
+ * apply here.
+ */
 export function replaceInTableCell(
     cell: TableCellEditor,
     text: string,
@@ -127,17 +138,16 @@ export function replaceInTableCell(
     to: number,
     caretOffsetInText: number,
     linkLabels: ReadonlySet<string> = new Set(),
+    conversion: { body?: string; notices: Partial<Record<GateReason, string>> } = { notices: {} },
 ): boolean {
-    return dispatchCellEditIfLive(cell, text, from, to, caretOffsetInText, linkLabels);
+    return dispatchCellEditIfLive(cell, text, from, to, caretOffsetInText, linkLabels, conversion);
 }
 
-// The one place cell writes happen. It refuses born-dead text, and an
-// edit after which some link is not drawn as it was, a bare address cut
-// short included (the cell's twin of pressLineVerdict's "link" verdict,
-// judged with the note's link labels; fewerLinksDrawn),
-// and otherwise writes through the cell's own editor, leaving the caret
-// inside what it just wrote. Never the main editor: a main-editor write
-// races the cell's own write-back and corrupts the table.
+// The one place cell writes happen. The result gate judges the edit
+// (cellVerdict), and a refused one is not written; otherwise it goes
+// through the cell's own editor, leaving the caret inside what it just
+// wrote. Never the main editor: a main-editor write races the cell's own
+// write-back and corrupts the table.
 function dispatchCellEditIfLive(
     cell: TableCellEditor,
     text: string,
@@ -145,46 +155,58 @@ function dispatchCellEditIfLive(
     to: number,
     caretOffsetInText: number,
     linkLabels: ReadonlySet<string>,
+    conversion: { body?: string; notices: Partial<Record<GateReason, string>> } = { notices: {} },
 ): boolean {
     const cellText = cell.state.doc.toString();
-    // The edit can finish off a construct that was sitting around it, and
-    // so be swallowed into that construct the moment it is born. The case
-    // actually found was a pair of "$" signs closing into inline math
-    // (command-press property suite, 2026-08-12). A cell's text is one
-    // line, so masking that line on its own is enough to decide.
     // a range from a stale selection is clamped the same way the caret is
     from = Math.max(0, Math.min(from, cellText.length));
     to = Math.max(from, Math.min(to, cellText.length));
-    // The cell is read as the note holds it (readCell), where a "|" in the
-    // text is written "\|", so the text is judged in its written form.
-    const after = readCell(cellText.slice(0, from) + text + cellText.slice(to));
-    const start = after.column(from);
-    const verdict =
-        fewerLinksDrawn(readCell(cellText).reading, after.reading, linkLabels)
-            ? "link"
-            : landingVerdict(after.reading, 0, start, after.line.slice(start, after.column(from + text.length)));
-    // shadow mode: the result gate judges the cell as a one-row table with
-    // the note's link reference definitions under it (result-gate.ts)
-    shadowGate("cell:write", verdict === "live" ? null : verdict, () => {
-        const links = [...linkLabels].map((label) => `[${label}]: https://example.com`);
-        const note = (line: string) => [line, "| --- |", "", ...links];
-        const written = after.line.slice(start, after.column(from + text.length));
-        const at = [{ line: 0, ch: start }];
-        // text written at the caret, not over a selection, comes from the
-        // key itself or the clipboard
-        const created: CreatedFootnote = written.startsWith("^[")
-            ? { kind: "inline", text: written, at, fromOutside: from === to && written !== "^[]" }
-            : caretOffsetInText < text.length
-              ? { kind: "placeholder", text: written, at }
-              : { kind: "footnote", name: written.slice(2, -1), references: at };
-        return { before: note(readCell(cellText).line), after: note(after.line), intent: { created: [created] } };
-    });
-    if (refusedCreation(verdict, ProtectedCreationNotice)) return false;
+    if (refusedCreation(cellVerdict(cellText, text, from, to, caretOffsetInText, linkLabels, conversion.body), conversion.notices)) return false;
     cell.dispatch({
         changes: { from, to, insert: text },
         selection: { anchor: from + caretOffsetInText },
     });
     return true;
+}
+
+/**
+ * The result gate's verdict on writing `text` over `from` up to `to` of a
+ * table cell whose text is `cellText`. The cell editor holds the cell's
+ * text alone, so the gate judges the cell as the one row of a table, with
+ * the note's link reference definitions under it (`linkLabels`: a "[some
+ * text]" in a cell is a link when the note defines its label) and, for a
+ * conversion, the definition it writes after them holding `body`, the
+ * selected text, as the note's own definition would. The edit can finish
+ * off a construct that was sitting around it, and so be swallowed into that
+ * construct the moment it is born (a pair of "$" signs closing into inline
+ * math, the command-press property suite, 2026-08-12); it can cut a link
+ * short or a code span in half; and a selection holding a footnote would
+ * put it inside the new one. The cell is read as the note holds it
+ * (readCell), where a "|" in the text is written "\|", so the text is
+ * judged in its written form. What `text` is comes from its shape and the
+ * caret: an inline footnote ("^[...]", its text the clipboard's when it is
+ * written at the caret and holds some), an empty placeholder (the caret
+ * left inside it), or a reference.
+ */
+function cellVerdict(cellText: string, text: string, from: number, to: number, caretOffsetInText: number, linkLabels: ReadonlySet<string>, body?: string): GateVerdict {
+    const after = readCell(cellText.slice(0, from) + text + cellText.slice(to));
+    const start = after.column(from);
+    const written = after.line.slice(start, after.column(from + text.length));
+    const at = [{ line: 0, ch: start }];
+    const links = [...linkLabels].map((label) => `[${label}]: https://example.com`);
+    const note = (line: string, definition: string[]) => [line, "| --- |", "", ...links, ...definition];
+    let created: CreatedFootnote;
+    let definition: string[] = [];
+    if (written.startsWith("^[")) {
+        created = { kind: "inline", text: written, at, fromOutside: from === to && written !== "^[]" };
+    } else if (caretOffsetInText < text.length) {
+        created = { kind: "placeholder", text: written, at };
+    } else {
+        const name = written.slice(2, -1);
+        if (body !== undefined) definition = ["", `[^${name}]: ${body}`];
+        created = { kind: "footnote", name, references: at, ...(body !== undefined ? { definition: { line: 4 + links.length, lines: 1 } } : {}) };
+    }
+    return judgeEdit(note(readCell(cellText).line, []), note(after.line, definition), { created: [created] });
 }
 
 /**
@@ -461,6 +483,19 @@ export function landCellDefinitionAppend(opts: {
     }
 }
 
+/**
+ * The result gate's verdict on the definition a press in a table cell
+ * appends for `footnoteId`, holding `body` when a conversion moves text
+ * into it (`lines` lines of it). It is judged on the note before the cell
+ * writes its reference, since the definition is planned the same way after
+ * that write, only against the row's new text.
+ */
+export function definitionAppendVerdict(plugin: FootnotePlugin, doc: Editor, footnoteId: string, lines: number, body?: string): GateVerdict {
+    const before = docLines(doc);
+    const plan = planDefinitionAppend({ lines: before, edits: [], footnoteId, plugin, ...(body !== undefined ? { body } : {}) });
+    return judgeEdit(before, plan.final, { created: [{ kind: "footnote", name: footnoteId, references: [], definition: { line: plan.labelLine, lines } }] });
+}
+
 /** Step 4 of the cascade, for the numbered key: insert the next-numbered reference at the caret, through `cell` when you are in a table, append its definition, and then open the popup or jump, whichever the settings say. */
 export function createAutonumFootnote(
     lineText: string,
@@ -500,12 +535,17 @@ export function createAutonumFootnote(
     const footnoteReference = referenceText(footnoteId);
 
     if (cell) {
+        // The definition goes outside the table, through the main editor,
+        // and the gate judges it before anything is written: once the
+        // reference is in the cell, refusing its definition would leave the
+        // reference with none.
+        if (refusedCreation(definitionAppendVerdict(plugin, doc, footnoteId, 1))) return true;
         // The reference is written through the cell's own editor, never
         // the main editor, because a main-editor write races the cell's
         // write-back and corrupts the table. The definition is appended
         // outside the table, so writing that through the main editor is
-        // safe. If the born-dead check refuses the cell insertion, no
-        // orphaned definition may be left behind.
+        // safe. If the gate refuses the cell insertion, no orphaned
+        // definition may be left behind.
         if (
             !insertInTableCell(cell, plugin, footnoteReference, footnoteReference.length, ctx.reading().linkLabels)
         ) {
@@ -524,11 +564,6 @@ export function createAutonumFootnote(
         // table, outside the cell's own editor, so it is safe under the
         // issue #28 rule.
         const plan = planDefinitionAppend({ lines: docLines(doc), edits: [], footnoteId, plugin });
-        shadowGate("cell:definition", null, () => ({
-            before: docLines(doc),
-            after: plan.final,
-            intent: { created: [{ kind: "footnote", name: footnoteId, references: [], definition: { line: plan.labelLine, lines: 1 } }] },
-        }));
         landCellDefinitionAppend({
             plugin,
             doc,
@@ -562,23 +597,16 @@ export function createAutonumFootnote(
     // a reference that fills the empty line under a definition becomes
     // that definition's text, a nested footnote.
     //
-    // verifyLiveFootnoteInsertion checks the note exactly as the
-    // transaction leaves it, and anything that came out wrong refuses the
-    // press with the notice that says why.
-    const verdict = verifyLiveFootnoteInsertion({
-        before: ctx.reading(),
-        lines: plan.final,
-        anchors: [plan.edits[0].start],
-        footnoteId,
-        definitionLabelLine: plan.labelLine,
-    });
-    shadowGate("press:numbered", verdict === "live" ? null : verdict, () => ({
-        before: ctx.lines,
-        beforeReading: ctx.reading(),
-        after: plan.final,
-        intent: { created: [{ kind: "footnote", name: footnoteId, references: [plan.edits[0].start], definition: { line: plan.labelLine, lines: 1 } }] },
-    }));
-    if (refusedCreation(verdict, ProtectedCreationNotice)) return true;
+    // The result gate judges the note exactly as the transaction leaves
+    // it, and anything that came out wrong refuses the press with the
+    // notice that says why.
+    const verdict = judgeEdit(
+        ctx.lines,
+        plan.final,
+        { created: [{ kind: "footnote", name: footnoteId, references: [plan.edits[0].start], definition: { line: plan.labelLine, lines: 1 } }] },
+        ctx.reading(),
+    );
+    if (refusedCreation(verdict)) return true;
 
     landDefinitionBackedInsertion({
         plugin,
@@ -649,26 +677,18 @@ export function createMatchingFootnoteDefinition(
     if (!idListIncludes(list, footnoteId)) {
         const plan = planDefinitionAppend({ lines: ctx.lines, edits: [], footnoteId, plugin });
         // The new definition must be live where it lands, as every other
-        // creation checks: at the end of a note whose last line is a "$$"
-        // after a paragraph, a definition appended below it is taken into
-        // the math block that line then opens (rule M2), so the press
-        // refuses instead of writing a definition Obsidian never shows
-        // (the runtime swap, 2026-10-03; found by the multi-caret named-flow
-        // property).
-        const verdict = verifyLiveFootnoteInsertion({
-            before: ctx.reading(),
-            lines: plan.final,
-            anchors: [],
-            footnoteId,
-            definitionLabelLine: plan.labelLine,
-        });
-        shadowGate("press:definition", verdict === "live" ? null : verdict, () => ({
-            before: ctx.lines,
-            beforeReading: ctx.reading(),
-            after: plan.final,
-            intent: { created: [{ kind: "footnote", name: footnoteId, references: [], definition: { line: plan.labelLine, lines: 1 } }] },
-        }));
-        if (refusedCreation(verdict, ProtectedCreationNotice)) return true;
+        // creation's: at the end of a note whose last line is a "$$" after
+        // a paragraph, a definition appended below it is taken into the
+        // math block that line then opens (rule M2), so the press refuses
+        // instead of writing a definition Obsidian never shows (the runtime
+        // swap, 2026-10-03; found by the multi-caret named-flow property).
+        const verdict = judgeEdit(
+            ctx.lines,
+            plan.final,
+            { created: [{ kind: "footnote", name: footnoteId, references: [], definition: { line: plan.labelLine, lines: 1 } }] },
+            ctx.reading(),
+        );
+        if (refusedCreation(verdict)) return true;
         landDefinitionBackedInsertion({
             plugin,
             doc,
@@ -793,22 +813,15 @@ export function createFootnoteReference(
     if (prefix === null) return true;
     const emptyReference = referenceText(prefix);
     cursorPosition = adjustFootnotePosition(cursorPosition, ctx.reading(), lineText, plugin, ctx.lines);
-    // The born-dead check (see bareInsertionVerdict). If the placeholder
-    // landed inside protected text, it would not be a real footnote, and
-    // you would be left typing a name into something that can never
-    // become one, with nothing to tell you so. Nor may it land inside a
-    // definition, where the footnote you name would be nested.
-    const after = simulatedContext(doc, cursorPosition, emptyReference);
-    const verdict =
-        pressLineVerdict(ctx.reading(), after, [cursorPosition], emptyReference) ??
-        bareInsertionVerdict(after, [cursorPosition], emptyReference);
-    shadowGate("press:named", verdict === "live" ? null : verdict, () => ({
-        before: ctx.lines,
-        beforeReading: ctx.reading(),
-        after: after.lines,
-        intent: { created: [{ kind: "placeholder", text: emptyReference, at: [cursorPosition] }] },
-    }));
-    if (refusedCreation(verdict, ProtectedCreationNotice)) return true;
+    // The result gate judges the placeholder as the name typed into it
+    // would read. If it landed inside protected text, it would not be a
+    // real footnote, and you would be left typing a name into something
+    // that can never become one, with nothing to tell you so. Nor may it
+    // land inside a definition, where the footnote you name would be
+    // nested.
+    const after = simulateChanges(ctx.lines, [{ from: cursorPosition, text: emptyReference }]);
+    const verdict = judgeEdit(ctx.lines, after, { created: [{ kind: "placeholder", text: emptyReference, at: [cursorPosition] }] }, ctx.reading());
+    if (refusedCreation(verdict)) return true;
     const newCursorPos = {
         line: cursorPosition.line,
         ch: cursorPosition.ch + 2 + prefix.length,

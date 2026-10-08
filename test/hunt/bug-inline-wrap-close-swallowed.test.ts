@@ -10,8 +10,7 @@ import { selectionPressHandled } from "../../src/commands/selection-footnote";
 import { pasteInlineFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { ProtectedSelectionNotice } from "../../src/commands/selection-footnote";
 import { ProtectedCreationNotice } from "../../src/editor/insertion-liveness";
-import { inlineWrapLandsIntact } from "../../src/commands/inline-footnotes";
-import { readNote } from "../../src/parsing/note-reading";
+import { judgeEdit } from "../../src/editor/result-gate";
 
 // BUG (hunt 2026-08-25, contexts lens; skeptic-confirmed): every
 // inline-footnote liveness check verifies only the wrapper's OPEN
@@ -99,11 +98,12 @@ describe("an inline wrapper whose text ends in a dollar, with another dollar lat
     });
 });
 
-describe("inlineWrapLandsIntact's own contract (2026-08-25 mutation audit)", () => {
-    it("a span that merely CONTAINS the probe but opens elsewhere refuses, even when its close coincides", () => {
-        // span opens at 0 and closes at 4; probing at=1 with wrapLength 4
-        // makes the close test alone pass (1 + 4 - 1 === 4) - only the
-        // open check refuses
-        expect(inlineWrapLandsIntact(readNote(["^[ab]"]), 0, 1, 4)).toBe(false);
+describe("the result gate's own contract for an inline footnote (2026-08-25 mutation audit, moved from inlineWrapLandsIntact in stage 3 of the result gate design, 2026-10-08)", () => {
+    it("an inline footnote that merely CONTAINS the place written at but opens elsewhere refuses, even when its close coincides", () => {
+        // the inline footnote opens at 0 and closes at 4; a wrap said to be
+        // written at 1, four long, ends at 4 too - only where it opens tells
+        // them apart
+        const verdict = judgeEdit(["ab]"], ["^[ab]"], { created: [{ kind: "inline", text: "^[ab", at: [{ line: 0, ch: 1 }] }] });
+        expect(verdict.pass).toBe(false);
     });
 });

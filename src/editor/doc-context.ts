@@ -93,8 +93,8 @@ export function contextOfLines(lines: string[]): DocContext {
  * ruling 1, option a, 2026-10-03; the quoted case was Kimi hunt cycle 3,
  * 2026-09-16, the in-item one hunt 2026-10-02, cluster R3). A footnote
  * written on such a line would be nested, which the plugin never creates
- * (ADR 0001). The caret guard asks it of the note before a press, and the
- * liveness check of the note after it (hunt 2026-10-02, cluster R2).
+ * (ADR 0001). The caret guard asks it of the note before a press (hunt
+ * 2026-10-02, cluster R2); the result gate judges the note after it.
  */
 export function insideDefinition(ctx: DocContext, line: number): boolean {
     return ctx.reading().definitionAt(line) !== null;

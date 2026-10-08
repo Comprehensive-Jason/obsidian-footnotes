@@ -5,6 +5,7 @@ import { readNote } from "../../src/parsing/note-reading";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
+import { BlockSyntaxNotice } from "../../src/editor/notice";
 
 // spec question: when a selection starts at the left margin of a quote,
 // list, or heading line, takes its "> ", "- ", or "# " with it, and ends
@@ -46,6 +47,12 @@ import { messages, resetNotices } from "../helpers/notices";
 // line's formatting (in front of a list or quote marker ...), where they
 // would break the line"); absorbLeadingSpace's docstring (a marker's space
 // is left alone, since stripping it "would break the structure").
+//
+// Answered (Jason's ruling B3, 2026-10-08, stage 3 of the result gate
+// design): option (b). The result gate refuses the press, since the rest of
+// the line would stop being a quote, a list item, or a heading, and the
+// notice is the block-syntax one. The four tests were it.fails until then;
+// they now hold the note unchanged with that notice.
 
 const Settings = {
     insertAtEndOfWord: true,
@@ -75,32 +82,32 @@ async function convert(lines: string[], from: number, to: number, fn = insertAut
 
 /** Whether line 0 is still read inside a quote, a list item, or a heading, or the press refused with a notice. */
 function keptOrRefused(before: string[], after: string[], kind: "quote" | "list" | "heading"): boolean {
-    if (after.join("\n") === before.join("\n")) return messages().length > 0;
+    if (after.join("\n") === before.join("\n")) return messages().includes(BlockSyntaxNotice);
     const blocks = readNote(after).lineBlocks[0] ?? "";
     return new RegExp(kind).test(blocks);
 }
 
 describe("spec question: a selection from column 0 over a line's marker, ending mid-line", () => {
-    // Now: "[^1] is blue today." / "" / "[^1]: > The sky", no notice.
-    it.fails("quote, numbered key: the rest of the line stays quoted", async () => {
+    // Before the ruling: "[^1] is blue today." / "" / "[^1]: > The sky", no notice.
+    it("quote, numbered key: the rest of the line stays quoted", async () => {
         const before = ["> The sky is blue today."];
         const doc = await convert(before, 0, "> The sky".length);
         expect(keptOrRefused(before, doc.lines, "quote")).toBe(true);
     });
 
-    it.fails("list item, numbered key: the rest of the line stays a list item", async () => {
+    it("list item, numbered key: the rest of the line stays a list item", async () => {
         const before = ["- milk and eggs"];
         const doc = await convert(before, 0, "- milk".length);
         expect(keptOrRefused(before, doc.lines, "list")).toBe(true);
     });
 
-    it.fails("quote, inline key: the rest of the line stays quoted", async () => {
+    it("quote, inline key: the rest of the line stays quoted", async () => {
         const before = ["> The sky is blue today."];
         const doc = await convert(before, 0, "> The sky".length, insertInlineFootnote);
         expect(keptOrRefused(before, doc.lines, "quote")).toBe(true);
     });
 
-    it.fails("heading, numbered key: the rest of the line stays a heading", async () => {
+    it("heading, numbered key: the rest of the line stays a heading", async () => {
         const before = ["# Heading here"];
         const doc = await convert(before, 0, "# Heading".length);
         expect(keptOrRefused(before, doc.lines, "heading")).toBe(true);

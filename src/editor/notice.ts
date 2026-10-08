@@ -47,6 +47,13 @@ export const BlockSyntaxNotice = NoFootnoteCreated + "a footnote here would brea
  * protected-text notice. */
 export const InsideLinkNotice = NoFootnoteCreated + "Obsidian would read it as part of a link.";
 
+/** The end of every refusal for an edit that would change how Obsidian
+ * reads the note somewhere it was not asked to: the result gate's general
+ * reason, when no more particular one fits (Jason's wording, 2026-10-08).
+ * Each action opens it with its own outcome. */
+const ReadsDifferently = "it would change how Obsidian reads the text around it.";
+export const ReadsDifferentlyNotice = NoFootnoteCreated + ReadsDifferently;
+
 /** The advice for a definition nothing references. The navigation press and
  * the lint alert give the same advice. */
 export function addReferenceOrDeleteDefinition(name: string): string {

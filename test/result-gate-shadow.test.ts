@@ -1,26 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { fakeEditor } from "./helpers/fake-editor";
-import { fakePlugin } from "./helpers/fake-plugin";
 import { resetNotices } from "./helpers/notices";
-import { insertAutonumFootnote } from "../src/commands/insert-or-navigate-footnotes";
 import { GateRecord, oldChecksSuspended, setGateRecorder, shadowGate } from "../src/editor/result-gate";
 import { removeOrphanedFootnoteReferences } from "../src/linting/rules/remove-orphaned-references";
 import { footnotesRenamed } from "../src/linting/rule-intents";
 
-// Shadow mode (stage 2 of the result gate design, 2026-10-07): every write
-// path hands its edit to the gate next to the old checks, which still
-// decide, and only a test that installs a recorder pays for it.
-
-const Settings = {
-    insertAtEndOfWord: true,
-    enablePopupEditor: false,
-    enableFootnotePrefix: false,
-    enableFootnoteSectionHeading: false,
-    footnoteSectionHeading: "",
-    enableRemoveBlankLastLines: true,
-    lintOnFootnoteCreation: false,
-};
+// Shadow mode (stage 2 of the result gate design, 2026-10-07): the write
+// paths whose old checks still decide hand their edit to the gate next to
+// them, and only a test that installs a recorder pays for it. Stage 3
+// (2026-10-08) lets the gate decide one family of write paths at a time.
 
 /** Installs a recorder that keeps every record, and hands back the list. */
 function recording(): GateRecord[] {
@@ -45,16 +33,6 @@ describe("shadow mode", () => {
         });
         expect(asked).toBe(false);
         expect(oldChecksSuspended()).toBe(false);
-    });
-
-    it("records a numbered press next to what the old checks decided", async () => {
-        const records = recording();
-        const doc = fakeEditor(["Some text."], { cursor: { line: 0, ch: 10 }, edits: true, wholeDoc: true, words: true });
-        await insertAutonumFootnote(fakePlugin(Settings, doc));
-        const press = records.find((record) => record.path === "press:numbered");
-        expect(press?.old).toBeNull();
-        expect(press?.verdict).toEqual({ pass: true });
-        expect(press?.after).toContain("[^1]");
     });
 
     it("records what a lint rule's old checks held back, and leaves the rule's result as it was (pin bug-lint-orphan-cut-leaves-lazy-label)", () => {

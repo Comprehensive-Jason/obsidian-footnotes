@@ -97,7 +97,7 @@ export function warnProtectedCaretIfInside(
         // a caret inside a link, a wikilink, or a web address is not in
         // protected text: the landing walk steps out past the construct
         // (Jason's landing rulings 2026-09-15), and a landing that stays
-        // inside is caught by the born-dead check afterwards. The masked
+        // inside is refused by the result gate afterwards. The masked
         // twin blots link destinations and addresses since 2026-09-16
         // (Kimi hunt cycle 1), which is why this is spelled out here.
         // A reference link in the cell is a link when the note defines
@@ -146,8 +146,8 @@ export function warnProtectedCaretIfInside(
     // The address and title of a link reference definition ("[ref]:
     // http://u "Title"") are protected text too, but what a press there
     // would break is a link, so it gets the link notice, as a press on the
-    // definition's label does through the "link" verdict
-    // (pressLineVerdict). A caret after the label of one whose address is
+    // definition's label does when the result gate refuses it for a link
+    // (result-gate.ts, check 4). A caret after the label of one whose address is
     // on the next line is inside it as well (Jason's triage decision Q4,
     // 2026-10-05; hunt 2026-10-05, round 2, pin
     // spec-link-definition-address-notice).

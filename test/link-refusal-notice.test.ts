@@ -11,7 +11,8 @@ import {
     insertNamedFootnote,
 } from "../src/commands/insert-or-navigate-footnotes";
 import { InsideLinkNotice } from "../src/editor/notice";
-import { ProtectedCreationNotice, verifyLiveFootnoteInsertion } from "../src/editor/insertion-liveness";
+import { ProtectedCreationNotice } from "../src/editor/insertion-liveness";
+import { judgeEdit } from "../src/editor/result-gate";
 import { readNote } from "../src/parsing/note-reading";
 
 // A press refused because Obsidian would read the new reference as part of
@@ -158,28 +159,16 @@ describe("the note reading says where a link is", () => {
     });
 });
 
-describe("the born-dead verdict names a link as its own cause", () => {
+describe("the result gate names a link as its own cause", () => {
+    const press = (ch: number) => ({ created: [{ kind: "footnote" as const, name: "1", references: [{ line: 0, ch }], definition: { line: 2, lines: 1 } }] });
+
     it("a reference read as a reference link's label is 'link'", () => {
-        expect(
-            verifyLiveFootnoteInsertion({
-                before: readNote(["see [sic] now"]),
-                lines: ["see [sic][^1] now", "", "[^1]: "],
-                anchors: [{ line: 0, ch: 9 }],
-                footnoteId: "1",
-                definitionLabelLine: 2,
-            }),
-        ).toBe("link");
+        const verdict = judgeEdit(["see [sic] now"], ["see [sic][^1] now", "", "[^1]: "], press(9));
+        expect(verdict.pass ? "pass" : verdict.reason).toBe("link");
     });
 
-    it("a reference read as code is 'dead'", () => {
-        expect(
-            verifyLiveFootnoteInsertion({
-                before: readNote(["see `sic` now"]),
-                lines: ["see `sic[^1]` now", "", "[^1]: "],
-                anchors: [{ line: 0, ch: 8 }],
-                footnoteId: "1",
-                definitionLabelLine: 2,
-            }),
-        ).toBe("dead");
+    it("a reference read as code is protected text", () => {
+        const verdict = judgeEdit(["see `sic` now"], ["see `sic[^1]` now", "", "[^1]: "], press(8));
+        expect(verdict.pass ? "pass" : verdict.reason).toBe("protected");
     });
 });

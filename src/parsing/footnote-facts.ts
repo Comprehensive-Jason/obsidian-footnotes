@@ -401,7 +401,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
                 // footnote (Obsidian 1.14.4, asked live 2026-10-05). When
                 // the note defines "[alt text]:", the press is still
                 // refused, since the image it would undo is a drawn link
-                // (pressLineVerdict); when it does not, the brackets were
+                // (the result gate's check 4); when it does not, the brackets were
                 // never an image, and the press lands like one in any
                 // bracketed text. So that alt is left unprotected (hunt
                 // 2026-10-05, round 2, pin bug-undefined-image-alt-press).

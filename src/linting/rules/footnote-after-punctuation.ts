@@ -293,7 +293,7 @@ function placedOnce(markdown: string, placement: "after" | "before"): string {
         };
         const result = lines.map((_line, i) => rewriteLine(i));
         // A move must leave every footnote it moves a footnote, as a press
-        // must (the born-dead check, insertion-liveness.ts). Stepping over
+        // must (check 6 of the result gate, result-gate.ts). Stepping over
         // the "]" of bracketed text that is no link turns
         // "[some text[^1]] here" into "[some text][^1] here", which reads
         // as a reference link with the label "^1", so the footnote's only

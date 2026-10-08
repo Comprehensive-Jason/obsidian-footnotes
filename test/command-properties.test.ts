@@ -11,7 +11,8 @@ import { resetNotices } from "./helpers/notices";
 import { fakeEditor as fakeMultiEditor } from "./helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "./helpers/fake-plugin";
 import FootnotePlugin from "../src/main";
-import { simulateChanges, verifyLiveFootnoteInsertion } from "../src/editor/insertion-liveness";
+import { simulateChanges } from "../src/editor/insertion-liveness";
+import { judgeEdit } from "../src/editor/result-gate";
 import { planDefinitionAppend } from "../src/commands/definition-append";
 import {
     InlineSelectionNotice,
@@ -1204,7 +1205,7 @@ describe("multi-caret press invariants over random documents", () => {
                     fakeMultiEditor(typedLines),
                 );
                 const plan = planDefinitionAppend({ lines: typedLines, edits: [], footnoteId: name, plugin: plugin2 });
-                if (verifyLiveFootnoteInsertion({ before: readNote(typedLines), lines: plan.final, anchors: [], footnoteId: name, definitionLabelLine: plan.labelLine }) !== "live") {
+                if (!judgeEdit(typedLines, plan.final, { created: [{ kind: "footnote", name, references: [], definition: { line: plan.labelLine, lines: 1 } }] }).pass) {
                     expect(doc2.lines).toEqual(typedLines);
                     return;
                 }

@@ -28,6 +28,14 @@ import { pasteInlineFootnote } from "../../src/commands/insert-or-navigate-footn
 // and the multi-caret paste both read the clipboard through, takes the
 // trailing definitions off the text the way a paste does
 // (splitCarriedText) before making it a footnote body.
+//
+// Since stage 3 of the result gate design (2026-10-08), a clipboard whose
+// text holds a reference is refused by the paste-as-inline key: the
+// reference would sit inside the new inline footnote (Jason's ruling B4,
+// spec-paste-inline-key-nests-carried-reference). The single-caret test
+// below still holds (nothing flattened, since nothing is pasted); the
+// multi-caret one pastes a text with no reference in it, whose carried
+// definition is still left out.
 
 // Makes navigator.clipboard.readText hand back `text`.
 function stubClipboard(text: string) {
@@ -79,11 +87,11 @@ describe("copy with carried definitions, then the paste-as-inline key", () => {
         expect(doc.lines.join("\n")).not.toContain("[^1]: one]");
     });
 
-    it("multi-caret: the same clipboard leaves the label out at every caret", async () => {
-        stubClipboard("a[^1] b" + String.fromCharCode(10, 10) + "[^1]: one");
+    it("multi-caret: a clipboard ending in a definition leaves the label out at every caret", async () => {
+        stubClipboard("a b" + String.fromCharCode(10, 10) + "[^1]: one");
         const doc = fakeEditor(["x y"], { wholeDoc: true, edits: true, carets: [{ line: 0, ch: 1 }, { line: 0, ch: 3 }] });
         await pasteInlineFootnote(fakePlugin({ ...base }, doc));
-        // Before the fix: "x^[a[^1] b [^1]: one] y^[a[^1] b [^1]: one]".
-        expect(doc.lines.join(String.fromCharCode(10))).toBe("x^[a[^1] b] y^[a[^1] b]");
+        // Before the fix: "x^[a b [^1]: one] y^[a b [^1]: one]".
+        expect(doc.lines.join(String.fromCharCode(10))).toBe("x^[a b] y^[a b]");
     });
 });

@@ -2,12 +2,7 @@ import { Editor, EditorPosition } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { ValidatedTextModal } from "./validated-text-modal";
-import {
-    escapedAt,
-    footnoteNameProblem,
-    idListIncludes,
-    referenceText,
-} from "../parsing/footnote-grammar";
+import { escapedAt, footnoteNameProblem, idListIncludes, referenceText } from "../parsing/footnote-grammar";
 import {
     comparePositions,
     endOfWordForSelection,
@@ -16,20 +11,16 @@ import {
 } from "../editor/cursor-motion";
 import { commandHotkeys } from "../editor/obsidian-internals";
 import { planDefinitionAppend } from "./definition-append";
-import { contextOfLines, DocContext, docContext, docLines, listExistingFootnoteDefinitions } from "../editor/doc-context";
-import { bareInsertionVerdict, sanitizeInlineFootnoteContent } from "./inline-footnotes";
-import {
-    caretInsideMaskedSpan,
-    simulateChanges,
-    pressLineVerdict,
-    verifyLiveFootnoteInsertion,
-} from "../editor/insertion-liveness";
-import { maskInlineRegions, readCell } from "../parsing/cell-reading";
+import { DocContext, docContext, docLines, listExistingFootnoteDefinitions } from "../editor/doc-context";
+import { sanitizeInlineFootnoteContent } from "./inline-footnotes";
+import { simulateChanges } from "../editor/insertion-liveness";
+import { readCell } from "../parsing/cell-reading";
 import { cellImageStarts, imageStartsOn } from "../parsing/landing";
-import { linesReadAlike, NoteReading, readNote } from "../parsing/note-reading";
-import { shadowGate } from "../editor/result-gate";
+import { NoteReading } from "../parsing/note-reading";
+import { GateReason, judgeEdit } from "../editor/result-gate";
 import {
     autonumFootnoteId,
+    definitionAppendVerdict,
     landCellDefinitionAppend,
     landDefinitionBackedInsertion,
     refusedCreation,
@@ -41,12 +32,7 @@ import {
     NoFootnoteCreated,
     showNotice,
 } from "../editor/notice";
-import {
-    cellSelection,
-    isTableDelimiterRow,
-    TableCellEditor,
-    tableRowCellSpans,
-} from "../editor/table-cursor";
+import { cellSelection, isTableDelimiterRow, TableCellEditor, tableRowCellSpans } from "../editor/table-cursor";
 
 // Conversion: turning selected text into a footnote (issue #35).
 //
@@ -84,7 +70,10 @@ import {
 // construct. A selection that CUTS one refuses: an edge sitting inside a
 // construct, or one delimiter grabbed without its partner. Cutting like
 // that would change how Obsidian reads innocent text further down the
-// note.
+// note. The result gate (result-gate.ts) judges every conversion as it
+// would leave the note, so these refusals, and those for a table cut in
+// pieces or a footnote moved inside the new one, are its verdicts, each
+// told in the selection's own words (selectionNotices).
 
 export const SelectionSpanNotice =
     "Select one continuous stretch of text to turn it into a footnote.";
@@ -102,12 +91,11 @@ export const InlineSelectionNotice =
 // plugin prevents them everywhere (Jason's ruling 2026-08-24, after the
 // Obsidian Academia Discord confirmed nobody uses them and modern style
 // guides have engineered the pattern out). So converting a selection that
-// touches a live reference or a live inline footnote refuses: swallowing
-// one whole would nest it in the new footnote's body, and overlapping one
-// only partly would cut it in half. Reference-shaped text inside a code
-// span is not a live footnote, so it travels along like ordinary text.
-// (The refusal message is NestedFootnoteNotice, shared with the caret
-// guards, so the one rule always speaks with one sentence.)
+// holds a live reference, a placeholder, or a live inline footnote
+// refuses: it would nest it in the new footnote's body. Reference-shaped
+// text inside a code span is not a live footnote, so it travels along like
+// ordinary text. (The refusal message is NestedFootnoteNotice, shared with
+// the caret guards, so the one rule always speaks with one sentence.)
 //
 // This message is deliberately not ProtectedCreationNotice (Jason's
 // manual pass, 2026-08-13). That one means the caret sits inside
@@ -127,6 +115,33 @@ export const ProtectedSelectionNotice =
 // prose around it travels like any other block.
 export const TableSelectionNotice =
     NoFootnoteCreated + "the selection cuts through a table. Select text inside one cell, or the whole table with the text around it.";
+
+/**
+ * The notices a selection conversion the result gate refused is told
+ * with, where they are not a press's (refusedCreation in
+ * create-footnote.ts). A selection that cuts through a table, or that holds
+ * or cuts into a footnote, is told so whatever reason the gate gave
+ * (`selected`, from selectedNotice): those were the first things checked
+ * before the gate decided, and they name what the user selected. Otherwise
+ * protected text, and anything the conversion meant to create that would
+ * not be live, is the selection cutting through protected text.
+ */
+function selectionNotices(selected: string | null): Partial<Record<GateReason, string>> {
+    if (selected !== null) return { nested: selected, protected: selected, link: selected, formatting: selected, dead: selected, other: selected };
+    return { protected: ProtectedSelectionNotice, dead: ProtectedSelectionNotice };
+}
+
+/**
+ * The notice that names what a selection from `from` to `to` takes, for a
+ * refusal (selectionNotices): the selection cutting through a table
+ * (tableVerdict), or a footnote it holds or cuts into, which would nest it
+ * in the new footnote's body or cut it in half
+ * (selectionTouchesFootnote); null when it does neither.
+ */
+function selectedNotice(ctx: DocContext, from: EditorPosition, to: EditorPosition): string | null {
+    if (tableVerdict(ctx, from, to) === "cuts") return TableSelectionNotice;
+    return selectionTouchesFootnote(ctx, from, to) ? NestedFootnoteNotice : null;
+}
 
 export type FootnoteCommandKind = "autonum" | "named" | "inline" | "paste";
 
@@ -218,30 +233,13 @@ export function selectionPressHandled(
             from = startOfWordOffset(cellText, from);
             to = endOfWordForSelection(cellText, to, plugin.settings.footnotePlacement, cellImageStarts(cellText, docContext(doc).reading().linkLabels));
         }
-        // Refuse an edge that cuts into protected text here and now,
-        // rather than leaving it to the simulation. The liveness checks
-        // only prove that the RESULT is a live footnote. A selection that
-        // swallows one delimiter of a code span can produce a perfectly
-        // live result precisely by destroying that span. A span the
-        // selection contains whole is fine and travels into the footnote
-        // (2026-08-19; the main editor has the twin of this check).
-        const maskedCell = maskInlineRegions(cellText);
-        if (
-            caretInsideMaskedSpan(maskedCell, from, false, false) ||
-            caretInsideMaskedSpan(maskedCell, to, false, false)
-        ) {
-            showNotice(ProtectedSelectionNotice, 8000);
-            return true;
-        }
-        // Nested footnotes are refused inside table cells too, under the
-        // same plugin-wide ruling (2026-08-24). The cell's text is read as
-        // the one cell of a one-row table, where a label-shaped "[^x]:" is
-        // a reference, as it is in the note.
+        // A selection that cuts a code span in half, or holds a footnote,
+        // is refused by the result gate when the conversion writes into the
+        // cell (replaceInTableCell), in the selection's words. The cell's
+        // text is read as the one cell of a one-row table, where a
+        // label-shaped "[^x]:" is a reference, as it is in the note.
         const cellRead = readCell(cellText);
-        if (spanTouchesFootnote(cellRead.reading, 0, cellRead.column(from), cellRead.column(to))) {
-            showNotice(NestedFootnoteNotice, 8000);
-            return true;
-        }
+        const notices = selectionNotices(spanTouchesFootnote(cellRead.reading, 0, cellRead.column(from), cellRead.column(to)) ? NestedFootnoteNotice : null);
         const text = cellText.slice(from, to);
         // The new reference sits snug against the text in front of the
         // selection, with no space between (see absorbLeadingSpace). A
@@ -252,16 +250,16 @@ export function selectionPressHandled(
         const lead = cellText.slice(replaceFrom, from);
         if (command === "inline") {
             const wrapped = `^[${sanitizeInlineFootnoteContent(text)}]`;
-            // If the result would not be a live footnote, the refusal and
-            // its notice happen inside replaceInTableCell.
-            replaceInTableCell(cell, wrapped, replaceFrom, to, wrapped.length, docContext(doc).reading().linkLabels);
+            // If the result gate refuses the result, the refusal and its
+            // notice happen inside replaceInTableCell.
+            replaceInTableCell(cell, wrapped, replaceFrom, to, wrapped.length, docContext(doc).reading().linkLabels, { notices });
             return true;
         }
         if (command === "named") {
             new NameSelectionModal(plugin, doc, {
                 kind: "cell",
                 cell,
-                selection: { from: replaceFrom, to, text, lead },
+                selection: { from: replaceFrom, to, text, lead, notices },
                 cursorPosition,
             }).open();
             return true;
@@ -270,7 +268,7 @@ export function selectionPressHandled(
             plugin,
             doc,
             cell,
-            { from: replaceFrom, to, text, lead },
+            { from: replaceFrom, to, text, lead, notices },
             cursorPosition,
             autonumFootnoteId(plugin, doc),
         );
@@ -340,16 +338,6 @@ export function selectionPressHandled(
         return true;
     }
     const text = rangeText(ctx.lines, trimmed.from, trimmed.to);
-    const table = tableVerdict(ctx, trimmed.from, trimmed.to);
-    if (table === "cuts") {
-        shadowRefusedSelection("table", plugin, ctx, trimmed, text, command);
-        showNotice(TableSelectionNotice, 8000);
-        return true;
-    }
-    // The nesting refusals come first: they name the real reason, where
-    // the reclassification check below would only see that the lines
-    // after a swallowed definition stop being its body.
-    //
     // A selection that sits inside another footnote's definition, or laps
     // over one, would nest footnotes inside each other. It is refused just
     // as the caret presses are (Jason's ruling 2026-08-13). Any overlap at
@@ -364,40 +352,21 @@ export function selectionPressHandled(
             (definition) => trimmed.from.line <= definition.end && trimmed.to.line >= definition.start,
         )
     ) {
-        shadowRefusedSelection("inside a definition", plugin, ctx, trimmed, text, command);
         showNotice(NestedFootnoteNotice, 8000);
         return true;
     }
-    // And a selection that touches any live footnote at all refuses:
-    // a reference, a placeholder, or an inline footnote (nesting is
-    // prevented plugin-wide, 2026-08-24).
-    if (selectionTouchesFootnote(ctx, trimmed.from, trimmed.to)) {
-        shadowRefusedSelection("touches a footnote", plugin, ctx, trimmed, text, command);
-        showNotice(NestedFootnoteNotice, 8000);
-        return true;
-    }
-    // Refuse a selection that cuts protected text here and now, rather
-    // than leaving it to the simulation. The born-dead checks only prove
-    // that the RESULT is a live footnote; a selection that swallows one
-    // delimiter can produce a live result precisely by destroying the
-    // construct. A real example: wrapping the first backtick of a fence
-    // opener un-fenced everything below it (found by the conversion
-    // property test, 2026-08-12). Protected text the selection contains
-    // whole is fine and travels into the footnote (2026-08-19). What
-    // refuses is an edge strictly inside protected text, or a replacement
-    // that would change how Obsidian reads a line the edit never touches.
-    const replacement =
-        command === "inline"
-            ? `^[${sanitizeInlineFootnoteContent(text)}]`
-            : "[^x]";
-    if (
-        selectionCutsProtectedText(ctx, trimmed.from, trimmed.to) ||
-        replacementReclassifiesDoc(ctx, trimmed.from, trimmed.to, replacement)
-    ) {
-        shadowRefusedSelection("protected text or a line read differently", plugin, ctx, trimmed, text, command);
-        showNotice(ProtectedSelectionNotice, 8000);
-        return true;
-    }
+    // Everything else the conversion could break is the result gate's to
+    // judge once the edit is worked out (convertMainSelectionToInline,
+    // convertMainSelection): a footnote the selection holds would sit in
+    // the new one; a selection that swallows one delimiter of a code span
+    // or a fence opener, or the first backtick of one, would leave the
+    // rest of the note reading differently (found by the conversion
+    // property test, 2026-08-12); one that takes part of a table shreds
+    // it (Jason's ruling, 2026-09-04). Protected text and a table the
+    // selection holds whole travel into the footnote (2026-08-19; sheet
+    // 05, 2026-09-09).
+    const table = tableVerdict(ctx, trimmed.from, trimmed.to) === "whole";
+    const notices = selectionNotices(selectedNotice(ctx, trimmed.from, trimmed.to));
     // The new reference sits snug against the text in front of the
     // selection, so the run of whitespace before it is replaced along with
     // the selection itself (absorbLeadingSpace decides how much).
@@ -408,13 +377,13 @@ export function selectionPressHandled(
     // so they leave with it instead of staying next to the reference
     // (Claude sweep 2026-09-13).
     const replaceFrom =
-        table === "whole"
+        table
             ? { line: trimmed.from.line, ch: 0 }
             : {
                   line: trimmed.from.line,
                   ch: absorbLeadingSpace(firstLine, trimmed.from.ch, ctx.reading().blockSyntaxEnd(trimmed.from.line)),
               };
-    const replaceTo = table === "whole" ? { line: trimmed.to.line, ch: lastLine.length } : trimmed.to;
+    const replaceTo = table ? { line: trimmed.to.line, ch: lastLine.length } : trimmed.to;
     const selection: ConvertedSelection = {
         from: replaceFrom,
         to: replaceTo,
@@ -423,12 +392,19 @@ export function selectionPressHandled(
         trail: lastLine.slice(trimmed.to.ch, replaceTo.ch),
     };
     if (command === "inline") {
-        convertMainSelectionToInline(plugin, doc, selection, ctx);
-    } else if (command === "named") {
-        new NameSelectionModal(plugin, doc, { kind: "main", selection }).open();
-    } else {
-        convertMainSelection(plugin, doc, selection, ctx, autonumFootnoteId(plugin, doc, ctx));
+        convertMainSelectionToInline(plugin, doc, selection, ctx, notices);
+        return true;
     }
+    if (command === "named") {
+        // The modal asks for a name, so the gate is asked first under the
+        // next free number, and a selection it refuses is refused before
+        // any modal opens; it is asked again under the typed name.
+        const probe = autonumFootnoteId(plugin, doc, ctx);
+        if (probe !== null && refusedCreation(conversion(plugin, ctx, selection, probe).verdict, notices)) return true;
+        new NameSelectionModal(plugin, doc, { kind: "main", selection: { ...selection, notices } }).open();
+        return true;
+    }
+    convertMainSelection(plugin, doc, { ...selection, notices }, ctx, autonumFootnoteId(plugin, doc, ctx));
     return true;
 }
 
@@ -446,6 +422,8 @@ export interface ConvertedSelection {
     lead: string;
     /** The whitespace swallowed after the selection, which only a whole table's trailing spaces produce; "" otherwise. */
     trail?: string;
+    /** The notices a refusal of this conversion is told with (selectionNotices). */
+    notices?: Partial<Record<GateReason, string>>;
 }
 
 /** The same thing as ConvertedSelection, but for a table cell's own editor: the positions are offsets into the cell's text. */
@@ -454,43 +432,8 @@ export interface CellSelection {
     to: number;
     text: string;
     lead: string;
-}
-
-/**
- * Shadow mode (result-gate.ts): a selection one of the checks above refused
- * (`why`) before any edit was worked out, judged by the result gate as the
- * conversion would have written it: the selected text replaced by an
- * inline footnote holding it, or by a reference with the text moved into
- * its definition (named "gate-probe" here, which no real footnote is).
- */
-function shadowRefusedSelection(
-    why: string,
-    plugin: FootnotePlugin,
-    ctx: DocContext,
-    range: { from: EditorPosition; to: EditorPosition },
-    text: string,
-    command: FootnoteCommandKind,
-): void {
-    shadowGate("selection:before-edit", why, () => {
-        if (command === "inline") {
-            const wrap = `^[${sanitizeInlineFootnoteContent(text)}]`;
-            return {
-                before: ctx.lines,
-                beforeReading: ctx.reading(),
-                after: simulateChanges(ctx.lines, [{ from: range.from, to: range.to, text: wrap }]),
-                intent: { created: [{ kind: "inline", text: wrap, at: [range.from] }] },
-            };
-        }
-        const body = indentDefinitionBody(text);
-        const name = "gate-probe";
-        const plan = planDefinitionAppend({ lines: ctx.lines, edits: [{ from: range.from, to: range.to, text: `[^${name}]` }], footnoteId: name, plugin, body });
-        return {
-            before: ctx.lines,
-            beforeReading: ctx.reading(),
-            after: plan.final,
-            intent: { created: [{ kind: "footnote", name, references: [plan.edits[0].start], definition: { line: plan.labelLine, lines: body.split("\n").length } }] },
-        };
-    });
+    /** The notices a refusal of this conversion is told with (selectionNotices). */
+    notices?: Partial<Record<GateReason, string>>;
 }
 
 /**
@@ -572,7 +515,9 @@ function trimSelectionEdges(
 /**
  * Whether the range from `from` up to `to` on line `line` touches any
  * footnote: a live reference, an empty "[^]" placeholder, or an inline
- * footnote, as the note reading finds them.
+ * footnote, as the note reading finds them. It no longer refuses anything:
+ * the result gate does, and this says which words a refusal is told with
+ * (selectedNotice; stage 3 of the result gate design, 2026-10-08).
  *
  * Any overlap counts. Containing one whole would nest it in the new
  * footnote's body; overlapping one only partly would cut it in half. A
@@ -610,7 +555,12 @@ function spanTouchesFootnote(reading: NoteReading, line: number, from: number, t
 /**
  * How the selection stands to any table: "none" when neither edge is on a
  * table row, "whole" when it holds one table edge to edge, "cuts" when it
- * takes only PART of a table.
+ * takes only PART of a table. A whole table is taken with its indent and
+ * the spaces after its last row; a selection that cuts one is refused by
+ * the result gate, told as cutting through the table (selectedNotice). It
+ * refused such a selection itself until stage 3 of the result gate design
+ * (2026-10-08), and so it refused two whole tables in one selection, which
+ * the gate passes (Jason's ruling on list A).
  *
  * An edge landing on a table row cuts, unless both edges sit inside the
  * same cell of the same row, because text within one cell converts fine.
@@ -687,118 +637,6 @@ function rangeText(
     for (let i = from.line + 1; i < to.line; i++) parts.push(lines[i] ?? "");
     parts.push((lines[to.line] ?? "").slice(0, to.ch));
     return parts.join("\n");
-}
-
-/**
- * Whether either edge of the selection cuts into protected text.
- *
- * Three ways it can: the edge is strictly inside a protected span on its
- * own line, or inside a region that runs over several lines (a comment,
- * math, or a code fence) and crosses that edge, or anywhere inside the
- * YAML frontmatter at the top of the note. Frontmatter is never prose, and
- * a footnote body holding half a properties block helps nobody.
- *
- * Protected text the selection contains whole passes this check, because
- * both edges then look out onto ordinary live text.
- *
- * Trimming has already guaranteed that a real character sits at `from` and
- * another sits just before `to`. So on each edge only the neighbor facing
- * outward can be unknown, and only that side needs to be told whether a
- * region is hanging open there.
- */
-function selectionCutsProtectedText(
-    ctx: DocContext,
-    from: EditorPosition,
-    to: EditorPosition,
-): boolean {
-    const { lines } = ctx;
-    const reading = ctx.reading();
-    // Frontmatter always starts at line 0, so if the selection overlaps it
-    // at all, the `from` edge must be inside it. Checking `from` is enough.
-    const frontmatter = reading.protectedSpans.find((span) => span.kind === "frontmatter");
-    if (frontmatter && from.line <= frontmatter.endLine) return true;
-    // Whether a region that runs over several lines (a comment, math, or a
-    // code fence, quoted ones included) is still open at the START of a
-    // given line. A fence inside a blockquote counts too: found in a
-    // 30,000-case soak, 2026-08-20, a full-line drag inside a quoted fence
-    // converted the line, which dropped its quote marker and killed the
-    // fence.
-    const openInto = (line: number) => reading.regionOpenAt(line);
-    // Suppose the line holding the `from` edge is protected but carries
-    // none of those three flags. That is a legitimate edge in one case
-    // only: the line is a fence OPENER, whose construct reaches DOWN into
-    // the selection. Everything else in that state refuses. Examples:
-    // indented code inside a blockquote, which starts with ">" at
-    // character 0, so the whitespace trimming cannot keep the edge out of
-    // it (the second find of the same 30,000-case soak, 2026-08-20); plus
-    // indented code at the top level of the note, and openers that never
-    // close.
-    const fenceOpener = (line: number) =>
-        line + 1 < lines.length
-            ? reading.regionOpenAt(line + 1)
-            : reading.openRegionFrom !== -1;
-    if (
-        reading.protectedLines[from.line] &&
-        !openInto(from.line) &&
-        !fenceOpener(from.line)
-    ) {
-        return true;
-    }
-    if (
-        caretInsideMaskedSpan(
-            ctx.maskedLine(from.line),
-            from.ch,
-            openInto(from.line),
-            false, // the selection start sits ON a character, so its right-hand side is still on this line
-        )
-    ) {
-        return true;
-    }
-    const openAtTo =
-        to.line + 1 < lines.length ? openInto(to.line + 1) : reading.openRegionFrom !== -1;
-    return caretInsideMaskedSpan(
-        ctx.maskedLine(to.line),
-        to.ch,
-        false, // `to` follows a character - the before-side is on-line
-        openAtTo,
-    );
-}
-
-/**
- * Whether replacing the selection with `replacement` would change how
- * Obsidian reads any line the edit does not itself touch: the note reading
- * of the two texts, compared line by line (linesReadAlike).
- *
- * This is the check that catches a destroyed construct. A selection that
- * swallows a fence delimiter, or that closes or un-closes a region simply
- * by being removed, can leave a result that looks perfectly live. It looks
- * live precisely BECAUSE innocent text elsewhere in the note has just been
- * reclassified, and the checks that test whether the new reference and
- * definition are live cannot see that happen. A selection that takes one
- * of a "%%" comment's two lines un-closes it, and every line below
- * disappears into it (hunt 2026-10-03, pin
- * bug-cut-comment-delimiter-wrong-toast); a destroyed fence opener turns
- * its closer into the opener of a new fence.
- */
-function replacementReclassifiesDoc(
-    ctx: DocContext,
-    from: EditorPosition,
-    to: EditorPosition,
-    replacement: string,
-): boolean {
-    const before = ctx.reading();
-    const simulated = simulateChanges(ctx.lines, [
-        { from, to, text: replacement },
-    ]);
-    const after = readNote(simulated);
-    const delta = simulated.length - ctx.lines.length;
-    for (let i = 0; i < from.line; i++) {
-        if (!linesReadAlike(before, i, after, i, "none")) return true;
-    }
-    for (let i = to.line + 1; i < ctx.lines.length; i++) {
-        if (!linesReadAlike(before, i, after, i + delta, "none")) return true;
-    }
-    return false;
 }
 
 /**
@@ -959,31 +797,25 @@ function normalizedMainSelection(
 // whitespace and escapes unbalanced brackets, so that a bracket in your
 // text cannot end the wrapper early.
 //
-// Then comes the same born-dead refusal that insertInlineText uses. A
-// born-dead insertion is one that would not be a real footnote the moment
-// it landed. So the new span has to survive on the masked twin of the
-// simulated line. A selection inside protected text dies here, and so does
-// one whose removal completes some construct around it. The refusal
-// speaks in the selection's words, "the selection cuts through ... select
-// all of it or none of it", never the caret's: what the user did was
-// select, and that advice is the fix (Claude sweep 2026-09-13, a drag over
-// one "%%" delimiter without its partner).
+// Then the result gate judges the note as the conversion leaves it, as it
+// judges insertInlineText's. The new inline footnote must read as one
+// whole, and the selection's removal must leave the rest of the note
+// reading as it did. A refusal speaks in the selection's words, "the
+// selection cuts through ... select all of it or none of it", never the
+// caret's: what the user did was select, and that advice is the fix
+// (Claude sweep 2026-09-13, a drag over one "%%" delimiter without its
+// partner).
 function convertMainSelectionToInline(
     plugin: FootnotePlugin,
     doc: Editor,
     selection: ConvertedSelection,
     ctx: DocContext,
+    notices: Partial<Record<GateReason, string>>,
 ): void {
     const text = `^[${sanitizeInlineFootnoteContent(selection.text)}]`;
-    const simulated = contextOfLines(simulateChanges(ctx.lines, [{ from: selection.from, to: selection.to, text }]));
-    const verdict = pressLineVerdict(ctx.reading(), simulated, [selection.from], text) ?? bareInsertionVerdict(simulated, [selection.from], text);
-    shadowGate("selection:inline", verdict === "live" ? null : verdict, () => ({
-        before: ctx.lines,
-        beforeReading: ctx.reading(),
-        after: simulated.lines,
-        intent: { created: [{ kind: "inline", text, at: [selection.from] }] },
-    }));
-    if (refusedCreation(verdict, ProtectedSelectionNotice)) return;
+    const simulated = simulateChanges(ctx.lines, [{ from: selection.from, to: selection.to, text }]);
+    const verdict = judgeEdit(ctx.lines, simulated, { created: [{ kind: "inline", text, at: [selection.from] }] }, ctx.reading());
+    if (refusedCreation(verdict, notices)) return;
     const after = { line: selection.from.line, ch: selection.from.ch + text.length };
     moveCursorAndSetJumpPoint(doc, selection.from, after, plugin, [
         { from: selection.from, to: selection.to, text },
@@ -997,11 +829,11 @@ function convertMainSelectionToInline(
 // press then lands in the popup or jumps to the definition, whichever the
 // settings say, exactly as createAutonumFootnote does.
 //
-// Simulating the edit and verifying the result matters more here than for
-// a plain insertion, for two reasons. Deleting the selection can leave a
-// construct hanging open, when its closing delimiter was part of what you
-// selected. And the body carries whatever text you selected onto the
-// definition line, which could be anything.
+// The result gate's verdict matters more here than for a plain insertion,
+// for two reasons. Deleting the selection can leave a construct hanging
+// open, when its closing delimiter was part of what you selected. And the
+// body carries whatever text you selected onto the definition line, which
+// could be anything.
 //
 // A null name means the note's prefix is invalid; the notice explaining
 // that has already been shown. The press still counts as handled.
@@ -1013,43 +845,8 @@ function convertMainSelection(
     footnoteId: string | null,
 ): void {
     if (footnoteId === null) return;
-    const footnoteReference = referenceText(footnoteId);
-
-    // A selection spanning lines becomes a body with several paragraphs:
-    // continuation lines indented four spaces under the label
-    // (2026-08-19).
-    const body = indentDefinitionBody(selection.text);
-    // The definition is planned against the note with the selection
-    // already replaced (see planDefinitionAppend), so a section heading
-    // the selection swallows is simply gone, and nothing the append does
-    // can land inside the replaced stretch (the property-test find of
-    // 2026-09-09, a drag across "# Footnotes", used to need a rule of its
-    // own for that).
-    const plan = planDefinitionAppend({
-        lines: ctx.lines,
-        edits: [{ from: selection.from, to: selection.to, text: footnoteReference }],
-        footnoteId,
-        plugin,
-        body,
-    });
-    // The same verification createAutonumFootnote does, widened to cover a
-    // body that was filled in ahead of time and may span lines: the new
-    // definition block has to claim every one of those continuation lines.
-    const verdict = verifyLiveFootnoteInsertion({
-        before: ctx.reading(),
-        lines: plan.final,
-        anchors: [plan.edits[0].start],
-        footnoteId,
-        definitionLabelLine: plan.labelLine,
-        definitionBodyExtraLines: body.split("\n").length - 1,
-    });
-    shadowGate("selection:footnote", verdict === "live" ? null : verdict, () => ({
-        before: ctx.lines,
-        beforeReading: ctx.reading(),
-        after: plan.final,
-        intent: { created: [{ kind: "footnote", name: footnoteId, references: [plan.edits[0].start], definition: { line: plan.labelLine, lines: body.split("\n").length } }] },
-    }));
-    if (refusedCreation(verdict, ProtectedSelectionNotice)) return;
+    const { body, plan, verdict } = conversion(plugin, ctx, selection, footnoteId);
+    if (refusedCreation(verdict, selection.notices ?? selectionNotices(null))) return;
 
     landDefinitionBackedInsertion({
         plugin,
@@ -1072,13 +869,50 @@ function convertMainSelection(
     });
 }
 
+/**
+ * The conversion of `selection` into the footnote `footnoteId`, worked
+ * out: the definition's `body`, the `plan` that replaces the selection with
+ * the reference and appends the definition, and the result gate's
+ * `verdict` on the note that leaves.
+ */
+function conversion(plugin: FootnotePlugin, ctx: DocContext, selection: ConvertedSelection, footnoteId: string) {
+    // A selection spanning lines becomes a body with several paragraphs:
+    // continuation lines indented four spaces under the label
+    // (2026-08-19).
+    const body = indentDefinitionBody(selection.text);
+    // The definition is planned against the note with the selection
+    // already replaced (see planDefinitionAppend), so a section heading
+    // the selection swallows is simply gone, and nothing the append does
+    // can land inside the replaced stretch (the property-test find of
+    // 2026-09-09, a drag across "# Footnotes", used to need a rule of its
+    // own for that).
+    const plan = planDefinitionAppend({
+        lines: ctx.lines,
+        edits: [{ from: selection.from, to: selection.to, text: referenceText(footnoteId) }],
+        footnoteId,
+        plugin,
+        body,
+    });
+    // The gate's verdict, as createAutonumFootnote asks for it, for a body
+    // that was filled in ahead of time and may span lines: the new
+    // definition has to take in every one of those continuation lines.
+    const verdict = judgeEdit(
+        ctx.lines,
+        plan.final,
+        { created: [{ kind: "footnote", name: footnoteId, references: [plan.edits[0].start], definition: { line: plan.labelLine, lines: body.split("\n").length } }] },
+        ctx.reading(),
+    );
+    return { body, plan, verdict };
+}
+
 // The definition-backed version for a table cell you are actively
 // editing. Both the numbered key and the named modal use it. The
 // reference replaces the cell selection through the cell's own editor,
 // while the pre-filled definition is appended outside the table. This
 // mirrors createAutonumFootnote's cell branch, including its promise
-// about refusals: when the cell replacement would be born-dead, no
-// orphaned definition may be left behind.
+// about refusals: the definition is judged before the cell is written,
+// and when the result gate refuses the cell replacement, no orphaned
+// definition may be left behind.
 function convertCellSelection(
     plugin: FootnotePlugin,
     doc: Editor,
@@ -1089,8 +923,13 @@ function convertCellSelection(
 ): void {
     if (footnoteId === null) return;
     const footnoteReference = referenceText(footnoteId);
+    const notices = selection.notices ?? selectionNotices(null);
+    if (refusedCreation(definitionAppendVerdict(plugin, doc, footnoteId, selection.text.split("\n").length, selection.text), notices)) return;
     if (
-        !replaceInTableCell(cell, footnoteReference, selection.from, selection.to, footnoteReference.length, docContext(doc).reading().linkLabels)
+        !replaceInTableCell(cell, footnoteReference, selection.from, selection.to, footnoteReference.length, docContext(doc).reading().linkLabels, {
+            body: selection.text,
+            notices,
+        })
     ) {
         return;
     }
@@ -1101,11 +940,6 @@ function convertCellSelection(
     // row (Kimi hunt cycle 3, 2026-09-16; the numbered cell press had the
     // same bug, sheet 05). So the note is read again here.
     const plan = planDefinitionAppend({ lines: docLines(doc), edits: [], footnoteId, plugin, body: selection.text });
-    shadowGate("cell:definition", null, () => ({
-        before: docLines(doc),
-        after: plan.final,
-        intent: { created: [{ kind: "footnote", name: footnoteId, references: [], definition: { line: plan.labelLine, lines: selection.text.split("\n").length } }] },
-    }));
     landCellDefinitionAppend({
         plugin,
         doc,

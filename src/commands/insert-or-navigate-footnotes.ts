@@ -11,9 +11,9 @@ import {
     refusedCreation,
 } from "./create-footnote";
 import { DocContext, docContext, referenceOccurrenceAtCursor } from "../editor/doc-context";
-import { bareInsertionVerdict, readInlineFootnoteFromClipboard } from "./inline-footnotes";
-import { pressLineVerdict, ProtectedCreationNotice, simulatedContext } from "../editor/insertion-liveness";
-import { shadowGate } from "../editor/result-gate";
+import { readInlineFootnoteFromClipboard } from "./inline-footnotes";
+import { ProtectedCreationNotice, simulateChanges } from "../editor/insertion-liveness";
+import { judgeEdit } from "../editor/result-gate";
 import { shouldJumpFromDefinitionToReference, shouldJumpFromReferenceToDefinition } from "./navigation";
 import { propertiesWidgetOwnsFocus, readingViewActive, viewEditor } from "../editor/obsidian-internals";
 import { warnTableEdgeCaretIfOutside, caretGuardsHandled, warnDefinitionCaretIfInside, warnProtectedCaretIfInside } from "./press-guards";
@@ -258,22 +258,15 @@ function insertInlineText(
         const ctx = docContext(doc);
         if (lineText.includes("|") && warnTableEdgeCaretIfOutside(null, cursorPosition, ctx)) return;
         const at = adjustFootnotePosition(cursorPosition, ctx.reading(), lineText, plugin, ctx.lines);
-        // born-dead check (see bareInsertionVerdict). "Born-dead" means an
-        // insertion that would not be a live footnote the moment it lands.
-        // The "^[…]" must still read as an inline footnote on the masked
-        // result, because text it carries (pasted inline code, say) can mask
-        // INSIDE the brackets. And it must not land inside a definition,
-        // which an empty line right under one does once it is filled.
-        const after = simulatedContext(doc, at, text);
-        const verdict = pressLineVerdict(ctx.reading(), after, [at], text) ?? bareInsertionVerdict(after, [at], text);
-        shadowGate("press:inline", verdict === "live" ? null : verdict, () => ({
-            before: ctx.lines,
-            beforeReading: ctx.reading(),
-            after: after.lines,
-            // the paste key's text comes from the clipboard
-            intent: { created: [{ kind: "inline", text, at: [at], fromOutside: text !== "^[]" }] },
-        }));
-        if (refusedCreation(verdict, ProtectedCreationNotice)) return;
+        // The result gate judges the note as the insertion leaves it. The
+        // "^[…]" must read as one whole inline footnote, because text it
+        // carries (pasted inline code, say) can change how its own brackets
+        // read. And it must not land inside a definition, which an empty
+        // line right under one does once it is filled. The paste key's text
+        // comes from the clipboard, so it is the key's own.
+        const after = simulateChanges(ctx.lines, [{ from: at, text }]);
+        const verdict = judgeEdit(ctx.lines, after, { created: [{ kind: "inline", text, at: [at], fromOutside: text !== "^[]" }] }, ctx.reading());
+        if (refusedCreation(verdict)) return;
         const newCursorPos = { line: at.line, ch: at.ch + caretOffsetInText };
         moveCursorAndSetJumpPoint(doc, cursorPosition, newCursorPos, plugin, [
             { from: at, text },

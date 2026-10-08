@@ -36,9 +36,16 @@ import { TableSelectionNotice } from "../../src/commands/selection-footnote";
 // selected edge to edge (with or without the text around it) converts; a
 // partial table refuses"; the rule is silent on more than one table.
 //
-// Cause of today's behavior: selectionCutsTable demands that every line
+// Cause of the old behavior: selectionCutsTable demanded that every line
 // from the first to the last be a table row, and the blank line between
 // the two tables is not one.
+//
+// Answered (Jason's ruling on list A, 2026-10-08, stage 3 of the result
+// gate design): the result gate decides, and it gives reading A: both
+// tables move whole into the footnote and read the same there, so the
+// selection converts. The two tests were it.fails until then. How the
+// footnote renders is on the manual selection-to-footnote sheet for
+// Jason to look at.
 
 function fakeEditor(
     lines: string[],
@@ -83,7 +90,7 @@ const TWO_TABLES = [
 beforeEach(resetNotices);
 
 describe("two whole tables in one selection", () => {
-    it.fails("edge to edge across both tables converts", async () => {
+    it("edge to edge across both tables converts", async () => {
         const doc = fakeEditor(
             TWO_TABLES,
             { line: 0, ch: 0 },
@@ -94,7 +101,7 @@ describe("two whole tables in one selection", () => {
         expect(doc.lines[0]).toBe("[^1]");
     });
 
-    it.fails("the wider drag, blank line to blank line, converts them too", async () => {
+    it("the wider drag, blank line to blank line, converts them too", async () => {
         const lines = ["before", "", ...TWO_TABLES, "", "after"];
         const doc = fakeEditor(lines, { line: 1, ch: 0 }, { line: 10, ch: 0 });
         await insertAutonumFootnote(fakePlugin(doc));

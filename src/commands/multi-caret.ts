@@ -10,20 +10,10 @@ import {
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
 import { adjustFootnotePosition, comparePositions } from "../editor/cursor-motion";
 import { planDefinitionAppend } from "./definition-append";
-import { shadowGate } from "../editor/result-gate";
-import { contextOfLines, DocContext, docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
-import {
-    bareInsertionVerdict,
-    inlineNoteBody,
-    readInlineFootnoteFromClipboard,
-} from "./inline-footnotes";
-import {
-    ProtectedCreationNotice,
-    simulateChanges,
-    simulatedAnchors,
-    pressLineVerdict,
-    verifyLiveFootnoteInsertion,
-} from "../editor/insertion-liveness";
+import { judgeEdit } from "../editor/result-gate";
+import { DocContext, docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
+import { inlineNoteBody, readInlineFootnoteFromClipboard } from "./inline-footnotes";
+import { simulateChanges, simulatedAnchors } from "../editor/insertion-liveness";
 import {
     autonumFootnoteId,
     createMatchingFootnoteDefinition,
@@ -360,8 +350,8 @@ export async function multiCaretPastePressHandled(
 // settings say, exactly as for a single-caret insertion. There is only one
 // definition, so there is only one place to land.
 //
-// The whole thing is a single edit. The liveness check covers EVERY
-// reference, and one dead reference refuses the lot; the press is atomic.
+// The whole thing is a single edit. The result gate judges EVERY
+// reference, and one it refuses refuses the lot; the press is atomic.
 function insertReferenceAtEveryCaret(
     plugin: FootnotePlugin,
     doc: Editor,
@@ -377,22 +367,13 @@ function insertReferenceAtEveryCaret(
         footnoteId,
         plugin,
     });
-    const verdict = verifyLiveFootnoteInsertion({
-        before: ctx.reading(),
-        lines: plan.final,
-        anchors: plan.edits.map((edit) => edit.start),
-        footnoteId,
-        definitionLabelLine: plan.labelLine,
-    });
-    shadowGate("multi:numbered", verdict === "live" ? null : verdict, () => ({
-        before: ctx.lines,
-        beforeReading: ctx.reading(),
-        after: plan.final,
-        intent: {
-            created: [{ kind: "footnote", name: footnoteId, references: plan.edits.map((edit) => edit.start), definition: { line: plan.labelLine, lines: 1 } }],
-        },
-    }));
-    if (refusedCreation(verdict, ProtectedCreationNotice)) return;
+    const verdict = judgeEdit(
+        ctx.lines,
+        plan.final,
+        { created: [{ kind: "footnote", name: footnoteId, references: plan.edits.map((edit) => edit.start), definition: { line: plan.labelLine, lines: 1 } }] },
+        ctx.reading(),
+    );
+    if (refusedCreation(verdict)) return;
 
     landDefinitionBackedInsertion({
         plugin,
@@ -420,8 +401,8 @@ function insertReferenceAtEveryCaret(
 // just past the FIRST wrapper and nowhere else (`land: "first"`), because
 // the body is already complete and one caret is the rule.
 //
-// Each caret's landing is checked for being born-dead against one shared
-// simulated result, and any dead one refuses the whole press.
+// The result gate judges every caret's landing on one shared simulated
+// result, and any it refuses refuses the whole press.
 function insertSkeletonAtEveryCaret(
     doc: Editor,
     ctx: DocContext,
@@ -433,19 +414,17 @@ function insertSkeletonAtEveryCaret(
     const changes: EditorChange[] = targets.map((pos) => ({ from: pos, text }));
     const simulated = simulateChanges(ctx.lines, changes);
     // Work out all the positions in one pass and judge them on one view of
-    // the result, the way verifyLiveFootnoteInsertion does. The old
-    // one-position-at-a-time version re-resolved and rescanned the whole
-    // note once per caret (second review 2026-09-09).
+    // the result. The old one-position-at-a-time version re-resolved and
+    // rescanned the whole note once per caret (second review 2026-09-09).
+    // The paste key's text comes from the clipboard.
     const anchors = simulatedAnchors(ctx.lines, changes, targets.map((_, index) => index), simulated);
-    const after = contextOfLines(simulated);
-    const verdict = pressLineVerdict(ctx.reading(), after, anchors, text) ?? bareInsertionVerdict(after, anchors, text);
-    shadowGate(text.startsWith("^[") ? "multi:inline" : "multi:named", verdict === "live" ? null : verdict, () => ({
-        before: ctx.lines,
-        beforeReading: ctx.reading(),
-        after: simulated,
-        intent: { created: [text.startsWith("^[") ? { kind: "inline", text, at: anchors, fromOutside: text !== "^[]" } : { kind: "placeholder", text, at: anchors }] },
-    }));
-    if (refusedCreation(verdict, ProtectedCreationNotice)) return;
+    const verdict = judgeEdit(
+        ctx.lines,
+        simulated,
+        { created: [text.startsWith("^[") ? { kind: "inline", text, at: anchors, fromOutside: text !== "^[]" } : { kind: "placeholder", text, at: anchors }] },
+        ctx.reading(),
+    );
+    if (refusedCreation(verdict)) return;
     // The targets arrive in the order they appear in the note, so
     // anchors[0] is the first footnote.
     const landed = land === "first" ? anchors.slice(0, 1) : anchors;

@@ -2,7 +2,7 @@ import { App, EditorPosition } from "obsidian";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { noticeCalls } from "./mocks/obsidian";
-import { noticed, resetNotices } from "./helpers/notices";
+import { messages, noticed, resetNotices } from "./helpers/notices";
 import {
     fakeEditor as sharedFakeEditor,
     FakeEditor,
@@ -1318,23 +1318,35 @@ describe("the block zoo converts (2026-08-19)", () => {
     });
 });
 
-describe("quote-relative indented code refuses at the edges (second 30k-soak find, 2026-08-20)", () => {
-    it("a full-line drag on a quoted code line refuses (its '>' sits at ch 0)", async () => {
+describe("quote-relative indented code at the edges (second 30k-soak find, 2026-08-20)", () => {
+    it("a full-line drag on a quoted code line: the inline key refuses, the numbered key moves the code whole (Jason's ruling on list A, 2026-10-08)", async () => {
         // the found counterexample, minimized: quote-relative indented
         // code is protected but carries no region flag, and its quote
         // marker at ch 0 is where the whitespace trim can't shield the
-        // edge - converting it consumed protected text
+        // edge. Wrapped as an inline footnote the code would become its
+        // text, with "[^88]" a reference-shaped text inside it, so the
+        // inline key refuses, as the gate says, for nesting (it said
+        // "the selection cuts through code" before). The numbered key moves the whole
+        // one-line quote into the footnote, where Obsidian draws the same
+        // quoted code (live answer gs3:a3-moved, docs/obsidian-reading-rules.md
+        // G2): the result gate passes it. Until stage 3 of the result gate
+        // design both keys refused here.
         const before = ["", ">     > gap code[^88]", "", "alpha[^1]."];
-        for (const command of [insertInlineFootnote, insertAutonumFootnote]) {
-            resetNotices();
-            const doc = fakeEditor(before, { line: 1, ch: 0 }, {
-                anchor: { line: 0, ch: 0 },
-                head: { line: 2, ch: 0 },
-            });
-            await command(fakePlugin(doc));
-            expect(doc.lines).toEqual(before);
-            expect(noticed(ProtectedSelectionNotice)).toBe(true);
-        }
+        resetNotices();
+        const inline = fakeEditor(before, { line: 1, ch: 0 }, {
+            anchor: { line: 0, ch: 0 },
+            head: { line: 2, ch: 0 },
+        });
+        await insertInlineFootnote(fakePlugin(inline));
+        expect(inline.lines).toEqual(before);
+        expect(messages()).toEqual([NestedFootnoteNotice]);
+        resetNotices();
+        const numbered = fakeEditor(before, { line: 1, ch: 0 }, {
+            anchor: { line: 0, ch: 0 },
+            head: { line: 2, ch: 0 },
+        });
+        await insertAutonumFootnote(fakePlugin(numbered));
+        expect(numbered.lines).toEqual(["", "[^2]", "", "alpha[^1].", "", "[^2]: >     > gap code[^88]"]);
     });
 
     it("a doc-level indented chunk at the selection TAIL still travels (containment)", async () => {

@@ -2,8 +2,7 @@ import { Editor, EditorPosition, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
 
-import { DocContext, docLines, insideDefinition } from "../editor/doc-context";
-import { deadInsertionVerdict, InsertionVerdict } from "../editor/insertion-liveness";
+import { docLines } from "../editor/doc-context";
 import { inlineNoteInCell, maskInlineRegions } from "../parsing/cell-reading";
 import { InlineNote, NoteReading, readNote } from "../parsing/note-reading";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
@@ -109,72 +108,6 @@ function wrapReadsWhole(text: string): boolean {
     const wrap = `^[${text}]`;
     const note = readNote([wrap]).inlineNoteAt(0, 1);
     return note !== null && note.open === 0 && note.close === wrap.length - 1;
-}
-
-/**
- * The born-dead rule, kept in one place (duplicated-logic audit,
- * 2026-09-05). "Born-dead" means an insertion that would not be a live
- * footnote the moment it lands.
- *
- * The question this answers: with `text` written at column `at` of line
- * `line`, does it still read as what it is in `after`, the reading of the
- * note as the edit leaves it? An inline footnote has to read as one whole
- * inline footnote, because pasted content can carry code of its own INSIDE
- * the brackets. Anything else, the empty "[^]" placeholder, has to come
- * back byte for byte on the masked twin, and must not open inside a link:
- * "[sic][^]" is a reference link to Obsidian, so the name typed into it
- * would never make a footnote (Jason's ruling, 2026-10-04).
- *
- * The answer: "live" when it reads as itself; "link" when it does not and
- * a link took it in (deadInsertionVerdict); "dead" when it completed some
- * other markdown construct around itself and would be born inside
- * protected text.
- */
-export function landingVerdict(after: NoteReading, line: number, at: number, text: string): "live" | "dead" | "link" {
-    const intact = text.startsWith("^[")
-        ? inlineWrapLandsIntact(after, line, at, text.length)
-        : after.maskedLine(line).slice(at, at + text.length) === text && !after.insideLink(line, at);
-    return intact ? "live" : deadInsertionVerdict(after, { line, ch: at });
-}
-
-/**
- * The verdict for `text` written with no definition alongside it (an
- * inline footnote, the empty "[^]" placeholder) at every one of `anchors`,
- * judged on `after`, the note as the edit leaves it. The first one that
- * would not read as itself decides: "link" when a link took it in, "dead"
- * otherwise (landingVerdict). "nested" when one lands on a line that
- * belongs to a definition, which is what filling the empty line right
- * under a definition does (ADR 0001; hunt 2026-10-02, pin
- * bug-press-blank-line-under-definition-nests), otherwise "live". The same
- * answers verifyLiveFootnoteInsertion gives a reference that comes with
- * its definition.
- */
-export function bareInsertionVerdict(after: DocContext, anchors: EditorPosition[], text: string): InsertionVerdict {
-    for (const at of anchors) {
-        const landed = landingVerdict(after.reading(), at.line, at.ch, text);
-        if (landed !== "live") return landed;
-    }
-    return anchors.some((at) => insideDefinition(after, at.line)) ? "nested" : "live";
-}
-
-/**
- * Whether a just-inserted inline-footnote wrapper at column `at` of line
- * `line` reads INTACT in `after`, the reading of the note as the edit
- * leaves it: an inline footnote that opens exactly at the wrapper's "^" AND
- * closes on the wrapper's own "]".
- *
- * That second half matters. Checking only the opening accepted a wrap whose
- * closing bracket a newly formed "$…$" pair had swallowed, and the rendered
- * line was math eating the prose around it (hunt 2026-08-25,
- * bug-inline-wrap-close-swallowed).
- *
- * This is the ONE test every writer of an inline wrap uses: insertion at
- * the caret, paste, multi-caret skeletons, writes into a table cell, and
- * converting a selection.
- */
-export function inlineWrapLandsIntact(after: NoteReading, line: number, at: number, wrapLength: number): boolean {
-    const note = after.inlineNoteAt(line, at + 1);
-    return note !== null && note.open === at && note.close === at + wrapLength - 1;
 }
 
 /**

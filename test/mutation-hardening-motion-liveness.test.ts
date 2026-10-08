@@ -11,7 +11,6 @@ import {
     caretInsideMaskedSpan,
     safeInsertionCh,
     simulateChanges,
-    simulatedContext,
 } from "../src/editor/insertion-liveness";
 import { readNote } from "../src/parsing/note-reading";
 
@@ -476,44 +475,10 @@ describe("safeInsertionCh", () => {
     });
 });
 
-// simulatedMaskedLine became simulatedContext on 2026-10-03 (the inline
-// and placeholder presses now also ask the simulated note whether the
-// line landed inside a definition); these read its masked line. Its
-// `toCh` replacement form had no caller left and went with it, and so did
-// the test of that form.
-describe("simulatedContext", () => {
-    const docOf = (lines: string[]): Editor =>
-        ({
-            lineCount: () => lines.length,
-            getLine: (n: number) => lines[n],
-        }) as unknown as Editor;
-
-    const NUL = (n: number) => "\0".repeat(n);
-
-    // line 66 MethodExpression "lineText.slice(toCh)" -> "lineText": the
-    // tail would be the WHOLE line instead of the part after the caret.
-    it("splices an insertion at the caret and keeps only the tail after it", () => {
-        expect(simulatedContext(docOf(["ab"]), { line: 0, ch: 1 }, "X").maskedLine(0)).toBe(
-            "aXb",
-        );
-    });
-
-    it("reports an insertion that COMPLETES a math pair as masked at birth", () => {
-        const doc = docOf(["$a $"]);
-        // untouched, the trailing space keeps "$a $" out of math…
-        expect(simulatedContext(doc, { line: 0, ch: 3 }, "").maskedLine(0)).toBe("$a $");
-        // …but filling that space closes the pair, and the insertion lands
-        // inside it
-        expect(simulatedContext(doc, { line: 0, ch: 3 }, "b").maskedLine(0)).toBe(NUL(5));
-    });
-
-    it("honors whole-document region state: a line inside a fence masks fully", () => {
-        const doc = docOf(["```", "code", "```"]);
-        expect(simulatedContext(doc, { line: 1, ch: 0 }, "[^1]").maskedLine(1)).toBe(
-            NUL("[^1]code".length),
-        );
-    });
-});
+// simulatedContext, the note an insertion would leave as a context, went
+// with the press checks that read it in stage 3 of the result gate design
+// (2026-10-08); the gate reads that note itself (test/result-gate.test.ts
+// and test/result-gate-created.test.ts hold an insertion masked at birth).
 
 describe("simulateChanges", () => {
     // line 78: "i < lines.length" -> "i <= lines.length" and dropping the
