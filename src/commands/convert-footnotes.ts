@@ -235,9 +235,10 @@ const nothingToConvert: ConversionToNormal = { converted: 0, definitions: 0, mer
  * note.
  *
  * Left alone, and counted in the result: an empty inline footnote (a
- * definition with no body is a footnote still being written), and one
+ * definition with no body is a footnote still being written), one
  * inside a definition's body, where a reference would nest footnotes
- * (ADR 1). One whose body runs over a line break of its paragraph ("text
+ * (ADR 1), and one whose text holds a reference, which would come alive
+ * in its definition (bodyHoldsFootnote). One whose body runs over a line break of its paragraph ("text
  * ^[an inline" / "note here] after") is left as it is too and counted
  * among the skipped ones "on more than one line": a definition's text over
  * two lines needs indented continuation lines, which nothing has ruled on
@@ -274,6 +275,10 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
             }
             if (insideDefinition[i]) {
                 skip("inside a footnote definition");
+                continue;
+            }
+            if (bodyHoldsFootnote(body)) {
+                skip("whose body holds a footnote");
                 continue;
             }
             spans.push({ line: i, open: span.open, close: span.close, body });
@@ -348,10 +353,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
     });
     // The result gate judges the conversion: each name's definition is one
     // line, the first at the label line the append planned, the others
-    // under it. A refused one changes nothing. An inline footnote whose text
-    // holds a reference, which Obsidian reads as dead text there (rule E3),
-    // would give a definition in which the reference comes alive, a
-    // footnote inside a footnote (Jason's ruling B12, 2026-10-08).
+    // under it. A refused one changes nothing.
     const verdict = judgeEdit(
         lines,
         plan.final,
@@ -401,6 +403,21 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         noticeLintAlerts(plugin, doc.getValue(), false);
     }
     return result;
+}
+
+/**
+ * Whether an inline footnote's text `body` holds a footnote once it is a
+ * definition's text. A reference inside an inline footnote is plain text to
+ * Obsidian (docs/obsidian-reading-rules.md, rule E3), but in a definition it
+ * comes alive, a footnote inside a footnote, which the plugin never makes
+ * (ADR 0001; Jason's ruling B12, 2026-10-08). Such an inline footnote is
+ * skipped, and the rest are converted (Jason's pick, 2026-10-08, decision 4
+ * of the stage 3 report). The body is read as the definition it would be,
+ * so a reference-shaped text in a code span does not count.
+ */
+function bodyHoldsFootnote(body: string): boolean {
+    const reading = readNote([`[^x]: ${body}`]);
+    return reading.references.some((reference) => reference.live) || reading.inlineNotesOn(0).length > 0;
 }
 
 /** "1 empty, 2 inside a footnote definition" */
