@@ -177,7 +177,7 @@ The linter also watches for problems it can't fix by itself and tells you about 
 
 - an empty `[^]` reference you never named, references with no definition or definitions nothing uses (while **delete orphaned references/definitions** are off)
 - a definition typed directly under a paragraph with no blank line above it as Obsidian shows it as plain text (while **Fix definitions hidden by a missing blank line** is off)
-- a definition with a line of `=` or `-` right under it, which Obsidian reads as a heading
+- a definition with a line of `=` or `-` right under it, which Obsidian reads as a heading, or, typed directly under a paragraph, as plain text that needs a blank line above it and another below it
 - a definition inside a `%%` comment (Obsidian hides it, so its footnote shows nothing) and a definition inside a table
 - duplicate definitions (while **Merge duplicate definitions** is off)
 - anything the rules left in place because changing it would alter how Obsidian reads the lines around it

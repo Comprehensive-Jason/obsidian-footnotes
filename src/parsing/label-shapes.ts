@@ -236,11 +236,51 @@ export function labelShapedLines(lines: string[], range?: { from: number; to: nu
 function underlinedAt(reading: NoteReading, lines: readonly string[], i: number): boolean {
     if (i + 1 >= lines.length || !UnderlineShaped.test(lines[i + 1].replace(/\r$/, ""))) return false;
     if (containersOf(reading.lineBlocks[i]).replace(/\^/g, "") !== containersOf(reading.lineBlocks[i + 1])) return false;
+    return headingWithBlankAbove(lines, i);
+}
+
+/**
+ * Whether the label on line `i` reads as a heading's text, the line under
+ * it its underline, once a blank line goes in above it: the note read with
+ * that blank line in place, the very note fix-lazy would write (a bare ">"
+ * line in a quote, as fix-lazy writes it).
+ */
+function headingWithBlankAbove(lines: readonly string[], i: number): boolean {
     const markers = (QuoteMarkers.exec(lines[i])?.[1] ?? "").trimEnd();
     const trial = readNote([...lines.slice(0, i), markers, ...lines.slice(i)]);
     // in the trial the label is on line i + 1 and the line under it on i + 2
     const own = ownBlock(trial.lineBlocks[i + 1]);
     return !trial.labelLines[i + 1] && /^\^heading\d$/.test(own) && ownBlock(trial.lineBlocks[i + 2]) === own.slice(1);
+}
+
+/**
+ * The names of the labels that read as plain text over a line of "-" or
+ * "=": each sits on the line right under a paragraph's text (a list
+ * item's included), so it carries that paragraph on, and the line under
+ * it is a horizontal rule, more text, or an empty list item
+ * (docs/obsidian-reading-rules.md D3; live Obsidian 1.14.4, 2026-10-06).
+ * A blank line above alone would make the label a heading with that line,
+ * so such a label needs a blank line above it and another below it, and
+ * the lint's alert says that (Jason's ruling Q9, 2026-10-07; pin
+ * bug-underlined-label-wide-item). The test is the one fix-lazy's blank
+ * line would face: the note read with it in place. The line under the
+ * label need not sit in the label's containers here, since nothing is
+ * cut: a lone "-" under the label is an empty list item of its own, and
+ * still the underline once the blank line is in. Each name once, in
+ * order, spelled as first written.
+ */
+export function underlinedLazyLabelNames(lines: string[]): string[] {
+    const reading = readNote(lines);
+    const names: string[] = [];
+    for (const label of labelShapedLines(lines, undefined, reading)) {
+        // a label that starts its own block is a heading's text already
+        // (the underline's alert speaks for it), not more of a paragraph
+        if (ownBlock(reading.lineBlocks[label.line]).startsWith("^")) continue;
+        if (label.line + 1 >= lines.length || !UnderlineShaped.test(lines[label.line + 1].replace(/\r$/, ""))) continue;
+        if (!headingWithBlankAbove(lines, label.line)) continue;
+        if (!names.some((name) => name.toLowerCase() === label.name.toLowerCase())) names.push(label.name);
+    }
+    return names;
 }
 
 /**

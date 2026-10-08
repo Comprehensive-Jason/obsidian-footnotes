@@ -1,6 +1,6 @@
 import type FootnotePlugin from "../main";
 import { footnotePrefix, footnotePrefixProblem } from "../parsing/footnote-prefix";
-import { definitionLabelWithName } from "../parsing/label-shapes";
+import { definitionLabelWithName, underlinedLazyLabelNames } from "../parsing/label-shapes";
 import { normalizeEol } from "../parsing/line-edits";
 import { readNote } from "../parsing/note-reading";
 import {
@@ -156,9 +156,11 @@ function labelList(names: string[]): string {
 // would tell the user to "write its definition", which is the wrong advice:
 // they already wrote it. So these names get this alert and are left out of
 // that one. The orphan rule exempts them too, from its alert and from
-// deletion alike. Like every alert, this one is never silent.
-function noticeLazyDefinitions(lines: string[]) {
-    const names = lazyDefinitionLabelNames(lines);
+// deletion alike. Like every alert, this one is never silent. A label
+// that also has a line of "-" or "=" right under it gets the alert after
+// this one instead (`both`).
+function noticeLazyDefinitions(lines: string[], both: ReadonlySet<string>) {
+    const names = lazyDefinitionLabelNames(lines).filter((name) => !both.has(name.toLowerCase()));
     if (names.length === 0) return;
     showNotice(
         names.length === 1
@@ -175,14 +177,32 @@ function noticeLazyDefinitions(lines: string[]) {
 // label and the underline, so these labels get their own alert and are
 // left out of the lazy one and its fix (Kimi hunt cycle 3, probed in
 // Reading view 2026-09-16). Never silent, like every alert. Jason
-// approved the wording on 2026-09-20.
-function noticeUnderlinedDefinitions(lines: string[]) {
-    const names = underlinedDefinitionLabelNames(lines);
+// approved the wording on 2026-09-20. A label inside a longer paragraph,
+// which reads as plain text, gets the alert below instead (`both`).
+function noticeUnderlinedDefinitions(lines: string[], both: ReadonlySet<string>) {
+    const names = underlinedDefinitionLabelNames(lines).filter((name) => !both.has(name.toLowerCase()));
     if (names.length === 0) return;
     showNotice(
         names.length === 1
             ? `This note has a footnote definition that Obsidian reads as a heading because a line of "=" or "-" sits right under it (${labelList(names)}). Put a blank line between the definition and that line.`
             : `This note has ${names.length} footnote definitions that Obsidian reads as headings because a line of "=" or "-" sits right under them (${labelList(names)}). Put a blank line between each definition and that line.`,
+        8000,
+    );
+}
+
+// A label right under a paragraph's text, with a line of "-" or "=" right
+// under it, reads as plain text, and a blank line above alone would make
+// it a heading: it needs one above and one below (underlinedLazyLabelNames;
+// Jason's ruling Q9, 2026-10-07). The lazy-label alert told the user to
+// add the blank line above, and the underline's said it read as a heading,
+// both wrong for it, so it gets this one alert instead (pin
+// bug-underlined-label-wide-item).
+function noticeUnderlinedLazyDefinitions(names: readonly string[]) {
+    if (names.length === 0) return;
+    showNotice(
+        names.length === 1
+            ? `This note has a footnote definition that Obsidian reads as plain text (${labelList([...names])}). Put a blank line above it and another below it.`
+            : `This note has ${names.length} footnote definitions that Obsidian reads as plain text (${labelList([...names])}). Put a blank line above and below each.`,
         8000,
     );
 }
@@ -672,8 +692,12 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string, after
     const lines = normalizeEol(markdown).text.split("\n");
     noticeEmptyReferences(markdown, prefix);
     noticeOrphanedReferences(plugin, markdown, prefix, { lines }, afterLint);
-    noticeLazyDefinitions(lines);
-    noticeUnderlinedDefinitions(lines);
+    // the labels the two alerts below leave to the one after them
+    const both = underlinedLazyLabelNames(lines);
+    const bothFolded = new Set(both.map((name) => name.toLowerCase()));
+    noticeLazyDefinitions(lines, bothFolded);
+    noticeUnderlinedDefinitions(lines, bothFolded);
+    noticeUnderlinedLazyDefinitions(both);
     noticeCommentedDefinitions(markdown);
     noticeDefinitionsInsideTables(markdown);
     noticeOrphanedDefinitions(plugin, markdown, { lines }, afterLint);

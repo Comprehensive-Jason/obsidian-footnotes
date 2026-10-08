@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 import { noticeLintAlerts } from "../../src/linting/lint-alerts";
 import { lazyDefinitionLabelNames, underlinedDefinitionLabelNames } from "../../src/linting/rules/remove-orphaned-references";
+import { underlinedLazyLabelNames } from "../../src/parsing/label-shapes";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
@@ -42,6 +43,21 @@ import { messages, resetNotices } from "../helpers/notices";
 // line under the label from where its containers end, as the label is
 // read, and counts it an underline when the reading puts it in the same
 // containers as the label's line.
+//
+// Corrected 2026-10-08 (Jason's ruling Q9, stage 5 of the result gate
+// design): the 2026-10-05 answer above was for the shape with a blank
+// line above the label. These notes have none, and live Obsidian 1.14.4
+// (2026-10-06, live-questions.md "c5fix-X") draws all three as a paragraph
+// inside the item ("item" and "[^b]: lazy" together), then a horizontal
+// rule, no heading, as docs/obsidian-reading-rules.md D3 says of a "---"
+// under a continuation line. So the label reads as plain text, and needs
+// a blank line above it AND below it: above alone would make it a heading
+// with its "---". Tests 1 and 2 now hold that reading: the label is one
+// that a blank line above would make a heading (underlinedLazyLabelNames),
+// and the alert is the one for that shape, "This note has a footnote
+// definition that Obsidian reads as plain text ("[^b]:"). Put a blank line
+// above it and another below it." Before, they held the heading reading:
+// the underline's alert, "reads as a heading".
 
 beforeEach(resetNotices);
 
@@ -53,16 +69,20 @@ const WIDE: { what: string; note: string[] }[] = [
 
 describe("an underlined label at a wide item's content column", () => {
     for (const { what, note } of WIDE) {
-        it(`${what}: the label is underlined, not lazy`, () => {
+        it(`${what}: the label reads as plain text, and a blank line above alone would make it a heading`, () => {
             // Before the fix: lazyDefinitionLabelNames gives ["b"].
             expect(lazyDefinitionLabelNames(note)).toEqual([]);
+            // the label still owns its underline, for fix-lazy and Delete footnote everywhere
             expect(underlinedDefinitionLabelNames(note)).toEqual(["b"]);
+            expect(underlinedLazyLabelNames(note)).toEqual(["b"]);
         });
 
-        it(`${what}: the alert gives the underline's advice, not "Add a blank line above it"`, () => {
+        it(`${what}: the alert asks for a blank line above and below, not "Add a blank line above it" or "reads as a heading"`, () => {
             noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS }), note.join("\n"));
-            // Before the fix: the lazy-label alert ("no blank line above") speaks instead.
-            expect(messages().some((m) => m.includes("reads as a heading"))).toBe(true);
+            // Before the fix: the lazy-label alert ("no blank line above") spoke;
+            // before the correction of 2026-10-08, the underline's ("reads as a heading").
+            expect(messages()).toContain('This note has a footnote definition that Obsidian reads as plain text ("[^b]:"). Put a blank line above it and another below it.');
+            expect(messages().some((m) => m.includes("reads as a heading"))).toBe(false);
             expect(messages().some((m) => m.includes("no blank line above"))).toBe(false);
         });
 

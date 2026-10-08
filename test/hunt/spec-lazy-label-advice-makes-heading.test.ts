@@ -33,6 +33,13 @@ import { readNote } from "../../src/parsing/note-reading";
 // "[^1]: def" / "---" is a heading on lines 2 to 3, not a definition (a
 // blank line above that label makes a heading). The note reading agrees
 // (the control below).
+//
+// Answered (Jason's ruling Q9, 2026-10-07; stage 5 of the result gate
+// design, 2026-10-08): one alert for a label right under paragraph text
+// with a line of "-" or "=" right under it, "This note has a footnote
+// definition that Obsidian reads as plain text ("[^1]:"). Put a blank line
+// above it and another below it.", and the lazy-label alert no longer
+// speaks for it. The test was it.fails until then.
 
 beforeEach(() => {
     resetNotices();
@@ -45,11 +52,12 @@ describe("spec question: the lazy alert's advice for a label a blank line above 
         expect(reading.lineBlocks[2]).toBe("^heading2");
     });
 
-    it.fails("the alert for '- item[^1]' / '[^1]: def' / '---' does not advise only adding a blank line above the label", () => {
+    it("the alert for '- item[^1]' / '[^1]: def' / '---' does not advise only adding a blank line above the label", () => {
         noticeLintAlerts(fakePlugin({}), ["- item[^1]", "[^1]: def", "---"].join("\n"));
         const advice = messages().filter((m) => m.includes('"[^1]:"'));
         expect(advice.length).toBeGreaterThan(0);
-        // Today the one alert ends "Add a blank line above it."
+        // Before the ruling the one alert ended "Add a blank line above it."
         expect(advice.every((m) => m.endsWith("Add a blank line above it."))).toBe(false);
+        expect(advice).toEqual(['This note has a footnote definition that Obsidian reads as plain text ("[^1]:"). Put a blank line above it and another below it.']);
     });
 });
