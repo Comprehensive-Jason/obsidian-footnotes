@@ -7,6 +7,7 @@ import { handlePaste, resetCarryRegister } from "../../src/commands/carry-footno
 import { dismissFootnotePopup, openFootnotePopup, settleFootnotePopupWithFeedback, toggleCloseFootnotePopup } from "../../src/commands/footnote-popup";
 import { fakeEditor, type FakeEditor } from "../helpers/fake-editor";
 import { messages, resetNotices } from "../helpers/notices";
+import { PasteNestedNotice } from "../../src/editor/notice";
 
 // BUG (wrong output): a carried paste into the footnote popup lands a
 // second definition of a name the note already uses.
@@ -302,50 +303,63 @@ async function closePopup() {
     await settleFootnotePopupWithFeedback();
 }
 
+// Since stage 3 of the result gate design (2026-10-08), a pasted text that
+// cites a footnote is refused in the popup: its reference would sit inside
+// the footnote the popup edits, a footnote inside a footnote (Jason's
+// rulings B4 and 4, 2026-10-07 and 2026-10-08), so nothing is pasted. The
+// first test below holds that refusal, with the user's own [^1] untouched;
+// the others paste texts that cite nothing and carry a definition, which
+// still go through the whole note's planning: renamed where the note uses
+// the name, placed after its last definition, indented the popup's way,
+// and reused when the note has the same text.
 describe("a carried paste into the footnote popup", () => {
-    it("does not land a second [^1] definition in a note that already defines [^1]", async () => {
+    it("does not land a second [^1] definition in a note that already defines [^1]: a text citing [^1] is refused", async () => {
         const { editor, popup, plugin } = await openPopup("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: ", "2");
         // A clipboard copied in another note: "see x[^1]" carrying its own [^1].
         const took = handlePaste(plugin, clipboardEvent("see x[^1]\n\n[^1]: their source") as never, popup);
-        // the popup holds the pasted text, renamed; the definition is in the note
         const whileOpen = { took, popup: popup.getValue(), note: editor.getValue() };
         await closePopup();
         const note = editor.getValue();
         const definitionsOf1 = note.split("\n").filter((line) => /^\s*\[\^1\]:/.test(line));
         // Before the fix: two definitions of [^1], the user's and "[^1]: their source".
         expect(definitionsOf1).toEqual(["[^1]: my own source"]);
-        expect(whileOpen).toEqual({
-            took: true,
-            popup: "see x[^3]",
-            note: "Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: see x[^3]\n[^3]: their source",
-        });
-        expect(note).toBe("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: see x[^3]\n[^3]: their source");
+        expect(whileOpen).toEqual({ took: true, popup: "", note: "Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: " });
+        expect(note).toBe("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: ");
+        expect(messages()).toContain(PasteNestedNotice);
+    });
+
+    it("renames a carried definition the note's name would clash with", async () => {
+        const { editor, popup, plugin } = await openPopup("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: ", "2");
+        const took = handlePaste(plugin, clipboardEvent("see x\n\n[^1]: their source") as never, popup);
+        expect({ took, popup: popup.getValue() }).toEqual({ took: true, popup: "see x" });
+        await closePopup();
+        expect(editor.getValue()).toBe("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: see x\n[^3]: their source");
         expect(messages()).toContain("Pasted with 1 footnote definition: 1 added, 1 renamed.");
     });
 
     it("puts the definitions after the note's last definition when the popup's footnote is not the last", async () => {
         const { editor, popup, plugin } = await openPopup("A[^1] b[^2].\n\n[^1]: \n[^2]: two", "1");
-        handlePaste(plugin, clipboardEvent("see x[^2]\n\n[^2]: their source") as never, popup);
-        expect(popup.getValue()).toBe("see x[^3]");
+        handlePaste(plugin, clipboardEvent("see x\n\n[^2]: their source") as never, popup);
+        expect(popup.getValue()).toBe("see x");
         await closePopup();
-        expect(editor.getValue()).toBe("A[^1] b[^2].\n\n[^1]: see x[^3]\n[^2]: two\n[^3]: their source");
+        expect(editor.getValue()).toBe("A[^1] b[^2].\n\n[^1]: see x\n[^2]: two\n[^3]: their source");
     });
 
     it("keeps a pasted text of several lines in the footnote, indented the way the popup's lines are", async () => {
         const { editor, popup, plugin } = await openPopup("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: ", "2");
-        handlePaste(plugin, clipboardEvent("line one[^1]\nline two\n\n[^1]: their source") as never, popup);
-        expect(popup.getValue()).toBe("line one[^3]\nline two");
+        handlePaste(plugin, clipboardEvent("line one\nline two\n\n[^1]: their source") as never, popup);
+        expect(popup.getValue()).toBe("line one\nline two");
         // the caret sits right after the pasted text, in the popup
         expect(popup.cursor).toEqual({ line: 1, ch: "line two".length });
         await closePopup();
-        expect(editor.getValue()).toBe("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: line one[^3]\n\tline two\n[^3]: their source");
+        expect(editor.getValue()).toBe("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: line one\n\tline two\n[^3]: their source");
     });
 
     it("reuses a definition the note already has, without adding one", async () => {
         const { editor, popup, plugin } = await openPopup("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: ", "2");
-        handlePaste(plugin, clipboardEvent("see also[^1]\n\n[^1]: my own source") as never, popup);
-        expect(popup.getValue()).toBe("see also[^1]");
+        handlePaste(plugin, clipboardEvent("see also\n\n[^1]: my own source") as never, popup);
+        expect(popup.getValue()).toBe("see also");
         await closePopup();
-        expect(editor.getValue()).toBe("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: see also[^1]");
+        expect(editor.getValue()).toBe("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: see also");
     });
 });

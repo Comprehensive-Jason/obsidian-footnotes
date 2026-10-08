@@ -59,9 +59,14 @@ describe("a section heading setting that cancels the lint on footnote creation",
         expect(messages().some((m) => m.startsWith("Linting canceled: the footnote section heading setting"))).toBe(true);
     });
 
+    // The note has a definition already, so the paste puts the carried one
+    // after it and writes no section heading. In a note with none, the
+    // paste would write the heading, whose "[^9]" reads as one more
+    // reference to footnote 9, so the result gate refuses that paste
+    // (Jason's ruling B10, 2026-10-08), and no lint runs to be canceled.
     it("after a carried paste, the user hears why the lint was canceled", () => {
         const at = { line: 0, ch: 7 };
-        const doc = fakeEditor(["y[^9] z"], { wholeDoc: true, edits: true, cursor: at, selection: { anchor: at, head: at } });
+        const doc = fakeEditor(["y[^9] z", "", "[^9]: nine"], { wholeDoc: true, edits: true, cursor: at, selection: { anchor: at, head: at } });
         handlePaste(
             fakePlugin(settings, doc),
             {

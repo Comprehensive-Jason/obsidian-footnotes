@@ -5,7 +5,8 @@ import type { EditorPosition } from "obsidian";
 import type FootnotePlugin from "../../src/main";
 import { fakeEditor, type FakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
-import { resetNotices } from "../helpers/notices";
+import { noticed, resetNotices } from "../helpers/notices";
+import { PasteNestedNotice } from "../../src/editor/notice";
 import { handlePaste, resetCarryRegister } from "../../src/commands/carry-footnotes-hooks";
 import { dismissFootnotePopup, openFootnotePopup, settleFootnotePopupWithFeedback, toggleCloseFootnotePopup } from "../../src/commands/footnote-popup";
 
@@ -27,6 +28,12 @@ import { dismissFootnotePopup, openFootnotePopup, settleFootnotePopupWithFeedbac
 // is Jason's call.
 //
 // Hunt 2026-10-02, round 1, lens carry-hook. Cluster C20.
+//
+// Answered for the first two cases (Jason's rulings B4 and 4, 2026-10-07
+// and 2026-10-08, stage 3 of the result gate design): the result gate
+// refuses the paste as nested, nothing is pasted, and the notice says
+// "Nothing was pasted: the pasted footnotes would land inside another
+// footnote." They were it.fails until then.
 //
 // Source of truth: docs/adr/0001-no-nested-footnotes.md ("We refuse to
 // create nesting anywhere") and CONTEXT.md's Nested footnote entry
@@ -75,18 +82,24 @@ beforeEach(() => {
 });
 
 describe("spec question: a paste that carries footnotes, with the caret inside another footnote", () => {
-    it.fails("a paste with the caret on a definition line does not nest a footnote inside that definition", () => {
+    it("a paste with the caret on a definition line does not nest a footnote inside that definition: nothing is pasted", () => {
         const dest = editor(["a[^1]", "", "[^1]: one "], { line: 2, ch: 10 });
-        handlePaste(fakePlugin(on, dest), clipboardEvent("c[^7]\n\n[^7]: seven") as never, dest);
-        // Today line 2 becomes "[^1]: one c[^7]".
+        const event = clipboardEvent("c[^7]\n\n[^7]: seven");
+        handlePaste(fakePlugin(on, dest), event as never, dest);
+        // Before the ruling line 2 became "[^1]: one c[^7]".
         expect(dest.lines[2]).not.toContain("[^7]");
+        expect(dest.lines).toEqual(["a[^1]", "", "[^1]: one "]);
+        expect(event.defaultPrevented).toBe(true);
+        expect(noticed(PasteNestedNotice)).toBe(true);
     });
 
-    it.fails("a paste inside an inline footnote does not nest a footnote", () => {
+    it("a paste inside an inline footnote does not nest a footnote: nothing is pasted", () => {
         const dest = editor(["a^[inline ] b"], { line: 0, ch: 10 });
         handlePaste(fakePlugin(on, dest), clipboardEvent("c[^7]\n\n[^7]: seven") as never, dest);
-        // Today line 0 becomes "a^[inline c[^7]] b".
+        // Before the ruling line 0 became "a^[inline c[^7]] b".
         expect(dest.lines[0]).not.toMatch(/\^\[inline c\[\^7\]/);
+        expect(dest.lines).toEqual(["a^[inline ] b"]);
+        expect(noticed(PasteNestedNotice)).toBe(true);
     });
 });
 

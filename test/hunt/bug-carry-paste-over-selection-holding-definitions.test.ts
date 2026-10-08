@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
-import { resetNotices } from "../helpers/notices";
+import { noticed, resetNotices } from "../helpers/notices";
+import { PasteReadsDifferentlyNotice } from "../../src/editor/notice";
 import { carryRegister, handleCopy, handlePaste, resetCarryRegister } from "../../src/commands/carry-footnotes-hooks";
 
 // BUG (data loss in the select-all case): a paste that replaces a
@@ -36,6 +37,13 @@ import { carryRegister, handleCopy, handlePaste, resetCarryRegister } from "../.
 // buildDefinitionAppend on the note with the selection still in it. The
 // plan's reuse and renames, and the append's position and blank-line
 // decision, all read text the same transaction removes.
+//
+// The third case is refused since stage 3 of the result gate design
+// (Jason's ruling B10, 2026-10-08): the selection takes the "]:" of
+// footnote 1's label, so the paste would leave footnote 1 with no
+// definition, and the result gate refuses it; nothing is pasted, the
+// paste's own refusal notice says why, and so nothing is spliced into the
+// label either.
 
 // A stand-in for the browser's clipboard event: it reads `text` and
 // records what the plugin writes back.
@@ -127,10 +135,12 @@ describe("paste over a selection that holds the destination's definitions", () =
         // The selection runs from inside "[^1]: one" (after "[^1") to
         // inside "tail" (before "il").
         const dest = editor(["a[^1]", "", "[^1]: one", "", "tail"], { line: 2, ch: 3 }, { line: 4, ch: 2 });
-        handlePaste(fakePlugin(on, dest), clipboardEvent("c[^7]\n\n[^7]: seven") as never, dest);
-        // The unselected "il" stays with the pasted body, and the
-        // definition is a line of its own.
-        expect(dest.lines).toContain("[^7]: seven");
-        expect(dest.lines.some((l) => l.includes("c[^7]il"))).toBe(true);
+        const event = clipboardEvent("c[^7]\n\n[^7]: seven");
+        handlePaste(fakePlugin(on, dest), event as never, dest);
+        // Refused: nothing is spliced into the label, and nothing is pasted.
+        expect(dest.lines.some((l) => l.includes("[^1c"))).toBe(false);
+        expect(dest.lines).toEqual(["a[^1]", "", "[^1]: one", "", "tail"]);
+        expect(event.defaultPrevented).toBe(true);
+        expect(noticed(PasteReadsDifferentlyNotice)).toBe(true);
     });
 });

@@ -472,23 +472,39 @@ function sideOf(
  * on it written as `side.map` gives it, in lower case, and every reference
  * the action takes out taken out: so a line whose footnotes were only
  * renamed, or lost a reference the action meant to take, reads the same on
- * both sides.
+ * both sides. With `withoutOwn`, the text the action owns on the line (the
+ * user's own text, taken out or written in) is taken out too.
  */
-function namesMapped(side: Side, i: number): string {
+function namesMapped(side: Side, i: number, withoutOwn = false): string {
     const line = side.lines[i] ?? "";
     const labels = side.reading.labelsOn(i);
     const references = side.reading.referencesOn(i);
-    if (labels.length === 0 && references.length === 0) return line;
-    const marks = [...references, ...labels].sort((a, b) => a.start - b.start);
+    const own = withoutOwn ? ownSpans(side, i, line.length) : [];
+    if (labels.length === 0 && references.length === 0 && own.length === 0) return line;
+    const marks = [...references.map((mark) => ({ ...mark, label: false })), ...labels.map((mark) => ({ ...mark, label: true }))];
+    const all = [...marks, ...own.map((span) => ({ ...span, name: "", label: false, own: true }))].sort((a, b) => a.start - b.start);
     let out = "";
     let at = 0;
-    for (const mark of marks) {
-        if (mark.start < at) continue;
-        const dropped = side.dropped.has(fold(mark.name)) && !labels.includes(mark);
-        out += line.slice(at, mark.start) + (dropped ? "" : `[^${side.map(fold(mark.name))}]`);
+    for (const mark of all) {
+        if (mark.start < at) {
+            // what an owned stretch takes in goes with it
+            if ("own" in mark) at = Math.max(at, mark.end);
+            continue;
+        }
+        out += line.slice(at, mark.start);
+        if (!("own" in mark)) out += side.dropped.has(fold(mark.name)) && !mark.label ? "" : `[^${side.map(fold(mark.name))}]`;
         at = mark.end;
     }
-    return out + line.slice(at);
+    return out + line.slice(Math.min(at, line.length));
+}
+
+/** The stretches of line `i` (`length` long) the action owns on `side` (Side.ranges), each from `start` up to `end`, in order. */
+function ownSpans(side: Side, i: number, length: number): { start: number; end: number }[] {
+    return side.ranges
+        .filter((range) => range.from.line <= i && i <= range.to.line && precedes(range.from, range.to))
+        .map((range) => ({ start: range.from.line < i ? 0 : range.from.ch, end: range.to.line > i ? length : Math.min(range.to.ch, length) }))
+        .filter((span) => span.end > span.start)
+        .sort((a, b) => a.start - b.start);
 }
 
 /**
@@ -496,6 +512,10 @@ function namesMapped(side: Side, i: number): string {
  * mapped (namesMapped). Each line's indentation is kept, and every other run
  * of spaces counts as one, with none at the end: taking a reference out
  * closes up the space around it (cutOne in remove-orphaned-references.ts).
+ * Text the user writes into a definition or takes out of it (a paste into
+ * a footnote's text, a cut from it) is left out of its lines, and a line
+ * that held only that text with it: the user's own text is theirs to
+ * change, and a footnote it brings is judged as nesting (check 2).
  */
 function definitionKey(side: Side, definition: Definition): string {
     const { quotes, listItems, footnotes } = definition.container;
@@ -510,7 +530,8 @@ function definitionKey(side: Side, definition: Definition): string {
             lines.push(lineKey(side.lines[i] ?? ""));
             continue;
         }
-        const line = namesMapped(side, i);
+        const line = namesMapped(side, i, true);
+        if (line.trim() === "" && (side.lines[i] ?? "").trim() !== "") continue;
         const indent = /^[ \t]*/.exec(line)?.[0] ?? "";
         lines.push(indent + line.slice(indent.length).replace(/[ \t]+/g, " ").trimEnd());
     }
@@ -1363,7 +1384,7 @@ export function shadowRule(path: string, markdown: string, run: () => string, in
  * back is recorded as one they refused. `intentOf` says what the edit
  * meant, from the notes before and after it.
  */
-export function shadowResult(path: string, markdown: string, result: string, run: () => string, intentOf: (before: string[], after: string[]) => EditIntent): void {
+function shadowResult(path: string, markdown: string, result: string, run: () => string, intentOf: (before: string[], after: string[]) => EditIntent): void {
     if (recorder === null || suspended) return;
     const lines = (text: string) => text.replace(/\r\n/g, "\n").split("\n");
     const record = (old: string | null, after: string) => {

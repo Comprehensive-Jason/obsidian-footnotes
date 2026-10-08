@@ -207,20 +207,19 @@ export function orphanedDefinitionBlocks(lines: string[]): Definition[] {
 }
 
 /**
- * `lines` with `dead` cut out (definitionCuts, removeLineRanges), or null
- * when the cut would change how Obsidian reads a line it keeps
- * (linesReadDifferently). The cut that carries definitions (planCut in
- * carry-footnotes.ts) reaches it through definitionsToCut, so a cut leaves
- * a definition in place wherever this rule would (Jason, 2026-10-05,
- * triage decision Q2).
+ * Whether taking `dead` out of a note, leaving `out`, may go ahead: `cut`
+ * is the cut as definitionCuts gives it.
  */
-function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[]): string[] | null {
+type CutAccepted = (dead: readonly Definition[], out: string[], cut: { lines: string[]; ranges: readonly { start: number; end: number }[] }) => boolean;
+
+/**
+ * `lines` with `dead` cut out (definitionCuts, removeLineRanges), or null
+ * when `accepts` refuses the cut.
+ */
+function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[], accepts: CutAccepted): string[] | null {
     const cut = definitionCuts(lines, dead);
     const out = removeLineRanges(cut.lines, cut.ranges);
-    // Shadow mode switches the old checks off for a moment, to see
-    // what the rule would do without them (oldChecksSuspended in
-    // result-gate.ts).
-    return !oldChecksSuspended() && linesReadDifferently(lines, cut, out) ? null : out;
+    return accepts(dead, out, cut) ? out : null;
 }
 
 /**
@@ -230,12 +229,13 @@ function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[]): st
  * definitions in place (hunt 2026-10-05 round 2, cluster C2, and the pin
  * bug-orphan-rule-cuts-footnote-cited-by-kept-orphan).
  *
- * A candidate stays when taking it out would change how Obsidian reads a
- * line that stays (cutDefinitionsIfClean): a definition between two lists
- * keeps them apart, and with it gone the lists join into one, a second
- * numbered list running on from the first one's numbers. Such a definition
- * stays in the note, where the lint's alert names it as an orphan (Jason,
- * 2026-10-05, triage decision Q2).
+ * A candidate stays when `accepts` refuses taking it out: by default when
+ * that would change how Obsidian reads a line that stays: a definition
+ * between two lists keeps them apart, and with it gone the lists join into
+ * one, a second numbered list running on from the first one's numbers.
+ * Such a definition stays in the note, where the lint's alert names it as
+ * an orphan (Jason, 2026-10-05, triage decision Q2). The cut hands in the
+ * result gate's verdict on the whole cut instead (planCut).
  *
  * The candidates go all at once when that is clean. Otherwise they are
  * taken one at a time, as many as can go cleanly. Whatever stays keeps
@@ -243,10 +243,16 @@ function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[]): st
  * only by one that stays is never cut from under it: that would leave the
  * one that stays citing a footnote with no definition.
  */
-export function definitionsToCut(lines: string[], candidates: readonly Definition[]): { removed: Definition[]; kept: string[] } {
+export function definitionsToCut(
+    lines: string[],
+    candidates: readonly Definition[],
+    // Shadow mode switches the old checks off for a moment, to see what the
+    // rule would do without them (oldChecksSuspended in result-gate.ts).
+    accepts: CutAccepted = (_dead, out, cut) => oldChecksSuspended() || !linesReadDifferently(lines, cut, out),
+): { removed: Definition[]; kept: string[] } {
     const reading = readNote(lines);
     const all = stillUnused(reading, candidates);
-    const whole = cutDefinitionsIfClean(lines, all);
+    const whole = cutDefinitionsIfClean(lines, all, accepts);
     if (whole !== null) return { removed: all, kept: whole };
     let removed: Definition[] = [];
     let kept = lines;
@@ -256,7 +262,7 @@ export function definitionsToCut(lines: string[], candidates: readonly Definitio
             if (removed.includes(block)) continue;
             const trial = stillUnused(reading, [...removed, block]);
             if (trial.length === removed.length) continue;
-            const out = cutDefinitionsIfClean(lines, trial);
+            const out = cutDefinitionsIfClean(lines, trial, accepts);
             if (out === null) continue;
             removed = trial;
             kept = out;

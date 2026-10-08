@@ -4,8 +4,8 @@ import { Editor, EditorChange, EditorPosition, MarkdownView } from "obsidian";
 import type FootnotePlugin from "../main";
 import { contextOfLines, docLines, insideDefinition } from "../editor/doc-context";
 import { simulateChanges } from "../editor/insertion-liveness";
-import { showNotice } from "../editor/notice";
-import { CreatedFootnote, EditIntent, NoteRange, shadowGate, shadowResult } from "../editor/result-gate";
+import { NothingCutNotice, PasteNestedNotice, PasteProtectedNotice, PasteReadsDifferentlyNotice, showNotice } from "../editor/notice";
+import { CreatedFootnote, EditIntent, judgeEdit, NoteRange } from "../editor/result-gate";
 import { codeMirrorViewOf, readingViewActive, viewEditor } from "../editor/obsidian-internals";
 import { mainEditorTextHolds, nestedSubEditorOwnsFocus } from "../editor/table-cursor";
 import { replaceMinimal, writeChanges } from "../editor/write-back";
@@ -233,7 +233,14 @@ export function handleCut(plugin: FootnotePlugin, event: ClipboardEvent): void {
     const selection = carryableSelection(plugin, event);
     if (!selection) return;
     const cut = plannedCut(plugin, selection.doc, selection.from, selection.to);
-    if (!cut || !event.clipboardData) return;
+    if (!cut) return;
+    // a refused cut cuts nothing and copies nothing (Jason's ruling B9)
+    if (cut === "refused") {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+    }
+    if (!event.clipboardData) return;
     event.clipboardData.setData("text/plain", cut.text);
     event.preventDefault();
     event.stopPropagation();
@@ -245,20 +252,23 @@ export function handleCut(plugin: FootnotePlugin, event: ClipboardEvent): void {
  * the paste that follows: what goes into the clipboard, and `make`, which
  * takes the text and the definitions nothing else uses out of the note.
  * Null when the text needs no definition, and the editor's own cut is
- * right.
+ * right. "refused" when the result gate refused the cut (planCut): the
+ * notice has said so, and nothing is cut, copied, or remembered (Jason's
+ * ruling B9, 2026-10-08).
  */
-function plannedCut(plugin: FootnotePlugin, doc: Editor, from: EditorPosition, to: EditorPosition): { text: string; make: () => void } | null {
+function plannedCut(plugin: FootnotePlugin, doc: Editor, from: EditorPosition, to: EditorPosition): { text: string; make: () => void } | "refused" | null {
     const before = doc.getValue();
     // a cut that takes the last definition with it empties the section,
     // so the section heading goes too when the setting says so (Jason,
     // 2026-09-25)
     const tidy = (text: string) => withEmptySectionHeadingRemoved(plugin, text);
     const plan = planCut(before, from, to, tidy);
+    if (plan.refused) {
+        showNotice(NothingCutNotice, 8000);
+        return "refused";
+    }
     const entry = remember(doc, from, to, plan);
     if (plan.carried.length === 0) return null;
-    // shadow mode: the result gate judges the cut, and the cut as it would
-    // be with no definition kept for the old checks (result-gate.ts)
-    shadowResult("cut", before, plan.text, () => planCut(before, from, to, tidy).text, (b, a) => cutIntent(b, a, { from, to }, plan.carried));
     const make = () => {
         // the note as the plan reads it, written back as the smallest set of
         // edits in one transaction, and the caret where the selection was
@@ -270,29 +280,6 @@ function plannedCut(plugin: FootnotePlugin, doc: Editor, from: EditorPosition, t
         }
     };
     return { text: entry.text, make };
-}
-
-/**
- * What a cut means to change, for the result gate (shadow mode): the
- * selection `cut` taken out, and the carried definitions it took out of
- * the rest of the note, those with fewer copies left outside the
- * selection than before.
- */
-function cutIntent(before: string[], after: string[], cut: NoteRange, carried: readonly CarriedDefinition[]): EditIntent {
-    const inCut = (line: number, ch: number) =>
-        (line > cut.from.line || (line === cut.from.line && ch >= cut.from.ch)) && (line < cut.to.line || (line === cut.to.line && ch < cut.to.ch));
-    const copies = (lines: string[], skip: (line: number, ch: number) => boolean) => {
-        const counts = new Map<string, number>();
-        for (const definition of readNote(lines).definitions) {
-            if (skip(definition.start, definition.labelStart)) continue;
-            counts.set(definition.name.toLowerCase(), (counts.get(definition.name.toLowerCase()) ?? 0) + 1);
-        }
-        return counts;
-    };
-    const was = copies(before, inCut);
-    const is = copies(after, () => false);
-    const removed = carried.map((block) => block.name.toLowerCase()).filter((name) => (is.get(name) ?? 0) < (was.get(name) ?? 0));
-    return { removedText: [cut], removed };
 }
 
 /**
@@ -469,6 +456,10 @@ function editorOwning(plugin: FootnotePlugin, view: EditorView): Editor | null {
  * references whose definitions could not be found at copy time.
  * `beforeWrite` runs right before the transaction that changes the note.
  *
+ * The result gate judges the note as the paste would leave it; a paste it
+ * refuses pastes nothing, and the notice says why (Jason, 2026-10-07 and
+ * 2026-10-08), so this returns true for it, the paste settled.
+ *
  * `pasted` is the text as it arrived, definition lines and all. Returns
  * false, having changed nothing, when its footnote syntax all lands in
  * protected text, pasted as it is or with only the text in front of the
@@ -601,7 +592,12 @@ function landCarriedText(
         ? popup.around((noteAfter ?? simulateChanges(noteLines, noteEdits)).join("\n"), simulateChanges(lines, edits).join("\n"))
         : null;
     if (popup && !around) return false;
-    shadowPaste(noteLines, noteAfter ?? simulateChanges(noteLines, noteEdits), { from: noteFrom, to: noteTo }, inNote(text) + inNote(after), appendedFrom, plan.definitions);
+    const finalNote = noteAfter ?? simulateChanges(noteLines, noteEdits);
+    const verdict = judgeEdit(noteLines, finalNote, pasteIntent(finalNote, { from: noteFrom, to: noteTo }, inNote(text) + inNote(after), appendedFrom, plan.definitions));
+    if (!verdict.pass) {
+        showNotice(verdict.reason === "nested" ? PasteNestedNotice : verdict.reason === "protected" ? PasteProtectedNotice : PasteReadsDifferentlyNotice, 8000);
+        return true;
+    }
     beforeWrite();
     around?.();
     // through the shared write-back, so a folded section the definitions
@@ -650,34 +646,31 @@ function landCarriedText(
 }
 
 /**
- * Shadow mode (result-gate.ts): a carried paste, which no old check judged
- * whole, judged by the result gate. The paste means to take out the
- * selection `replaced` (when there is one), to write `pasted` where it
+ * What a carried paste means to change, for the result gate: to take out
+ * the selection `replaced` (when there is one), to write `pasted` where it
  * started, and to add the carried `definitions`, which start on line
- * `appendedFrom` of the note after it (null when it adds none). The
- * definitions come from the clipboard, so their lines are text the paste
- * writes in too.
+ * `appendedFrom` of `after`, the note as the paste leaves it (null when it
+ * adds none). The definitions come from the clipboard, so their lines are
+ * text the paste writes in too.
  */
-function shadowPaste(before: string[], after: string[], replaced: NoteRange, pasted: string, appendedFrom: number | null, definitions: readonly CarriedDefinition[]): void {
-    shadowGate("paste", null, () => {
-        const lines = pasted.split("\n");
-        const end = lines.length === 1 ? { line: replaced.from.line, ch: replaced.from.ch + pasted.length } : { line: replaced.from.line + lines.length - 1, ch: lines[lines.length - 1].length };
-        const inserted: NoteRange[] = [{ from: replaced.from, to: end }];
-        const created: CreatedFootnote[] = [];
-        if (appendedFrom !== null) {
-            inserted.push({ from: { line: appendedFrom, ch: 0 }, to: { line: after.length, ch: 0 } });
-            // each block's label at the margin, after the block before it
-            let from = appendedFrom;
-            for (const block of definitions) {
-                let line = after.findIndex((text, i) => i >= from && text.startsWith(`[^${block.name}]:`));
-                if (line === -1) line = from;
-                created.push({ kind: "footnote", name: block.name, references: [], definition: { line, lines: block.lines.length } });
-                from = line + block.lines.length;
-            }
+function pasteIntent(after: string[], replaced: NoteRange, pasted: string, appendedFrom: number | null, definitions: readonly CarriedDefinition[]): EditIntent {
+    const lines = pasted.split("\n");
+    const end = lines.length === 1 ? { line: replaced.from.line, ch: replaced.from.ch + pasted.length } : { line: replaced.from.line + lines.length - 1, ch: lines[lines.length - 1].length };
+    const inserted: NoteRange[] = [{ from: replaced.from, to: end }];
+    const created: CreatedFootnote[] = [];
+    if (appendedFrom !== null) {
+        inserted.push({ from: { line: appendedFrom, ch: 0 }, to: { line: after.length, ch: 0 } });
+        // each block's label at the margin, after the block before it
+        let from = appendedFrom;
+        for (const block of definitions) {
+            let line = after.findIndex((text, i) => i >= from && text.startsWith(`[^${block.name}]:`));
+            if (line === -1) line = from;
+            created.push({ kind: "footnote", name: block.name, references: [], definition: { line, lines: block.lines.length } });
+            from = line + block.lines.length;
         }
-        const selected = replaced.from.line !== replaced.to.line || replaced.from.ch !== replaced.to.ch;
-        return { before, after, intent: { created, insertedText: inserted, ...(selected ? { removedText: [replaced] } : {}) } };
-    });
+    }
+    const selected = replaced.from.line !== replaced.to.line || replaced.from.ch !== replaced.to.ch;
+    return { created, insertedText: inserted, ...(selected ? { removedText: [replaced] } : {}) };
 }
 
 /**
@@ -823,6 +816,9 @@ export function wrapClipboardCommands(plugin: FootnotePlugin): void {
         const before = doc.getValue();
         const cut = range && plannedCut(plugin, doc, range.from, range.to);
         if (!cut) return false;
+        // refused: nothing is cut or copied, and the editor's own cut does
+        // not run either
+        if (cut === "refused") return true;
         await navigator.clipboard.writeText(cut.text);
         wrote();
         // the note changed while the clipboard was written: cutting by the

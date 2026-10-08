@@ -265,6 +265,23 @@ describe("what each kind of action may change", () => {
         })).toBe("pass");
     });
 
+    it("text the user pastes into a footnote's text, or cuts out of it, is theirs; a footnote it brings nests, and text a cut joins to a footnote is not theirs (Jason's rulings B4 and B9)", () => {
+        const before = ["a[^1]", "", "[^1]: one"];
+        const pastedAt = (to: number): NoteRange => ({ from: { line: 2, ch: 9 }, to: { line: 2, ch: to } });
+        expect(reasonOf(before, ["a[^1]", "", "[^1]: one more"], { insertedText: [pastedAt(14)] })).toBe("pass");
+        const carried: EditIntent = {
+            insertedText: [pastedAt(15), { from: { line: 3, ch: 0 }, to: { line: 4, ch: 0 } }],
+            created: [{ kind: "footnote", name: "7", references: [], definition: { line: 3, lines: 1 } }],
+        };
+        expect(reasonOf(before, ["a[^1]", "", "[^1]: one c[^7]", "[^7]: seven"], carried)).toBe("nested");
+        const cut: NoteRange = { from: { line: 2, ch: 6 }, to: { line: 2, ch: 9 } };
+        expect(reasonOf(before, ["a[^1]", "", "[^1]: "], { removedText: [cut] })).toBe("pass");
+        // the B9 cut: from the end of the definition's second line to after
+        // "Para [^a]", which joins " tail." to the footnote's text
+        const joined: NoteRange = { from: { line: 1, ch: 11 }, to: { line: 3, ch: 9 } };
+        expect(reasonOf(["[^a]: def", "    cont xx", "", "Para [^a] tail."], ["[^a]: def", "    cont xx tail."], { removedText: [joined] })).toBe("other");
+    });
+
     it("a press on a blank line above a definition would hide the definition", () => {
         expect(reasonOf(["text[^1]", "", "[^1]: d"], ["text[^1]", "[^]", "[^1]: d"], { created: [{ kind: "placeholder", text: "[^]", at: [{ line: 1, ch: 0 }] }] })).toBe("formatting");
     });

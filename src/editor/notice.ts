@@ -54,6 +54,15 @@ export const InsideLinkNotice = NoFootnoteCreated + "Obsidian would read it as p
 const ReadsDifferently = "it would change how Obsidian reads the text around it.";
 export const ReadsDifferentlyNotice = NoFootnoteCreated + ReadsDifferently;
 
+/** A cut the result gate refused: nothing is cut or copied (Jason, 2026-10-08). */
+export const NothingCutNotice = "Nothing was cut: " + ReadsDifferently;
+
+/** A carried paste the result gate refused: nothing is pasted, and the
+ * notice says why, by the gate's reason (Jason, 2026-10-08). */
+export const PasteNestedNotice = "Nothing was pasted: the pasted footnotes would land inside another footnote.";
+export const PasteProtectedNotice = "Nothing was pasted: footnotes can't go inside code, math, or other protected text.";
+export const PasteReadsDifferentlyNotice = "Nothing was pasted: " + ReadsDifferently;
+
 /** The advice for a definition nothing references. The navigation press and
  * the lint alert give the same advice. */
 export function addReferenceOrDeleteDefinition(name: string): string {

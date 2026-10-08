@@ -1,6 +1,7 @@
 import { EditorPosition } from "obsidian";
 
 import { positionAfterRewrite } from "../editor/document-diff";
+import { EditIntent, judgeEdit } from "../editor/result-gate";
 import { definitionsToCut, orphanedDefinitionBlocks } from "../linting/rules/remove-orphaned-definitions";
 import { normalizeEol } from "../parsing/line-edits";
 import { Definition, NoteReading, readNote, ReferenceOccurrence } from "../parsing/note-reading";
@@ -784,6 +785,8 @@ export interface CutPlan extends CarriedDefinitions {
     caret: EditorPosition;
     /** how many of the carried blocks the cut took out of the note, the number the toast gives */
     removed: number;
+    /** whether the result gate refused the cut, so nothing is cut or copied (Jason's ruling B9, 2026-10-08); never for a cut the plugin leaves to the editor */
+    refused: boolean;
 }
 
 /**
@@ -800,8 +803,11 @@ export interface CutPlan extends CarriedDefinitions {
  * line closes a comment), are not the cut's to take, and nor is one that
  * a definition staying in the note still cites. Deleting the selection
  * left its lines whole (leftWhole). And taking it out changes how no
- * other line of the note reads, the guard the orphan rule uses
- * (definitionsToCut).
+ * other line of the note reads, as the result gate judges the cut against
+ * the note before it (definitionsToCut). Judged against the note with only
+ * the selection deleted, a definition kept there took the line the
+ * deletion joined under it as its text (pin
+ * bug-cut-kept-definition-lazy-join-paste-back).
  *
  * Every other block stays where it is. That is how the cut used to lose
  * text, wherever the two halves disagreed (hunt 2026-10-02): a selection
@@ -818,6 +824,10 @@ export interface CutPlan extends CarriedDefinitions {
  * section heading the cut left empty); the caret is worked out in the
  * note as it reads after that too, so it can never point past the end of
  * the note (pin bug-carry-cut-caret-stale-line).
+ *
+ * The whole cut, as it leaves the note, is judged by the result gate too:
+ * a cut it refuses (the text left joining a definition, Jason's ruling B9)
+ * is `refused`, and the plugin cuts and copies nothing.
  *
  * When the clipboard carries nothing, the plugin leaves the cut to the
  * editor, and the plan is the editor's own cut: the selection deleted,
@@ -840,7 +850,7 @@ export function planCut(
         ...lines.slice(to.line + 1),
     ];
     const joinedText = joined.join("\n");
-    if (blocks.length === 0) return { carried, missing, text: joinedText, caret: from, removed: 0 };
+    if (blocks.length === 0) return { carried, missing, text: joinedText, caret: from, removed: 0, refused: false };
 
     // where a line the deletion keeps sits once the selection is gone
     const moved = (line: number) => (line <= from.line ? line : line - (to.line - from.line));
@@ -867,9 +877,13 @@ export function planCut(
     // still travels on the clipboard, so pasting the text back reuses it
     // (Jason, 2026-10-05, triage decision Q2; pin
     // bug-cut-definition-between-lists-joins-them).
-    const { removed, kept } = definitionsToCut(joined, candidates);
+    // what the cut means: the selection taken out, and the definitions it
+    // takes with it
+    const intent = (taken: readonly Definition[]): EditIntent => ({ removedText: [{ from, to }], removed: taken.map((block) => block.name) });
+    const { removed, kept } = definitionsToCut(joined, candidates, (dead, out) => judgeEdit(lines, out, intent(dead)).pass);
     const text = tidy(kept.join("\n"));
-    return { carried, missing, text, caret: positionAfterRewrite(joinedText, text, from), removed: removed.length };
+    const refused = !judgeEdit(lines, text.split("\n"), intent(removed)).pass;
+    return { carried, missing, text, caret: positionAfterRewrite(joinedText, text, from), removed: removed.length, refused };
 }
 
 /**
