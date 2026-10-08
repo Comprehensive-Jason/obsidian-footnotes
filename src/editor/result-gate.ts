@@ -296,12 +296,24 @@ function changedRuns(a: readonly string[], b: readonly string[], anchorA: (i: nu
         const textB: number[] = [];
         for (let i = fromA; i < toA; i++) if (a[i].trim() !== "" && useA(i)) textA.push(i);
         for (let j = fromB; j < toB; j++) if (b[j].trim() !== "" && useB(j)) textB.push(j);
+        // Lines with the same text at the start and at the end are lined up
+        // as they are, and only the lines between them by their key: a key
+        // costs a pass over its line, and a press leaves all but a few
+        // lines of a long note alike.
+        let same = 0;
+        while (same < textA.length && same < textB.length && a[textA[same]] === b[textB[same]]) same++;
+        let sameEnd = 0;
+        while (sameEnd < textA.length - same && sameEnd < textB.length - same && a[textA[textA.length - 1 - sameEnd]] === b[textB[textB.length - 1 - sameEnd]]) sameEnd++;
+        const differing = unmatchedRuns(
+            textA.slice(same, textA.length - sameEnd).map((n) => key(a[n])),
+            textB.slice(same, textB.length - sameEnd).map((n) => key(b[n])),
+        ).map((run) => ({ aStart: run.aStart + same, aEnd: run.aEnd + same, bStart: run.bStart + same, bEnd: run.bEnd + same }));
         let i = 0;
         let j = 0;
         let lastA = fromA - 1;
         let lastB = fromB - 1;
         const end = { aStart: textA.length, aEnd: textA.length, bStart: textB.length, bEnd: textB.length };
-        for (const run of [...unmatchedRuns(textA.map((n) => key(a[n])), textB.map((n) => key(b[n]))), end]) {
+        for (const run of [...differing, end]) {
             for (; i < run.aStart; i++, j++) {
                 lineUp(lastA + 1, textA[i], lastB + 1, textB[j], next);
                 // two lines lined up by their key whose text differs are a change
