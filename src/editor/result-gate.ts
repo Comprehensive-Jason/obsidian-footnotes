@@ -320,18 +320,37 @@ export function useEditWindows(on: boolean): void {
  * fresh start, so they read the same there, and every check can look at
  * the stretches alone. An edit changes a few lines, a press two places
  * (the reference and the definition at the bottom), so a long note costs
- * the gate little more than a short one. Where the notes' link reference
- * definitions differ, any "[text]" in the note may read differently, and
- * the stretch is the whole note, as it is for a rename.
+ * the gate little more than a short one. A rename (`renamed`, from the old
+ * name to the new one) changes the lines that hold its footnote, so those
+ * are stretches too, even where a line reads the same, since a line the
+ * rename passed over names the wrong footnote; a reindex of a long note
+ * then looks at the lines holding a footnote, not the whole note (the
+ * footnote that keeps a name a rename would take is judged apart, in
+ * judgeEdit). Where the notes' link reference definitions differ, any
+ * "[text]" in the note may read differently, and the stretch is the whole
+ * note.
  */
-function editWindows(oldSide: Side, newSide: Side, renames: boolean): void {
+function editWindows(oldSide: Side, newSide: Side, renamed: ReadonlyMap<string, string>): void {
     if (!windowsOn) return;
-    const a = oldSide.lines;
-    const b = newSide.lines;
+    // the lines holding a footnote called one of `names`: its live
+    // references and its definitions' labels
+    const holding = (side: Side, names: ReadonlySet<string>) => {
+        const lines = new Set<number>();
+        if (names.size === 0) return lines;
+        for (const reference of side.reading.references) if (reference.live && names.has(fold(reference.name))) lines.add(reference.line);
+        for (const definition of side.reading.definitions) if (names.has(fold(definition.name))) lines.add(definition.start);
+        return lines;
+    };
+    // each such line is marked, differently on the two sides, so it never
+    // lines up as unchanged
+    const marked = (side: Side, names: ReadonlySet<string>, mark: string) => {
+        const lines = holding(side, names);
+        return lines.size === 0 ? side.lines : side.lines.map((line, i) => (lines.has(i) ? line + mark : line));
+    };
+    const a = marked(oldSide, new Set(renamed.keys()), "\u0000before");
+    const b = marked(newSide, new Set(renamed.values()), "\u0000after");
     const labelsAlike = oldSide.reading.linkLabels.size === newSide.reading.linkLabels.size && [...oldSide.reading.linkLabels].every((label) => newSide.reading.linkLabels.has(label));
-    // a rename changes what a footnote is called on lines that are
-    // otherwise the same, so the whole note is looked at
-    if (!labelsAlike || renames) {
+    if (!labelsAlike) {
         oldSide.windows = [{ from: 0, to: a.length }];
         newSide.windows = [{ from: 0, to: b.length }];
         return;
@@ -565,6 +584,21 @@ function containersOf(blocks: string): string {
 }
 
 /**
+ * Whether a line's blocks before an edit (`was`) and after it (`is`) are
+ * the same kinds in the same containers. Where each block starts counts
+ * too, except for a paragraph: a line may start the paragraph it carried
+ * on, or carry on the one it started, because a line written into the
+ * blank line between two paragraphs joins them, as Obsidian reads it
+ * (Jason's ruling B1, 2026-10-08; docs/obsidian-reading-rules.md G1). Two
+ * lists that become one, or a table, code, a list, a quote, or a heading
+ * that stops being one, is a line read differently.
+ */
+function sameKind(was: string, is: string): boolean {
+    const joined = (blocks: string) => blocks.replace(/\^paragraph$/, "paragraph");
+    return joined(was) === joined(is);
+}
+
+/**
  * Whether a line of a lazy label's paragraph reads, once fix-lazy has made
  * the label a definition (`is`), as it did before (`was`): it carried on
  * the paragraph, and its own block, the innermost, is the same kind, start
@@ -759,28 +793,65 @@ function nestingPairs(side: Side, skipped: (line: number, ch: number) => boolean
  * action meaning `intent`: pass, or refuse with the reason (see the top of
  * this file for the six checks, in the order they are run here: what the
  * action meant to create, nesting, protected text, links, block shape, and
- * the untouched footnotes). `beforeReading` is the reading of the note
- * before, when the caller already has it: reading a long note again, even
- * from the reading's memory, costs a pass over its text.
+ * the untouched footnotes). `beforeReading` and `afterReading` are the
+ * readings of the two notes, when the caller already has them: reading a
+ * long note again, even from the reading's memory, costs a pass over its
+ * text.
  */
-export function judgeEdit(beforeLines: readonly string[], afterLines: readonly string[], intent: EditIntent, beforeReading: NoteReading = readNote(beforeLines)): GateVerdict {
+export function judgeEdit(
+    beforeLines: readonly string[],
+    afterLines: readonly string[],
+    intent: EditIntent,
+    beforeReading: NoteReading = readNote(beforeLines),
+    afterReading: NoteReading = readNote(afterLines),
+): GateVerdict {
     const renamed = new Map<string, string>();
-    for (const [from, to] of intent.renamed ?? []) renamed.set(fold(from), fold(to));
+    for (const [from, to] of intent.renamed ?? []) if (fold(from) !== fold(to)) renamed.set(fold(from), fold(to));
     const removed = new Set((intent.removed ?? []).map(fold));
     const rewritten = new Set((intent.rewritten ?? []).map(fold));
-    const merged = new Set((intent.merged ?? []).map(fold));
     const inlined = new Set((intent.inlined ?? []).map(fold));
-    const defined = new Set((intent.defined ?? []).map(fold));
     const created = intent.created ?? [];
+    // The names each side writes. The note before the edit is read with
+    // every renamed footnote under its new name, and the note after it as
+    // it is, so the two compare name for name. One action can take a
+    // footnote out and then rename another to its name (the lint deletes
+    // an orphaned reference to "3" and renumbers "4" to "3"); the one taken
+    // out then goes under a name no footnote can have, so the two are never
+    // taken for each other.
+    const targets = new Set(renamed.values());
+    const before = (name: string) => renamed.get(name) ?? (removed.has(name) && targets.has(name) ? `\u0001${name}` : name);
+    const after = (name: string) => renamed.get(name) ?? name;
+    // a name the action takes out, as the note after it writes it: none,
+    // when another footnote now has it
+    const removedAfter = new Set([...removed].filter((name) => !targets.has(name)));
+    // fix-lazy and the merge work before the lint renames anything, so
+    // their names are written as the note before has them
+    const defined = new Set((intent.defined ?? []).map(fold));
+    const merged = new Set((intent.merged ?? []).map(fold));
+    const definedAfter = new Set([...defined].map(after));
+    const mergedAfter = new Set([...merged].map(after));
     // a placeholder with a prefix, "[^2.]", already reads as a reference
     // to "2.", the name the user is still typing
     const createdNames = new Set(
         created.flatMap((footnote) => (footnote.kind === "footnote" ? [fold(footnote.name)] : footnote.kind === "placeholder" ? [fold(footnote.text.slice(2, -1))] : [])),
     );
+    // A footnote renamed to a name another footnote keeps would join the
+    // two into one. The rename command and the lint's renames never do that,
+    // so this is a last guard, asked of the whole note (the stretches below
+    // look at the lines the renames changed, and the footnote that keeps the
+    // name may sit anywhere else).
+    if (renamed.size > 0) {
+        const kept = new Set<string>();
+        for (const { name } of beforeReading.definitions) kept.add(fold(name));
+        for (const { name, live } of beforeReading.references) if (live) kept.add(fold(name));
+        for (const target of targets) {
+            if (kept.has(target) && !renamed.has(target) && !removed.has(target)) return refuse("other", 1, `[^${target}]`);
+        }
+    }
     // a footnote turned from normal into inline or back changes how the
     // lines that cite it are written, so definitions are then compared
     // without their footnotes too
-    const moved = (intent.footnotesMoved ?? false) || (intent.inlined ?? []).length > 0 || (intent.inlineRemoved ?? 0) > 0;
+    const moved = (intent.footnotesMoved ?? false) || inlined.size > 0 || (intent.inlineRemoved ?? 0) > 0;
     const mapsNames = renamed.size > 0 || removed.size > 0 || inlined.size > 0;
     const oldSide = sideOf(
         beforeReading,
@@ -788,7 +859,7 @@ export function judgeEdit(beforeLines: readonly string[], afterLines: readonly s
         intent.removedText ?? [],
         intent.removedText ?? [],
         new Set([...removed, ...rewritten]),
-        (name) => renamed.get(name) ?? name,
+        before,
         new Set([...removed, ...inlined]),
         moved,
         mapsNames,
@@ -799,20 +870,20 @@ export function judgeEdit(beforeLines: readonly string[], afterLines: readonly s
         footnote.kind === "inline" && footnote.fromOutside === true ? footnote.at.map((at) => ({ from: at, to: { line: at.line, ch: at.ch + footnote.text.length } })) : [],
     );
     const newSide = sideOf(
-        readNote(afterLines),
+        afterReading,
         afterLines,
         intent.insertedText ?? [],
         [...(intent.insertedText ?? []), ...written],
         // what a removed footnote's definition held is the action's on both
         // sides: a copy the action keeps holds it in both
-        new Set([...rewritten, ...removed]),
+        new Set([...rewritten, ...removedAfter]),
         (name) => name,
-        new Set([...removed, ...inlined]),
+        new Set([...removedAfter, ...inlined]),
         moved,
         mapsNames,
     );
 
-    editWindows(oldSide, newSide, renamed.size > 0);
+    editWindows(oldSide, newSide, renamed);
 
     // 6. what the action meant to create is live
     const made = createdVerdict(newSide, created);
@@ -832,8 +903,8 @@ export function judgeEdit(beforeLines: readonly string[], afterLines: readonly s
     );
     const converted = new Set([...inlined, ...(intent.inlineRemoved ? createdNames : [])]);
     const holder = (left: ReadonlySet<string>) => (name: string) => (left.has(name) ? null : name === "^" || converted.has(name) ? "*" : name);
-    const outerBefore = nestingPairs(oldSide, (line, ch) => inRanges(oldSide.ranges, line, ch), holder(removed));
-    const outerAfter = nestingPairs(newSide, () => false, holder(new Set([...removed, ...defined, ...pasted])));
+    const outerBefore = nestingPairs(oldSide, (line, ch) => inRanges(oldSide.ranges, line, ch), holder(new Set([...removed].map(before))));
+    const outerAfter = nestingPairs(newSide, () => false, holder(new Set([...removedAfter, ...definedAfter, ...pasted])));
     const nested = surplus(counted(outerAfter), counted(outerBefore));
     if (nested !== null) return refuse("nested", 2, nested);
 
@@ -848,11 +919,19 @@ export function judgeEdit(beforeLines: readonly string[], afterLines: readonly s
     if (link !== null) return refuse("link", 4, readable(link));
 
     // 5. block shape
-    const shape = blockShapeVerdict(oldSide, newSide, created, defined) ?? mergedShapeVerdict(oldSide, newSide, merged);
+    const shape = blockShapeVerdict(oldSide, newSide, created, defined, definedAfter) ?? mergedShapeVerdict(oldSide, newSide, merged, mergedAfter);
     if (shape !== null) return shape;
 
     // 1. untouched footnotes read the same
-    return untouchedVerdict(oldSide, newSide, intent, { removed: new Set([...removed, ...inlined]), rewritten: new Set([...rewritten, ...merged]), defined, createdNames });
+    return untouchedVerdict(oldSide, newSide, {
+        removed: new Set([...[...removed].map(before), ...inlined]),
+        rewritten: new Set([...rewritten, ...mergedAfter]),
+        defined: definedAfter,
+        createdNames,
+        renamedTo: targets,
+        inlineCreated: created.reduce((n, footnote) => n + (footnote.kind === "inline" ? footnote.at.length : 0), 0) + (intent.inlineCreated ?? 0),
+        inlineRemoved: intent.inlineRemoved ?? 0,
+    });
 }
 
 /**
@@ -893,7 +972,7 @@ function onlyFootnotes(line: string): boolean {
  * text the action takes out or writes in (a cut, a paste), only the first
  * line's containers are compared, since the rest is the user's own text.
  */
-function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly CreatedFootnote[], defined: ReadonlySet<string>): GateVerdict | null {
+function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly CreatedFootnote[], defined: ReadonlySet<string>, definedAfter: ReadonlySet<string>): GateVerdict | null {
     // the definitions that run over any line the checks look at
     const near = (side: Side) => side.reading.definitions.filter((definition) => overlapsWindow(side, definition.start, definition.end));
     const oldDefinitions = near(oldSide);
@@ -909,7 +988,7 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
     const writtenFor = new Map<number, number>();
     for (const footnote of created) if (footnote.kind === "footnote" && footnote.definition) writtenFor.set(footnote.definition.line, footnote.definition.lines);
     for (const definition of newDefinitions) {
-        if (defined.has(fold(definition.name))) {
+        if (definedAfter.has(fold(definition.name))) {
             const key = definitionKey(newSide, definition);
             const left = oldKeys.get(key) ?? 0;
             if (left === 0) {
@@ -947,14 +1026,9 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
         if (was === is) return sameCells(i, j);
         // Under a lazy label fix-lazy makes a definition, the rest of the
         // label's paragraph may become the table the user meant, as
-        // fix-lazy's own comment says (linesAfterReadDifferently).
+        // fix-lazy's own comment says.
         if (defined.size > 0 && lazyLineReadsAlike(was, is) && /(?:^| )\^?table$/.test(is)) return true;
-        // Text the action writes in from outside (a paste) that joins the
-        // paragraph next to it is the user's text doing what it does in
-        // any editor: the line next to it then carries on that paragraph,
-        // or starts it, and reads otherwise the same.
-        const nextToWritten = lineInRanges(newSide.usersText, j - 1) || lineInRanges(newSide.usersText, j + 1);
-        return nextToWritten && was.replace(/\^paragraph$/, "paragraph") === is.replace(/\^paragraph$/, "paragraph");
+        return sameKind(was, is);
     };
     // a table row keeps its cells: text taken across a "|" leaves the row
     // a cell short (Jason's ruling on partial-table selections, 2026-09-04)
@@ -1029,24 +1103,12 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
                 if (blankLine(oldSide, was[k]) || blankLine(newSide, is[k]) || lenient[is[k]] || (onlyFootnotes(newSide.lines[is[k]] ?? "") && wholeBlocks(was))) continue;
                 const wasBlocks = oldSide.reading.lineBlocks[was[k]] ?? "";
                 const isBlocks = newSide.reading.lineBlocks[is[k]] ?? "";
-                if (usersText ? containersOf(wasBlocks) !== containersOf(isBlocks) : wasBlocks !== isBlocks || !sameCells(was[k], is[k])) return formatting(is[k]);
+                if (usersText ? containersOf(wasBlocks) !== containersOf(isBlocks) : !sameKind(wasBlocks, isBlocks) || !sameCells(was[k], is[k])) return formatting(is[k]);
             }
-            // A line the edit adds must start a block of its own, unless
-            // it is the user's own text: one that carries on the block
-            // above it joins that block, a paragraph with a reference
-            // written on the blank line under it, as surely as one that
-            // starts a block the line under it then carries on.
-            if (!usersText && is.length > was.length) {
-                for (const line of is.slice(pairs)) {
-                    // a line that carries on a block an added line above it
-                    // started is part of that block, as a table's rows are
-                    if (lenient[line] || is.includes(line - 1)) continue;
-                    // and a line inside a quote or a list item with no block
-                    // of its own (a bare ">") is the container's blank line
-                    const own = (newSide.reading.lineBlocks[line] ?? "").split(" ").pop() ?? "";
-                    if (own !== "" && !own.startsWith("^") && !/^(?:blockquote|list|list\.ordered|listItem|footnoteDefinition)$/.test(own)) return formatting(line);
-                }
-            }
+            // A line the edit adds may join the paragraph next to it, as a
+            // reference written on the blank line under a paragraph does;
+            // what it does to the lines around it is judged on those lines
+            // (Jason's ruling B1, 2026-10-08).
             i = run.aEnd;
             j = run.bEnd;
         }
@@ -1060,25 +1122,26 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
  * heading), is still held by the copy left. A copy whose table starts on
  * its label line cannot be folded into indented lines without the table
  * turning into text (GLM hunt cycle 7, 2026-09-16, pin
- * bug-merge-duplicate-flattens-table).
+ * bug-merge-duplicate-flattens-table). `merged` names them as the note
+ * before the edit does, `mergedAfter` as the note after it does.
  */
-function mergedShapeVerdict(oldSide: Side, newSide: Side, merged: ReadonlySet<string>): GateVerdict | null {
+function mergedShapeVerdict(oldSide: Side, newSide: Side, merged: ReadonlySet<string>, mergedAfter: ReadonlySet<string>): GateVerdict | null {
     if (merged.size === 0) return null;
-    const blocksOf = (side: Side) => {
+    const blocksOf = (side: Side, names: ReadonlySet<string>) => {
         const out: string[] = [];
         for (const definition of side.reading.definitions) {
-            if (!merged.has(fold(definition.name)) || !inWindow(side, definition.start)) continue;
+            if (!names.has(fold(definition.name)) || !inWindow(side, definition.start)) continue;
             for (let line = definition.start; line <= definition.end; line++) {
                 // the blocks inside the definition that start on this line
                 const inside = (side.reading.lineBlocks[line] ?? "").split(" ");
                 const at = inside.findIndex((kind) => /^\^?footnoteDefinition$/.test(kind));
-                for (const kind of inside.slice(at + 1)) if (kind.startsWith("^") && kind !== "^paragraph") out.push(`${fold(definition.name)}:${kind}`);
+                for (const kind of inside.slice(at + 1)) if (kind.startsWith("^") && kind !== "^paragraph") out.push(`${side.map(fold(definition.name))}:${kind}`);
             }
         }
         return counted(out);
     };
-    const was = blocksOf(oldSide);
-    const is = blocksOf(newSide);
+    const was = blocksOf(oldSide, merged);
+    const is = blocksOf(newSide, mergedAfter);
     const lost = surplus(was, is) ?? surplus(is, was);
     return lost === null ? null : refuse("formatting", 5, lost);
 }
@@ -1089,31 +1152,47 @@ function mergedShapeVerdict(oldSide: Side, newSide: Side, merged: ReadonlySet<st
  * container and its lines), wherever they now sit; a renamed footnote
  * keeps them under its new name. The inline footnotes are compared by
  * their text: as many as the action meant to take out may go, and as many
- * as it meant to create may come.
+ * as it meant to create may come. Every name in `names` is written as the
+ * note after the edit has it.
  */
 function untouchedVerdict(
     oldSide: Side,
     newSide: Side,
-    intent: EditIntent,
-    names: { removed: ReadonlySet<string>; rewritten: ReadonlySet<string>; defined: ReadonlySet<string>; createdNames: ReadonlySet<string> },
+    names: {
+        removed: ReadonlySet<string>;
+        rewritten: ReadonlySet<string>;
+        defined: ReadonlySet<string>;
+        createdNames: ReadonlySet<string>;
+        renamedTo: ReadonlySet<string>;
+        inlineCreated: number;
+        inlineRemoved: number;
+    },
 ): GateVerdict {
     const skipped = (name: string) => names.removed.has(name) || names.defined.has(name) || names.createdNames.has(name);
-    const renamedTo = new Set([...(intent.renamed ?? new Map<string, string>()).values()].map(fold));
-    const why = (name: string): GateVerdict => refuse(renamedTo.has(name) ? "dead" : "other", 1, `[^${name}]`);
+    const why = (name: string): GateVerdict => refuse(names.renamedTo.has(name) ? "dead" : "other", 1, `[^${name}]`);
 
+    // the live references, by name, and those of them inside a definition
     const references = (side: Side) => {
-        const out: string[] = [];
+        const all: string[] = [];
+        const held: string[] = [];
         for (const reference of side.reading.references) {
             if (!reference.live || !inWindow(side, reference.line) || owned(side, reference.line, reference.start)) continue;
-            out.push(side.map(fold(reference.name)));
+            all.push(side.map(fold(reference.name)));
+            if (side.reading.definitionAt(reference.line) !== null) held.push(side.map(fold(reference.name)));
         }
-        return counted(out);
+        return { all: counted(all), held: counted(held) };
     };
     const referencesBefore = references(oldSide);
     const referencesAfter = references(newSide);
-    for (const name of new Set([...referencesBefore.keys(), ...referencesAfter.keys()])) {
+    for (const name of new Set([...referencesBefore.all.keys(), ...referencesAfter.all.keys()])) {
         if (skipped(name)) continue;
-        if ((referencesBefore.get(name) ?? 0) !== (referencesAfter.get(name) ?? 0)) return why(name);
+        if ((referencesBefore.all.get(name) ?? 0) === (referencesAfter.all.get(name) ?? 0)) continue;
+        // a reference that comes alive inside a footnote, such as one an
+        // inline footnote held as dead text (rule E3) whose text becomes a
+        // definition, is a footnote inside a footnote (Jason's ruling B12,
+        // 2026-10-08)
+        if ((referencesAfter.held.get(name) ?? 0) > (referencesBefore.held.get(name) ?? 0)) return refuse("nested", 2, `[^${name}]`);
+        return why(name);
     }
 
     const definitions = (side: Side) => {
@@ -1149,8 +1228,7 @@ function untouchedVerdict(
     let come = 0;
     for (const [text, n] of inlineBefore) gone += Math.max(0, n - (inlineAfter.get(text) ?? 0));
     for (const [text, n] of inlineAfter) come += Math.max(0, n - (inlineBefore.get(text) ?? 0));
-    const createdInline = (intent.created ?? []).reduce((n, footnote) => n + (footnote.kind === "inline" ? footnote.at.length : 0), 0) + (intent.inlineCreated ?? 0);
-    if (gone > (intent.inlineRemoved ?? 0) || come > createdInline) return refuse("other", 1, "an inline footnote");
+    if (gone > names.inlineRemoved || come > names.inlineCreated) return refuse("other", 1, "an inline footnote");
     return Pass;
 }
 

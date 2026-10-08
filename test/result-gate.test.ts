@@ -257,11 +257,10 @@ describe("what each kind of action may change", () => {
         expect(reasonOf(before, ["a[^8]", "", "prose", "[^8]: x", "", "[^8]: d"], { removed: ["9"] })).toBe("formatting");
     });
 
-    it("a press on a blank line that pulls the line below into a paragraph is refused; pasted text joining it is the user's own", () => {
-        expect(reasonOf(["Para one.", "", "Para two."], ["Para one.", "[^1]", "Para two.", "", "[^1]: "], press("1", 1, 0, 4))).toBe("formatting");
-        const pasted: NoteRange = { from: { line: 1, ch: 0 }, to: { line: 1, ch: 7 } };
+    it("a paste's text may join the paragraph next to it", () => {
+        const pasted: NoteRange = { from: { line: 2, ch: 0 }, to: { line: 2, ch: 7 } };
         expect(reasonOf(["Para one.", "", "Para two."], ["Para one.", "", "a[^1] b", "Para two.", "", "[^1]: one"], {
-            insertedText: [{ ...pasted, from: { line: 2, ch: 0 }, to: { line: 2, ch: 7 } }],
+            insertedText: [pasted],
             created: [{ kind: "footnote", name: "1", references: [], definition: { line: 5, lines: 1 } }],
         })).toBe("pass");
     });
@@ -274,6 +273,71 @@ describe("what each kind of action may change", () => {
         const inline = (text: string, fromOutside: boolean): EditIntent => ({ created: [{ kind: "inline", text, at: [{ line: 0, ch: 9 }], fromOutside }] });
         expect(reasonOf(["Some text after."], ["Some text^[see https://example.com/page] after."], inline("^[see https://example.com/page]", true))).toBe("pass");
         expect(reasonOf(["a $x$ b"], ["a^[$x$] b"], { created: [{ kind: "inline", text: "^[$x$]", at: [{ line: 0, ch: 1 }] }] })).toBe("pass");
+    });
+});
+
+// Jason's ruling B1 (2026-10-08): a press on an empty line may join the
+// paragraph next to it; it is refused only when another line changes what
+// kind of block it is in. The five notes are the ones he checked in
+// Reading view, each with the empty line holding the new reference
+// (docs/obsidian-reading-rules.md G1; saved answers gs3:b1-*).
+describe("a press on an empty line (Jason's ruling B1)", () => {
+    it("joins the paragraph above a horizontal rule: one paragraph, then the rule", () => {
+        expect(reasonOf(["Results were mixed.", "", "---"], ["Results were mixed.", "[^1]", "---", "", "[^1]: "], press("1", 1, 0, 4))).toBe("pass");
+    });
+
+    it("joins two paragraphs into one", () => {
+        expect(reasonOf(["The tide rose.", "", "Oysters closed."], ["The tide rose.", "[^1]", "Oysters closed.", "", "[^1]: "], press("1", 1, 0, 4))).toBe("pass");
+    });
+
+    it("is refused over a table, whose rows would become paragraph text", () => {
+        const table = ["Some text.", "", "| a | b |", "| --- | --- |", "| c | d |"];
+        expect(reasonOf(table, ["Some text.", "[^1]", "| a | b |", "| --- | --- |", "| c | d |", "", "[^1]: "], press("1", 1, 0, 6))).toBe("formatting");
+    });
+
+    it("is refused over a definition, which would become a lazy label", () => {
+        const before = ["text[^1] and[^2]", "", "[^1]: d"];
+        expect(reasonOf(before, ["text[^1] and[^2]", "[^2]", "[^1]: d"], { created: [{ kind: "footnote", name: "2", references: [{ line: 1, ch: 0 }] }] })).not.toBe("pass");
+        expect(reasonOf(before, ["text[^1] and[^2]", "[^]", "[^1]: d"], { created: [{ kind: "placeholder", text: "[^]", at: [{ line: 1, ch: 0 }] }] })).toBe("formatting");
+    });
+
+    it("is refused over indented code, which would become paragraph text", () => {
+        expect(reasonOf(["Para.", "", "    code line"], ["Para.", "[^1]", "    code line", "", "[^1]: "], press("1", 1, 0, 4))).toBe("protected");
+    });
+
+    it("is refused where the next line would join a list item above, not a paragraph", () => {
+        expect(reasonOf(["- item", "", "Para two."], ["- item", "[^1]", "Para two.", "", "[^1]: "], press("1", 1, 0, 4))).toBe("formatting");
+    });
+});
+
+describe("what a reason says", () => {
+    it("a dead reference that comes alive inside a footnote is a footnote inside a footnote (Jason's ruling B12; pin spec-convert-inline-body-holds-reference)", () => {
+        const before = ["x[^1] a^[see [^1]]", "", "[^1]: one"];
+        const after = ["x[^1] a[^2]", "", "[^1]: one", "[^2]: see [^1]"];
+        const intent: EditIntent = { created: [{ kind: "footnote", name: "2", references: [{ line: 0, ch: 7 }], definition: { line: 3, lines: 1 } }], inlineRemoved: 1 };
+        expect(reasonOf(before, after, intent)).toBe("nested");
+    });
+});
+
+describe("renames", () => {
+    it("look at the lines the renamed footnotes are on, not the whole note", () => {
+        const before = ["a[^x] b", "", ...Array.from({ length: 50 }, (_, i) => `line ${String(i)}`), "", "[^x]: one"];
+        const after = before.map((line) => line.replace("[^x]", "[^y]"));
+        expect(reasonOf(before, after, { renamed: new Map([["x", "y"]]) })).toBe("pass");
+    });
+
+    it("never join a footnote to one that keeps the name, wherever that one sits", () => {
+        const before = ["a[^x] b", "", ...Array.from({ length: 50 }, (_, i) => `line ${String(i)}`), "c[^y]", "", "[^x]: one", "[^y]: two"];
+        const after = ["a[^y] b", ...before.slice(1, -2), "[^y]: one", "[^y]: two"];
+        expect(reasonOf(before, after, { renamed: new Map([["x", "y"]]) })).toBe("other");
+    });
+
+    it("tell a footnote taken out apart from one renamed to its name (the lint deletes an orphaned [^3] and renumbers [^4] to [^3])", () => {
+        const before = ["a[^3] b[^4]", "", "[^4]: four"];
+        const after = ["a b[^3]", "", "[^3]: four"];
+        expect(reasonOf(before, after, { removed: ["3"], renamed: new Map([["4", "3"]]) })).toBe("pass");
+        // the renamed footnote losing its definition is still seen
+        expect(reasonOf(before, ["a b[^3]", "", "four"], { removed: ["3"], renamed: new Map([["4", "3"]]) })).not.toBe("pass");
     });
 });
 
