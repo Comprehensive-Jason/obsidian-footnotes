@@ -340,6 +340,17 @@ export function selectionPressHandled(
             ),
         };
     }
+    // A list item's line selected whole, as a triple-click selects it (its
+    // line break is taken back off by the trimming above), converts the
+    // item's text: the selection starts where the line's block syntax ends,
+    // so the bullet stays and holds the reference ("- [^1]"). Taken whole,
+    // the first bullet of a list was refused for taking part of the line's
+    // formatting, and a later bullet left a bare "[^1]" that read as more
+    // of the bullet above (Jason's ruling Q27, 2026-10-08; hunt 2026-10-08
+    // cycle 6, cluster Z11).
+    if (wholeListItemLine(ctx.reading(), ctx.lines, trimmed.from, trimmed.to)) {
+        trimmed.from = { line: trimmed.from.line, ch: ctx.reading().blockSyntaxEnd(trimmed.from.line) };
+    }
     // The inline key works within a single line only. A selection that
     // spans lines is sent to the numbered and named keys, which put the
     // text in a definition instead (2026-08-20).
@@ -491,6 +502,25 @@ export function absorbLeadingSpace(line: string, ch: number, syntaxEnd: number, 
     const liveAtEnd = (text: string) => readNote([`${text}[^1]`]).referencesOn(0).some((reference) => reference.start === text.length);
     if (reference && !liveAtEnd(prose) && liveAtEnd(before)) return ch;
     return ch - run[0].length;
+}
+
+/**
+ * Whether the selection from `from` to `to` is one line of the note, all
+ * of it, and that line starts a list item with text after its marker
+ * ("- First point", "2. Second", "- [ ] task"; NoteReading.blockSyntaxEnd
+ * says where the marker ends).
+ */
+function wholeListItemLine(reading: NoteReading, lines: readonly string[], from: EditorPosition, to: EditorPosition): boolean {
+    const line = lines[from.line] ?? "";
+    const syntaxEnd = reading.blockSyntaxEnd(from.line);
+    return (
+        from.line === to.line &&
+        line.slice(0, from.ch).trim() === "" &&
+        line.slice(to.ch).trim() === "" &&
+        from.ch < syntaxEnd &&
+        syntaxEnd < to.ch &&
+        (reading.lineBlocks[from.line] ?? "").split(" ").includes("^listItem")
+    );
 }
 
 /**

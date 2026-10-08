@@ -10,7 +10,7 @@ import { readNote } from "../../src/parsing/note-reading";
 // "- First point", which selects the line and its line break) and the
 // numbered key pressed. What should happen?
 //
-// What it does now: for the first bullet of a list, the press is refused
+// What it did before the ruling: for the first bullet of a list, the press is refused
 // with "No footnote was created: the selection takes part of the line's
 // formatting. Select the whole line, or only its text." The user did
 // select the whole line, so the advice names the selection they made. For
@@ -54,6 +54,13 @@ import { readNote } from "../../src/parsing/note-reading";
 // The tests assert option (a).
 //
 // Hunt 2026-10-08, cycle 6. Cluster Z11, triage question Q27.
+//
+// Answered for list items (Jason's ruling Q27, 2026-10-08), option (a): a
+// whole bullet line selected converts the item's text ("- First point"
+// becomes "- [^1]" with "[^1]: First point"), the same for the second and
+// later bullets. The bullet tests below were it.fails until then; what the
+// press did before is described above. The ruling names bullets, so the
+// quote line's case stays open as it.fails.
 //
 // Origin: the second bullet's reference read as the first bullet's text is
 // pre-existing; the first bullet's refusal came with 99d4e6d, where the
@@ -113,24 +120,45 @@ describe("a whole bullet line selected and the numbered key pressed", () => {
         expect(messages()).toEqual([]);
     });
 
-    // Now: refused with the notice that says to select the whole line.
-    it.fails("the first bullet: it converts as its text alone does", async () => {
+    // Before the ruling: refused with the notice that says to select the whole line.
+    it("the first bullet: it converts as its text alone does", async () => {
         const doc = await tripleClick(list, 2);
         expect(doc.lines).toEqual(["Intro.", "", "- [^1]", "- Second point", "- Third point", "", "After.", "", "[^1]: First point"]);
         expect(referenceLineStartsABlock(doc.lines)).toBe(true);
     });
 
-    // Now: "- First point", "[^1]", "- Third point", with "[^1]: - Second
-    // point" at the end; the "[^1]" line reads as more of the first bullet.
-    it.fails("the second bullet: it converts as its text alone does, and the reference does not read as more of the first bullet", async () => {
+    // Before the ruling: "- First point", "[^1]", "- Third point", with
+    // "[^1]: - Second point" at the end; the "[^1]" line read as more of the
+    // first bullet.
+    it("the second bullet: it converts as its text alone does, and the reference does not read as more of the first bullet", async () => {
         const doc = await tripleClick(list, 3);
         expect(doc.lines).toEqual(["Intro.", "", "- First point", "- [^1]", "- Third point", "", "After.", "", "[^1]: Second point"]);
         expect(referenceLineStartsABlock(doc.lines)).toBe(true);
     });
 
+    it("the last bullet: it converts as its text alone does", async () => {
+        const doc = await tripleClick(list, 4);
+        expect(doc.lines).toEqual(["Intro.", "", "- First point", "- Second point", "- [^1]", "", "After.", "", "[^1]: Third point"]);
+        expect(messages()).toEqual([]);
+    });
+
+    it("a numbered item and a task item: the marker and the box stay", async () => {
+        const numbered = await tripleClick(["Intro.", "", "1. First", "2. Second", "", "After."], 3);
+        expect(numbered.lines).toEqual(["Intro.", "", "1. First", "2. [^1]", "", "After.", "", "[^1]: Second"]);
+        resetNotices();
+        const task = await tripleClick(["Intro.", "", "- [ ] buy milk", "- [ ] buy eggs", "", "After."], 2);
+        expect(task.lines).toEqual(["Intro.", "", "- [ ] [^1]", "- [ ] buy eggs", "", "After.", "", "[^1]: buy milk"]);
+    });
+
+    it("the whole line dragged without its line break converts the same way", async () => {
+        const doc = await selectText(list, 3, 0, 14);
+        expect(doc.lines).toEqual(["Intro.", "", "- First point", "- [^1]", "- Third point", "", "After.", "", "[^1]: Second point"]);
+    });
+
     // The same choice for a quote line: the "> " stays and holds the
-    // reference, as selecting "One." alone does today.
-    // Now: refused with the notice that says to select the whole line.
+    // reference, as selecting "One." alone does today. Still open: the
+    // ruling names bullets. Now: refused with the notice that says to
+    // select the whole line.
     it.fails("the first line of a two-line quote: it converts as its text alone does", async () => {
         const doc = await tripleClick(["Intro.", "", "> One.", "> Two.", "", "After."], 2);
         expect(doc.lines).toEqual(["Intro.", "", "> [^1]", "> Two.", "", "After.", "", "[^1]: One."]);
