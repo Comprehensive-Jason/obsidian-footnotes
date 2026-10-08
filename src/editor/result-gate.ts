@@ -667,6 +667,46 @@ function ownKind(blocks: string): string {
     return (blocks.split(" ").pop() ?? "").replace(/^\^/, "");
 }
 
+/** Whether one of a line's blocks is a list, numbered or not, with or without the mark for where it starts. */
+const listKind = (kind: string | undefined): boolean => kind !== undefined && /^\^?list(?:\.ordered)?$/.test(kind);
+
+/** A line's blocks up to (not including) the one at `depth`, without the marks for where each starts: what holds that block. */
+const heldBy = (kinds: readonly string[], depth: number): string => kinds.slice(0, depth).join(" ").replace(/\^/g, "");
+
+/**
+ * The line where the list that holds line `line` of `side` starts, the
+ * list being the line's block number `depth` (counted from the outermost,
+ * from 0); null when that block is no list. A line that carries on a list
+ * finds its start on the lines above it, each of which holds the same list
+ * in the same containers. `memo` keeps each answer, so a long list is
+ * walked once.
+ */
+function listStartOf(side: Side, line: number, depth: number, memo: Map<string, number | null>): number | null {
+    const kinds = (side.reading.lineBlocks[line] ?? "").split(" ");
+    if (!listKind(kinds[depth])) return null;
+    if (kinds[depth].startsWith("^")) return line;
+    const key = `${String(line)}:${String(depth)}`;
+    const known = memo.get(key);
+    if (known !== undefined) return known;
+    // the first line above that does not carry on the same list
+    let above = line - 1;
+    while (above >= 0) {
+        const aboveKinds = (side.reading.lineBlocks[above] ?? "").split(" ");
+        if (!listKind(aboveKinds[depth]) || heldBy(aboveKinds, depth) !== heldBy(kinds, depth)) break;
+        if (aboveKinds[depth].startsWith("^") || memo.has(`${String(above)}:${String(depth)}`)) break;
+        above--;
+    }
+    const aboveKinds = above >= 0 ? (side.reading.lineBlocks[above] ?? "").split(" ") : [];
+    const start =
+        above < 0 || !listKind(aboveKinds[depth]) || heldBy(aboveKinds, depth) !== heldBy(kinds, depth)
+            ? null
+            : aboveKinds[depth].startsWith("^")
+              ? above
+              : (memo.get(`${String(above)}:${String(depth)}`) ?? null);
+    for (let walked = above + 1; walked <= line; walked++) memo.set(`${String(walked)}:${String(depth)}`, start);
+    return start;
+}
+
 /**
  * Whether the line `merged`, which an edit made of the lines `first` to
  * `last` (a selection across lines, replaced by its reference), still
@@ -1189,13 +1229,69 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
     // text changed (its footnotes) did not become a lazy label
     const matched = (i: number, j: number) => readsAlike(i, j) && (oldSide.lines[i] === newSide.lines[j] || !becameLazy([i], [j]));
 
+    // the line before each line after that the line-up paired it with
+    const pairedWith = new Map<number, number>();
+    const paired = (i: number, j: number) => {
+        pairedWith.set(j, i);
+        return matched(i, j);
+    };
+
     // each stretch before is lined up with its own stretch after: what lies
     // between them is the same on both sides (editWindows)
     for (let k = 0; k < oldSide.windows.length; k++) {
         const verdict = lineUp(oldBodyOf(oldSide.windows[k]), newBodyOf(newSide.windows[k]));
         if (verdict !== null) return verdict;
     }
-    return null;
+    return joinedListsVerdict();
+
+    // Two lists that become one. A line's blocks do not say which list it
+    // is in, so a line that carries on a list reads the same in either:
+    // "- d" under "- a", "- b" with a footnote's definition between them
+    // and the "- c" that started the second list cut out. So each line in
+    // the stretches that carries on a list is followed up to the line its
+    // list starts on, and both are found in the note before (by the
+    // line-up, or by their place outside the stretches). Lines of two
+    // different lists before, in one list after, are two lists the edit
+    // joined. That stands only when nothing but blank lines and the user's
+    // own text (a cut, a paste) kept them apart, as the editor's own cut
+    // would join them; a definition between them keeps them apart, so an
+    // edit that takes it out reads differently (Jason's triage decision
+    // Q2, 2026-10-05; docs/obsidian-reading-rules.md B9; hunt 2026-10-08
+    // cycle 7, cluster Y4, pin
+    // bug-cut-next-to-definition-between-lists-joins-them). The start mark
+    // a line may lose next to the user's text (sameKind) let the join
+    // through, and so did taking out the line that started the second
+    // list, since nothing left was compared with it.
+    function joinedListsVerdict(): GateVerdict | null {
+        const oldMemo = new Map<string, number | null>();
+        const newMemo = new Map<string, number | null>();
+        // where line `j` after sat before: paired by the line-up inside a
+        // stretch, or as many lines on from the stretch before it outside
+        const before = (j: number): number | null => {
+            if (inWindow(newSide, j)) return pairedWith.get(j) ?? null;
+            let shift = 0;
+            for (let k = 0; k < newSide.windows.length && newSide.windows[k].to <= j; k++) shift = oldSide.windows[k].to - newSide.windows[k].to;
+            return j + shift;
+        };
+        for (const j of pairedWith.keys()) {
+            const kinds = (newSide.reading.lineBlocks[j] ?? "").split(" ");
+            for (let depth = 0; depth < kinds.length; depth++) {
+                if (!listKind(kinds[depth]) || kinds[depth].startsWith("^")) continue;
+                const start = listStartOf(newSide, j, depth, newMemo);
+                const i = before(j);
+                const startBefore = start === null ? null : before(start);
+                if (i === null || startBefore === null) continue;
+                const first = listStartOf(oldSide, startBefore, depth, oldMemo);
+                const second = listStartOf(oldSide, i, depth, oldMemo);
+                if (first === null || second === null || first >= second) continue;
+                for (let between = startBefore + 1; between < second; between++) {
+                    if (blankLine(oldSide, between) || lineInRanges(oldSide.usersText, between) || listStartOf(oldSide, between, depth, oldMemo) === first) continue;
+                    return formatting(j);
+                }
+            }
+        }
+        return null;
+    }
 
     // The body lines of one stretch, lined up. Lines that match at the
     // start and the end are taken as they are, and the rest by the lint's
@@ -1203,7 +1299,7 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
     function lineUp(oldBody: readonly number[], newBody: readonly number[]): GateVerdict | null {
         let head = 0;
         while (head < oldBody.length && head < newBody.length && oldText(oldBody[head]) === newText(newBody[head])) {
-            if (!matched(oldBody[head], newBody[head])) return formatting(newBody[head]);
+            if (!paired(oldBody[head], newBody[head])) return formatting(newBody[head]);
             head++;
         }
         let oldTail = oldBody.length;
@@ -1211,7 +1307,7 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
         while (oldTail > head && newTail > head && oldText(oldBody[oldTail - 1]) === newText(newBody[newTail - 1])) {
             oldTail--;
             newTail--;
-            if (!matched(oldBody[oldTail], newBody[newTail])) return formatting(newBody[newTail]);
+            if (!paired(oldBody[oldTail], newBody[newTail])) return formatting(newBody[newTail]);
         }
         const oldMiddle = oldBody.slice(head, oldTail);
         const newMiddle = newBody.slice(head, newTail);
@@ -1222,7 +1318,7 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
         let i = 0;
         let j = 0;
         for (const run of [...runs, { aStart: oldMiddle.length, aEnd: oldMiddle.length, bStart: newMiddle.length, bEnd: newMiddle.length }]) {
-            for (; i < run.aStart; i++, j++) if (!matched(oldMiddle[i], newMiddle[j])) return formatting(newMiddle[j]);
+            for (; i < run.aStart; i++, j++) if (!paired(oldMiddle[i], newMiddle[j])) return formatting(newMiddle[j]);
             const was = oldMiddle.slice(run.aStart, run.aEnd);
             const is = newMiddle.slice(run.bStart, run.bEnd);
             const usersText = was.some((line) => lineInRanges(oldSide.usersText, line)) || is.some((line) => lineInRanges(newSide.usersText, line));

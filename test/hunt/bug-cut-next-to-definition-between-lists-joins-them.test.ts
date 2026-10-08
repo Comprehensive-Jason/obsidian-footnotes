@@ -113,14 +113,14 @@ beforeEach(() => {
 describe("a cut next to a definition between two lists", () => {
     // Now: "- a", "- b", "", "- d", one loose list. The editor's own cut
     // would leave two lists; taking the definition too makes one.
-    it.fails("cutting the second list's first item (Shift+Down) leaves the two lists apart", () => {
+    it("cutting the second list's first item (Shift+Down) leaves the two lists apart", () => {
         const before = ["- a", "- b", "", "[^1]: one", "", "- c[^1]", "- d"];
         const c = cut(before, { line: 5, ch: 0 }, { line: 6, ch: 0 });
         expect(listStarts(c.lines), JSON.stringify(c.lines)).toBe(2);
     });
 
     // Now: "1. a", "2. b", "", "2. d", and Reading view numbers "d" 3.
-    it.fails("numbered: cutting the second list's first item leaves the numbering alone", () => {
+    it("numbered: cutting the second list's first item leaves the numbering alone", () => {
         const before = ["1. a", "2. b", "", "[^1]: one", "", "1. c[^1]", "2. d"];
         const c = cut(before, { line: 5, ch: 0 }, { line: 6, ch: 0 });
         expect(listStarts(c.lines), JSON.stringify(c.lines)).toBe(2);
@@ -135,7 +135,7 @@ describe("a cut next to a definition between two lists", () => {
     // Now: "- a", "- b", "", "- c", "- d", one loose list of four, with
     // the notice "Cut with 1 footnote definition that nothing else used;
     // paste to carry it along."
-    it.fails("cutting the paragraph above the second list leaves the lists apart", () => {
+    it("cutting the paragraph above the second list leaves the lists apart", () => {
         const before = ["- a", "- b", "", "[^1]: one", "", "Then[^1]:", "- c", "- d"];
         const c = cut(before, { line: 5, ch: 0 }, { line: 6, ch: 0 });
         expect(listStarts(c.lines), JSON.stringify({ lines: c.lines, notices: messages() })).toBe(2);
@@ -144,6 +144,23 @@ describe("a cut next to a definition between two lists", () => {
     it("control: cutting only the text of the second list's first item leaves the lists apart", () => {
         const before = ["- a", "- b", "", "[^1]: one", "", "- c[^1]", "- d"];
         const c = cut(before, { line: 5, ch: 2 }, { line: 5, ch: 7 });
+        expect(listStarts(c.lines), JSON.stringify(c.lines)).toBe(2);
+    });
+
+    // Found while fixing (the fix group c7fix-AB). Nothing but the cut
+    // text keeps these lists apart, so they join, as with the editor's own
+    // cut; the gate lets that join stand.
+    it("control: cutting a paragraph that alone keeps two lists apart joins them, as the editor does", () => {
+        const c = cut(["- a", "", "Then[^1]:", "- c", "", "[^1]: one"], { line: 2, ch: 0 }, { line: 3, ch: 0 });
+        expect(c.lines).toEqual(["- a", "", "- c"]);
+        expect(c.clip).toContain("[^1]: one");
+    });
+
+    // Found while fixing, and failing on 34d5377: the same cut one list
+    // deeper, the first item of the second outer item's sub-list.
+    it("cutting a sub-list's first item leaves the outer lists apart", () => {
+        const before = ["- a", "  - a1", "", "[^1]: one", "", "- b", "  - b1[^1]", "  - b2"];
+        const c = cut(before, { line: 6, ch: 0 }, { line: 7, ch: 0 });
         expect(listStarts(c.lines), JSON.stringify(c.lines)).toBe(2);
     });
 
