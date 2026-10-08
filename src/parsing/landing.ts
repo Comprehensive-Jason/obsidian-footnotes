@@ -331,6 +331,28 @@ export function drawnAsLink(link: LinkLike, linkLabels: ReadonlySet<string>): bo
 }
 
 /**
+ * The shape of every link `reading` draws (drawnAsLink), judged with the
+ * link labels `linkLabels`: its text in the masked twin, its lines joined
+ * by line breaks. `keep`, when given, says which links to count: the
+ * result gate leaves out the links in text the edit meant to take out or
+ * write (result-gate.ts). (Moved here from insertion-liveness.ts on
+ * 2026-10-07, so the result gate can use it too.)
+ */
+export function drawnLinkShapes(reading: NoteReading, linkLabels: ReadonlySet<string>, keep?: (link: NoteReading["links"][number]) => boolean): string[] {
+    const shapes: string[] = [];
+    for (const link of reading.links) {
+        if (!drawnAsLink(link, linkLabels) || (keep && !keep(link))) continue;
+        const lines: string[] = [];
+        for (let line = link.startLine; line <= link.endLine; line++) {
+            const text = reading.maskedLine(line);
+            lines.push(text.slice(line === link.startLine ? link.start : 0, line === link.endLine ? link.end : text.length));
+        }
+        shapes.push(lines.join("\n"));
+    }
+    return shapes;
+}
+
+/**
  * The end of the link-like construct that holds column `ch` of `line`, as
  * `reading` reads the note, or null when it sits in none: an inline link
  * "[text](url)", a reference link "[text][ref]", an image, a wikilink, an

@@ -3,7 +3,7 @@ import { NoFootnoteCreated } from "./notice";
 
 import { contextOfLines, DocContext, docLines, insideDefinition } from "./doc-context";
 import { escapedAt } from "../parsing/footnote-grammar";
-import { drawnAsLink } from "../parsing/landing";
+import { drawnLinkShapes } from "../parsing/landing";
 import { labelShapedLines } from "../parsing/label-shapes";
 import { NoteReading, readNote } from "../parsing/note-reading";
 
@@ -446,21 +446,6 @@ export function fewerLinksDrawn(before: NoteReading, after: NoteReading, linkLab
         now.set(shape, left - 1);
     }
     return false;
-}
-
-/** The shape of every link `reading` draws (drawnAsLink), judged with the link labels `linkLabels`: its text in the masked twin, its lines joined by line breaks. */
-function drawnLinkShapes(reading: NoteReading, linkLabels: ReadonlySet<string>): string[] {
-    const shapes: string[] = [];
-    for (const link of reading.links) {
-        if (!drawnAsLink(link, linkLabels)) continue;
-        const lines: string[] = [];
-        for (let line = link.startLine; line <= link.endLine; line++) {
-            const text = reading.maskedLine(line);
-            lines.push(text.slice(line === link.startLine ? link.start : 0, line === link.endLine ? link.end : text.length));
-        }
-        shapes.push(lines.join("\n"));
-    }
-    return shapes;
 }
 
 /**

@@ -226,7 +226,7 @@ function trimCommonEdges(before: string, change: OffsetChange): OffsetChange {
  * steps. Each round's answers are kept, so the path can then be walked
  * back from the corner to read off which lines matched.
  */
-function unmatchedRuns(a: readonly string[], b: readonly string[]): Run[] {
+export function unmatchedRuns(a: readonly string[], b: readonly string[]): Run[] {
     const n = a.length;
     const m = b.length;
     const whole: Run[] = n === 0 && m === 0 ? [] : [{ aStart: 0, aEnd: n, bStart: 0, bEnd: m }];
@@ -326,7 +326,7 @@ function unmatchedRuns(a: readonly string[], b: readonly string[]): Run[] {
  * definition (hunt 2026-10-06 cycle 3, cluster D1, pin
  * bug-caret-reference-only-line).
  */
-function lineKey(line: string): string {
+export function lineKey(line: string): string {
     // most lines hold no footnote, and two searches are quicker than the scan
     const plain = line.includes("[^") || line.includes("^[") ? withoutFootnotes(line) : line;
     const key = plain.replace(/\s+/g, " ").trim();

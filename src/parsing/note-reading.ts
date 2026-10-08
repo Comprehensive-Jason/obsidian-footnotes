@@ -70,6 +70,8 @@ export interface NoteReading {
     readonly protectedSpans: FootnoteFacts["protectedSpans"];
     /** Every link, reference link, image, and wikilink, in the order the note reads them (see insideLink). */
     readonly links: FootnoteFacts["links"];
+    /** Every inline footnote "^[...]", one held inside another and one that runs over a line break included, as the parser found them (the result gate counts them). */
+    readonly inlineNotes: readonly InlineNote[];
     /**
      * The labels the note's link reference definitions "[label]: url"
      * carry, normalized as a link's `lookup` is. A reference link or image
@@ -645,6 +647,7 @@ function readingOf(facts: FootnoteFacts, lines: readonly string[], text: string)
         references: facts.references,
         protectedSpans: facts.protectedSpans,
         links: facts.links,
+        inlineNotes: facts.inlineNotes,
         linkLabels: new Set(facts.linkDefinitions.map((definition) => definition.label)),
         labelLines: Object.freeze(labels.map((label) => label !== null)) as boolean[],
         labelOn: (line) => labels[line] ?? null,
