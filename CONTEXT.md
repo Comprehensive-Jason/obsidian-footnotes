@@ -154,8 +154,9 @@ string inside code is not live — it's a fake.
 
 **Born-dead**:
 An insertion that would not be live the moment it lands (swallowed,
-reclassified, or completing a construct around it). Creation simulates
-first and refuses born-dead presses.
+reclassified, or completing a construct around it). Creation works out
+the note it would leave first, and the result gate refuses a born-dead
+press.
 
 **Fake**:
 Reference-shaped text that is not a live footnote (usually inside

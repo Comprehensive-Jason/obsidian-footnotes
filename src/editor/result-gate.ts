@@ -638,12 +638,12 @@ function sameKind(was: string, is: string, split = false): boolean {
  * quote). Paragraph text that becomes a table is what the user meant, as
  * fix-lazy's own comment says; a line that starts a heading is not (hunt
  * 2026-10-06, cycle 5, pin bug-fix-lazy-makes-heading-of-next-label;
- * design, Q24).
+ * design, Q24; Jason's ruling B6, 2026-10-08).
  */
 function lazyLineReadsAlike(was: string, is: string): boolean {
     // only a line that carried on the label's paragraph may become the
     // definition's text; one that started a block of its own must read as
-    // it did, as fix-lazy asks of its own result (linesAfterReadDifferently)
+    // it did (Jason's triage decision Q7, 2026-10-05)
     if (was.includes("^")) return false;
     const own = (blocks: string) => (blocks.split(" ").pop() ?? "").replace(/^\^/, "");
     return own(was) === own(is) || (own(was) === "paragraph" && own(is) === "table");
