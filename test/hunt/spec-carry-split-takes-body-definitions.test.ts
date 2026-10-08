@@ -71,12 +71,18 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
+// Answered (Jason's rulings 2026-10-07: ADR 0003, rule 2, a cut pasted
+// back is an undo; built in stage 4 of the result gate design,
+// 2026-10-08). A paste of the last cut's text into the note the cut left,
+// at the caret it left, writes the note before the cut back exactly, names
+// and blank lines included, so the paste back below gives the note back.
+// The test was it.fails until then; what it did before is described above.
 describe("spec question: a cut whose selection ends in its own definition, pasted back from a phone keyboard", () => {
     // The phone route: a keyboard's clipboard history commits the text
     // through the input method (the system that turns key presses into
     // text) instead of firing a paste event, so carriedInputHandler sees
     // it.
-    it.fails("a cut selection whose body ends in a definition line pasted back through the keyboard history keeps that definition's name", () => {
+    it("a cut selection whose body ends in a definition line pasted back through the keyboard history keeps that definition's name", () => {
         // The selection: "intro[^2]" (defined further down, outside the
         // selection) and the "[^1]: one" definition, which "keep[^1]" at
         // the top still uses.

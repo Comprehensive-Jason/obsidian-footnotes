@@ -132,10 +132,16 @@ function pairing(lines: string[]): string[] {
         .map((r) => `${r.name}=${bodies.get(r.name.toLowerCase()) ?? "<orphan>"}`);
 }
 
+// Answered (Jason's rulings 2026-10-07: ADR 0003, rule 2, a cut pasted
+// back is an undo; built in stage 4 of the result gate design,
+// 2026-10-08). A paste of the last cut's text into the note the cut left,
+// at the caret it left, writes the note before the cut back exactly, names
+// and blank lines included, so the paste back below gives the note back.
+// The test was it.fails until then; what it did before is described above.
 describe("spec question: a definition line cut or copied within one note and pasted back keeps serving its reference", () => {
     const note = ["Text[^1]. More[^2].", "", "[^1]: one", "", "[^2]: two"];
 
-    it.fails("cut [^1]'s line (Shift+Down), paste it back at the caret: [^1] still serves Text[^1]", () => {
+    it("cut [^1]'s line (Shift+Down), paste it back at the caret: [^1] still serves Text[^1]", () => {
         const c = cut(note, { line: 2, ch: 0 }, { line: 3, ch: 0 });
         // the selection holds the whole label, so the cut is the editor's own
         expect(c.taken).toBe(false);
@@ -143,7 +149,7 @@ describe("spec question: a definition line cut or copied within one note and pas
         const back = paste(c.lines, c.caret, c.clip);
         expect(back.taken).toBe(true);
         const ctx = JSON.stringify({ clip: c.clip, back: back.lines, toasts: messages() });
-        // Today "[^3]: one" is appended and Text[^1] is an orphan; the toast says "1 renamed".
+        // Before the paste back (stage 4, 2026-10-08): "[^3]: one" is appended and Text[^1] is an orphan; the toast says "1 renamed".
         expect(pairing(back.lines), ctx).toEqual(pairing(note));
         expect(readNote(back.lines).definitions.map((d) => d.name).sort(), ctx).toEqual(["1", "2"]);
     });

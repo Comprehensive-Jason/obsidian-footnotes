@@ -80,12 +80,18 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
+// Answered (Jason's rulings 2026-10-07: ADR 0003, rule 2, a cut pasted
+// back is an undo; built in stage 4 of the result gate design,
+// 2026-10-08). A paste of the last cut's text into the note the cut left,
+// at the caret it left, writes the note before the cut back exactly, names
+// and blank lines included, so the paste back below gives the note back.
+// The test was it.fails until then; what it did before is described above.
 describe("spec question: cut and paste back a paragraph citing one of two same-text footnotes", () => {
-    it.fails("the paste back gives the note back, [^b] and all", () => {
+    it("the paste back gives the note back, [^b] and all", () => {
         const ibid = ["First[^a].", "", "Second[^b].", "", "[^a]: Ibid.", "", "[^b]: Ibid."];
         const c = cut(ibid, { line: 2, ch: 0 }, { line: 3, ch: 0 });
         const back = paste(c.lines, c.caret, c.clip);
-        // Today the note reads "First[^a].", "", "Second[^a].", "", "[^a]: Ibid.".
+        // Before the paste back (stage 4, 2026-10-08): the note reads "First[^a].", "", "Second[^a].", "", "[^a]: Ibid.".
         expect(back.lines).toEqual(ibid);
     });
 });

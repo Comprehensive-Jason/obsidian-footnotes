@@ -106,6 +106,12 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
+// Answered (Jason's rulings 2026-10-07: ADR 0003, rule 2, a cut pasted
+// back is an undo; built in stage 4 of the result gate design,
+// 2026-10-08). A paste of the last cut's text into the note the cut left,
+// at the caret it left, writes the note before the cut back exactly, names
+// and blank lines included, so the paste back below gives the note back.
+// The test was it.fails until then; what it did before is described above.
 describe("spec question: a footnote whose definition holds another is reused on a paste in the same note", () => {
     it.fails("copy the paragraph, paste it on a fresh line of the same note: [^a] is reused, nothing added", () => {
         const note = ["Outer[^a].", "", "[^a]: outer text", "", "    [^b]: inner text", "", "End."];
@@ -121,7 +127,7 @@ describe("spec question: a footnote whose definition holds another is reused on 
         expect(messages().join("\n"), ctx).toContain("reused");
     });
 
-    it.fails("cut the paragraph citing the outer footnote while another paragraph cites the held one, paste it back", () => {
+    it("cut the paragraph citing the outer footnote while another paragraph cites the held one, paste it back", () => {
         const note = ["Outer[^a].", "", "Inner too[^b].", "", "[^a]: outer text", "", "    [^b]: inner text", "", "End."];
         const c = cut(note, { line: 0, ch: 0 }, { line: 1, ch: 0 });
         expect(c.taken).toBe(true);
@@ -130,7 +136,7 @@ describe("spec question: a footnote whose definition holds another is reused on 
         const back = paste(c.lines, c.caret, c.clip);
         expect(back.taken).toBe(true);
         const ctx = JSON.stringify({ clip: c.clip, back: back.lines, toasts: messages() });
-        // Today the paragraph comes back as "Outer[^a-2]." with a renamed copy of both footnotes added.
+        // Before the paste back (stage 4, 2026-10-08): the paragraph comes back as "Outer[^a-2]." with a renamed copy of both footnotes added.
         expect(readNote(back.lines).definitions.map((d) => d.name), ctx).toEqual(["a", "b"]);
         expect(back.lines, ctx).toEqual(note);
     });

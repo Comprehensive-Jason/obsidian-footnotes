@@ -86,6 +86,12 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
+// Answered (Jason's rulings 2026-10-07: ADR 0003, rule 2, a cut pasted
+// back is an undo; built in stage 4 of the result gate design,
+// 2026-10-08). A paste of the last cut's text into the note the cut left,
+// at the caret it left, writes the note before the cut back exactly, names
+// and blank lines included, so the paste back below gives the note back.
+// The test was it.fails until then; what it did before is described above.
 describe("spec question: a cut ending one character into a label, pasted back", () => {
     // the selection: a whole table and the "[" of the label under it, so
     // the definition is carried (the selection does not hold its whole
@@ -94,10 +100,10 @@ describe("spec question: a cut ending one character into a label, pasted back", 
     const from = { line: 0, ch: 0 };
     const to = { line: 3, ch: 1 };
 
-    it.fails("cut then paste back at the caret gives the note back, with one definition", () => {
+    it("cut then paste back at the caret gives the note back, with one definition", () => {
         const after = cut(note, from, to);
         const back = paste(after.lines, after.caret, after.clip);
-        // Today the note ends with "[^109]: under table" twice.
+        // Before the paste back (stage 4, 2026-10-08): the note ends with "[^109]: under table" twice.
         expect(back.lines.filter((line) => line.startsWith("[^109]:")).length).toBe(1);
     });
 });

@@ -3,6 +3,7 @@ import { Editor, EditorChange, EditorPosition, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { contextOfLines, docLines, insideDefinition } from "../editor/doc-context";
+import { lineDiffChanges } from "../editor/document-diff";
 import { simulateChanges } from "../editor/insertion-liveness";
 import { NothingCutNotice, PasteNestedNotice, PasteProtectedNotice, PasteReadsDifferentlyNotice, showNotice } from "../editor/notice";
 import { CreatedFootnote, EditIntent, judgeEdit, NoteRange } from "../editor/result-gate";
@@ -61,6 +62,15 @@ import { footnotePopupEditor, footnotePopupSection } from "./footnote-popup";
 // and renamed to fit the destination (planCarriedPaste), where a creation
 // press would put them (planDefinitionAppend). Then the lint-on-creation
 // trigger runs, as after every press that creates a footnote.
+//
+// A cut pasted back is an undo (ADR 0003, rule 2; Jason's rulings
+// 2026-10-07). For a cut, the register also keeps the note before the cut
+// and right after it, the caret the cut left, and the file. A paste of that
+// cut's text into that file, while its text is still exactly the note the
+// cut left, at that caret with nothing selected, writes the note before the
+// cut back exactly, names and blank lines included (pastedBack). It
+// compares texts, so the phone's Paste command and its keyboard's
+// clipboard history paste a cut back too.
 
 /** What the last copy or cut from this window took with it. */
 export interface CarryRegister {
@@ -71,6 +81,17 @@ export interface CarryRegister {
     /** the definitions at the end of the selection, then the ones its references need from outside it */
     carried: CarriedDefinition[];
     missing: string[];
+    /** for a cut, what a paste back needs (pastedBack); none for a copy */
+    cut?: CutRecord;
+}
+
+/** What a cut remembers for a paste back: the note before it and right after it (lines joined with "\n"), the caret it left, where the cut text ended in the note before it, and the file it was made in. */
+interface CutRecord {
+    before: string;
+    after: string;
+    caret: EditorPosition;
+    end: EditorPosition;
+    file: string | null;
 }
 
 let register: CarryRegister | null = null;
@@ -268,6 +289,9 @@ function plannedCut(plugin: FootnotePlugin, doc: Editor, from: EditorPosition, t
         return "refused";
     }
     const entry = remember(doc, from, to, plan);
+    // a cut the editor makes leaves the note planCut worked out for it too:
+    // the selection deleted, and the caret where it started
+    entry.cut = { before: normalizeEol(before).text, after: plan.text, caret: plan.caret, end: to, file: fileOf(plugin, doc) };
     if (plan.carried.length === 0) return null;
     const make = () => {
         // the note as the plan reads it, written back as the smallest set of
@@ -312,6 +336,8 @@ export function handlePaste(plugin: FootnotePlugin, event: ClipboardEvent, doc: 
  */
 function landPastedText(plugin: FootnotePlugin, doc: Editor, text: string, beforeWrite: () => void = () => undefined): boolean {
     if (!text) return false;
+    const [only] = doc.listSelections();
+    if (doc.listSelections().length === 1 && pastedBack(plugin, doc, text, only.anchor, only.head, beforeWrite)) return true;
     let body: string;
     let carried: CarriedDefinition[];
     // the names the plugin's own copy found no definition for; null for a
@@ -330,6 +356,42 @@ function landPastedText(plugin: FootnotePlugin, doc: Editor, text: string, befor
     const [a, b] = [selections[0].anchor, selections[0].head];
     const [from, to] = a.line < b.line || (a.line === b.line && a.ch <= b.ch) ? [a, b] : [b, a];
     return landOrNameMissing(plugin, doc, from, to, text, body, carried, known, selections.length === 1, beforeWrite);
+}
+
+/** The path of the file `doc` is the editor of, or null when it is not the active note's editor (the footnote popup's, a hover popover's). */
+function fileOf(plugin: FootnotePlugin, doc: Editor): string | null {
+    const view = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+    return view && viewEditor(view) === doc ? (view.file?.path ?? null) : null;
+}
+
+/**
+ * A paste of `text` in `doc` from `from` to `to`, made as the paste back
+ * of the last cut (ADR 0003, rule 2): the text is that cut's clipboard
+ * text, nothing is selected and the caret is where the cut left it, the
+ * editor is the one of the file the cut was made in, and its text is
+ * exactly the note the cut left. Then the note before the cut is written
+ * back, every name and blank line as it was, and the caret goes to the end
+ * of the restored text, and this returns true. Otherwise it changes
+ * nothing and returns false, and the paste is planned as any other.
+ * `beforeWrite` runs right before the note is changed (see wrapCommand).
+ *
+ * A carried paste plans the text afresh where it lands, so a cut pasted
+ * back could come back renamed, joined to the line around it, or with its
+ * definition doubled (the paste back questions C27, Q5, Q6, Q12, and X25
+ * of the hunts of 2026-10-02 to 2026-10-06; Jason's rulings 2026-10-07).
+ * The cut knew what the note was, so the paste back gives exactly that.
+ */
+function pastedBack(plugin: FootnotePlugin, doc: Editor, text: string, from: EditorPosition, to: EditorPosition, beforeWrite: () => void = () => undefined): boolean {
+    const cut = register?.cut;
+    if (!register || !cut || normalizeEol(register.text).text !== normalizeEol(text).text) return false;
+    const at = (pos: EditorPosition) => pos.line === cut.caret.line && pos.ch === cut.caret.ch;
+    if (!at(from) || !at(to) || fileOf(plugin, doc) !== cut.file) return false;
+    const now = doc.getValue();
+    const { text: note, eol } = normalizeEol(now);
+    if (note !== cut.after) return false;
+    beforeWrite();
+    writeChanges(doc, now, lineDiffChanges(now, restoreEol(cut.before, eol)), plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined, { from: cut.end });
+    return true;
 }
 
 /**
@@ -417,7 +479,14 @@ export function carriedInputHandler(
     editorFor: (view: EditorView) => Editor | null,
 ): (view: EditorView, from: number, to: number, text: string) => boolean {
     return (view, from, to, text) => {
-        if (!plugin.settings.carryFootnotesOnCopy || !text.includes("\n")) return false;
+        if (!plugin.settings.carryFootnotesOnCopy) return false;
+        // the last cut's text, pasted back from the keyboard's clipboard
+        // history (pastedBack)
+        if (from === to && register?.cut && normalizeEol(register.text).text === normalizeEol(text).text) {
+            const doc = editorFor(view);
+            if (doc && !nestedSubEditorOwnsFocus(doc) && pastedBack(plugin, doc, text, doc.offsetToPos(from), doc.offsetToPos(to))) return true;
+        }
+        if (!text.includes("\n")) return false;
         const { body, carried } = splitCarriedText(text);
         // a text with no "[^" left in its body, and nothing carried, has
         // nothing to land, rename, or name

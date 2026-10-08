@@ -102,20 +102,33 @@ beforeEach(() => {
 // back writes "Para[^a].tail": two paragraphs glued into one line.
 // Option (a) above answers this face too: the cut keeps the emptied line
 // for the caret. (Origin: pre-existing.)
+//
+// Answered (Jason's rulings 2026-10-07: ADR 0003, rule 2, a cut pasted
+// back is an undo; built in stage 4 of the result gate design,
+// 2026-10-08). A paste of the last cut's text into the note the cut left,
+// at the caret it left, writes the note before the cut back exactly, names
+// and blank lines included, so the paste back below gives the note back.
+// The test was it.fails until then; what it did before is described above.
 describe("spec question: the caret after a cut that takes a definition above the selection out", () => {
-    it.fails("cut the line's text 'Para[^a].' and paste back: 'Para[^a].' and 'tail' stay separate paragraphs", () => {
+    it("cut the line's text 'Para[^a].' and paste back: 'Para[^a].' and 'tail' stay separate paragraphs", () => {
         const note = ["Intro", "", "[^a]: def", "", "Para[^a].", "", "tail"];
         const after = cut(note, { line: 4, ch: 0 }, { line: 4, ch: 9 });
         expect(after.taken).toBe(true);
         const back = paste(after.lines, after.caret, after.clip);
         expect(back.taken).toBe(true);
-        // Today: the cut leaves ["Intro", "", "tail"] with the caret at the
+        // Before the paste back (stage 4, 2026-10-08): the cut leaves ["Intro", "", "tail"] with the caret at the
         // start of "tail", and the paste back gives ["Intro", "", "Para[^a].tail", "", "[^a]: def"].
         expect(back.lines).not.toContain("Para[^a].tail");
         expect(back.lines.indexOf("tail") - back.lines.indexOf("Para[^a].")).toBeGreaterThan(1);
     });
 });
 
+// Answered (Jason's rulings 2026-10-07: ADR 0003, rule 2, a cut pasted
+// back is an undo; built in stage 4 of the result gate design,
+// 2026-10-08). A paste of the last cut's text into the note the cut left,
+// at the caret it left, writes the note before the cut back exactly, names
+// and blank lines included, so the paste back below gives the note back.
+// The test was it.fails until then; what it did before is described above.
 describe("spec question: the caret after a cut that takes the note's last definition out", () => {
     // the selection: the blank line under [^2]'s definition and the
     // paragraph citing [^1], through its line break
@@ -123,12 +136,12 @@ describe("spec question: the caret after a cut that takes the note's last defini
     const from = { line: 3, ch: 0 };
     const to = { line: 5, ch: 0 };
 
-    it.fails("cut then paste back at the caret keeps the paragraph out of [^2]'s definition", () => {
+    it("cut then paste back at the caret keeps the paragraph out of [^2]'s definition", () => {
         const after = cut(note, from, to);
         const back = paste(after.lines, after.caret, after.clip);
         const i = back.lines.indexOf("alpha[^1]. alpha");
         expect(i).toBeGreaterThan(0);
-        // Today the line above the paragraph is "[^2]: other".
+        // Before the paste back (stage 4, 2026-10-08): the line above the paragraph is "[^2]: other".
         expect(back.lines[i - 1].trim()).toBe("");
     });
 });
