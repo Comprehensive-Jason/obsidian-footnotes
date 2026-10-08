@@ -116,6 +116,15 @@ export const ProtectedSelectionNotice =
 export const TableSelectionNotice =
     NoFootnoteCreated + "the selection cuts through a table. Select text inside one cell, or the whole table with the text around it.";
 
+// A selection that takes a line's "> ", "- ", or "# " and leaves the rest
+// of the line behind is refused, since the rest would stop being a quote,
+// a list item, or a heading (Jason's ruling B3, 2026-10-08). The press's
+// notice for that says to move the caret, which a selection has no use
+// for, so a selection gets its own (Jason's pick, 2026-10-08, decision 3
+// of the stage 3 report). A whole "# Heading here" still converts.
+export const SelectionFormattingNotice =
+    NoFootnoteCreated + "the selection takes part of the line's formatting. Select the whole line, or only its text.";
+
 /**
  * The notices a selection conversion the result gate refused is told
  * with, where they are not a press's (refusedCreation in
@@ -124,11 +133,12 @@ export const TableSelectionNotice =
  * (`selected`, from selectedNotice): those were the first things checked
  * before the gate decided, and they name what the user selected. Otherwise
  * protected text, and anything the conversion meant to create that would
- * not be live, is the selection cutting through protected text.
+ * not be live, is the selection cutting through protected text, and a
+ * line's formatting is the selection taking part of it.
  */
 function selectionNotices(selected: string | null): Partial<Record<GateReason, string>> {
     if (selected !== null) return { nested: selected, protected: selected, link: selected, formatting: selected, dead: selected, other: selected };
-    return { protected: ProtectedSelectionNotice, dead: ProtectedSelectionNotice };
+    return { protected: ProtectedSelectionNotice, dead: ProtectedSelectionNotice, formatting: SelectionFormattingNotice };
 }
 
 /**

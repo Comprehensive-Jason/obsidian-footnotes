@@ -5,7 +5,7 @@ import { readNote } from "../../src/parsing/note-reading";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
-import { BlockSyntaxNotice } from "../../src/editor/notice";
+import { SelectionFormattingNotice } from "../../src/commands/selection-footnote";
 
 // spec question: when a selection starts at the left margin of a quote,
 // list, or heading line, takes its "> ", "- ", or "# " with it, and ends
@@ -53,6 +53,12 @@ import { BlockSyntaxNotice } from "../../src/editor/notice";
 // the line would stop being a quote, a list item, or a heading, and the
 // notice is the block-syntax one. The four tests were it.fails until then;
 // they now hold the note unchanged with that notice.
+//
+// The notice is the selection's own since Jason's pick, 2026-10-08
+// (decision 3 of the stage 3 report): "No footnote was created: the
+// selection takes part of the line's formatting. Select the whole line, or
+// only its text." The block-syntax notice told the user to move the caret,
+// which a selection has no use for. A whole "# Heading here" still converts.
 
 const Settings = {
     insertAtEndOfWord: true,
@@ -82,7 +88,7 @@ async function convert(lines: string[], from: number, to: number, fn = insertAut
 
 /** Whether line 0 is still read inside a quote, a list item, or a heading, or the press refused with a notice. */
 function keptOrRefused(before: string[], after: string[], kind: "quote" | "list" | "heading"): boolean {
-    if (after.join("\n") === before.join("\n")) return messages().includes(BlockSyntaxNotice);
+    if (after.join("\n") === before.join("\n")) return messages().includes(SelectionFormattingNotice);
     const blocks = readNote(after).lineBlocks[0] ?? "";
     return new RegExp(kind).test(blocks);
 }
@@ -117,6 +123,16 @@ describe("spec question: a selection from column 0 over a line's marker, ending 
         const before = ["> The sky is blue today."];
         const doc = await convert(before, 2, "> The sky".length);
         expect(doc.lines[0]).toBe("> [^1] is blue today.");
+    });
+
+    it("the whole heading line selected still converts", async () => {
+        const doc = await convert(["# Heading here"], 0, "# Heading here".length);
+        expect(doc.lines).toEqual(["[^1]", "", "[^1]: # Heading here"]);
+        expect(messages()).toEqual([]);
+    });
+
+    it("the notice says what the selection takes", () => {
+        expect(SelectionFormattingNotice).toBe("No footnote was created: the selection takes part of the line's formatting. Select the whole line, or only its text.");
     });
 
     it("control: a heading line read before the press is a heading", () => {
