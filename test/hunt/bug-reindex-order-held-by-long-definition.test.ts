@@ -83,10 +83,10 @@ describe("a press between footnotes 1 and 2, then the lint, with footnote 2 long
         "Marx develops this point at length in the third volume, where the falling rate of profit is treated not as a law that acts directly but as a tendency, checked by counteracting causes such as the cheapening of the elements of constant capital, the relative surplus population, and foreign trade. ";
     const longBody = sentence.repeat(4).trim();
 
-    // Now the definitions stay in the order 1, 3, 4, 2, with the alert
+    // Before c7fix-C the definitions stayed in the order 1, 3, 4, 2, with the alert
     // "This note has 3 footnote definitions the lint could not put in
     // order ...".
-    it.fails("the lint puts the four definitions in order, all defined, and says nothing", async () => {
+    it("the lint puts the four definitions in order, all defined, and says nothing", async () => {
         const lines = [
             "Profit rates fell[^1] in the period. The cause is contested[^2], and so is the measure[^3].",
             "",
@@ -124,13 +124,13 @@ describe("reindex next to a long footnote", () => {
         expect(sorted(reindexFootnotes(note))).toEqual(["1", "2", "3", "4"]);
     });
 
-    // Now the definitions stay in the order 2, 3, 4, 1 after the
-    // references are renumbered.
-    it.fails("reindex puts the definitions in order (a blank line after the long one makes room)", () => {
+    // Before c7fix-C the definitions stayed in the order 2, 3, 4, 1 after the
+    // references were renumbered.
+    it("reindex puts the definitions in order (a blank line after the long one makes room)", () => {
         expect(order(reindexFootnotes(note))).toEqual(["1", "2", "3", "4"]);
     });
 
-    it.fails("the default lint keeps every footnote defined and puts them in order", () => {
+    it("the default lint keeps every footnote defined and puts them in order", () => {
         const out = lintFootnotes(note);
         expect(sorted(out)).toEqual(["1", "2", "3", "4"]);
         expect(order(out)).toEqual(["1", "2", "3", "4"]);

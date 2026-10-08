@@ -1,8 +1,10 @@
 import { holdBack, rulePasses } from "../rule-gate";
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { nameForBody } from "../../parsing/footnote-grammar";
-import { NoteReading } from "../../parsing/note-reading";
+import { definitionLabelIn } from "../../parsing/label-shapes";
+import { Definition, NoteReading } from "../../parsing/note-reading";
 import { endsInLazyLine, movedDefinitions, rewriteDocument } from "../rewrite-document";
+import { labelOutrunsLookahead } from "./move-footnotes-to-the-bottom";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
 import { FootnoteRule } from "../rule";
 
@@ -327,6 +329,24 @@ function reindexOnce(
             .map((entry) => entry.block);
 
         const slotAtLine = new Map(blocks.map((block, i) => [block.start, i]));
+        // The line the swap puts where line `at` was: the first line of the
+        // block swapped into that slot, or the line itself, renamed.
+        const swappedLine = (at: number): string => {
+            const slot = slotAtLine.get(at);
+            return rewritten[slot === undefined ? at : sorted[slot].start];
+        };
+        // Whether `block` needs a blank line between it and the label line
+        // `under` written right below it: when it ends in a lazy line
+        // (endsInLazyLine), or when it is too long for that label to end it
+        // (labelOutrunsLookahead), the label would read as more of its text.
+        // These are move-to-bottom's two reasons for a blank line, so the
+        // two rules lay the definitions out alike. Without the second, a
+        // short definition swapped in under a footnote of about 170 words
+        // would stop being a definition, so the gate refused the swap and
+        // the definitions stayed out of order (hunt 2026-10-08, cycle 7,
+        // cluster Y8a, pin bug-reindex-order-held-by-long-definition).
+        const needsGap = (block: Definition, under: string): boolean =>
+            endsInLazyLine(reading, lines, block) || labelOutrunsLookahead(rewritten, block.start, block.end, definitionLabelIn(under)?.labelEnd ?? 0);
         const out: string[] = [];
         for (let i = 0; i < lines.length; i++) {
             const slot = slotAtLine.get(i);
@@ -337,26 +357,25 @@ function reindexOnce(
             const block = sorted[slot];
             for (let j = block.start; j <= block.end; j++) out.push(rewritten[j]);
             i = blocks[slot].end;
-            // A block that ends in a lazy line, swapped into a slot with a
-            // label right under it, gets a blank line after it, or that
+            // A block that needs a blank line under it (needsGap), swapped
+            // into a slot with a label right under it, gets one, or that
             // label would read as more of its text and stop being a
             // definition; the next lint then added the blank line, so a
             // lint was not idempotent (endsInLazyLine).
-            if (block !== blocks[slot] && endsInLazyLine(reading, lines, block) && reading.labelLines[i + 1]) out.push("");
-            // And the other way round: when the slot's old block ended in a
-            // lazy line, the blank line under it was there to keep the next
-            // label a definition. A block that does not end in a lazy line
-            // needs no such line, and move-to-bottom packs it label to
-            // label, so the blank line goes with the block that needed it.
-            // Left behind, the next lint's move took it out, and a lint was
-            // not idempotent (hunt 2026-10-06, cycle 3, pin
-            // bug-lint-lazy-tail-swapped-after-plain).
+            if (block !== blocks[slot] && reading.labelLines[i + 1] && needsGap(block, swappedLine(i + 1))) out.push("");
+            // And the other way round: when the slot's old block needed the
+            // blank line under it to keep the next label a definition, a
+            // block that does not need one gets none, as move-to-bottom
+            // packs it label to label, so the blank line goes with the
+            // block that needed it. Left behind, the next lint's move took
+            // it out, and a lint was not idempotent (hunt 2026-10-06, cycle
+            // 3, pin bug-lint-lazy-tail-swapped-after-plain).
             else if (
                 block !== blocks[slot] &&
-                endsInLazyLine(reading, lines, blocks[slot]) &&
-                !endsInLazyLine(reading, lines, block) &&
                 lines[i + 1] === "" &&
-                reading.labelLines[i + 2]
+                reading.labelLines[i + 2] &&
+                needsGap(blocks[slot], rewritten[i + 2]) &&
+                !needsGap(block, swappedLine(i + 2))
             ) {
                 i++;
             }
