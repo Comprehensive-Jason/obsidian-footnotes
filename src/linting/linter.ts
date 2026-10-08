@@ -10,7 +10,7 @@ import { jumpToFootnoteDefinition } from "../commands/navigation";
 import { docContext } from "../editor/doc-context";
 import { replaceMinimal } from "../editor/write-back";
 import { rewriteDocument } from "./rewrite-document";
-import { gatedLint } from "./rule-gate";
+import { GatedLint, gatedLint } from "./rule-gate";
 import { definitionLabel, quotedReference } from "../parsing/footnote-grammar";
 import { footnotePrefix, footnotePrefixProblem } from "../parsing/footnote-prefix";
 import { FootnotePlacement } from "../parsing/landing";
@@ -202,6 +202,16 @@ export function lintFootnotes(
     markdown: string,
     options: LintOptions = {},
 ): string {
+    return gatedLintFootnotes(markdown, options, false).text;
+}
+
+/**
+ * lintFootnotes, telling the result gate whether to judge every change at
+ * once (`checkedFirst`), and saying whether the lint needed that (see
+ * gatedLint in rule-gate.ts). lintNote uses it to remember a note that
+ * holds something back.
+ */
+function gatedLintFootnotes(markdown: string, options: LintOptions, checkedFirst: boolean): GatedLint {
     if (options.sectionHeading) {
         const sectionHeading = trimmedSectionHeading(options.sectionHeading);
         options = { ...options, sectionHeading: sectionHeadingProblem(sectionHeading) === null ? sectionHeading : "" };
@@ -384,12 +394,9 @@ export function lintFootnotes(
         }
         return result;
     };
-    // Notes can use any line endings. rewriteDocument converts them to plain
-    // LF once here, so every step below sees the same thing, and puts the
-    // note's original endings back once on the way out. The result gate
-    // judges the whole lint once, and only when it refuses that are the
-    // rules' changes judged one by one (gatedLint in rule-gate.ts).
-    return rewriteDocument(markdown, (text) => gatedLint(text, () => {
+    // The whole lint: one run of every rule, and more while the move would
+    // still change the note.
+    const lintSettled = (text: string): string => {
         let result = lintOnce(text);
         // Reindex can take away the reason the move left the definitions
         // where they were. Gathered in the order written, a label indented
@@ -410,14 +417,33 @@ export function lintFootnotes(
             result = lintOnce(moved);
         }
         return result;
-    }));
+    };
+    // Notes can use any line endings. rewriteDocument converts them to plain
+    // LF once here, so every step below sees the same thing, and puts the
+    // note's original endings back once on the way out. The result gate
+    // judges the whole lint once, and only when it refuses that are the
+    // rules' changes judged one by one (gatedLint in rule-gate.ts).
+    let checked = false;
+    const linted = rewriteDocument(markdown, (text) => {
+        const gated = gatedLint(text, () => lintSettled(text), checkedFirst);
+        checked = gated.checked;
+        return gated.text;
+    });
+    return { text: linted, checked };
 }
 
 /**
  * The lint's last result, and the options it ran with (written out as
- * text, so two sets of options compare by what they say). See lintNote.
+ * text, so two sets of options compare by what they say), with the note it
+ * linted (its file's path) and whether that lint needed every change
+ * judged. See lintNote.
  */
-let lastLint: { options: string; text: string } | null = null;
+let lastLint: { options: string; text: string; file: string | null; checked: boolean } | null = null;
+
+/** The path of the file open in the active editor, or null when there is none. */
+function activeFilePath(plugin: FootnotePlugin): string | null {
+    return plugin.app.workspace.getActiveViewOfType(MarkdownView)?.file?.path ?? null;
+}
 
 /**
  * The lint as the plugin runs it on a note: lintFootnotes with the user's
@@ -441,14 +467,24 @@ let lastLint: { options: string; text: string } | null = null;
  * ever fails to settle a note in one run (always a bug, such as the one
  * hunt 2026-10-05's pin bug-reindex-moves-refused-orphan caught), the
  * change a second run would make waits for the next edit to the note.
+ *
+ * A note whose lint holds something back needs two runs of the rules (see
+ * gatedLint in rule-gate.ts). When the last lint was of the same file and
+ * needed the second run, this lint goes straight to it, which about halves
+ * a lint that holds something back (Jason's pick, decision 1 of the stage
+ * 3 report, 2026-10-08). The result is the same unless the gate would pass
+ * the whole lint while refusing one of its steps; the lint then holds that
+ * step back, as the second run always does.
  */
 export function lintNote(plugin: FootnotePlugin, markdown: string, sectionHeading: string): string {
     const options = lintOptionsFromSettings(plugin, sectionHeading, markdown);
     const written = JSON.stringify(options);
+    const file = activeFilePath(plugin);
     if (lastLint !== null && lastLint.options === written && lastLint.text === markdown) return markdown;
-    const after = lintFootnotes(markdown, options);
-    lastLint = { options: written, text: after };
-    return after;
+    const checkedFirst = lastLint !== null && lastLint.checked && lastLint.file === file;
+    const after = gatedLintFootnotes(markdown, options, checkedFirst);
+    lastLint = { options: written, text: after.text, file, checked: after.checked };
+    return after.text;
 }
 
 /**

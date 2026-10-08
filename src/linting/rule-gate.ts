@@ -16,9 +16,17 @@ import { EditIntent, judgeEdit } from "../editor/result-gate";
 // with every change passed, gathers what each meant, and asks the gate
 // once about the whole lint (gatedLint). Only when the gate refuses that
 // does it run again, every change judged as it is made.
+//
+// A note that holds something back pays for both runs on every lint. So
+// the caller can say that the note's last lint needed the second run, and
+// this lint then goes straight to it (Jason's pick, decision 1 of the
+// stage 3 report, 2026-10-08).
 
 /** What the rules' changes have meant so far, while the lint gathers them, or null while every change is judged as it is made. */
 let gathering: GatheredIntent | null = null;
+
+/** How many changes the gate has refused while every change is judged. */
+let refusals = 0;
 
 /**
  * Whether a rule may make the change that turns `before` into `after`,
@@ -31,7 +39,16 @@ export function rulePasses(before: readonly string[], after: readonly string[], 
         gathering.add(intent);
         return true;
     }
-    return judgeEdit(before, after, intent).pass;
+    const pass = judgeEdit(before, after, intent).pass;
+    if (!pass) refusals++;
+    return pass;
+}
+
+/** A gated lint's result, and whether it needed every change judged. */
+export interface GatedLint {
+    text: string;
+    /** whether the lint needed the second run, with every change judged */
+    checked: boolean;
 }
 
 /**
@@ -41,8 +58,18 @@ export function rulePasses(before: readonly string[], after: readonly string[], 
  * that is the lint's result. When it refuses, the lint runs again with
  * every change judged as it is made (rulePasses), so each rule holds back
  * what the gate refuses and makes the rest.
+ *
+ * With `checkedFirst`, the lint skips the first run and judges every
+ * change at once. It still counts as needing that run only when the gate
+ * refused a change, so a note that stops holding anything back goes back
+ * to the one gathered run on its next lint.
  */
-export function gatedLint(text: string, lint: () => string): string {
+export function gatedLint(text: string, lint: () => string, checkedFirst = false): GatedLint {
+    if (checkedFirst) {
+        const before = refusals;
+        const result = lint();
+        return { text: result, checked: refusals > before };
+    }
     const gathered = new GatheredIntent();
     gathering = gathered;
     let result: string;
@@ -51,8 +78,8 @@ export function gatedLint(text: string, lint: () => string): string {
     } finally {
         gathering = null;
     }
-    if (result === text || judgeEdit(text.split("\n"), result.split("\n"), gathered.intent()).pass) return result;
-    return lint();
+    if (result === text || judgeEdit(text.split("\n"), result.split("\n"), gathered.intent()).pass) return { text: result, checked: false };
+    return { text: lint(), checked: true };
 }
 
 const fold = (name: string): string => name.toLowerCase();

@@ -13,7 +13,8 @@ import type { FootnotePluginSettings } from "../../src/settings";
  * Pass `editor` when the spec drives a COMMAND entry point
  * (insertAutonumFootnote and friends resolve their editor through
  * app.workspace.getActiveViewOfType); leave it off for specs that hand
- * the editor to the function under test directly. Specs needing a
+ * the editor to the function under test directly; its workspace then has
+ * no open view. Specs needing a
  * richer view (Reading-view getMode, files, etc.) keep their own local
  * double.
  */
@@ -28,6 +29,6 @@ export function fakePlugin(
                   workspace: { getActiveViewOfType: () => ({ editor }) },
                   vault: {},
               }
-            : { vault: {} },
+            : { workspace: { getActiveViewOfType: () => null }, vault: {} },
     } as unknown as FootnotePlugin;
 }
