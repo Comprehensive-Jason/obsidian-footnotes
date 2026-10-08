@@ -25,6 +25,13 @@ import { handleCut, resetCarryRegister } from "../../src/commands/carry-footnote
 // selection's start in the note as it read BEFORE the cut. Removing a
 // definition block above the selection moves every line below it up, so
 // that old line number now points further down the note.
+//
+// The two variants below changed with Jason's ruling Q5, option (a)
+// (2026-10-07; stage 4 of the result gate design, 2026-10-08): the cut's
+// extra deletions never take the line the editor's own cut leaves the
+// caret on, so the cut's emptied line stays, with the caret on it. Before,
+// the note was left as its first line alone and the caret was moved into
+// it.
 
 /** A stand-in for the browser's clipboard event: it records what the hook writes and whether the hook took the event over. */
 function clipboardEvent() {
@@ -85,8 +92,8 @@ describe("cut: the caret afterwards", () => {
             doc,
         );
         handleCut(plugin, clipboardEvent() as never);
-        expect(doc.lines).toEqual(["intro"]);
-        expect(doc.cursor.line).toBeLessThan(doc.lines.length);
+        expect(doc.lines).toEqual(["intro", "", ""]);
+        expect(doc.cursor).toEqual({ line: 2, ch: 0 });
     });
 
     // A variant from round 3 (lens carry-model): the same thing at default
@@ -99,8 +106,7 @@ describe("cut: the caret afterwards", () => {
         const lines = ["Intro.", "", "Only[^1] here.", "", "[^1]: one"];
         const doc = editor(lines, { line: 2, ch: 0 }, { line: 2, ch: 14 });
         handleCut(fakePlugin({ carryFootnotesOnCopy: true }, doc), clipboardEvent() as never);
-        expect(doc.lines).toEqual(["Intro."]);
-        // Today: { line: 2, ch: 0 }.
-        expect(doc.cursor.line).toBeLessThan(doc.lines.length);
+        expect(doc.lines).toEqual(["Intro.", "", ""]);
+        expect(doc.cursor).toEqual({ line: 2, ch: 0 });
     });
 });

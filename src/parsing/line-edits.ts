@@ -78,6 +78,27 @@ export function removeLineRanges(
     lines: string[],
     ranges: readonly { start: number; end: number }[],
 ): string[] {
+    return removeLineRangesKeeping(lines, ranges, -1).lines;
+}
+
+/**
+ * removeLineRanges, never removing line `keep` of `lines`: the line a cut
+ * leaves the caret on (planCut in carry-footnotes.ts). That line is never
+ * merged into the blank lines around it or trimmed off the end of the note,
+ * and when a range starts on it, the range's lines go and it stays, empty.
+ * Returns the lines and where line `keep` is among them (-1 for no line to
+ * keep). A cut's extra deletions took the line the editor's own cut leaves
+ * the caret on, so the caret went somewhere else, and a paste there joined
+ * the text onto a definition or onto the next paragraph (Jason's ruling
+ * Q5, option (a), 2026-10-07; pin spec-cut-last-definition-caret-paste-back).
+ */
+export function removeLineRangesKeeping(
+    lines: string[],
+    ranges: readonly { start: number; end: number }[],
+    keep: number,
+): { lines: string[]; keep: number } {
+    // where line `keep` went in `out`
+    let keptAt = -1;
     const rangeAtLine = new Map(ranges.map((range) => [range.start, range]));
     const out: string[] = [];
     let mergeBlanks = false;
@@ -91,9 +112,22 @@ export function removeLineRanges(
     for (let i = 0; i < lines.length; i++) {
         const range = rangeAtLine.get(i);
         if (range) {
+            // the line kept empty is the caret's own, so the blank line
+            // after it is not merged into it
+            const keeps = range.start <= keep && keep <= range.end;
+            if (keeps) {
+                keptAt = out.length;
+                out.push("");
+            }
             i = range.end;
-            mergeBlanks = true;
+            mergeBlanks = !keeps;
             cutAfter = out.length;
+            continue;
+        }
+        if (i === keep) {
+            keptAt = out.length;
+            out.push(lines[i]);
+            mergeBlanks = false;
             continue;
         }
         if (
@@ -110,7 +144,7 @@ export function removeLineRanges(
         }
         // a blank quote line the cut left at the end of its quote, with
         // the quote ending in a blank line or the end of the note, goes
-        if (mergeBlanks && lines[i] === "" && endsInQuoteBlankLine(out)) {
+        if (mergeBlanks && lines[i] === "" && endsInQuoteBlankLine(out) && out.length - 1 !== keptAt) {
             out.pop();
         }
         // A cut must not drop a paragraph straight onto a "---" or "==="
@@ -157,7 +191,7 @@ export function removeLineRanges(
     // second took the ">" (hunt 2026-10-06, cycle 5, pin
     // bug-quote-trailing-blank-after-definitions).
     if (cutReachesEnd) {
-        while (out.length > 0) {
+        while (out.length > 0 && out.length - 1 !== keptAt) {
             if (out[out.length - 1] === "") {
                 out.pop();
             } else if (out.length === cutAfter && endsInQuoteBlankLine(out)) {
@@ -168,7 +202,7 @@ export function removeLineRanges(
             }
         }
     }
-    return out;
+    return { lines: out, keep: keptAt };
 }
 
 /** Whether `line` is a blank line of a quote: quote markers (">") and spaces, nothing else. */

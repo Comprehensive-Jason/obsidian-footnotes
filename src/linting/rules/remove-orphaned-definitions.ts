@@ -1,5 +1,5 @@
 import { rulePasses } from "../rule-gate";
-import { definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../../parsing/line-edits";
+import { definitionCuts, normalizeEol, removeLineRangesKeeping, restoreEol } from "../../parsing/line-edits";
 import { Definition, NoteReading, readNote } from "../../parsing/note-reading";
 import { FootnoteRule } from "../rule";
 
@@ -210,13 +210,14 @@ export function orphanedDefinitionBlocks(lines: string[]): Definition[] {
 type CutAccepted = (dead: readonly Definition[], out: string[]) => boolean;
 
 /**
- * `lines` with `dead` cut out (definitionCuts, removeLineRanges), or null
- * when `accepts` refuses the cut.
+ * `lines` with `dead` cut out (definitionCuts, removeLineRangesKeeping),
+ * never line `keep`, and where that line is now; or null when `accepts`
+ * refuses the cut.
  */
-function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[], accepts: CutAccepted): string[] | null {
+function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[], accepts: CutAccepted, keep: number): { lines: string[]; keep: number } | null {
     const cut = definitionCuts(lines, dead);
-    const out = removeLineRanges(cut.lines, cut.ranges);
-    return accepts(dead, out) ? out : null;
+    const out = removeLineRangesKeeping(cut.lines, cut.ranges, keep);
+    return accepts(dead, out.lines) ? out : null;
 }
 
 /**
@@ -240,32 +241,37 @@ function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[], acc
  * alive the footnotes its text cites (stillUnused), so a definition cited
  * only by one that stays is never cut from under it: that would leave the
  * one that stays citing a footnote with no definition.
+ *
+ * Line `keep` of `lines` is never removed (removeLineRangesKeeping): the
+ * cut keeps the line its caret stands on, and `keptLine` says where that
+ * line is in `kept` (-1 without one).
  */
 export function definitionsToCut(
     lines: string[],
     candidates: readonly Definition[],
     accepts: CutAccepted = (dead, out) => rulePasses(lines, out, { removed: dead.map((block) => block.name) }),
-): { removed: Definition[]; kept: string[] } {
+    keep = -1,
+): { removed: Definition[]; kept: string[]; keptLine: number } {
     const reading = readNote(lines);
     const all = stillUnused(reading, candidates);
-    const whole = cutDefinitionsIfClean(lines, all, accepts);
-    if (whole !== null) return { removed: all, kept: whole };
+    const whole = cutDefinitionsIfClean(lines, all, accepts, keep);
+    if (whole !== null) return { removed: all, kept: whole.lines, keptLine: whole.keep };
     let removed: Definition[] = [];
-    let kept = lines;
+    let kept = { lines, keep };
     for (let grew = true; grew; ) {
         grew = false;
         for (const block of candidates) {
             if (removed.includes(block)) continue;
             const trial = stillUnused(reading, [...removed, block]);
             if (trial.length === removed.length) continue;
-            const out = cutDefinitionsIfClean(lines, trial, accepts);
+            const out = cutDefinitionsIfClean(lines, trial, accepts, keep);
             if (out === null) continue;
             removed = trial;
             kept = out;
             grew = true;
         }
     }
-    return { removed, kept };
+    return { removed, kept: kept.lines, keptLine: kept.keep };
 }
 
 /**

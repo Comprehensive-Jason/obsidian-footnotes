@@ -1,6 +1,5 @@
 import { EditorPosition } from "obsidian";
 
-import { positionAfterRewrite } from "../editor/document-diff";
 import { EditIntent, judgeEdit } from "../editor/result-gate";
 import { definitionsToCut, orphanedDefinitionBlocks } from "../linting/rules/remove-orphaned-definitions";
 import { normalizeEol } from "../parsing/line-edits";
@@ -781,7 +780,7 @@ export function uncarriedNames(lines: readonly string[], at: EditorPosition, bod
 export interface CutPlan extends CarriedDefinitions {
     /** the note as it reads after the cut, its lines joined with "\n" */
     text: string;
-    /** where the caret goes in `text`: the place the selection was */
+    /** where the caret goes in `text`: where the editor's own cut would put it, on the line the selection started on */
     caret: EditorPosition;
     /** how many of the carried blocks the cut took out of the note, the number the toast gives */
     removed: number;
@@ -821,9 +820,11 @@ export interface CutPlan extends CarriedDefinitions {
  * never eat text).
  *
  * `tidy` is what the plugin does to the note after the cut (removing a
- * section heading the cut left empty); the caret is worked out in the
- * note as it reads after that too, so it can never point past the end of
- * the note (pin bug-carry-cut-caret-stale-line).
+ * section heading the cut left empty). Neither the definitions the cut
+ * takes nor the tidy remove the line the editor's own cut leaves the caret
+ * on, and the caret is where that cut puts it, on that line wherever it
+ * now sits (Jason's ruling Q5, option (a), 2026-10-07), so it can never
+ * point past the end of the note either (pin bug-carry-cut-caret-stale-line).
  *
  * The whole cut, as it leaves the note, is judged by the result gate too:
  * a cut it refuses (the text left joining a definition, Jason's ruling B9)
@@ -880,10 +881,28 @@ export function planCut(
     // what the cut means: the selection taken out, and the definitions it
     // takes with it
     const intent = (taken: readonly Definition[]): EditIntent => ({ removedText: [{ from, to }], removed: taken.map((block) => block.name) });
-    const { removed, kept } = definitionsToCut(joined, candidates, (dead, out) => judgeEdit(lines, out, intent(dead)).pass);
-    const text = tidy(kept.join("\n"));
+    // The cut's extra deletions never take the line the editor's own cut
+    // leaves the caret on, and the caret stays where that cut puts it
+    // (Jason's ruling Q5, option (a), 2026-10-07): taken, the caret went to
+    // the nearest place left, the end of a definition or the start of the
+    // next paragraph, and a paste there joined the text onto it.
+    const { removed, kept, keptLine } = definitionsToCut(joined, candidates, (dead, out) => judgeEdit(lines, out, intent(dead)).pass, from.line);
+    const text = keepingLine(kept, tidy(kept.join("\n")).split("\n"), keptLine).join("\n");
     const refused = !judgeEdit(lines, text.split("\n"), intent(removed)).pass;
-    return { carried, missing, text, caret: positionAfterRewrite(joinedText, text, from), removed: removed.length, refused };
+    return { carried, missing, text, caret: { line: keptLine, ch: from.ch }, removed: removed.length, refused };
+}
+
+/**
+ * The note `tidied`, the empty section heading taken off the end of `kept`
+ * (removeEmptySectionHeading), with the lines of `kept` up to line `keep`
+ * put back when the tidy took them: the cut never takes the line its caret
+ * stands on (planCut). A caret on a blank line above the heading keeps
+ * that line, and the heading still goes; a caret on the heading's own line,
+ * or a blank line after it, keeps the heading too.
+ */
+function keepingLine(kept: readonly string[], tidied: readonly string[], keep: number): string[] {
+    if (tidied.length > keep) return [...tidied];
+    return [...tidied, ...kept.slice(tidied.length, keep + 1)];
 }
 
 /**

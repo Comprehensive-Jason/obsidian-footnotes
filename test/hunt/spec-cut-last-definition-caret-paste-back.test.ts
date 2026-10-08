@@ -145,3 +145,47 @@ describe("spec question: the caret after a cut that takes the note's last defini
         expect(back.lines[i - 1].trim()).toBe("");
     });
 });
+
+// Answered for the caret too (Jason's ruling Q5, option (a), 2026-10-07;
+// stage 4 of the result gate design, 2026-10-08): the cut's extra
+// deletions, a definition it takes along and the empty section heading it
+// tidies away, never remove the line the editor's own cut would leave the
+// caret on, and the caret lands where the editor's plain cut would put it.
+// Before, the caret went to the nearest place left in the note: the start
+// of "tail" in the first case, the end of "[^2]: other" in the second.
+describe("the caret after a cut that takes definitions along is where the editor's own cut would leave it", () => {
+    it("a definition above the selection goes, and the line the selection emptied stays, with the caret on it", () => {
+        const after = cut(["Intro", "", "[^a]: def", "", "Para[^a].", "", "tail"], { line: 4, ch: 0 }, { line: 4, ch: 9 });
+        expect(after.taken).toBe(true);
+        expect(after.lines).toEqual(["Intro", "", "", "", "tail"]);
+        expect(after.caret).toEqual({ line: 2, ch: 0 });
+    });
+
+    it("the note's last definition goes, and the empty last line the caret is on stays", () => {
+        const after = cut(["Intro[^2].", "", "[^2]: other", "", "alpha[^1]. alpha", "", "[^1]: alpha"], { line: 3, ch: 0 }, { line: 5, ch: 0 });
+        expect(after.lines).toEqual(["Intro[^2].", "", "[^2]: other", ""]);
+        expect(after.caret).toEqual({ line: 3, ch: 0 });
+    });
+
+    it("a definition on the line the caret would stand on goes, and the line stays, empty", () => {
+        const after = cut(["Text[^1]", "", "[^1]: x", "", "more"], { line: 0, ch: 0 }, { line: 2, ch: 0 });
+        expect(after.taken).toBe(true);
+        expect(after.lines).toEqual(["", "", "more"]);
+        expect(after.caret).toEqual({ line: 0, ch: 0 });
+    });
+
+    it("the empty section heading goes, and the line the caret is on stays", () => {
+        const doc = fakeEditor(["Keep.", "", "Text[^1]", "", "# Footnotes", "", "[^1]: x"], { wholeDoc: true, edits: true, cursor: { line: 2, ch: 0 }, selection: { anchor: { line: 2, ch: 0 }, head: { line: 2, ch: 8 } } });
+        const event = clipboardEvent();
+        handleCut(fakePlugin({ ...settings, enableFootnoteSectionHeading: true, removeEmptySectionHeading: true }, doc), event as never);
+        expect(event.defaultPrevented).toBe(true);
+        expect(doc.lines).toEqual(["Keep.", "", ""]);
+        expect(doc.cursor).toEqual({ line: 2, ch: 0 });
+    });
+
+    it("control: a caret on a line of text is where the selection started", () => {
+        const after = cut(["Intro", "", "One Para[^a]. two", "", "[^a]: def"], { line: 2, ch: 4 }, { line: 2, ch: 13 });
+        expect(after.lines).toEqual(["Intro", "", "One  two"]);
+        expect(after.caret).toEqual({ line: 2, ch: 4 });
+    });
+});
