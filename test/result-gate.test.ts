@@ -101,7 +101,10 @@ describe("check 2: no footnote inside a footnote that was not there before (ADR 
     it("passes an edit elsewhere in a note that already holds a footnote inside a footnote", () => {
         const before = ["Text[^1]", "", "[^1]: one[^2]", "[^2]: two", "", "tail"];
         const after = ["Text[^1]", "", "[^1]: one[^2]", "[^2]: two", "", "tail!"];
-        expect(reasonOf(before, after)).toBe("pass");
+        // the "!" is the user's own text, as a paste writes it: check 5
+        // refuses a change to the words the action does not declare
+        const typed: NoteRange = { from: { line: 5, ch: 4 }, to: { line: 5, ch: 5 } };
+        expect(reasonOf(before, after, { insertedText: [typed] })).toBe("pass");
     });
 });
 
@@ -182,6 +185,24 @@ describe("check 5: block shape", () => {
         const after = ["- af", "- ghi"];
         const cut: NoteRange = { from: { line: 0, ch: 3 }, to: { line: 1, ch: 4 } };
         expect(reasonOf(before, after, { removedText: [cut] })).toBe("pass");
+    });
+    it("refuses a change to the words of a line outside any footnote that the action does not declare (hunt 2026-10-08, cycle 6)", () => {
+        expect(reasonOf(["a", "b", "c"], ["a", "zzz", "c"])).toBe("other");
+        expect(reasonOf(["a", "b", "c"], ["a", "zzz", "c"], { footnotesMoved: true })).toBe("other");
+        expect(reasonOf(["Text[^1] b", "", "[^1]: one"], ["Text[^1] zzz", "", "[^1]: one"], { renamed: new Map([["1", "2"]]) })).toBe("other");
+        expect(reasonOf(["Text[^1] b", "", "[^1]: one"], ["Text zzz", "", "[^1]: one"], { removed: ["1"] })).toBe("other");
+    });
+
+    it("passes the same words with their footnotes changed: moved past punctuation, renamed, taken out, or turned inline", () => {
+        expect(reasonOf(["It ends[^1].", "", "[^1]: one"], ["It ends.[^1]", "", "[^1]: one"], { footnotesMoved: true })).toBe("pass");
+        expect(reasonOf(["odd \\^[^x]. end", "", "[^x]: one"], ["odd \\^.[^x] end", "", "[^x]: one"], { footnotesMoved: true })).toBe("pass");
+        expect(reasonOf(["Text[^1] b", "", "[^1]: one"], ["Text[^2] b", "", "[^2]: one"], { renamed: new Map([["1", "2"]]) })).toBe("pass");
+        expect(reasonOf(["Text[^1] b", "", "[^1]: one"], ["Text b", ""], { removed: ["1"] })).toBe("pass");
+        expect(reasonOf(["x[^1]", "", "[^1]: use `a]b` here"], ["x^[use `a]b` here]"], { inlined: ["1"], inlineCreated: 1 })).toBe("pass");
+    });
+
+    it("passes a selection that leaves its reference where the words were", () => {
+        expect(reasonOf(["Oysters filter water all day."], ["Oysters filter[^1] all day.", "", "[^1]: water"], press("1", 0, 14, 2))).toBe("pass");
     });
 });
 

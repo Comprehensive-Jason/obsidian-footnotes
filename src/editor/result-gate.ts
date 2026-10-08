@@ -1033,6 +1033,30 @@ function onlyFootnotes(line: string): boolean {
 }
 
 /**
+ * The words on line `i` of `side`: the line without the live references
+ * and the inline footnotes the reading finds on it, each run of spaces
+ * counted as one, none at either end. The reading's own places are used,
+ * not a pattern, since a pattern took "\^[^x]" (an escaped caret before a
+ * reference) for an inline footnote, and stopped an inline footnote at a
+ * "]" inside its code span.
+ */
+function wordsOn(side: Side, i: number): string {
+    const line = side.lines[i] ?? "";
+    const spans: { start: number; end: number }[] = [...side.reading.referencesOn(i)];
+    for (const note of side.reading.inlineNotes) {
+        if (note.line <= i && i <= note.closeLine) spans.push({ start: note.line === i ? note.open : 0, end: note.closeLine === i ? note.close + 1 : line.length });
+    }
+    spans.sort((a, b) => a.start - b.start);
+    let out = "";
+    let at = 0;
+    for (const span of spans) {
+        if (span.start > at) out += line.slice(at, span.start);
+        at = Math.max(at, span.end);
+    }
+    return (out + line.slice(at)).replace(/\s+/g, " ").trim();
+}
+
+/**
  * Check 5. The lines that belong to no definition (the body) are lined up,
  * before and after, by their text without footnotes (lineKey, the lint's
  * own line-up), so a line whose footnotes alone changed is lined up with
@@ -1054,6 +1078,13 @@ function onlyFootnotes(line: string): boolean {
  * keeps its blocks; otherwise its first line does. Where the stretch holds
  * text the action takes out or writes in (a cut, a paste), only the first
  * line's containers are compared, since the rest is the user's own text.
+ *
+ * Each line of such a stretch paired with one before also keeps its text,
+ * footnotes aside, unless it holds a footnote the action created: a
+ * selection the action turns into a footnote leaves its reference where
+ * the text was. Any other change to the words outside the edit is not
+ * what the action meant (the orchestrator's call, hunt 2026-10-08, cycle
+ * 6: the gate passed "b" written over with "zzz" outside any footnote).
  */
 function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly CreatedFootnote[], defined: ReadonlySet<string>, definedAfter: ReadonlySet<string>): GateVerdict | null {
     // the definitions that run over any line the checks look at
@@ -1124,6 +1155,16 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
     const sameCells = (i: number, j: number) =>
         !oldSide.reading.tableRowLines[i] || !newSide.reading.tableRowLines[j] || oldSide.lines[i] === newSide.lines[j] || cells(oldSide, i) === cells(newSide, j);
     const formatting = (j: number) => refuse("formatting", 5, `line ${String(j)}: ${(newSide.lines[j] ?? "").slice(0, 60)}`);
+    // the lines of the note after that hold a footnote the action created,
+    // each line an inline footnote runs over included
+    const createdLines = new Set<number>();
+    for (const footnote of created) {
+        if (footnote.kind === "footnote") for (const at of footnote.references) createdLines.add(at.line);
+        else for (const at of footnote.at) for (let line = at.line; line <= at.line + footnote.text.split("\n").length - 1; line++) createdLines.add(line);
+    }
+    // a line paired with one before whose words changed, footnotes aside,
+    // with no footnote the action created on it
+    const reworded = (i: number, j: number) => !createdLines.has(j) && wordsOn(oldSide, i) !== wordsOn(newSide, j);
     // Nor may an edited line become a lazy label, a line shaped like a
     // definition that Obsidian reads as more of the paragraph above:
     // "[^8][^9]: x" under a line of prose with "[^9]" cut out leaves
@@ -1188,6 +1229,7 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
             if (!usersText && becameLazy(was, is)) return formatting(is.find((line) => lazyLines(newSide).has(line)) ?? is[0]);
             const pairs = usersText || was.length !== is.length ? Math.min(1, was.length, is.length) : was.length;
             for (let k = 0; k < pairs; k++) {
+                if (!usersText && reworded(was[k], is[k])) return refuse("other", 5, `line ${String(is[k])}: ${(newSide.lines[is[k]] ?? "").slice(0, 60)}`);
                 if (blankLine(oldSide, was[k]) || blankLine(newSide, is[k]) || lenient[is[k]] || (onlyFootnotes(newSide.lines[is[k]] ?? "") && wholeBlocks(was))) continue;
                 const wasBlocks = oldSide.reading.lineBlocks[was[k]] ?? "";
                 const isBlocks = newSide.reading.lineBlocks[is[k]] ?? "";
