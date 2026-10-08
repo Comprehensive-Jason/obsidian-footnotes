@@ -141,12 +141,24 @@ export const ClosingMarkChars = "\"'’”)]}」』）】〕》〉*_~=｣］｝�
  * opening bracket (the start of a following reference) ends the walk.
  * `images` are the columns where the line draws an image or an embed, as
  * punctuationAt takes them.
+ *
+ * A walk that would end right after the "]" of bracketed text that is no
+ * link stops in front of that "]" instead, inside the brackets: "[see p.
+ * 5][^1]" is a reference link to Obsidian, labelled "^1", so the footnote
+ * would not be live, while "[see p. 5[^1]]" is, as "none" already lands it
+ * (Jason's ruling Q2, option (a), 2026-10-07; pin
+ * spec-placement-last-word-in-brackets). Before, the press refused with
+ * the link notice. "[see p. 5]." under "after" still lands after the
+ * period, where the reference is live.
  */
 export function referenceLandingAfter(text: string, end: number, placement: FootnotePlacement = "after", images?: ReadonlySet<number>): number {
     if (placement === "none") return end;
+    // the last "]" the walk stepped over as a closing mark, or -1
+    let bracketClose = -1;
+    const landed = (at: number) => (at === bracketClose + 1 && bracketClose !== -1 && closesBracketedText(text, bracketClose) ? bracketClose : at);
     let at = end;
     for (;;) {
-        if (at >= text.length) return at;
+        if (at >= text.length) return landed(at);
         const c = text[at];
         if (c === "]" && text[at + 1] === "(") {
             // a link's "(url)" tail, with any round brackets INSIDE the
@@ -169,7 +181,7 @@ export function referenceLandingAfter(text: string, end: number, placement: Foot
                 continue;
             }
         }
-        if (!ClosingMarkChars.includes(c) && !punctuationAt(text, at, images)) return at;
+        if (!ClosingMarkChars.includes(c) && !punctuationAt(text, at, images)) return landed(at);
         if (placement === "before" && punctuationAt(text, at, images)) {
             // "before": the run of punctuation from here is stepped over
             // only when a closing mark follows it (the period inside
@@ -190,15 +202,28 @@ export function referenceLandingAfter(text: string, end: number, placement: Foot
                 !ClosingMarkChars.includes(text[runEnd]) ||
                 markRunEnd(text, runEnd) === -1
             ) {
-                return at;
+                return landed(at);
             }
             at = runEnd;
             continue;
         }
         const next = markRunEnd(text, at);
-        if (next === -1) return at;
+        if (next === -1) return landed(at);
+        if (c === "]") bracketClose = at;
         at = next;
     }
+}
+
+/** Whether the "]" at `close` closes a "[" before it on the line, counting nested square brackets and skipping escaped ones. */
+function closesBracketedText(text: string, close: number): boolean {
+    if (escapedAt(text, close)) return false;
+    let depth = 0;
+    for (let i = close; i >= 0; i--) {
+        if (escapedAt(text, i)) continue;
+        if (text[i] === "]") depth++;
+        else if (text[i] === "[" && --depth === 0) return true;
+    }
+    return false;
 }
 
 /**

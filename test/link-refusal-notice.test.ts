@@ -28,6 +28,14 @@ import { readNote } from "../src/parsing/note-reading";
 // borrowed the protected-text notice ("footnotes can't go inside code,
 // math, or other protected text"), which names the wrong cause; that
 // notice stays for code, math, comments, and other protected text.
+//
+// A bare "[sic]", with no "[sic]: ..." line, is no link, and since Jason's
+// ruling Q2, option (a) (2026-10-07; stage 4 of the result gate design,
+// 2026-10-08), a press on its last word lands inside the brackets, "[sic[^1]]",
+// where the footnote is live, for every key, so the link notice is left to
+// a real link such as the shortcut reference link "[text]". Before, the
+// bare "[sic]" refused with the link notice like the link, and the inline
+// key wrote "[sic]^[]".
 
 const Settings: Partial<FootnotePlugin["settings"]> = {
     insertAtEndOfWord: true,
@@ -60,10 +68,34 @@ beforeEach(() => {
 });
 
 // Each note, with the caret's column inside the bracketed word.
-const Shapes = [
-    { shape: "a bare [sic]", lines: ["see [sic] now"], ch: 6 },
-    { shape: "a shortcut reference link [text]", lines: ["see [text] now", "", "[text]: http://u"], ch: 6 },
-];
+const Shapes = [{ shape: "a shortcut reference link [text]", lines: ["see [text] now", "", "[text]: http://u"], ch: 6 }];
+
+describe("a press on the last word of a bare [sic] lands inside the brackets", () => {
+    const lines = ["see [sic] now"];
+    it("the numbered key", async () => {
+        const doc = await pressOnce(insertAutonumFootnote, lines, 6);
+        expect(doc.lines).toEqual(["see [sic[^1]] now", "", "[^1]: "]);
+        expect(messages()).toEqual([]);
+    });
+
+    it("the named key writes its empty reference there", async () => {
+        const doc = await pressOnce(insertNamedFootnote, lines, 6);
+        expect(doc.lines[0]).toBe("see [sic[^]] now");
+        expect(messages()).toEqual([]);
+    });
+
+    it("the numbered key at two carets", async () => {
+        const doc = await pressAtCarets(insertAutonumFootnote, ["see [sic] now and plain"], [6, "see [sic] now and plain".length]);
+        expect(doc.lines[0]).toBe("see [sic[^1]] now and plain[^1]");
+        expect(messages()).toEqual([]);
+    });
+
+    it("the inline key", async () => {
+        const doc = await pressOnce(insertInlineFootnote, lines, 6);
+        expect(doc.lines[0]).toBe("see [sic^[]] now");
+        expect(messages()).toEqual([]);
+    });
+});
 
 describe.each(Shapes)("a press on the last word of $shape", ({ lines, ch }) => {
     it("the numbered key refuses with the link notice", async () => {

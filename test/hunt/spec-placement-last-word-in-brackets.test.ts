@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
+import { lintFootnotes } from "../../src/linting/linter";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
@@ -59,23 +60,48 @@ async function press(line: string, ch: number, placement: "after" | "before" | "
     return doc;
 }
 
+// Answered (Jason's ruling Q2, option (a), 2026-10-07; stage 4 of the
+// result gate design, 2026-10-08): the landing walk stops in front of the
+// "]" of bracketed text that is no link when it would end glued to it, so
+// the press lands inside the brackets. The three tests were it.fails until
+// then.
 describe("spec question: a press on the last word of bracketed text that is no link", () => {
-    it.fails("After: '[see p. 5]' with no punctuation after it lands inside the brackets", async () => {
+    it("After: '[see p. 5]' with no punctuation after it lands inside the brackets", async () => {
         const doc = await press("as noted [see p. 5] here", "as noted [see p. ".length + 1, "after");
         expect(messages()).toEqual([]);
         expect(doc.lines[0]).toBe("as noted [see p. 5[^1]] here");
     });
 
-    it.fails("Before: the caret on the 5 of '[see p. 5].' is not refused", async () => {
+    it("Before: the caret on the 5 of '[see p. 5].' is not refused", async () => {
         const doc = await press("[see p. 5].", "[see p. 5".length, "before");
         expect(messages()).toEqual([]);
         expect(doc.lines[0]).not.toBe("[see p. 5].");
+        expect(doc.lines[0]).toBe("[see p. 5[^1]].");
     });
 
-    it.fails("After: 'see [some text] here.' with the caret in 'text' is not refused", async () => {
+    it("After: 'see [some text] here.' with the caret in 'text' is not refused", async () => {
         const doc = await press("see [some text] here.", "see [some te".length, "after");
         expect(messages()).toEqual([]);
         expect(doc.lines[0]).not.toBe("see [some text] here.");
+    });
+
+    it("After: '[see p. 5].' lands after the period, where the reference is live", async () => {
+        const doc = await press("[see p. 5].", "[see p. 5".length, "after");
+        expect(doc.lines[0]).toBe("[see p. 5].[^1]");
+    });
+
+    it("After: a period inside the brackets stays in front of the reference", async () => {
+        const doc = await press("as noted [see p. 5.] here", "as noted [see p. 5".length, "after");
+        expect(doc.lines[0]).toBe("as noted [see p. 5.[^1]] here");
+    });
+
+    it("the lint leaves a reference inside the brackets where it is", () => {
+        expect(lintFootnotes("as noted [see p. 5[^1]] here\n\n[^1]: one", { placement: "after" })).toBe("as noted [see p. 5[^1]] here\n\n[^1]: one");
+    });
+
+    it("control: a link's text still steps out past the whole link", async () => {
+        const doc = await press("see [some text](https://x.org) here.", "see [some te".length, "after");
+        expect(doc.lines[0]).toBe("see [some text](https://x.org)[^1] here.");
     });
 
     it("control: Don't move lands inside the brackets", async () => {
