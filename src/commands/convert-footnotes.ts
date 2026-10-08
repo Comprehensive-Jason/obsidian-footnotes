@@ -1,14 +1,12 @@
 import { normalizeEol, removeLineRanges, restoreEol } from "../parsing/line-edits";
 import { Definition, readNote } from "../parsing/note-reading";
-import { linesReadDifferently } from "../linting/rules/remove-orphaned-definitions";
-import { readsDifferently } from "../linting/rules/remove-orphaned-references";
 import { sanitizeInlineFootnoteContent } from "./inline-footnotes";
 import { Editor, EditorChange, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
 import { showNotice } from "../editor/notice";
-import { CreatedFootnote, shadowGate } from "../editor/result-gate";
+import { CreatedFootnote, judgeEdit } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { replaceMinimal, writeChanges } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
@@ -33,6 +31,9 @@ import { withEditableEditor } from "./insert-or-navigate-footnotes";
 // Normal to inline is a pure transform (this file's first half). Inline
 // to normal is built editor-side so it can reuse the definition-append
 // decision tree (this file's second half).
+
+/** The refusal both conversions give when the result gate refuses them. */
+const ConvertByHand = "Converting would change how Obsidian reads the text around a footnote. Convert it by hand.";
 
 /** What converting a note's normal footnotes to inline did, or would do. */
 export interface ConversionToInline {
@@ -189,27 +190,14 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
             .sort((a, b) => b.start - a.start)
             .reduce((kept, edit) => kept.slice(0, edit.start) + edit.text + kept.slice(edit.end), line);
     });
-    // The promise the orphan rules and the delete command make: a rewrite
-    // that changes how Obsidian reads a line it was not asked to touch is
-    // refused whole rather than half done.
-    const byHand = "Converting would change how Obsidian reads the text around a footnote. Convert it by hand.";
-    // shadow mode: the result gate judges the conversion as the old checks do (result-gate.ts)
-    const shadow = (old: string | null, after: string[]) => {
-        shadowGate("convert:to-inline", old, () => ({
-            before: lines,
-            after,
-            intent: { inlined: eligible.map(({ block }) => block.name), inlineCreated: eligible.reduce((n, { refs: its }) => n + its.length, 0) },
-        }));
-    };
-    if (readsDifferently(lines, replaced, "rewrite")) {
-        shadow("references read differently", replaced);
-        return unchanged(named, byHand);
-    }
+    // The promise the orphan rules and the delete command make: the result
+    // gate judges the conversion, and one that changes how Obsidian reads
+    // a line it was not asked to touch is refused whole rather than half
+    // done.
     const dead = eligible.map(({ block }) => block).sort((a, b) => a.start - b.start);
     const out = removeLineRanges(replaced, dead);
-    const refused = linesReadDifferently(replaced, { lines: replaced, ranges: dead }, out);
-    shadow(refused ? "lines read differently" : null, out);
-    if (refused) return unchanged(named, byHand);
+    const intent = { inlined: eligible.map(({ block }) => block.name), inlineCreated: eligible.reduce((n, { refs: its }) => n + its.length, 0) };
+    if (!judgeEdit(lines, out, intent, reading).pass) return unchanged(named, ConvertByHand);
 
     return {
         markdown: restoreEol(out.join("\n"), eol),
@@ -230,6 +218,8 @@ export interface ConversionToNormal {
     merged: number;
     /** the inline footnotes left alone, by reason, in the order first met */
     skipped: { reason: string; count: number }[];
+    /** set when the whole conversion was refused because the result gate refused it; nothing was changed */
+    refused?: boolean;
 }
 
 const nothingToConvert: ConversionToNormal = { converted: 0, definitions: 0, merged: 0, skipped: [] };
@@ -356,16 +346,16 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         body: bodies[0],
         moreDefinitionLines: ids.slice(1).map((id, k) => `${definitionLabel(id)} ${bodies[k + 1]}`),
     });
-    // through the shared write-back, so a folded section the conversion
-    // edits stays folded and a second pane on the note stays where it was
-    // (hunt 2026-10-02, round 4, cluster U2)
-    // shadow mode: the result gate judges the conversion, which no old
-    // check looked at (result-gate.ts); each name's definition is one line,
-    // the first at the label line the append planned, the others under it
-    shadowGate("convert:to-normal", null, () => ({
-        before: lines,
-        after: plan.final,
-        intent: {
+    // The result gate judges the conversion: each name's definition is one
+    // line, the first at the label line the append planned, the others
+    // under it. A refused one changes nothing. An inline footnote whose text
+    // holds a reference, which Obsidian reads as dead text there (rule E3),
+    // would give a definition in which the reference comes alive, a
+    // footnote inside a footnote (Jason's ruling B12, 2026-10-08).
+    const verdict = judgeEdit(
+        lines,
+        plan.final,
+        {
             created: ids.map(
                 (id, k): CreatedFootnote => ({
                     kind: "footnote",
@@ -376,7 +366,15 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
             ),
             inlineRemoved: spans.length,
         },
-    }));
+        ctx.reading(),
+    );
+    if (!verdict.pass) {
+        showNotice(`Nothing was converted. ${ConvertByHand}`, 8000);
+        return { ...nothingToConvert, skipped, refused: true };
+    }
+    // through the shared write-back, so a folded section the conversion
+    // edits stays folded and a second pane on the note stays where it was
+    // (hunt 2026-10-02, round 4, cluster U2)
     const offsetChanges = plan.changes
         .map((change) => ({ from: doc.posToOffset(change.from), to: doc.posToOffset(change.to ?? change.from), text: change.text }))
         .sort((a, b) => a.from - b.from);

@@ -23,6 +23,13 @@ import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 //
 // Source of truth: CommonMark 5.2 (an empty list item cannot interrupt a
 // paragraph), checked with micromark.
+//
+// The first case is answered (Jason's ruling B11, 2026-10-08, stage 3 of
+// the result gate design): the result gate refuses the delete, since the
+// "1." would stop being a list item, and nothing is deleted; it was
+// it.fails until then. The second, a definition on the marker's line, is
+// still open: the gate compares a definition's lines wherever they sit, not
+// as the lines around a cut, so it lets the item fold.
 
 // Deletes footnote `name` from `lines` and returns the note, or the plan's kind if nothing was deleted.
 function md(lines: string[], name: string): string {
@@ -31,8 +38,8 @@ function md(lines: string[], name: string): string {
 }
 
 describe("spec question: an ordered item emptied by a delete under a paragraph", () => {
-    it.fails("cutting a reference that is an ordered item's whole content does not fold the item into the paragraph", () => {
-        expect(md(["Sources:", "1. [^1]", "", "[^1]: x"], "1")).not.toBe("Sources:\n1.");
+    it("cutting a reference that is an ordered item's whole content does not fold the item into the paragraph: the delete is refused", () => {
+        expect(md(["Sources:", "1. [^1]", "", "[^1]: x"], "1")).toBe("<<refused>>");
     });
 
     it.fails("emptying a numbered marker-line definition does not fold the item into the paragraph", () => {

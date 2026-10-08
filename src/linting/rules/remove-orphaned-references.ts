@@ -277,11 +277,8 @@ export function cutOne(line: string, start: number, end: number): string {
  * D8, D9). Comparing the note reading of the two texts line by line
  * catches all of these the same way (the runtime swap, step 2,
  * 2026-10-03).
- *
- * Shared with the Delete footnote command (T4, 2026-09-21) and the
- * conversions.
  */
-export function readsDifferently(before: string[], after: string[], touched: LineEdit = "cut"): boolean {
+function readsDifferently(before: string[], after: string[], touched: LineEdit = "cut"): boolean {
     const readingBefore = readNote(before);
     const readingAfter = readNote(after);
     for (let i = 0; i < before.length; i++) {

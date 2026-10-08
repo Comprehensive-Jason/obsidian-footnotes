@@ -6,8 +6,7 @@ import { footnoteNameProblem, quotedReference } from "../parsing/footnote-gramma
 import { DocContext, docContext } from "../editor/doc-context";
 import { footnotePrefixFromEditor, footnotePrefixProblem } from "../parsing/footnote-prefix";
 import { simulateChanges } from "../editor/insertion-liveness";
-import { shadowGate } from "../editor/result-gate";
-import { Definition, readNote } from "../parsing/note-reading";
+import { judgeEdit } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { withEditableEditor } from "./insert-or-navigate-footnotes";
 
@@ -26,10 +25,10 @@ import { nameAlreadyUsed, showNotice } from "../editor/notice";
 // is the merge-duplicate-definitions lint rule's job, not something a
 // rename should do as a side effect.
 //
-// The whole rename is also simulated and checked before a single edit is
-// made. A new name can complete markdown constructs around an occurrence,
-// just as an insertion can (the "$…$" swallow class), and if it would,
-// NOTHING is renamed.
+// The whole rename is also judged by the result gate before a single edit
+// is made. A new name can complete markdown constructs around an
+// occurrence, just as an insertion can (the "$…$" swallow class), and if
+// it would, NOTHING is renamed.
 
 export const RenameTargetNotice =
     "Place the cursor on a footnote reference or definition to rename it.";
@@ -199,7 +198,6 @@ export function planFootnoteRename(
     }
 
     const changes: EditorChange[] = [];
-    const referenceLines = new Set<number>();
     for (let line = 0; line < ctx.lines.length; line++) {
         for (const occurrence of ctx.reading().referencesOn(line)) {
             if (occurrence.name.toLowerCase() !== oldFolded) continue;
@@ -208,10 +206,8 @@ export function planFootnoteRename(
                 to: { line, ch: occurrence.end - 1 },
                 text: newName,
             });
-            referenceLines.add(line);
         }
     }
-    const labelLines: number[] = [];
     for (const definition of definitions) {
         if (definition.name.toLowerCase() !== oldFolded) continue;
         // the name sits between the label's "[^" and its "]:"
@@ -220,17 +216,15 @@ export function planFootnoteRename(
             to: { line: definition.start, ch: definition.labelEnd - 2 },
             text: newName,
         });
-        labelLines.push(definition.start);
     }
     if (changes.length === 0) return { kind: "noop" };
 
-    const survives = renameSurvives(ctx, changes, oldFolded, newName, referenceLines, definitions, labelLines);
-    shadowGate("rename", survives ? null : "dead", () => ({
-        before: ctx.lines,
-        after: simulateChanges(ctx.lines, changes),
-        intent: { renamed: new Map([[oldName, newName]]) },
-    }));
-    if (!survives) {
+    // The whole rename is judged by the result gate before a single edit
+    // is made: the note afterwards must read EXACTLY as before with the
+    // name swapped. Anything else means the new name has changed how
+    // markdown reads the text around an occurrence, so the entire rename
+    // is refused rather than one copy of it corrupted.
+    if (!judgeEdit(ctx.lines, simulateChanges(ctx.lines, changes), { renamed: new Map([[oldName, newName]]) }, ctx.reading()).pass) {
         return { kind: "dead" };
     }
     return { kind: "renamed", changes, count: changes.length, newName, prefixAdded };
@@ -256,77 +250,6 @@ function effectiveRenameName(
         return newName;
     }
     return `${sweepPrefix}${newName}`;
-}
-
-// Run the whole rename in simulation and insist that the note's footnote
-// structure afterwards is EXACTLY the old one with the name swapped.
-//
-// Concretely: on every edited line, the list of occurrences must match the
-// old list, with positions shifted to allow for the new name's length, and
-// every definition must keep its label line, its last line, and its mapped
-// name.
-// Anything else means the new name has changed how markdown reads the text
-// around an occurrence. In that case refuse the entire rename, rather than
-// corrupt one copy of it.
-function renameSurvives(
-    ctx: DocContext,
-    changes: EditorChange[],
-    oldFolded: string,
-    newName: string,
-    referenceLines: Set<number>,
-    definitionsBefore: readonly Definition[],
-    labelLines: number[],
-): boolean {
-    const simulated = simulateChanges(ctx.lines, changes);
-    // the note as the rename leaves it, read once for all the lines
-    // checked below (a footnote used on forty lines used to cost forty-one
-    // scans, review B4)
-    const readingAfter = readNote(simulated);
-    const labelLineSet = new Set(labelLines);
-    for (const line of referenceLines) {
-        const before = ctx.reading().referencesOn(line);
-        const expected: { start: number; name: string }[] = [];
-        // On the definition's own label line, the label is renamed too and
-        // sits before every reference in the body, so the references
-        // start out shifted by the label's change of length. Forgetting
-        // that refused a perfectly safe rename whenever a definition's
-        // body mentioned its own footnote (Kimi sweep 2026-09-13).
-        let shift = 0;
-        if (labelLineSet.has(line)) {
-            const label = ctx.reading().labelOn(line);
-            if (label && label.name.toLowerCase() === oldFolded) shift = newName.length - label.name.length;
-        }
-        for (const occurrence of before) {
-            const renamed = occurrence.name.toLowerCase() === oldFolded;
-            expected.push({
-                start: occurrence.start + shift,
-                name: renamed ? newName : occurrence.name,
-            });
-            if (renamed) shift += newName.length - occurrence.name.length;
-        }
-        const after = readingAfter.referencesOn(line);
-        if (after.length !== expected.length) return false;
-        for (let i = 0; i < expected.length; i++) {
-            if (
-                after[i].start !== expected[i].start ||
-                after[i].name !== expected[i].name
-            ) {
-                return false;
-            }
-        }
-    }
-    // every definition, wherever it sits, must still be read on the same
-    // lines with its name mapped: a renamed label then still reads as a live
-    // definition under the new name
-    const definitionsAfter = readingAfter.definitions;
-    if (definitionsAfter.length !== definitionsBefore.length) return false;
-    for (let i = 0; i < definitionsBefore.length; i++) {
-        const before = definitionsBefore[i];
-        const after = definitionsAfter[i];
-        const wanted = before.name.toLowerCase() === oldFolded ? newName : before.name;
-        if (after.start !== before.start || after.end !== before.end || after.name !== wanted) return false;
-    }
-    return true;
 }
 
 /**

@@ -2,13 +2,13 @@ import { quotedDefinitionLabel, quotedReference } from "../parsing/footnote-gram
 import { labelShapedLines } from "../parsing/label-shapes";
 import { definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../parsing/line-edits";
 import { readNote } from "../parsing/note-reading";
-import { definitionsHeldBy, linesReadDifferently } from "../linting/rules/remove-orphaned-definitions";
-import { cutOne, readsDifferently } from "../linting/rules/remove-orphaned-references";
+import { definitionsHeldBy } from "../linting/rules/remove-orphaned-definitions";
+import { cutOne } from "../linting/rules/remove-orphaned-references";
 import { MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { showNotice } from "../editor/notice";
-import { shadowGate } from "../editor/result-gate";
+import { judgeEdit } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { replaceMinimal } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
@@ -157,32 +157,25 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     });
     if (references === 0 && definitions === 0) return { kind: "nothing" };
 
-    // The promise the two orphan rules make, kept here too: a deletion
-    // that changes how Obsidian reads a line it was not asked to touch is
-    // refused whole, rather than half done. Cutting reference text can
-    // turn "-[^9] tail" into a bullet; cutting a block can put the line
-    // below it under a setext underline or a blank line and so promote a
-    // lazy label there into a definition (the guards' own comments list
-    // the cases).
+    // The promise the two orphan rules make, kept here too: the result gate
+    // judges the deletion, and one that changes how Obsidian reads text it
+    // was not asked to touch is refused whole, rather than half done.
+    // Cutting reference text can turn "-[^9] tail" into a bullet; cutting a
+    // block can put the line below it under a setext underline or a blank
+    // line and so promote a lazy label there into a definition, or empty a
+    // numbered item so it folds into the paragraph above (Jason's ruling
+    // B11, 2026-10-08).
     const byHand = " would change how Obsidian reads the text around it. Delete it by hand.";
     // The reference cuts are judged on their own first, so the toast can
     // say which half was refused; then the whole deletion, against the
-    // note as it was. A deleted definition's label line that keeps only its
-    // list marker counts as cut, like a line a reference was cut from: it
-    // may lose the definition, and nothing else may change with it.
+    // note as it was.
     const referencesCut = cutLines.map((line, i) => (definitionCut.lines[i] === lines[i] ? line : lines[i]));
-    // shadow mode: the result gate judges each half as the old checks do (result-gate.ts)
-    const shadow = (old: string | null, after: string[]) => {
-        shadowGate("delete", old, () => ({ before: lines, after, intent: { removed: [name] } }));
-    };
-    if (references > 0 && readsDifferently(lines, referencesCut)) {
-        shadow("references read differently", referencesCut);
+    const intent = { removed: [name] };
+    if (references > 0 && !judgeEdit(lines, referencesCut, intent, reading).pass) {
         return { kind: "refused", reason: `Nothing was deleted: removing ${quotedReference(name)}${byHand}` };
     }
     const out = removeLineRanges(cutLines, blocks);
-    const refused = linesReadDifferently(lines, { lines: cutLines, ranges: blocks }, out);
-    shadow(refused ? "lines read differently" : null, out);
-    if (refused) {
+    if (!judgeEdit(lines, out, intent, reading).pass) {
         return {
             kind: "refused",
             reason: `Nothing was deleted: removing the ${quotedDefinitionLabel(name)} definition${byHand}`,

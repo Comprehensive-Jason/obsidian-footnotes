@@ -586,16 +586,18 @@ function containersOf(blocks: string): string {
 /**
  * Whether a line's blocks before an edit (`was`) and after it (`is`) are
  * the same kinds in the same containers. Where each block starts counts
- * too, except for a paragraph: a line may start the paragraph it carried
- * on, or carry on the one it started, because a line written into the
- * blank line between two paragraphs joins them, as Obsidian reads it
- * (Jason's ruling B1, 2026-10-08; docs/obsidian-reading-rules.md G1). Two
- * lists that become one, or a table, code, a list, a quote, or a heading
- * that stops being one, is a line read differently.
+ * too, except that a line that started a paragraph may carry on the one
+ * above it: a line written into the blank line between two paragraphs
+ * joins them, as Obsidian reads it (Jason's ruling B1, 2026-10-08;
+ * docs/obsidian-reading-rules.md G1). A paragraph split in two is a line
+ * read differently, unless `split`: next to text the user writes in
+ * themselves (a paste), whose own blank lines may split it. Two lists that
+ * become one, or a table, code, a list, a quote, or a heading that stops
+ * being one, is a line read differently too.
  */
-function sameKind(was: string, is: string): boolean {
-    const joined = (blocks: string) => blocks.replace(/\^paragraph$/, "paragraph");
-    return joined(was) === joined(is);
+function sameKind(was: string, is: string, split = false): boolean {
+    const carriedOn = (blocks: string) => blocks.replace(/\^paragraph$/, "paragraph");
+    return was === is || carriedOn(was) === is || (split && was === carriedOn(is));
 }
 
 /**
@@ -1028,7 +1030,10 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
         // label's paragraph may become the table the user meant, as
         // fix-lazy's own comment says.
         if (defined.size > 0 && lazyLineReadsAlike(was, is) && /(?:^| )\^?table$/.test(is)) return true;
-        return sameKind(was, is);
+        // text the action writes in from outside (a paste) is the user's
+        // own, doing what it does in any editor next to the lines around it
+        const nextToWritten = lineInRanges(newSide.usersText, j - 1) || lineInRanges(newSide.usersText, j + 1);
+        return sameKind(was, is, nextToWritten);
     };
     // a table row keeps its cells: text taken across a "|" leaves the row
     // a cell short (Jason's ruling on partial-table selections, 2026-09-04)
