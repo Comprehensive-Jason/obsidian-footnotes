@@ -741,6 +741,33 @@ describe("creation-command invariants over random documents", () => {
             .join("\n");
     }
 
+    /**
+     * Rule: a list item's line selected whole converts the item's text, not
+     * the line. The bullet, number, or task box stays on the line and holds
+     * the reference ("- [^1]"), so the span that moves starts after them.
+     * A span that is anything else comes back as it is. (Jason's ruling
+     * Q27, 2026-10-08, which the rulings job extended to numbered and task
+     * items; hunt 2026-10-08 cycle 7, test defect Y13, seeds 1729, 577215,
+     * and 662607, where this property still expected the whole line.)
+     */
+    function wholeItemToItsText(
+        lines: string[],
+        span: { from: EditorPosition; to: EditorPosition } | null,
+    ): { from: EditorPosition; to: EditorPosition } | null {
+        if (span === null || span.from.line !== span.to.line) return span;
+        const line = lines[span.from.line];
+        if (line.slice(0, span.from.ch).trim() !== "" || line.slice(span.to.ch).trim() !== "") return span;
+        // The item's marker: a bullet or a number with "." or ")", then
+        // an optional task box, then the gap before the item's text.
+        const marker = /^(?:[-*+]|\d{1,9}[.)])(?:[ \t]+\[.\])?[ \t]+(?=\S)/.exec(line.slice(span.from.ch));
+        if (marker === null) return span;
+        // Only a line that really starts a list item counts; a line inside
+        // code or a lazy line that only looks like one is left alone.
+        const blocks = readNote(lines).lineBlocks[span.from.line] ?? "";
+        if (!blocks.split(" ").includes("^listItem")) return span;
+        return { from: { line: span.from.line, ch: span.from.ch + marker[0].length }, to: span.to };
+    }
+
     /** The LF-joined text of `[from, to)`. */
     function spanText(
         lines: string[],
@@ -763,7 +790,7 @@ describe("creation-command invariants over random documents", () => {
                 selectionPressArb,
                 fc.constantFrom<CommandName>("autonum", "inline"),
                 async ({ lines, span, selection, settings }, command) => {
-                    const trimmed = trimmedSpan(lines, span.from, span.to);
+                    const trimmed = wholeItemToItsText(lines, trimmedSpan(lines, span.from, span.to));
                     const protectedBefore = readNote(lines).protectedLines;
                     resetNotices();
                     const doc = pressEditor(lines, span.from, selection);
