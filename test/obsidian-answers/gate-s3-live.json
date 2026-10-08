@@ -1,0 +1,10 @@
+[
+{"id":"gs3:b1-rule","text":"Results were mixed.\n[^1]\n---\n\n[^1]: note","defs":[["1",4,0,4]],"refs":[["1",1,0]],"code":[]},
+{"id":"gs3:b1-prose","text":"The tide rose.\n[^1]\nOysters closed.\n\n[^1]: note","defs":[["1",4,0,4]],"refs":[["1",1,0]],"code":[]},
+{"id":"gs3:b1-table","text":"Some text.\n[^1]\n| a | b |\n| --- | --- |\n| c | d |\n\n[^1]: note","defs":[["1",6,0,6]],"refs":[["1",1,0]],"code":[]},
+{"id":"gs3:b1-definition","text":"text[^1] and[^2]\n[^2]\n[^1]: d","defs":[],"refs":[["1",0,4],["2",0,12],["2",1,0],["1",2,0]],"code":[]},
+{"id":"gs3:b1-code","text":"Para.\n[^1]\n    code line\n\n[^1]: note","defs":[["1",4,0,4]],"refs":[["1",1,0]],"code":[]},
+{"id":"gs3:a1-fence","text":"intro[^1] text\n\n# Footnotes\n\n[^1]: one\n\n```\nunclosed code","defs":[["1",4,0,4]],"refs":[["1",0,5]],"code":[[6,7]]},
+{"id":"gs3:a1-comment","text":"intro[^1] text\n\n# Footnotes\n\n[^1]: one\n\n%%\nopen comment","defs":[["1",4,0,4]],"refs":[["1",0,5]],"code":[]},
+{"id":"gs3:a3-moved","text":"[^1]\n\nalpha[^2].\n\n[^1]: >     > gap code[^88]","defs":[["1",4,0,4]],"refs":[["1",0,0],["2",2,5]],"code":[]}
+]

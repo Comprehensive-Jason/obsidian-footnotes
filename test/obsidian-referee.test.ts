@@ -43,7 +43,13 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 //   another character ("- [/]", "- [>]"), a link definition's title or
 //   "<...>" destination running over blank lines, an inline HTML tag whose
 //   attribute runs over a line break, and a reference right after a bare
-//   email address.
+//   email address;
+// - gate-s3-live: the shapes the result gate's stage 3 asked of the live
+//   app on 2026-10-08: a reference written into the blank line under a
+//   paragraph, over a rule, more prose, a table, a definition, and
+//   indented code (Jason's ruling B1); a definition gathered under the
+//   section heading of a note that ends in an open fence or comment; and a
+//   quote holding indented code moved into a definition.
 //
 // The comparison is the live oracle's own (scripts/oracle/compare.mts), so a
 // note agrees here exactly when `npm run oracle -- check --reader` would find
@@ -52,7 +58,7 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 // notes, run the live oracle with --answers (TESTING.md) and add the file to
 // AnswerFiles.
 
-const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes", "swap34-probes", "h2-live-probes"];
+const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes", "swap34-probes", "h2-live-probes", "gate-s3-live"];
 
 /**
  * Notes on which the reader and Obsidian still disagree, by id, with the
