@@ -1,0 +1,16 @@
+[
+{"id":"c6:z2-tight","text":"Shopping list[^1]\n\n- apples\n- pears\n- plums\n\n[^1]: from the market","defs":[["1",6,0,6]],"refs":[["1",0,13]],"code":[]},
+{"id":"c6:z2-loose","text":"Shopping list[^1]\n\n- apples\n\n- pears\n- plums\n\n[^1]: from the market","defs":[["1",7,0,7]],"refs":[["1",0,13]],"code":[]},
+{"id":"c6:z2-lazy","text":"Shopping list[^1]\n\n- apples\n[^1]: from the market\n- pears\n- plums","defs":[],"refs":[["1",0,13],["1",3,0]],"code":[]},
+{"id":"c6:z2-ord-tight","text":"Steps[^1]\n\n1. Mix\n1. Bake\n\n[^1]: by hand","defs":[["1",5,0,5]],"refs":[["1",0,5]],"code":[]},
+{"id":"c6:z2-ord-loose","text":"Steps[^1]\n\n1. Mix\n\n1. Bake\n\n[^1]: by hand","defs":[["1",6,0,6]],"refs":[["1",0,5]],"code":[]},
+{"id":"c6:z17-email-ref","text":"Write to me@example.com.[^1]\n\n[^1]: one","defs":[["1",2,0,2]],"refs":[["1",0,24]],"code":[]},
+{"id":"c6:z17-email-plain","text":"Write to me@example.com.","defs":[],"refs":[],"code":[]},
+{"id":"c6:z17-email-before","text":"Write to me@example.com[^1].\n\n[^1]: one","defs":[["1",2,0,2]],"refs":[["1",0,23]],"code":[]},
+{"id":"c6:z12-after-id","text":"Oysters filter water. ^water1[^1]\n\n[^1]: Jones 2019.\n\nSee [[#^water1]].","defs":[["1",2,0,2]],"refs":[["1",0,29]],"code":[]},
+{"id":"c6:z12-before-id","text":"Oysters filter water.[^1] ^water1\n\n[^1]: Jones 2019.\n\nSee [[#^water1]].","defs":[["1",2,0,2]],"refs":[["1",0,21]],"code":[]},
+{"id":"c6:z20-quote","text":"Smith says so.[^a]\n\n[^a]: Smith, p. 4:\n\n    > The tide rose.\n    See also Jones.\n","defs":[["a",2,0,5]],"refs":[["a",0,14]],"code":[]},
+{"id":"c6:z20-list","text":"Smith says so.[^a]\n\n[^a]: Smith, pages:\n\n    - p. 4\n    - p. 9\n    See also Jones.\n","defs":[["a",2,0,6]],"refs":[["a",0,14]],"code":[]},
+{"id":"c6:z7-ordered","text":"Vgl.[^1] dazu.\n\n[^1]: 2. Aufl., S. 34","defs":[["1",2,0,2]],"refs":[["1",0,4]],"code":[]},
+{"id":"c6:lead-quote-label","text":"> Quote one.\n>\n[^1]: def\n> Quote two.\n\nuse[^1]","defs":[["1",2,0,3]],"refs":[["1",5,3]],"code":[]}
+]

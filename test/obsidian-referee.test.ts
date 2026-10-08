@@ -54,6 +54,13 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 //   no link now lands (Jason's ruling Q2, 2026-10-07), asked of the live app
 //   on 2026-10-08: a reference inside the brackets, with and without a
 //   period after them, and an inline footnote there, with text and empty.
+// - c6-hunt-live: the shapes hunt cycle 6 asked of the live app on
+//   2026-10-08: a tight list against the loose one a blank line makes, a
+//   label between two items, an email address with a reference after its
+//   period and before it, a block id with a reference after it and before
+//   it, text right under a quote or a list inside a footnote, a label whose
+//   text starts with "2.", and a label after a quote's empty line with a
+//   quote line under it.
 //
 // The comparison is the live oracle's own (scripts/oracle/compare.mts), so a
 // note agrees here exactly when `npm run oracle -- check --reader` would find
@@ -62,7 +69,7 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 // notes, run the live oracle with --answers (TESTING.md) and add the file to
 // AnswerFiles.
 
-const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes", "swap34-probes", "h2-live-probes", "gate-s3-live", "gate-s45-live"];
+const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes", "swap34-probes", "h2-live-probes", "gate-s3-live", "gate-s45-live", "c6-hunt-live"];
 
 /**
  * Notes on which the reader and Obsidian still disagree, by id, with the
