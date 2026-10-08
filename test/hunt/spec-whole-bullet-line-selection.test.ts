@@ -59,8 +59,11 @@ import { readNote } from "../../src/parsing/note-reading";
 // whole bullet line selected converts the item's text ("- First point"
 // becomes "- [^1]" with "[^1]: First point"), the same for the second and
 // later bullets. The bullet tests below were it.fails until then; what the
-// press did before is described above. The ruling names bullets, so the
-// quote line's case stays open as it.fails.
+// press did before is described above. Answered for quote lines too
+// (Jason's ruling Q27 for quote lines, 2026-10-08): "> One." becomes
+// "> [^1]" with "[^1]: One.". The fix job (cycle 7) gave a callout's title
+// line the same treatment, its "[!note]" kept, since moving the title out
+// whole left the callout a plain quote.
 //
 // Origin: the second bullet's reference read as the first bullet's text is
 // pre-existing; the first bullet's refusal came with 99d4e6d, where the
@@ -156,11 +159,39 @@ describe("a whole bullet line selected and the numbered key pressed", () => {
     });
 
     // The same choice for a quote line: the "> " stays and holds the
-    // reference, as selecting "One." alone does today. Still open: the
-    // ruling names bullets. Now: refused with the notice that says to
-    // select the whole line.
-    it.fails("the first line of a two-line quote: it converts as its text alone does", async () => {
+    // reference, as selecting "One." alone does (Jason's ruling Q27 for
+    // quote lines, 2026-10-08). Before it, the first line was refused with
+    // the notice that says to select the whole line.
+    it("the first line of a two-line quote: it converts as its text alone does", async () => {
         const doc = await tripleClick(["Intro.", "", "> One.", "> Two.", "", "After."], 2);
         expect(doc.lines).toEqual(["Intro.", "", "> [^1]", "> Two.", "", "After.", "", "[^1]: One."]);
+    });
+
+    it("the second line of a two-line quote, and a quote line dragged without its line break", async () => {
+        const second = await tripleClick(["Intro.", "", "> One.", "> Two.", "", "After."], 3);
+        expect(second.lines).toEqual(["Intro.", "", "> One.", "> [^1]", "", "After.", "", "[^1]: Two."]);
+        resetNotices();
+        const dragged = await selectText(["Intro.", "", "> One.", "> Two.", "", "After."], 2, 0, 6);
+        expect(dragged.lines).toEqual(["Intro.", "", "> [^1]", "> Two.", "", "After.", "", "[^1]: One."]);
+    });
+
+    // Before: the callout's title line moved whole into the footnote, and
+    // "> One." below it was left a plain quote, no longer a callout.
+    it("a callout's title line: the \"[!note]\" stays and the callout stays a callout", async () => {
+        const doc = await tripleClick(["> [!note] Tides", "> One.", "", "After."], 0);
+        expect(doc.lines).toEqual(["> [!note] [^1]", "> One.", "", "After.", "", "[^1]: Tides"]);
+    });
+
+    // Before: the line moved whole, "[^1]: >  Two." at the end.
+    it("a quote line with two spaces after the \">\": the spaces stay out of the footnote", async () => {
+        const doc = await tripleClick(["Intro.", "", ">  Two.", "", "After."], 2);
+        expect(doc.lines.at(-1)).toBe("[^1]: Two.");
+        expect(doc.lines[2]).toMatch(/^> +\[\^1\]$/);
+    });
+
+    it("a line of a callout's body: the \"> \" stays", async () => {
+        const doc = await tripleClick(["> [!note] Tides", "> One.", "> Two.", "", "After."], 1);
+        expect(doc.lines).toEqual(["> [!note] Tides", "> [^1]", "> Two.", "", "After.", "", "[^1]: One."]);
+        expect(messages()).toEqual([]);
     });
 });

@@ -349,9 +349,16 @@ export function selectionPressHandled(
     // the first bullet of a list was refused for taking part of the line's
     // formatting, and a later bullet left a bare "[^1]" that read as more
     // of the bullet above (Jason's ruling Q27, 2026-10-08; hunt 2026-10-08
-    // cycle 6, cluster Z11).
+    // cycle 6, cluster Z11). A quote line selected whole does the same:
+    // "> One." gives "> [^1]" (Jason's ruling Q27 for quote lines,
+    // 2026-10-08), and a callout's title line keeps its "[!note]" marker
+    // the same way. The selection starts at the text itself, past any
+    // extra spaces after the marker, so they stay on the line and out of
+    // the footnote, as they do when the text alone is selected.
     if (wholeListItemLine(ctx.reading(), ctx.lines, trimmed.from, trimmed.to)) {
-        trimmed.from = { line: trimmed.from.line, ch: ctx.reading().blockSyntaxEnd(trimmed.from.line) };
+        const syntaxEnd = ctx.reading().blockSyntaxEnd(trimmed.from.line);
+        const text = ctx.lines[trimmed.from.line].slice(syntaxEnd);
+        trimmed.from = { line: trimmed.from.line, ch: syntaxEnd + text.length - text.trimStart().length };
     }
     // The inline key works within a single line only. A selection that
     // spans lines is sent to the numbered and named keys, which put the
@@ -528,20 +535,26 @@ export function absorbLeadingSpace(
 
 /**
  * Whether the selection from `from` to `to` is one line of the note, all
- * of it, and that line starts a list item with text after its marker
- * ("- First point", "2. Second", "- [ ] task"; NoteReading.blockSyntaxEnd
- * says where the marker ends).
+ * of it, and that line starts a list item or is a line of a quote's
+ * paragraph, with text after its marker ("- First point", "2. Second",
+ * "- [ ] task", "> One.", "> [!note] Title"; NoteReading.blockSyntaxEnd
+ * says where the marker ends). A heading, a rule, or code in a quote is
+ * not quote text, and is left to move whole.
  */
 function wholeListItemLine(reading: NoteReading, lines: readonly string[], from: EditorPosition, to: EditorPosition): boolean {
     const line = lines[from.line] ?? "";
     const syntaxEnd = reading.blockSyntaxEnd(from.line);
+    // the blocks the line belongs to, outermost first, a "^" marking the
+    // ones that start on it (NoteReading.lineBlocks)
+    const blocks = (reading.lineBlocks[from.line] ?? "").split(" ");
+    const quoteText = blocks.includes("blockquote") && blocks[blocks.length - 1].replace("^", "") === "paragraph";
     return (
         from.line === to.line &&
         line.slice(0, from.ch).trim() === "" &&
         line.slice(to.ch).trim() === "" &&
         from.ch < syntaxEnd &&
         syntaxEnd < to.ch &&
-        (reading.lineBlocks[from.line] ?? "").split(" ").includes("^listItem")
+        (blocks.includes("^listItem") || quoteText)
     );
 }
 

@@ -749,6 +749,12 @@ describe("creation-command invariants over random documents", () => {
      * Q27, 2026-10-08, which the rulings job extended to numbered and task
      * items; hunt 2026-10-08 cycle 7, test defect Y13, seeds 1729, 577215,
      * and 662607, where this property still expected the whole line.)
+     *
+     * A line of a quote's paragraph selected whole does the same: the "> "
+     * stays and holds the reference ("> [^1]"), and a callout's title line
+     * keeps its "[!note]" too. A heading, rule, or code in a quote is not
+     * quote text, and moves whole as before (Jason's ruling Q27 for quote
+     * lines, 2026-10-08).
      */
     function wholeItemToItsText(
         lines: string[],
@@ -757,14 +763,27 @@ describe("creation-command invariants over random documents", () => {
         if (span === null || span.from.line !== span.to.line) return span;
         const line = lines[span.from.line];
         if (line.slice(0, span.from.ch).trim() !== "" || line.slice(span.to.ch).trim() !== "") return span;
-        // The item's marker: a bullet or a number with "." or ")", then
-        // an optional task box, then the gap before the item's text.
-        const marker = /^(?:[-*+]|\d{1,9}[.)])(?:[ \t]+\[.\])?[ \t]+(?=\S)/.exec(line.slice(span.from.ch));
+        // Only a line that really starts a list item, or really is quote
+        // text, counts; a line inside code or a lazy line that only looks
+        // like one is left alone. The reading lists the blocks each line
+        // belongs to, a "^" marking the ones that start on it.
+        const blocks = (readNote(lines).lineBlocks[span.from.line] ?? "").split(" ");
+        const rest = line.slice(span.from.ch);
+        let marker: RegExpExecArray | null = null;
+        if (blocks.includes("^listItem")) {
+            // The item's marker: any quote markers it sits in, a bullet or
+            // a number with "." or ")", an optional task box, then the gap
+            // before the item's text.
+            marker = /^(?:>[ \t]*)*(?:[-*+]|\d{1,9}[.)])(?:[ \t]+\[.\])?[ \t]+(?=\S)/.exec(rest);
+        } else if (blocks.includes("blockquote") && blocks[blocks.length - 1].replace("^", "") === "paragraph") {
+            // The quote's markers, each with the spaces after it, then on a
+            // callout's title line its "[!type]" (an optional "+" or "-"
+            // after it sets it folded or open) and the gap after that.
+            marker = blocks.includes("^calloutTitle")
+                ? /^(?:>[ \t]*)+\[![^\]\s]+\][+-]?[ \t]+(?=\S)/.exec(rest)
+                : /^(?:>[ \t]*)+(?=\S)/.exec(rest);
+        }
         if (marker === null) return span;
-        // Only a line that really starts a list item counts; a line inside
-        // code or a lazy line that only looks like one is left alone.
-        const blocks = readNote(lines).lineBlocks[span.from.line] ?? "";
-        if (!blocks.split(" ").includes("^listItem")) return span;
         return { from: { line: span.from.line, ch: span.from.ch + marker[0].length }, to: span.to };
     }
 
