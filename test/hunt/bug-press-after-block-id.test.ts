@@ -80,14 +80,14 @@ beforeEach(resetNotices);
 describe("a press at the end of a line ending in a block id", () => {
     // Now: the numbered key writes "Oysters filter water. ^water1[^1]", the
     // named key "... ^water1[^]", the inline key "... ^water1^[]".
-    it.fails.each(Keys)("the %s key keeps the block id at the end of the line", async (_name, key, reference) => {
+    it.each(Keys)("the %s key keeps the block id at the end of the line", async (_name, key, reference) => {
         const doc = await press(key, line.length);
         expectIdKept(doc.lines[0], reference);
     });
 
     // "none" is the setting shown as "Don't move". Now: "Oysters filter
     // water. ^water1[^1]" under both placements.
-    it.fails.each(["before", "none"] as const)("the numbered key keeps the block id at the end of the line under the %s placement", async (placement) => {
+    it.each(["before", "none"] as const)("the numbered key keeps the block id at the end of the line under the %s placement", async (placement) => {
         const doc = await press(insertAutonumFootnote, line.length, placement);
         expectIdKept(doc.lines[0], "[^1]");
     });

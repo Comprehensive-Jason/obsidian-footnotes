@@ -266,6 +266,13 @@ export function startOfWordOffset(text: string, offset: number): number {
     return start;
 }
 
+/**
+ * A block id at the end of a line, with the spaces in front of it: a "^"
+ * and Latin letters, digits, or dashes, the only characters Obsidian allows
+ * in one (Obsidian Help, Link to blocks).
+ */
+const TrailingBlockId = /[ \t]+\^[A-Za-z0-9-]+$/;
+
 /** Move the insertion point so a footnote goes in only at the end of a
  * word, and never where an escape or an inline-footnote opener would
  * swallow it (safeInsertionCh in insertion-liveness). `reading` is the
@@ -316,6 +323,17 @@ export function adjustFootnotePosition(
         if (landing !== cursorPosition.ch) {
             cursorPosition = { line: cursorPosition.line, ch: landing };
         }
+    }
+    // A block id is the " ^water1" at the end of a line that lets other
+    // notes link to its paragraph. Obsidian counts it only at the very end,
+    // so a reference written after it hid the block, and every link to the
+    // paragraph stopped working (docs/obsidian-reading-rules.md D4). A
+    // press at the id, or after it, lands in front of it, under every
+    // placement (hunt 2026-10-08 cycle 6, cluster Z12, pin
+    // bug-press-after-block-id).
+    const blockId = lineText.search(TrailingBlockId);
+    if (blockId !== -1 && cursorPosition.ch > blockId) {
+        cursorPosition = { line: cursorPosition.line, ch: blockId };
     }
     const ch = safeInsertionCh(lineText, cursorPosition.ch);
     if (ch !== cursorPosition.ch) {
