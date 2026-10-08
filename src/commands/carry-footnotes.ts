@@ -82,12 +82,13 @@ export function carriedDefinitions(markdown: string, from: EditorPosition, to: E
  * here. The parser keeps, for each line, how many characters its
  * containers took; that count also holds what the definition itself took
  * (its own indentation) and what anything inside it took (a quote inside
- * the footnote). So the note is read once more with each block's label
- * turned into plain text ("[^a]:" becomes "[^a] "): there is no definition
- * then, and nothing inside one, and the count on each line is what the
- * containers alone took. A container's share is not the label's column:
- * a label may sit further in than its container needs ("  [^a]:" at the
- * top level, or 2 columns past a list item's text), and an ordered item
+ * the footnote). So the note is read once more with each label turned into
+ * plain text ("[^a]:" becomes "[^a] "), except those of the footnotes a
+ * block sits in: the block is no definition then, and has nothing inside
+ * it, and the count on each line is what the containers alone took. A
+ * container's share is not the label's column: a label may sit further
+ * in than its container needs ("  [^a]:" at the top level, or 2 columns
+ * past a list item's text), and an ordered item
  * "1. " takes 4 columns from its later lines, not 3. Counting by the
  * label's column took too much and lost the definition's later
  * paragraphs (hunt 2026-10-05 round 2, clusters C1 and C4, pins
@@ -115,11 +116,21 @@ function liftedBlocks(lines: readonly string[], blocks: readonly Definition[]): 
 /** For each of the `blocks`, how many characters liftedBlocks takes off the front of each of its lines, the label's line first. */
 function liftedCuts(lines: readonly string[], blocks: readonly Definition[]): number[][] {
     if (blocks.length === 0) return [];
-    // the note with every block's ":" after its label turned into a space
+    // The note with the ":" after a label turned into a space, for every
+    // definition but the ones a block sits in. Those stay, because their
+    // indentation is a container the block is lifted out of. Every other
+    // definition goes, not only the blocks: with the definitions packed,
+    // "[^2] Jones" right under "[^1]: Smith" read as more of footnote 1's
+    // text, footnote 1's four columns were counted as the container of
+    // footnote 2's second paragraph, and the clipboard lost its indentation
+    // (hunt 2026-10-08 cycle 7, cluster Y3, pin
+    // bug-carry-packed-definition-loses-continuation).
+    const holdsABlock = (definition: Definition) => blocks.some((block) => definition.start < block.start && definition.end >= block.end);
     const unlabelled = [...lines];
-    for (const block of blocks) {
-        const label = unlabelled[block.start];
-        unlabelled[block.start] = label.slice(0, block.labelEnd - 1) + " " + label.slice(block.labelEnd);
+    for (const definition of readNote(lines).definitions) {
+        if (holdsABlock(definition)) continue;
+        const label = unlabelled[definition.start];
+        unlabelled[definition.start] = label.slice(0, definition.labelEnd - 1) + " " + label.slice(definition.labelEnd);
     }
     const containers = readNote(unlabelled);
     // A line the parser counts as syntax to its end (a bare list marker)

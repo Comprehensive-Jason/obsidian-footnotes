@@ -129,7 +129,7 @@ describe("a carried footnote with a second paragraph, packed under another defin
 
     // The root pin. Now the clipboard is "Oysters filter water[^2].",
     // "", "[^2]: Jones, p. 9.", "", "A second paragraph of the note.".
-    it.fails("the clipboard keeps the second paragraph indented", () => {
+    it("the clipboard keeps the second paragraph indented", () => {
         const clip = copy(source, { line: 0, ch: 0 }, { line: 0, ch: 25 });
         expect(clip).toContain("\n    A second paragraph of the note.");
     });
@@ -141,14 +141,14 @@ describe("a carried footnote with a second paragraph, packed under another defin
 
     // Now the clipboard ends "first site", "second site": the list's
     // markers are gone as well as the indentation.
-    it.fails("the clipboard keeps the list markers of a list inside the footnote", () => {
+    it("the clipboard keeps the list markers of a list inside the footnote", () => {
         const withList = ["Oysters filter water[^2].", "", "[^1]: Smith, p. 4.", "[^2]: Jones, p. 9:", "", "    - first site", "    - second site"];
         const clip = copy(withList, { line: 0, ch: 0 }, { line: 0, ch: 25 });
         expect(clip, JSON.stringify(clip)).toContain("\n    - first site\n    - second site");
     });
 
     // Now the clipboard ends "The tide rose.", its "> " gone.
-    it.fails("the clipboard keeps the quote marker of a quote inside the footnote", () => {
+    it("the clipboard keeps the quote marker of a quote inside the footnote", () => {
         const withQuote = ["Oysters filter water[^2].", "", "[^1]: Smith, p. 4.", "[^2]: Jones, p. 9:", "", "    > The tide rose."];
         const clip = copy(withQuote, { line: 0, ch: 0 }, { line: 0, ch: 25 });
         expect(clip, JSON.stringify(clip)).toContain("\n    > The tide rose.");
@@ -156,7 +156,7 @@ describe("a carried footnote with a second paragraph, packed under another defin
 
     // Now the paste is refused: "Nothing was pasted: it would change how
     // Obsidian reads the text around it."
-    it.fails("copied and pasted into another note, the footnote keeps its second paragraph", () => {
+    it("copied and pasted into another note, the footnote keeps its second paragraph", () => {
         const clip = copy(source, { line: 0, ch: 0 }, { line: 0, ch: 25 });
         const dest = paste(["Notes from the field.", ""], { line: 1, ch: 0 }, clip);
         expect(footnoteText(dest, "2"), JSON.stringify({ dest, notices: messages() })).toBe("Jones, p. 9. / A second paragraph of the note.");
@@ -165,7 +165,7 @@ describe("a carried footnote with a second paragraph, packed under another defin
     // With the plugin's record of its own last copy cleared, the paste
     // reads as one from another app. Now the paragraph lands at column 0,
     // body text outside footnote 2.
-    it.fails("copied, then pasted from another app's clipboard, the footnote keeps its second paragraph", () => {
+    it("copied, then pasted from another app's clipboard, the footnote keeps its second paragraph", () => {
         const clip = copy(source, { line: 0, ch: 0 }, { line: 0, ch: 25 });
         resetCarryRegister();
         const dest = paste(["Notes from the field.", ""], { line: 1, ch: 0 }, clip);
@@ -175,7 +175,7 @@ describe("a carried footnote with a second paragraph, packed under another defin
     // The data-loss face. Now the cut takes footnote 2 and its second
     // paragraph out of the note, and the paste under "Tides rise[^1]." is
     // refused, so the note is left with no footnote 2 at all.
-    it.fails("cut and pasted elsewhere in the same note (moving the sentence), the footnote keeps its second paragraph", () => {
+    it("cut and pasted elsewhere in the same note (moving the sentence), the footnote keeps its second paragraph", () => {
         const note = ["# Field notes", "", "Oysters filter water[^2].", "", "Tides rise[^1].", "", "[^1]: Smith, p. 4.", "[^2]: Jones, p. 9.", "", "    A second paragraph of the note."];
         const c = cut(note, { line: 2, ch: 0 }, { line: 3, ch: 0 });
         // Paste on the blank line under "Tides rise[^1].".
@@ -183,5 +183,19 @@ describe("a carried footnote with a second paragraph, packed under another defin
         const moved = paste(c.lines, at, c.clip, "note.md");
         expect(footnoteText(moved, "2"), JSON.stringify({ cut: c.lines, clip: c.clip, moved, notices: messages() })).toBe("Jones, p. 9. / A second paragraph of the note.");
         expect(moved.filter((line) => line.trim() === "A second paragraph of the note.").length).toBe(1);
+    });
+
+    // Found while fixing, and failing on 34d5377 the same way: the packed
+    // definitions in a quote, and a third definition packed under two with
+    // a lazy line of its own. The fix reads every packed neighbour as plain
+    // text, so neither can take the carried footnote's lines.
+    it("packed in a quote, the carried footnote keeps its second paragraph", () => {
+        const quoted = ["Water[^2].", "", "> [^1]: Smith.", "> [^2]: Jones.", ">", ">     Second para."];
+        expect(copy(quoted, { line: 0, ch: 0 }, { line: 0, ch: 10 })).toContain("\n    Second para.");
+    });
+
+    it("the third of three packed definitions keeps its lazy line and its second paragraph", () => {
+        const three = ["Water[^3].", "", "[^1]: Smith.", "[^2]: Jones.", "[^3]: Brown.", "more of three", "", "    Second para."];
+        expect(copy(three, { line: 0, ch: 0 }, { line: 0, ch: 10 })).toContain("[^3]: Brown.\nmore of three\n\n    Second para.");
     });
 });
