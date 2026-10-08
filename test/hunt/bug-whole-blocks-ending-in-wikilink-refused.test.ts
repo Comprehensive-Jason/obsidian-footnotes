@@ -93,7 +93,7 @@ describe("a selection of whole blocks whose last line ends in a wikilink or an e
     // Now each of these is refused with "No footnote was created: the
     // selection takes part of the line's formatting. Select the whole
     // line, or only its text.", and the note is unchanged.
-    it.fails("a list of wikilink bullets selected whole converts", async () => {
+    it("a list of wikilink bullets selected whole converts", async () => {
         const lines = ["Para one here.", "", "- [[Note A]]", "- [[Note B]]"];
         const out = await pressOver(lines, { line: 2, ch: 0 }, end(lines, 3));
         expect(refusals()).toEqual([]);
@@ -101,21 +101,21 @@ describe("a selection of whole blocks whose last line ends in a wikilink or an e
         expect(out).toContain("[^1]: - [[Note A]]");
     });
 
-    it.fails("a 'See also' line with its list of wikilinks, selected whole, converts", async () => {
+    it("a 'See also' line with its list of wikilinks, selected whole, converts", async () => {
         const lines = ["The tide rose fast.", "", "See also:", "- [[Oyster biology]]", "- [[Reef restoration]]"];
         const out = await pressOver(lines, { line: 2, ch: 0 }, end(lines, 4));
         expect(refusals()).toEqual([]);
         expect(out.slice(0, 3)).toEqual(["The tide rose fast.", "", "[^1]"]);
     });
 
-    it.fails("a quote ending in a wikilink, selected whole, converts", async () => {
+    it("a quote ending in a wikilink, selected whole, converts", async () => {
         const lines = ["Intro.", "", "> The reef grew back.", "> From [[Smith 2020]]", "", "After."];
         const out = await pressOver(lines, { line: 2, ch: 0 }, end(lines, 3));
         expect(refusals()).toEqual([]);
         expect(out.slice(0, 4)).toEqual(["Intro.", "", "[^1]", ""]);
     });
 
-    it.fails("a list whose last bullet is an embed, selected whole, converts", async () => {
+    it("a list whose last bullet is an embed, selected whole, converts", async () => {
         const lines = ["Photos from the reef:", "", "- ![[reef-01.jpg]]", "- ![[reef-02.jpg]]", "", "More text."];
         const out = await pressOver(lines, { line: 2, ch: 0 }, end(lines, 3));
         expect(refusals()).toEqual([]);
@@ -124,7 +124,7 @@ describe("a selection of whole blocks whose last line ends in a wikilink or an e
 
     // The triple-click selects each line with its line break, so the
     // selection ends at the start of the blank line under the list.
-    it.fails("a numbered list ending in a wikilink, triple-clicked over two lines, converts", async () => {
+    it("a numbered list ending in a wikilink, triple-clicked over two lines, converts", async () => {
         const lines = ["Steps:", "", "1. Read [[Paper A]]", "2. Read [[Paper B]]", "", "Done."];
         const out = await pressOver(lines, { line: 2, ch: 0 }, { line: 4, ch: 0 });
         expect(refusals()).toEqual([]);

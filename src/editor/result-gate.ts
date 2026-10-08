@@ -734,8 +734,17 @@ function listStartOf(side: Side, line: number, depth: number, memo: Map<string, 
  * ends as `last` does. Each is compared by its text without footnotes
  * (lineKey). A selection that takes the whole of `last` leaves the start
  * of `first` alone.
+ *
+ * A merged line that holds nothing but footnotes holds no text of `last`:
+ * a selection of whole blocks leaves its reference alone on the line.
+ * Asked of it, lineKey gave back "[^1]" itself, the line having no text
+ * without its footnotes, and "[^1]" ends in "]" as a last line ending in a
+ * wikilink or an embed does, so a whole list of wikilinks was refused
+ * (hunt 2026-10-08 cycle 7, cluster Y1, pin
+ * bug-whole-blocks-ending-in-wikilink-refused).
  */
 function holdsTextOfLast(first: string, last: string, merged: string): boolean {
+    if (onlyFootnotes(merged)) return false;
     const [start, end, line] = [lineKey(first), lineKey(last), lineKey(merged)];
     let fromStart = 0;
     while (fromStart < line.length && line[fromStart] === start[fromStart]) fromStart++;
