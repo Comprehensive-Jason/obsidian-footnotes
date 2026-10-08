@@ -5,6 +5,7 @@ import { docLines } from "./doc-context";
 import { mapPosition, safeInsertionCh } from "./insertion-liveness";
 import { FootnotePlacement, imageStartsOn, lineLinkLikeEndAt, linkLikeEndAt, punctuationAt, referenceLandingAfter } from "../parsing/landing";
 import { NoteReading, readNote } from "../parsing/note-reading";
+import { readCell } from "../parsing/cell-reading";
 import {
     EditorWithCm,
     VaultWithConfig,
@@ -294,6 +295,22 @@ function inFrontOfTakenPunctuation(reading: NoteReading, lines: readonly string[
     const inFront = withReference(start);
     const live = inFront.referencesOn(line).some((reference) => reference.start === start);
     return live && linkLikeEndAt(inFront, line, start - 1)?.ch === start ? start : ch;
+}
+
+/**
+ * inFrontOfTakenPunctuation for a table cell's own text: where a reference
+ * that would land at `offset` goes instead, as an offset into `text`. The
+ * cell is read as the note holds it, as the one row of a table (readCell),
+ * since a cell reads like a paragraph here: "| Write to me@example.com.[^1] |"
+ * links the address with its period, and "| Write to me@example.com[^1]. |"
+ * links the address alone (docs/obsidian-reading-rules.md D8; hunt
+ * 2026-10-08 cycle 7, cluster Y11).
+ */
+export function cellInFrontOfTakenPunctuation(text: string, offset: number): number {
+    const cell = readCell(text);
+    // the same two lines readCell reads: the row and a delimiter row under it
+    const lines = [cell.line, "| --- |"];
+    return cell.offset(inFrontOfTakenPunctuation(cell.reading, lines, 0, cell.column(offset)));
 }
 
 /** Move the insertion point so a footnote goes in only at the end of a

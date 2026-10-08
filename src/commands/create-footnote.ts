@@ -18,7 +18,7 @@ import {
 import { openFootnotePopup, popupEditingAvailable } from "./footnote-popup";
 import { jumpToFootnoteDefinition } from "./navigation";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
-import { adjustFootnotePosition, endOfWordOffset, moveCursorAndSetJumpPoint } from "../editor/cursor-motion";
+import { adjustFootnotePosition, cellInFrontOfTakenPunctuation, endOfWordOffset, moveCursorAndSetJumpPoint } from "../editor/cursor-motion";
 import { cellImageStarts, cellLinkLikeEndAt } from "../parsing/landing";
 import { planDefinitionAppend } from "./definition-append";
 import {
@@ -105,18 +105,23 @@ export function insertInTableCell(
     // adjustFootnotePosition does. Text inserted right after an escaping
     // backslash, or right after a bare "^", gets swallowed by it
     // (bug-insert-after-backslash).
-    const at = safeInsertionCh(
-        cellText,
-        plugin.settings.insertAtEndOfWord
-            ? endOfWordOffset(
-                  cellText,
-                  head,
-                  plugin.settings.footnotePlacement,
-                  cellLinkLikeEndAt(cellText, head, linkLabels),
-                  cellImageStarts(cellText, linkLabels),
-              )
-            : head,
-    );
+    let landing = head;
+    if (plugin.settings.insertAtEndOfWord) {
+        landing = endOfWordOffset(
+            cellText,
+            head,
+            plugin.settings.footnotePlacement,
+            cellLinkLikeEndAt(cellText, head, linkLabels),
+            cellImageStarts(cellText, linkLabels),
+        );
+        // A press after the period that ends an email address lands in
+        // front of the period, as it does in a paragraph, unless the
+        // placement is Don't move (Jason's ruling Q30, 2026-10-08; hunt
+        // 2026-10-08 cycle 7, cluster Y11, pin
+        // bug-table-cell-press-after-email-period).
+        if (plugin.settings.footnotePlacement !== "none") landing = cellInFrontOfTakenPunctuation(cellText, landing);
+    }
+    const at = safeInsertionCh(cellText, landing);
     return dispatchCellEditIfLive(cell, text, at, at, caretOffsetInText, linkLabels);
 }
 

@@ -63,15 +63,16 @@ describe("Q30's landing in a table cell", () => {
         expect(dispatched).toEqual([{ changes: { from: 21, to: 21, insert: "[^1]" }, selection: { anchor: 25 } }]);
     });
 
-    // Now: refused with the link notice, and nothing sent to the cell.
-    it.fails("a press after the period lands in front of it, under After", () => {
+    // Before the fix: refused with the link notice, and nothing sent to the
+    // cell. insertInTableCell now asks cellInFrontOfTakenPunctuation.
+    it("a press after the period lands in front of it, under After", () => {
         const { cell, dispatched } = fakeCell("Write to me@example.com.", 24);
         insertInTableCell(cell, fakePlugin({ insertAtEndOfWord: true, footnotePlacement: "after" }), "[^1]", 4);
         expect(messages()).toEqual([]);
         expect(dispatched).toEqual([{ changes: { from: 23, to: 23, insert: "[^1]" }, selection: { anchor: 27 } }]);
     });
 
-    it.fails("a press on the address lands in front of the period, under After", () => {
+    it("a press on the address lands in front of the period, under After", () => {
         const { cell, dispatched } = fakeCell("Write to me@example.com.", 15);
         insertInTableCell(cell, fakePlugin({ insertAtEndOfWord: true, footnotePlacement: "after" }), "[^1]", 4);
         expect(messages()).toEqual([]);
