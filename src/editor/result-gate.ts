@@ -1207,7 +1207,25 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
         // to the lines around it
         const nextToUsersText =
             lineInRanges(newSide.usersText, j - 1) || lineInRanges(newSide.usersText, j + 1) || lineInRanges(oldSide.usersText, i - 1) || lineInRanges(oldSide.usersText, i + 1);
-        return sameKind(was, is, nextToUsersText);
+        return sameKind(was, is, nextToUsersText) || (is === was.replace(/(^| )paragraph$/, "$1^paragraph") && openedByFootnotesAlone(i));
+    };
+    // Whether the lines above line `i` before the edit, in the paragraph
+    // `i` carried on, held only footnotes, and so the paragraph's text began
+    // on line `i`. Such a paragraph may start on line `i` after the edit:
+    // with the reference a press wrote alone on the line under a heading
+    // deleted, "Oysters closed." starts the paragraph the "[^1]" line
+    // started, and reads as it did before the press (hunt 2026-10-08 cycle
+    // 7, cluster Y10, pin bug-delete-lone-reference-under-block-refused). A
+    // start mark the other way round, a press joining a paragraph, is
+    // sameKind's (Jason's ruling B1).
+    const openedByFootnotesAlone = (i: number): boolean => {
+        for (let above = i - 1; above >= 0; above--) {
+            const blocks = oldSide.reading.lineBlocks[above] ?? "";
+            if (!onlyFootnotes(oldSide.lines[above] ?? "")) return false;
+            if (/(?:^| )\^paragraph$/.test(blocks)) return true;
+            if (!/(?:^| )paragraph$/.test(blocks)) return false;
+        }
+        return false;
     };
     // a table row keeps its cells: text taken across a "|" leaves the row
     // a cell short (Jason's ruling on partial-table selections, 2026-09-04)

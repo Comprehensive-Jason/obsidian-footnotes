@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
+import { lintFootnotes } from "../../src/linting/linter";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
@@ -43,8 +44,10 @@ import { messages, resetNotices } from "../helpers/notices";
 // closed." are one paragraph, and without the "[^1]" line "Oysters
 // closed." is that paragraph alone. Rule C4: any line that is not a table
 // row ends the table above it. Taking the emptied line out and leaving it
-// blank read the same in Obsidian, so the tests accept both; which one the
-// fix writes is Jason's pick.
+// blank read the same in Obsidian. Jason picked leaving it blank
+// (2026-10-08), which gives back the note as it was before the press; a
+// reference alone between two lines of text still goes with its line
+// (Q28). The tests first accepted either, and now expect the blank line.
 //
 // Cause: before the deletion the "[^1]" line starts the paragraph and
 // "Oysters closed." carries it on; after it, "Oysters closed." starts the
@@ -79,15 +82,15 @@ const Above: [string, string[]][] = [
 /**
  * Deletes footnote 1 everywhere from the note `above`, "[^1]",
  * "Oysters closed.", with its definition at the end, and checks that it
- * was deleted and that the note reads as it did before the press: the
- * emptied line either taken out or left blank.
+ * was deleted and that the note is as it was before the press: the emptied
+ * line left blank (Jason, 2026-10-08).
  */
 function expectDeletedWithItsLine(above: string[]) {
     const plan = deleteFootnoteEverywhere([...above, "[^1]", "Oysters closed.", "", "[^1]: Tide tables."].join("\n"), "1");
     expect(plan.kind, JSON.stringify(plan)).toBe("deleted");
     const markdown = plan.kind === "deleted" ? plan.markdown : "";
     expect(markdown).not.toContain("[^1]");
-    expect([[...above, "Oysters closed."].join("\n"), [...above, "", "Oysters closed."].join("\n")]).toContain(markdown);
+    expect(markdown).toBe([...above, "", "Oysters closed."].join("\n"));
 }
 
 describe("a reference alone on the first line of a paragraph", () => {
@@ -102,7 +105,18 @@ describe("a reference alone on the first line of a paragraph", () => {
 
     // Now: refused with "Nothing was deleted: removing "[^1]" would change
     // how Obsidian reads the text around it. Delete it by hand."
-    it.fails.each(Above)("Delete footnote everywhere under %s deletes it, and the note reads as before the press", (_what, above) => {
+    it.each(Above)("Delete footnote everywhere under %s deletes it, and the note reads as before the press", (_what, above) => {
         expectDeletedWithItsLine(above);
+    });
+});
+
+// Characterization test (behaviour pinned as it is, found while fixing):
+// the same gate change lets the lint's Delete orphaned references take a
+// lone orphaned reference out from under a heading, leaving its line
+// blank. On 34d5377 the gate held that deletion back, and the lint renamed
+// the orphan to [^1] instead.
+describe("the lint with Delete orphaned references on", () => {
+    it("takes a lone orphaned reference out from under a heading, leaving its line blank", () => {
+        expect(lintFootnotes(["# Tides", "[^9]", "Oysters closed."].join("\n"), { removeOrphanedReferences: true })).toBe(["# Tides", "", "Oysters closed."].join("\n"));
     });
 });

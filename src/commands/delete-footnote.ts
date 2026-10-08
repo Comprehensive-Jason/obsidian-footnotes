@@ -157,16 +157,26 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     });
     if (references === 0 && definitions === 0) return { kind: "nothing" };
     // A line the reference cuts leave blank, with text right above it and
-    // right below it, goes too. A reference alone on a line between two
-    // lines of text is part of one paragraph with them (a press on the
-    // blank line between two paragraphs writes one there, Jason's ruling
-    // B1), and an empty line left in its place would split that paragraph
-    // in two, so the deletion was refused. Without the line, the note reads
-    // as it did (Jason's ruling Q28, 2026-10-08; hunt 2026-10-08 cycle 6,
-    // cluster Z13). An emptied line with a blank line next to it stays, as
+    // right below it, goes too, when it carried on the paragraph above. A
+    // reference alone on a line between two lines of text is part of one
+    // paragraph with them (a press on the blank line between two paragraphs
+    // writes one there, Jason's ruling B1), and an empty line left in its
+    // place would split that paragraph in two, so the deletion was refused.
+    // Without the line, the note reads as it did (Jason's ruling Q28,
+    // 2026-10-08; hunt 2026-10-08 cycle 6, cluster Z13).
+    //
+    // A line that started its paragraph stays, empty: under a heading, a
+    // rule, a code block, or a table, a press on the blank line writes the
+    // reference there, and the blank line back gives the note as it was
+    // before the press (Jason, 2026-10-08; hunt 2026-10-08 cycle 7, cluster
+    // Y10). An emptied line with a blank line next to it stays too, as
     // before.
     const hasText = (i: number) => i >= 0 && i < lines.length && !cut.has(i) && lines[i].trim() !== "";
-    const emptied = cutLines.flatMap((line, i) => (line !== lines[i] && !cut.has(i) && line.trim() === "" && hasText(i - 1) && hasText(i + 1) ? [{ start: i, end: i }] : []));
+    // its own block a paragraph without the mark for where one starts
+    const carriesOn = (i: number) => /(?:^| )paragraph$/.test(reading.lineBlocks[i] ?? "");
+    const emptied = cutLines.flatMap((line, i) =>
+        line !== lines[i] && !cut.has(i) && line.trim() === "" && hasText(i - 1) && hasText(i + 1) && carriesOn(i) ? [{ start: i, end: i }] : [],
+    );
 
     // The promise the two orphan rules make, kept here too: the result gate
     // judges the deletion, and one that changes how Obsidian reads text it
