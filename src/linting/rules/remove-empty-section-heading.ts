@@ -34,8 +34,15 @@ export function removeEmptySectionHeading(markdown: string, sectionHeading: stri
     for (let i = end + 1; i < lines.length; i++) {
         if (lines[i].trim() !== "") return markdown;
     }
-    let start = end - headingLines.length + 1;
+    const headingStart = end - headingLines.length + 1;
+    let start = headingStart;
     while (start > 0 && lines[start - 1].trim() === "") start--;
     const out = lines.slice(0, start);
-    return rulePasses(lines, out, {}) ? restoreEol(out.join("\n"), eol) : markdown;
+    // The heading is the settings' text, and the tidy means to take it out,
+    // so the gate is told so (removedText): a heading holding a comment,
+    // inline code, or HTML ("%% footnotes %%", "## `Notes`") is then not
+    // taken for protected text the tidy changed (found while fixing hunt
+    // 2026-10-08, cycle 6, cluster Z9, the same cause in reverse).
+    const heading = { from: { line: headingStart, ch: 0 }, to: { line: end, ch: lines[end].length } };
+    return rulePasses(lines, out, { removedText: [heading] }) ? restoreEol(out.join("\n"), eol) : markdown;
 }

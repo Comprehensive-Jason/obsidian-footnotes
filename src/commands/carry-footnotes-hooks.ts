@@ -648,7 +648,9 @@ function landCarriedText(
         });
         changes = append.changes;
         noteAfter = append.final;
-        appendedFrom = append.labelLine;
+        // from the section heading the append writes above a first
+        // footnote, when it writes one (DefinitionAppendPlan's heading)
+        appendedFrom = append.heading.length > 0 ? append.heading[0].from.line : append.labelLine;
         // in the popup the definitions land outside its text, so the caret
         // there stays right after the pasted text
         if (!popup) end = append.edits[0].end;
@@ -722,8 +724,9 @@ function landCarriedText(
  * the selection `replaced` (when there is one), to write `pasted` where it
  * started, and to add the carried `definitions`, which start on line
  * `appendedFrom` of `after`, the note as the paste leaves it (null when it
- * adds none). The definitions come from the clipboard, so their lines are
- * text the paste writes in too.
+ * adds none), or under the section heading that starts there. The
+ * definitions come from the clipboard and the heading from the settings, so
+ * their lines are text the paste writes in too.
  */
 function pasteIntent(after: string[], replaced: NoteRange, pasted: string, appendedFrom: number | null, definitions: readonly CarriedDefinition[]): EditIntent {
     const lines = pasted.split("\n");

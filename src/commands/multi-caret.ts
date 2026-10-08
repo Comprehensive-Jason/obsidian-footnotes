@@ -370,7 +370,7 @@ function insertReferenceAtEveryCaret(
     const verdict = judgeEdit(
         ctx.lines,
         plan.final,
-        { created: [{ kind: "footnote", name: footnoteId, references: plan.edits.map((edit) => edit.start), definition: { line: plan.labelLine, lines: 1 } }] },
+        { created: [{ kind: "footnote", name: footnoteId, references: plan.edits.map((edit) => edit.start), definition: { line: plan.labelLine, lines: 1 } }], insertedText: plan.heading },
         ctx.reading(),
     );
     if (refusedCreation(verdict)) return;

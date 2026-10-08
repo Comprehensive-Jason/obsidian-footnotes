@@ -493,7 +493,7 @@ export function landCellDefinitionAppend(opts: {
 export function definitionAppendVerdict(plugin: FootnotePlugin, doc: Editor, footnoteId: string, lines: number, body?: string): GateVerdict {
     const before = docLines(doc);
     const plan = planDefinitionAppend({ lines: before, edits: [], footnoteId, plugin, ...(body !== undefined ? { body } : {}) });
-    return judgeEdit(before, plan.final, { created: [{ kind: "footnote", name: footnoteId, references: [], definition: { line: plan.labelLine, lines } }] });
+    return judgeEdit(before, plan.final, { created: [{ kind: "footnote", name: footnoteId, references: [], definition: { line: plan.labelLine, lines } }], insertedText: plan.heading });
 }
 
 /** Step 4 of the cascade, for the numbered key: insert the next-numbered reference at the caret, through `cell` when you are in a table, append its definition, and then open the popup or jump, whichever the settings say. */
@@ -603,7 +603,7 @@ export function createAutonumFootnote(
     const verdict = judgeEdit(
         ctx.lines,
         plan.final,
-        { created: [{ kind: "footnote", name: footnoteId, references: [plan.edits[0].start], definition: { line: plan.labelLine, lines: 1 } }] },
+        { created: [{ kind: "footnote", name: footnoteId, references: [plan.edits[0].start], definition: { line: plan.labelLine, lines: 1 } }], insertedText: plan.heading },
         ctx.reading(),
     );
     if (refusedCreation(verdict)) return true;
@@ -685,7 +685,7 @@ export function createMatchingFootnoteDefinition(
         const verdict = judgeEdit(
             ctx.lines,
             plan.final,
-            { created: [{ kind: "footnote", name: footnoteId, references: [], definition: { line: plan.labelLine, lines: 1 } }] },
+            { created: [{ kind: "footnote", name: footnoteId, references: [], definition: { line: plan.labelLine, lines: 1 } }], insertedText: plan.heading },
             ctx.reading(),
         );
         if (refusedCreation(verdict)) return true;

@@ -79,8 +79,8 @@ describe("a press under a section heading that holds protected text", () => {
         expect(messages()).toEqual([]);
     });
 
-    // Now: the note is unchanged and the protected-text notice shows.
-    it.fails.each([["# Footnotes <!-- fn -->"], ["%% footnotes %%"], ["## `Notes`"], ["# Footnotes %%fn%%"]])(
+    // Before the fix (2026-10-08): the note is unchanged and the protected-text notice shows.
+    it.each([["# Footnotes <!-- fn -->"], ["%% footnotes %%"], ["## `Notes`"], ["# Footnotes %%fn%%"]])(
         "'%s' takes the first footnote too, with no notice",
         async (heading) => {
             const doc = await press(heading);
@@ -91,9 +91,9 @@ describe("a press under a section heading that holds protected text", () => {
 });
 
 describe("the other commands that write the section heading", () => {
-    // Now: the note is unchanged, and the notice says the selection cuts
+    // Before the fix (2026-10-08): the note is unchanged, and the notice says the selection cuts
     // through protected text.
-    it.fails("a selection converted with the numbered key, under '%% footnotes %%'", async () => {
+    it("a selection converted with the numbered key, under '%% footnotes %%'", async () => {
         const doc = fakeEditor(note, {
             cursor: { line: 0, ch: 21 },
             selection: { anchor: { line: 0, ch: 17 }, head: { line: 0, ch: 21 } },
@@ -106,8 +106,8 @@ describe("the other commands that write the section heading", () => {
         expect(doc.lines).toEqual(["Text with a word[^1]", "", "Last paragraph.", "", "%% footnotes %%", "", "[^1]: here"]);
     });
 
-    // Now: the command is refused and the inline footnote stays.
-    it.fails("Convert inline footnotes to normal, under '%% footnotes %%'", () => {
+    // Before the fix (2026-10-08): the command is refused and the inline footnote stays.
+    it("Convert inline footnotes to normal, under '%% footnotes %%'", () => {
         const lines = ["Text^[a note] here", "", "Last paragraph."];
         const doc = fakeEditor(lines, { cursor: { line: 0, ch: 0 }, edits: true, wholeDoc: true });
         const result = convertInlineFootnotesToNormal(fakePlugin({ ...settings("%% footnotes %%"), footnoteNaming: "keep" }, doc), doc);
@@ -123,9 +123,9 @@ describe("the lint's gather under the section heading", () => {
         expect(lintFootnotes(linted, { sectionHeading: "# Footnotes" })).toBe("Text[^1] here.\n\nMore text.\n\n# Footnotes\n\n[^1]: one");
     });
 
-    // Now: the lint changes nothing; the definition stays above "More text."
+    // Before the fix (2026-10-08): the lint changes nothing; the definition stays above "More text."
     // and no heading is written.
-    it.fails.each([["%% footnotes %%"], ["# Footnotes <!-- fn -->"], ["## `Notes`"]])("'%s' gathers it too", (heading) => {
+    it.each([["%% footnotes %%"], ["# Footnotes <!-- fn -->"], ["## `Notes`"]])("'%s' gathers it too", (heading) => {
         expect(lintFootnotes(linted, { sectionHeading: heading })).toBe(`Text[^1] here.\n\nMore text.\n\n${heading}\n\n[^1]: one`);
     });
 });

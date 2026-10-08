@@ -909,7 +909,7 @@ function conversion(plugin: FootnotePlugin, ctx: DocContext, selection: Converte
     const verdict = judgeEdit(
         ctx.lines,
         plan.final,
-        { created: [{ kind: "footnote", name: footnoteId, references: [plan.edits[0].start], definition: { line: plan.labelLine, lines: body.split("\n").length } }] },
+        { created: [{ kind: "footnote", name: footnoteId, references: [plan.edits[0].start], definition: { line: plan.labelLine, lines: body.split("\n").length } }], insertedText: plan.heading },
         ctx.reading(),
     );
     return { body, plan, verdict };

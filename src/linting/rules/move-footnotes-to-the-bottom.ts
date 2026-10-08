@@ -1,4 +1,4 @@
-import { judgeEdit } from "../../editor/result-gate";
+import { judgeEdit, NoteRange } from "../../editor/result-gate";
 import { rulePasses } from "../rule-gate";
 import { findLineRunEnd, normalizeEol, removeLineRanges } from "../../parsing/line-edits";
 import { Definition, readNote } from "../../parsing/note-reading";
@@ -94,7 +94,7 @@ export function labelOutrunsLookahead(lines: readonly string[], from: number, to
  */
 export function moveFootnoteDefinitionsToBottom(markdown: string, sectionHeading = ""): string {
     return rewriteDocument(markdown, (text, view) => {
-        const moved = gathered(text, view, sectionHeading);
+        const { text: moved, heading } = gathered(text, view, sectionHeading);
         // A move must leave every definition reading as it did, as Obsidian
         // reads the note: still a definition, in the same container, with
         // the same lines, and every other line as it was. Where the end of
@@ -110,12 +110,21 @@ export function moveFootnoteDefinitionsToBottom(markdown: string, sectionHeading
         // item's second paragraph, and the indented code under it from
         // waking up as live text (found by the conservation property, the
         // runtime swap step 2, 2026-10-03).
-        return moved !== text && !rulePasses(text.split("\n"), moved.split("\n"), {}) ? text : moved;
+        return moved !== text && !rulePasses(text.split("\n"), moved.split("\n"), { insertedText: heading }) ? text : moved;
     });
 }
 
-/** The note with its movable definitions gathered under the section heading or at the end, before the result gate judges it. */
-function gathered(text: string, view: DocumentView, sectionHeading: string): string {
+/**
+ * The note with its movable definitions gathered under the section heading
+ * or at the end, before the result gate judges it, and where the section
+ * heading is in it when the move writes one. The heading comes from the
+ * settings, so the gate is told the move writes it in from outside the note
+ * (insertedText), as a creation press tells it (DefinitionAppendPlan's
+ * heading): a heading holding a comment, inline code, or HTML is then not
+ * taken for protected text the move changed (hunt 2026-10-08, cycle 6,
+ * cluster Z9, pin bug-section-heading-with-protected-text-refuses).
+ */
+function gathered(text: string, view: DocumentView, sectionHeading: string): { text: string; heading: NoteRange[] } {
     const lines = view.lines;
 
     // Remember how many blank lines the note ended with; they go back on
@@ -126,7 +135,7 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
 
     const { reading, blocks } = view;
     const isProtected = reading.protectedLines;
-    if (blocks.length === 0) return text;
+    if (blocks.length === 0) return { text, heading: [] };
 
     // Packed label to label, except after a block whose last line is
     // a lazy continuation (a plain column-0 line): the next label
@@ -233,7 +242,7 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
             isProtected[0],
             out.join("\n") + "\n".repeat(trailingNewlines),
         );
-        return anchored;
+        return { text: anchored, heading: [] };
     }
 
     const base = body.join("\n");
@@ -253,11 +262,17 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): str
             ? (sectionHeading !== "" ? sectionHeading + "\n\n" : "") +
               definitions
             : base + headingPart + "\n\n" + definitions;
-    const rebuilt = preserveLeadingThematicBreak(
-        isProtected[0],
-        result + "\n".repeat(trailingNewlines),
-    );
-    return rebuilt;
+    const unanchored = result + "\n".repeat(trailingNewlines);
+    const rebuilt = preserveLeadingThematicBreak(isProtected[0], unanchored);
+    if (sectionHeading === "") return { text: rebuilt, heading: [] };
+    // the heading's lines: the first ones, or the ones under the body and
+    // a blank line, one lower when a blank line went in at the top
+    const headingLines = sectionHeading.split("\n");
+    const start = (base === "" ? 0 : body.length + 1) + (rebuilt === unanchored ? 0 : 1);
+    return {
+        text: rebuilt,
+        heading: [{ from: { line: start, ch: 0 }, to: { line: start + headingLines.length - 1, ch: headingLines[headingLines.length - 1].length } }],
+    };
 }
 
 /**
@@ -309,12 +324,13 @@ export function definitionsHoldingTheMoveBack(markdown: string, sectionHeading =
     // bug-move-alert-ignores-heading), judged as the rule judges it
     const note = lines.join("\n");
     let moved = note;
+    let heading: NoteRange[] = [];
     rewriteDocument(note, (text, view) => {
-        moved = gathered(text, view, sectionHeading);
+        ({ text: moved, heading } = gathered(text, view, sectionHeading));
         return text;
     });
     if (moved === note) return [];
-    const verdict = judgeEdit(lines, moved.split("\n"), {});
+    const verdict = judgeEdit(lines, moved.split("\n"), { insertedText: heading });
     if (verdict.pass) return [];
     // The definitions whose own move the gate refuses, judged as taken out
     // of the note one at a time, such as one between two lists, whose move

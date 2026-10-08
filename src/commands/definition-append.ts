@@ -14,6 +14,12 @@ import { readNote } from "../parsing/note-reading";
 // creation press shares. Split out of the one big commands file on
 // 2026-08-11.
 
+/** A stretch of a note, from `from` up to `to`. */
+interface TextRange {
+    from: EditorPosition;
+    to: EditorPosition;
+}
+
 /**
  * The section heading a first footnote goes under: the setting's text when
  * the setting is on, without the blank lines at its start and end, the way
@@ -67,13 +73,16 @@ function addFootnoteSectionHeader(plugin: FootnotePlugin): string {
 //
 // `whole` is a stretch of lines the definition must not go between (see
 // planDefinitionAppend).
+//
+// `heading` is where the section heading it writes ends up, when it writes
+// one, measured like `cursor`.
 export function buildDefinitionAppend(
     ctx: DocContext,
     footnoteId: string,
     isFirstFootnote: boolean,
     plugin: FootnotePlugin,
     whole?: { from: number; to: number },
-): { change: EditorChange; cursor: EditorPosition; prepend?: EditorChange } {
+): { change: EditorChange; cursor: EditorPosition; prepend?: EditorChange; heading?: TextRange } {
     const lines = ctx.lines;
     const reading = ctx.reading();
     const isProtected = reading.protectedLines;
@@ -201,6 +210,7 @@ export function buildDefinitionAppend(
     const from = { line: fromLine, ch: lines[fromLine].length };
 
     let text = `\n[^${footnoteId}]: `;
+    let written: TextRange | undefined;
     if (isFirstFootnote) {
         let heading = addFootnoteSectionHeader(plugin);
         // The heading already brings a blank line of its own above it. If
@@ -211,6 +221,15 @@ export function buildDefinitionAppend(
             heading = heading.slice(1);
         }
         text = heading + "\n" + text;
+        if (heading) {
+            // the heading's own lines, under the line breaks in front of it
+            const headingLines = sectionHeading(plugin).split("\n");
+            const start = fromLine + heading.length - sectionHeading(plugin).length;
+            written = {
+                from: { line: start, ch: 0 },
+                to: { line: start + headingLines.length - 1, ch: headingLines[headingLines.length - 1].length },
+            };
+        }
     } else if (lines[fromLine].trim() !== "") {
         // Not the first footnote, and yet there is no definition block at
         // the left margin to append under, because the note's only
@@ -254,9 +273,10 @@ export function buildDefinitionAppend(
         if (readNote(candidate.split("\n")).protectedLines[0]) {
             prepend = { from: { line: 0, ch: 0 }, text: "\n" };
             cursor.line += 1;
+            if (written) written = { from: { ...written.from, line: written.from.line + 1 }, to: { ...written.to, line: written.to.line + 1 } };
         }
     }
-    return { change: { from, to, text }, cursor, prepend };
+    return { change: { from, to, text }, cursor, prepend, ...(written ? { heading: written } : {}) };
 }
 
 /**
@@ -285,6 +305,7 @@ function seedDefinitionBody(
         change: EditorChange;
         cursor: EditorPosition;
         prepend?: EditorChange;
+        heading?: TextRange;
     },
     footnoteId: string,
     body: string,
@@ -292,6 +313,7 @@ function seedDefinitionBody(
     change: EditorChange;
     cursor: EditorPosition;
     prepend?: EditorChange;
+    heading?: TextRange;
     labelLineOffset: number;
 } {
     const label = `${definitionLabel(footnoteId)} `;
@@ -330,6 +352,17 @@ export interface DefinitionAppendPlan {
     labelLine: number;
     /** Where the caret goes in the new definition: the end of its label, or the end of the seeded body. */
     cursor: EditorPosition;
+    /**
+     * The section heading the append writes above a first footnote, when it
+     * writes one, as the result gate takes text the action writes in from
+     * outside the note (its insertedText): the heading comes from the
+     * settings. A heading can hold a comment, inline code, or HTML ("%%
+     * footnotes %%", "## `Notes`"), and told nothing, the gate counted that
+     * as protected text the press changed and refused every first footnote
+     * (hunt 2026-10-08, cycle 6, cluster Z9, pin
+     * bug-section-heading-with-protected-text-refuses).
+     */
+    heading: TextRange[];
 }
 
 /**
@@ -417,5 +450,6 @@ export function planDefinitionAppend(opts: {
         edits,
         labelLine: seeded.cursor.line - bodyExtraLines,
         cursor: seeded.cursor,
+        heading: seeded.heading ? [seeded.heading] : [],
     };
 }

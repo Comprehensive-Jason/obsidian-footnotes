@@ -367,6 +367,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
                 }),
             ),
             inlineRemoved: spans.length,
+            insertedText: plan.heading,
         },
         ctx.reading(),
     );
