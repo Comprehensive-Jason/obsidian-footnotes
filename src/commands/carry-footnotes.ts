@@ -906,8 +906,8 @@ export interface CutPlan extends CarriedDefinitions {
  * now sits (Jason's ruling Q5, option (a), 2026-10-07), so it can never
  * point past the end of the note either (pin bug-carry-cut-caret-stale-line).
  *
- * The whole cut, as it leaves the note, is judged by the result gate too:
- * a cut it refuses (the text left joining a definition, Jason's ruling B9)
+ * The whole cut, as it leaves the note before the tidy, is judged by the
+ * result gate too: a cut it refuses (the text left joining a definition, Jason's ruling B9)
  * is `refused`, and the plugin cuts and copies nothing.
  *
  * When the clipboard carries nothing, the plugin leaves the cut to the
@@ -967,8 +967,15 @@ export function planCut(
     // the nearest place left, the end of a definition or the start of the
     // next paragraph, and a paste there joined the text onto it.
     const { removed, kept, keptLine } = definitionsToCut(joined, candidates, (dead, out) => judgeEdit(lines, out, intent(dead)).pass, from.line);
+    // The cut is judged before the tidy, as Delete footnote everywhere is.
+    // The tidy takes out only the section heading, the settings' own text,
+    // so it is the plugin's to take. Judged after it, a heading holding a
+    // comment or code ("%% footnotes %%", "## `Notes`") read as protected
+    // text the cut took out, and the whole cut was refused (hunt 2026-10-08
+    // cycle 6, found by fix group c6fix-B; the tidy tests in
+    // test/section-heading-protected-text.test.ts).
+    const refused = !judgeEdit(lines, kept, intent(removed)).pass;
     const out = keepingLine(kept, tidy(kept.join("\n")).split("\n"), keptLine);
-    const refused = !judgeEdit(lines, out, intent(removed)).pass;
     // The caret never sits past the end of its line. A cut that starts at
     // the end of a definition it takes empties the caret's line, and the
     // caret goes to the start of that empty line. Left at the column the

@@ -108,11 +108,11 @@ describe("the tidy after a cut takes the last footnote", () => {
         expect(cutLastFootnote("# Footnotes").lines).toEqual(["b"]);
     });
 
-    // Not fixed here: the cut judges its whole result, the tidy's included,
-    // without saying it takes the heading out (planCut in
-    // src/commands/carry-footnotes.ts, another fix group's file in this
-    // cycle), so the whole cut is refused and nothing is cut.
-    it.fails.each([["%% footnotes %%"], ["## `Notes`"]])("'%s' goes with it", (heading) => {
+    // The cut judged its whole result, the tidy's included, so a heading
+    // holding a comment or code read as protected text the cut took out,
+    // and the whole cut was refused. planCut now judges the cut before the
+    // tidy (hunt 2026-10-08 cycle 7, fix group c7fix-AB).
+    it.each([["%% footnotes %%"], ["## `Notes`"]])("'%s' goes with it", (heading) => {
         expect(cutLastFootnote(heading).lines).toEqual(["b"]);
     });
 });
