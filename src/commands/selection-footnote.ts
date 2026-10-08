@@ -125,6 +125,14 @@ export const TableSelectionNotice =
 export const SelectionFormattingNotice =
     NoFootnoteCreated + "the selection takes part of the line's formatting. Select the whole line, or only its text.";
 
+// A selection of some but not all of a list's items, each whole, is
+// refused. One item's line selected whole converts its text (ruling Q27),
+// and a whole list converts as whole blocks (ruling Q25); two of three
+// items fall between them, and "[^1]" left above or below the rest of a
+// numbered list would make an item read as more of its paragraph (Jason's
+// ruling Q31, 2026-10-08; hunt 2026-10-08 cycle 7, cluster Y12).
+export const PartOfListNotice = NoFootnoteCreated + "select one item's text, or the whole list.";
+
 /**
  * The notices a selection conversion the result gate refused is told
  * with, where they are not a press's (refusedCreation in
@@ -396,7 +404,15 @@ export function selectionPressHandled(
     // selection holds whole travel into the footnote (2026-08-19; sheet
     // 05, 2026-09-09).
     const table = tableVerdict(ctx, trimmed.from, trimmed.to) === "whole";
-    const notices = selectionNotices(selectedNotice(ctx, trimmed.from, trimmed.to));
+    const selected = selectedNotice(ctx, trimmed.from, trimmed.to);
+    // Some of a list's items, each whole, are refused (ruling Q31). A
+    // footnote the selection holds or cuts into is named first, since
+    // selecting the whole list would still not convert it.
+    if (selected === null && someWholeListItems(ctx.reading(), ctx.lines, trimmed.from, trimmed.to)) {
+        showNotice(PartOfListNotice, 8000);
+        return true;
+    }
+    const notices = selectionNotices(selected);
     // The new reference sits snug against the text in front of the
     // selection, so the run of whitespace before it is replaced along with
     // the selection itself (absorbLeadingSpace decides how much).
@@ -556,6 +572,38 @@ function wholeListItemLine(reading: NoteReading, lines: readonly string[], from:
         syntaxEnd < to.ch &&
         (blocks.includes("^listItem") || quoteText)
     );
+}
+
+/**
+ * Whether the selection from `from` to `to` spans lines and takes some
+ * but not all of one list's items, each whole: it starts at a list item's
+ * marker, ends at the end of a line, stays inside the list, and the list
+ * goes on above it or below it (ruling Q31).
+ *
+ * The note reading lists the blocks each line belongs to, outermost first,
+ * with a "^" on the ones that start on that line ("^list ^listItem
+ * ^paragraph" for a list's first item, "list ^listItem ^paragraph" for a
+ * later one, "list" for a blank line between items). The list the first
+ * item belongs to is the innermost list on its line; it goes on above when
+ * it does not start there, and below when the next line is still in it.
+ */
+function someWholeListItems(reading: NoteReading, lines: readonly string[], from: EditorPosition, to: EditorPosition): boolean {
+    if (from.line === to.line) return false;
+    // the lists line `line` sits in, outermost first ("list", or
+    // "list.ordered" for a numbered one, each with "^" where it starts)
+    const listsOn = (line: number) => (reading.lineBlocks[line] ?? "").split(" ").filter((block) => /^\^?list(?:\.|$)/.test(block));
+    const lists = listsOn(from.line);
+    const depth = lists.length;
+    if (depth === 0 || !(reading.lineBlocks[from.line] ?? "").split(" ").includes("^listItem")) return false;
+    if ((lines[from.line] ?? "").slice(0, from.ch).trim() !== "" || from.ch >= reading.blockSyntaxEnd(from.line)) return false;
+    if ((lines[to.line] ?? "").slice(to.ch).trim() !== "") return false;
+    for (let line = from.line + 1; line <= to.line; line++) {
+        if ((lines[line] ?? "").trim() !== "" && listsOn(line).length < depth) return false;
+    }
+    const goesOnAbove = !lists[depth - 1].startsWith("^");
+    const below = listsOn(to.line + 1);
+    const goesOnBelow = below.length >= depth && !below[depth - 1].startsWith("^");
+    return goesOnAbove || goesOnBelow;
 }
 
 /**

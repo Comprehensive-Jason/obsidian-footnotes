@@ -5,6 +5,7 @@ import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { DEFAULT_SETTINGS } from "../../src/settings";
+import { PartOfListNotice } from "../../src/commands/selection-footnote";
 
 // spec question: two whole bullets of a longer list are selected and the
 // numbered key pressed. What should happen?
@@ -37,6 +38,13 @@ import { DEFAULT_SETTINGS } from "../../src/settings";
 //     ask for.)
 // The tests assert (c): the press is refused, the note is unchanged, and
 // the notice does not tell the user to select the whole line.
+//
+// Answered (Jason's ruling Q31, 2026-10-08), option (c): a selection of
+// some but not all of a list's items, each whole, is refused, the note
+// unchanged, with "No footnote was created: select one item's text, or the
+// whole list." (PartOfListNotice, his pick of the three drafts). The tests
+// below were it.fails until then; the last two bullets, a numbered list,
+// and a list with blank lines between its items were added with the fix.
 //
 // Why it is a question and not a bug: the refusal itself is the result
 // gate doing its job. The "result gate" is the one check every edit passes
@@ -72,22 +80,48 @@ async function pressOver(anchor: { line: number; ch: number }, head: { line: num
 
 beforeEach(resetNotices);
 
-describe("spec question: two whole bullets of a three-bullet list selected", () => {
+describe("Q31: two whole bullets of a three-bullet list selected", () => {
     it("control: the whole list converts as whole blocks", async () => {
         const doc = await pressOver({ line: 2, ch: 0 }, { line: 5, ch: 0 });
         expect(messages()).toEqual([]);
         expect(doc.lines[2]).toBe("[^1]");
     });
 
-    // Now: refused with "No footnote was created: the selection takes part
-    // of the line's formatting. Select the whole line, or only its text."
-    it.fails.each([
+    // Before the ruling: refused with "No footnote was created: the
+    // selection takes part of the line's formatting. Select the whole line,
+    // or only its text."
+    it.each([
         ["with the line break (a triple-click dragged down)", { line: 4, ch: 0 }],
         ["without the last line break", { line: 3, ch: 14 }],
-    ])("spec (c), %s: refused with a notice that does not say to select the whole line", async (_what, head) => {
+    ])("ruling (c), %s: refused with the notice that says to select one item's text or the whole list", async (_what, head) => {
         const doc = await pressOver({ line: 2, ch: 0 }, head);
         expect(doc.lines).toEqual(list);
-        expect(messages().filter((m) => m.startsWith("No footnote was created"))).toHaveLength(1);
-        expect(messages().filter((m) => m.includes("Select the whole line"))).toEqual([]);
+        expect(messages()).toEqual([PartOfListNotice]);
+    });
+
+    it("the last two bullets: refused the same way", async () => {
+        const doc = await pressOver({ line: 3, ch: 0 }, { line: 5, ch: 0 });
+        expect(doc.lines).toEqual(list);
+        expect(messages()).toEqual([PartOfListNotice]);
+    });
+
+    it("two items of a numbered list, and two of a list with blank lines between its items: refused the same way", async () => {
+        const numbered = ["Intro.", "", "1. First", "2. Second", "3. Third", "", "After."];
+        const first = fakeEditor([...numbered], { cursor: { line: 4, ch: 0 }, selection: { anchor: { line: 2, ch: 0 }, head: { line: 4, ch: 0 } }, edits: true, wholeDoc: true, words: true });
+        await insertAutonumFootnote(fakePlugin({ ...DEFAULT_SETTINGS, enablePopupEditor: false }, first));
+        expect(first.lines).toEqual(numbered);
+        expect(messages()).toEqual([PartOfListNotice]);
+        resetNotices();
+        const loose = ["Intro.", "", "- First", "", "- Second", "", "- Third", "", "After."];
+        const second = fakeEditor([...loose], { cursor: { line: 7, ch: 0 }, selection: { anchor: { line: 4, ch: 0 }, head: { line: 7, ch: 0 } }, edits: true, wholeDoc: true, words: true });
+        await insertAutonumFootnote(fakePlugin({ ...DEFAULT_SETTINGS, enablePopupEditor: false }, second));
+        expect(second.lines).toEqual(loose);
+        expect(messages()).toEqual([PartOfListNotice]);
+    });
+
+    it("control: the whole list with the paragraph after it converts as whole blocks", async () => {
+        const doc = await pressOver({ line: 2, ch: 0 }, { line: 6, ch: 6 });
+        expect(messages()).toEqual([]);
+        expect(doc.lines[2]).toBe("[^1]");
     });
 });
