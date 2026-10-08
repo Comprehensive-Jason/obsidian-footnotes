@@ -46,20 +46,20 @@ import { lintFootnotes } from "../../src/linting/linter";
 
 describe("the lint does not join two lists around a definition at the end of the note", () => {
     // Now: "Steps\n\n1. Mix\n\n1. Bake.[^a]\n\n[^a]: by hand\n"
-    it.fails("numbered: the second list keeps its own 1.", () => {
+    it("numbered: the second list keeps its own 1.", () => {
         const out = lintFootnotes("Steps\n\n1. Mix\n\n[^a]: by hand\n\n1. Bake[^a].\n");
         expect(out).toBe("Steps\n\n1. Mix\n\n[^a]: by hand\n\n1. Bake.[^a]\n");
     });
 
     // Now: "Steps\n\n- Mix\n\n- Bake.[^a]\n\n[^a]: by hand\n"
-    it.fails("bullets: the two lists stay apart", () => {
+    it("bullets: the two lists stay apart", () => {
         const out = lintFootnotes("Steps\n\n- Mix\n\n[^a]: by hand\n\n- Bake[^a].\n");
         expect(out).toBe("Steps\n\n- Mix\n\n[^a]: by hand\n\n- Bake.[^a]\n");
     });
 
     // The root pin: the gate on its own passes this edit (pass: true) when
     // the note ends in a line break.
-    it.fails("the gate itself: moving the definition and changing the line under it is refused", () => {
+    it("the gate itself: moving the definition and changing the line under it is refused", () => {
         const before = "Steps\n\n1. Mix\n\n[^a]: by hand\n\n1. Bake[^a].\n".split("\n");
         const after = "Steps\n\n1. Mix\n\n1. Bake.[^a]\n\n[^a]: by hand\n".split("\n");
         expect(judgeEdit(before, after, { footnotesMoved: true }).pass).toBe(false);

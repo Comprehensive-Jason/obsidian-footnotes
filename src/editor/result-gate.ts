@@ -250,10 +250,11 @@ interface ChangedRun {
 /**
  * The stretches of lines that differ between `a` and `b` (ChangedRun).
  * Lines with text on them that belong to no definition (`anchorA` and
- * `anchorB` say which) are lined up first, as check 5 lines up the body of
- * the note; then, between two body lines lined up with each other, the
- * other lines with text, the definitions' lines; and what still differs
- * between two lines lined up is a change. Blank lines are never lined up:
+ * `anchorB` say which) are lined up first, by their text without footnotes
+ * (lineKey), as check 5 lines up the body of the note; then, between two
+ * body lines lined up with each other, the other lines with text, the
+ * definitions' lines; and what still differs between two lines lined up is
+ * a change. Blank lines are never lined up:
  * they read as nothing, and lined up with each other they paired the wrong
  * lines, so a line that changed how it reads was taken for a new one (a
  * "   ===" left under a deleted lazy label, which started a paragraph of
@@ -261,14 +262,24 @@ interface ChangedRun {
  * bug-delete-cuts-rule-under-lazy-label). And definitions move: lined up
  * before the body, the body lines a move took them past were taken for
  * lines taken out in one place and written in another.
+ *
+ * A body line whose footnotes alone changed is lined up with itself, as a
+ * change of its own. Lined up by its whole text, it found no partner, and
+ * the definition the lint moved past it was lined up instead; the line
+ * then went into one stretch as a line taken out and into another as a
+ * line written in, and check 5 compared it with nothing (two lists joined
+ * around a moved definition; hunt 2026-10-08, cycle 6, pin
+ * bug-gate-windows-trailing-line-break-joins-lists).
  */
 function changedRuns(a: readonly string[], b: readonly string[], anchorA: (i: number) => boolean, anchorB: (j: number) => boolean): ChangedRun[] {
     const runs: ChangedRun[] = [];
     // the lines from `fromA` up to `toA` of `a` and from `fromB` up to
-    // `toB` of `b`, lined up by the lines `useA` and `useB` allow, and
-    // then, in each stretch between two lines lined up, by `next` (or,
-    // with none left, taken as one change when the stretches differ)
-    const lineUp = (fromA: number, toA: number, fromB: number, toB: number, levels: readonly [(i: number) => boolean, (j: number) => boolean][]): void => {
+    // `toB` of `b`, lined up by the lines `useA` and `useB` allow, each
+    // compared by `key`, and then, in each stretch between two lines lined
+    // up, by `next` (or, with none left, taken as one change when the
+    // stretches differ)
+    type Level = readonly [(i: number) => boolean, (j: number) => boolean, (line: string) => string];
+    const lineUp = (fromA: number, toA: number, fromB: number, toB: number, levels: readonly Level[]): void => {
         // compared in place: most stretches between two lined-up lines are
         // empty, and a press lines up every line of a long note
         if (toA - fromA === toB - fromB) {
@@ -280,7 +291,7 @@ function changedRuns(a: readonly string[], b: readonly string[], anchorA: (i: nu
             runs.push({ aStart: fromA, aEnd: toA, bStart: fromB, bEnd: toB });
             return;
         }
-        const [[useA, useB], ...next] = levels;
+        const [[useA, useB, key], ...next] = levels;
         const textA: number[] = [];
         const textB: number[] = [];
         for (let i = fromA; i < toA; i++) if (a[i].trim() !== "" && useA(i)) textA.push(i);
@@ -290,9 +301,11 @@ function changedRuns(a: readonly string[], b: readonly string[], anchorA: (i: nu
         let lastA = fromA - 1;
         let lastB = fromB - 1;
         const end = { aStart: textA.length, aEnd: textA.length, bStart: textB.length, bEnd: textB.length };
-        for (const run of [...unmatchedRuns(textA.map((n) => a[n]), textB.map((n) => b[n])), end]) {
+        for (const run of [...unmatchedRuns(textA.map((n) => key(a[n])), textB.map((n) => key(b[n]))), end]) {
             for (; i < run.aStart; i++, j++) {
                 lineUp(lastA + 1, textA[i], lastB + 1, textB[j], next);
+                // two lines lined up by their key whose text differs are a change
+                if (a[textA[i]] !== b[textB[j]]) runs.push({ aStart: textA[i], aEnd: textA[i] + 1, bStart: textB[j], bEnd: textB[j] + 1 });
                 lastA = textA[i];
                 lastB = textB[j];
             }
@@ -302,8 +315,8 @@ function changedRuns(a: readonly string[], b: readonly string[], anchorA: (i: nu
         lineUp(lastA + 1, toA, lastB + 1, toB, next);
     };
     lineUp(0, a.length, 0, b.length, [
-        [anchorA, anchorB],
-        [() => true, () => true],
+        [anchorA, anchorB, lineKey],
+        [() => true, () => true, (line) => line],
     ]);
     return runs;
 }
