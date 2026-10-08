@@ -67,7 +67,11 @@ describe("the lint pipeline order", () => {
         lintFootnotes(messy, { removeOrphanedReferences: true });
         // the third call is the lint's last look, after reindex, at whether
         // the move would still change the note (hunt 2026-10-06, cycle 5,
-        // pin bug-move-refused-then-reindex-reorders); here it would not
-        expect(move).toHaveBeenCalledTimes(3);
+        // pin bug-move-refused-then-reindex-reorders); here it would not.
+        // The rules run twice, three calls each time: once with every change
+        // passed, and again with each change judged, because the orphan rule
+        // took a footnote out (wholeJudgmentSound in rule-gate.ts; hunt
+        // 2026-10-08, cycle 6, pin bug-whole-lint-glues-reference-to-bracket).
+        expect(move).toHaveBeenCalledTimes(6);
     });
 });

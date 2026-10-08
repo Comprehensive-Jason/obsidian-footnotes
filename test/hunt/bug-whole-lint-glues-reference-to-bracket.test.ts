@@ -52,7 +52,7 @@ const before = { placement: "before" as const };
 
 describe("the whole lint under Before punctuation, a reference after [sic].", () => {
     // Now: "He said it was fine [sic][^1].\n\n[^1]: Quoted as written."
-    it.fails("a lazy label: the reference after [sic]. is not glued to the bracket", () => {
+    it("a lazy label: the reference after [sic]. is not glued to the bracket", () => {
         const out = lintFootnotes("He said it was fine [sic].[^1]\n[^1]: Quoted as written.", before);
         expect(out).not.toContain("[sic][^1]");
         expect(out).toBe("He said it was fine [sic].[^1]\n\n[^1]: Quoted as written.");
@@ -60,14 +60,14 @@ describe("the whole lint under Before punctuation, a reference after [sic].", ()
 
     // Now: "He said it was fine [sic][^1].\n\nMore text here.", the
     // definition deleted.
-    it.fails("a lazy label, Delete orphaned definitions on: the definition's text is not deleted in the same lint", () => {
+    it("a lazy label, Delete orphaned definitions on: the definition's text is not deleted in the same lint", () => {
         const out = lintFootnotes("He said it was fine [sic].[^1]\n[^1]: Quoted as written.\n\nMore text here.", { ...before, removeOrphanedDefinitions: true });
         expect(out).toContain("[^1]: Quoted as written.");
         expect(out).not.toContain("[sic][^1]");
     });
 
     // Now: "> He said it was fine [sic][^1].\n>\n> [^1]: Quoted as written."
-    it.fails("a lazy label in a quote: the reference is not glued to the bracket", () => {
+    it("a lazy label in a quote: the reference is not glued to the bracket", () => {
         const out = lintFootnotes("> He said it was fine [sic].[^1]\n> [^1]: Quoted as written.", before);
         expect(out).not.toContain("[sic][^1]");
     });
@@ -76,7 +76,7 @@ describe("the whole lint under Before punctuation, a reference after [sic].", ()
     // orphan rule deletes the definition nothing references now, and the
     // one judgment skips footnote 1 as removed. Now: "He said it was fine
     // [sic][^1].\n\nMore text here."
-    it.fails("an ordinary note, Delete orphaned definitions on: one lint keeps the reference live and the definition", () => {
+    it("an ordinary note, Delete orphaned definitions on: one lint keeps the reference live and the definition", () => {
         const out = lintFootnotes("He said it was fine [sic].[^1]\n\n[^1]: Quoted as written.\n\nMore text here.", { ...before, removeOrphanedDefinitions: true });
         expect(out).toBe("He said it was fine [sic].[^1]\n\nMore text here.\n\n[^1]: Quoted as written.");
     });

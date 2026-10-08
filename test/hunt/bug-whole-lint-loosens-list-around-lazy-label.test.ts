@@ -52,12 +52,12 @@ const Bullets = "Shopping list[^1]\n\n- apples\n[^1]: from the market\n- pears\n
 
 describe("the default lint on a lazy label between list items (Q7)", () => {
     // Now: "Shopping list[^1]\n\n- apples\n\n- pears\n- plums\n\n[^1]: from the market"
-    it.fails("bullets: the list keeps its items together, the label stays lazy", () => {
+    it("bullets: the list keeps its items together, the label stays lazy", () => {
         expect(lintFootnotes(Bullets)).toBe(Bullets);
     });
 
     // Now: "Steps[^1]\n\n1. Mix\n\n1. Bake\n\n[^1]: by hand"
-    it.fails("numbered items written 1. 1., as many people do: the label stays lazy", () => {
+    it("numbered items written 1. 1., as many people do: the label stays lazy", () => {
         const note = "Steps[^1]\n\n1. Mix\n[^1]: by hand\n1. Bake";
         expect(lintFootnotes(note)).toBe(note);
     });

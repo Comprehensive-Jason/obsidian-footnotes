@@ -14,8 +14,10 @@ import { EditIntent, judgeEdit } from "../editor/result-gate";
 // Asking for every change of every rule costs a lint a quarter to more than
 // half again of its time on a long note. So the lint first runs every rule
 // with every change passed, gathers what each meant, and asks the gate
-// once about the whole lint (gatedLint). Only when the gate refuses that
-// does it run again, every change judged as it is made.
+// once about the whole lint (gatedLint). Only when the gate refuses that,
+// or when a rule took a footnote out or defined one out of a lazy label
+// (wholeJudgmentSound), does it run again, every change judged as it is
+// made.
 //
 // A note that holds something back pays for both runs on every lint. So
 // the caller can say that the note's last lint needed the second run, and
@@ -78,8 +80,29 @@ export function gatedLint(text: string, lint: () => string, checkedFirst = false
     } finally {
         gathering = null;
     }
-    if (result === text || judgeEdit(text.split("\n"), result.split("\n"), gathered.intent()).pass) return { text: result, checked: false };
+    if (result === text) return { text: result, checked: false };
+    const intent = gathered.intent();
+    if (wholeJudgmentSound(intent) && judgeEdit(text.split("\n"), result.split("\n"), intent).pass) return { text: result, checked: false };
     return { text: lint(), checked: true };
+}
+
+/**
+ * Whether one judgment of the whole lint can stand for every rule's change.
+ * It cannot when a rule took a footnote out (the orphan rules) or made a
+ * definition of a lazy label (fix-lazy): the gate leaves such a footnote
+ * out of check 1 for the whole lint, so what another rule did to it went
+ * unseen. A punctuation move that left a reference dead was hidden behind
+ * the orphan rule removing the definition it left behind, data lost in one
+ * lint (hunt 2026-10-08, cycle 6, pin
+ * bug-whole-lint-glues-reference-to-bracket). And fix-lazy and the move,
+ * judged as one net change, hid what the blank line alone did to the lines
+ * around it (pins bug-whole-lint-loosens-list-around-lazy-label and
+ * bug-second-lint-makes-held-fix-lazy). Such a lint judges each change as
+ * it is made; a note holds a lazy label or an orphan far less often than
+ * it is linted.
+ */
+function wholeJudgmentSound(intent: EditIntent): boolean {
+    return (intent.removed ?? []).length === 0 && (intent.defined ?? []).length === 0;
 }
 
 const fold = (name: string): string => name.toLowerCase();

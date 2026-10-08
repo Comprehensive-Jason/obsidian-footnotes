@@ -76,7 +76,7 @@ describe("a lazy label fix-lazy must hold, on the second lint", () => {
 
     // Now: "Text[^1] here.\n\nMore text.[^2]\n\n[^1]: note\n    ===\n[^2]: other",
     // where "note" over "    ===" is a heading inside footnote 1.
-    it.fails("the heading shape: the second lint holds it too (ruling B6), so linting twice changes nothing", () => {
+    it("the heading shape: the second lint holds it too (ruling B6), so linting twice changes nothing", () => {
         const first = lintFootnotes(Heading);
         const second = lintFootnotes(first);
         expect(headingInFootnote(second), JSON.stringify(second)).toBe(false);
@@ -84,14 +84,14 @@ describe("a lazy label fix-lazy must hold, on the second lint", () => {
     });
 
     // Now: the second lint gives "Text[^1] here.\n\nMore text.[^2]\n\n[^1]: note\n\n    ```\n    code\n    ```\n[^2]: other".
-    it.fails("the code-block shape: linting twice changes nothing", () => {
+    it("the code-block shape: linting twice changes nothing", () => {
         const first = lintFootnotes(Code);
         expect(lintFootnotes(first)).toBe(first);
     });
 
     // Now: the second lint gives "1. First point[^1]\n2. Second point\n\nMore text.[^2]\n\n[^1]: my note\n\n    - sub one\n    - sub two\n[^2]: other":
     // the bullets under item 2 leave the numbered list for footnote 1.
-    it.fails("a lazy label under a numbered item with a list under it: linting twice changes nothing", () => {
+    it("a lazy label under a numbered item with a list under it: linting twice changes nothing", () => {
         const first = lintFootnotes(NestedList);
         expect(lintFootnotes(first)).toBe(first);
     });
@@ -100,7 +100,7 @@ describe("a lazy label fix-lazy must hold, on the second lint", () => {
     // only fix-lazy and the move to do. It needs no second lint to go wrong:
     // the first one takes the bullets. Suggested by the skeptic; the
     // first-lint face of the same root. Now: as the second lint above.
-    it.fails("one lint of the nested-list shape with the punctuation already right leaves the note unchanged", () => {
+    it("one lint of the nested-list shape with the punctuation already right leaves the note unchanged", () => {
         const note = "1. First point[^1]\n2. Second point\n[^1]: my note\n\n    - sub one\n    - sub two\n\nMore text.[^2]\n\n[^2]: other";
         expect(lintFootnotes(note)).toBe(note);
     });
