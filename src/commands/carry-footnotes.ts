@@ -644,16 +644,22 @@ function renamedLines(text: readonly string[], syntaxOn: (line: number) => reado
  * always, so a paste outside Obsidian keeps the definitions). A
  * body with no definitions to carry comes back untouched.
  *
- * The body goes in exactly as it was selected, its trailing line breaks
- * included, and splitCarriedText takes back off exactly the one blank
- * line put in here. A paragraph selected line-wise (Shift+Down, so the
- * selection holds its line break) used to lose that line break here, and
- * a paste of the clipboard text glued it onto the text after the caret
- * (hunt 2026-10-02, pin bug-carry-line-wise-body-loses-line-break).
+ * The body goes in as it was selected, and splitCarriedText takes back off
+ * exactly the one blank line put in here. A body that ends in a line break
+ * was taken whole lines at a time (Shift+Down makes such a selection), and
+ * the clipboard says so the way plain editors mark a whole-line copy: its
+ * last line break goes to the very end of the text, after the definitions
+ * (Jason's ruling Q16, 2026-10-07; Gboard's clipboard history keeps a
+ * trailing line break). Its other trailing line breaks stay in front of
+ * the blank line, as blank lines of the body. A paragraph selected
+ * line-wise used to lose its line break here, and a paste of the clipboard
+ * text glued it onto the text after the caret (hunt 2026-10-02, pin
+ * bug-carry-line-wise-body-loses-line-break).
  */
 export function withCarriedText(body: string, carried: CarriedDefinition[]): string {
     if (carried.length === 0) return body;
-    return body + "\n\n" + carriedLines(carried).join("\n");
+    const wholeLines = body.endsWith("\n");
+    return (wholeLines ? body.slice(0, -1) : body) + "\n\n" + carriedLines(carried).join("\n") + (wholeLines ? "\n" : "");
 }
 
 /**
@@ -687,32 +693,25 @@ export function carriedLines(carried: readonly CarriedDefinition[]): string[] {
  * inside a code fence is protected text and not a definition.
  *
  * The body comes back with everything in front of the definitions except
- * the one blank line that separates them from it, so a body that ended in
- * a line break keeps it. Line breaks after the last definition go back on
- * the end of the body: a text that ends in a line break was taken whole
- * lines at a time, and pasted at the start of a line it must still end
- * its own line, with the definitions lifted out of it (hunt 2026-10-02,
- * pin bug-carry-line-wise-body-loses-line-break).
+ * the one blank line that separates them from it, so blank lines of the
+ * body's own stay. Line breaks after the last definition go back on the
+ * end of the body: a text that ends in a line break was taken whole lines
+ * at a time, the way plain editors and withCarriedText mark a whole-line
+ * copy, and pasted at the start of a line it must still end its own line,
+ * with the definitions lifted out of it (hunt 2026-10-02, pin
+ * bug-carry-line-wise-body-loses-line-break; Jason's ruling Q16,
+ * 2026-10-07). The blank lines between two definitions of the run are
+ * spacing and nothing else. Until that ruling, a second blank line between
+ * two definitions was read as the selection's closing line break (d77449d,
+ * hunt 2026-10-06 cycle 3, cluster K3), so a clipboard from another app
+ * whose definitions were spaced by two blank lines split the line it was
+ * pasted into (pin spec-foreign-clipboard-double-blank-definitions).
  *
- * So do the blank lines between two definitions of the run past the first
- * one. withCarriedText puts one blank line in front of the definitions it
- * appends, and the definitions sit right under one another; a second blank
- * line there is the line break that ended the selection, when the selection
- * itself ended with a definition of its own. The selection was then taken
- * whole lines at a time too, and its body must end its own line. Dropping
- * that line break glued the pasted body onto the text after the caret,
- * where a paste of the plugin's own copy in the same window kept it on its
- * own line (hunt 2026-10-06 cycle 3, cluster K3, pin
- * bug-carry-line-wise-break-before-outside-definition).
- *
- * That reading holds only for a text withCarriedText wrote. The copy's own
- * register splits the selection itself, before anything is appended
- * (`selection`, the note it was selected in), and there the blank lines
- * between two definitions are the note's own spacing, never a line break
- * of the selection's: read as one, a selection ending right after "[^2]:
- * two", in a note that spaces its definitions by two blank lines, pasted
- * mid-line split the line it landed in (hunt 2026-10-06 cycle 4, cluster
- * K2, pin bug-own-copy-double-blank-definitions-split-line).
+ * The copy's own register splits the selection itself, before anything is
+ * appended (`selection`, the note it was selected in), and reads it the
+ * same way: a selection ending right after "[^2]: two" holds no line
+ * break, whatever the note's spacing (hunt 2026-10-06 cycle 4, cluster K2,
+ * pin bug-own-copy-double-blank-definitions-split-line).
  *
  * A selection is read in its note in two more ways (hunt 2026-10-06 cycle
  * 5). Only a line the note reads as a definition label is one. Read on its
@@ -752,14 +751,10 @@ export function splitCarriedText(text: string, selection?: SelectedIn): { body: 
     let end = lines.length;
     while (end > 0 && lines[end - 1].trim() === "") end--;
     const after = lines.slice(end);
-    // the blank lines past the first between two definitions of the run
-    const breaks: string[] = [];
     for (;;) {
-        const below = end;
         while (end > 0 && lines[end - 1].trim() === "") end--;
         const block = byEnd.get(end - 1);
         if (!block) break;
-        if (cut < lines.length && !selection) breaks.push(...lines.slice(end + 1, below));
         cut = end = block.start;
     }
     if (cut === lines.length) return { body: text, carried: [] };
@@ -772,7 +767,7 @@ export function splitCarriedText(text: string, selection?: SelectedIn): { body: 
     const blank = (i: number) => lines[i].trim() === "" && (i > 0 || selection === undefined || selection.from.ch === 0);
     if (selection) while (bodyEnd > 0 && blank(bodyEnd - 1)) bodyEnd--;
     else if (bodyEnd > 0 && blank(bodyEnd - 1)) bodyEnd--;
-    return { body: [...lines.slice(0, bodyEnd), ...breaks, ...after].join("\n"), carried };
+    return { body: [...lines.slice(0, bodyEnd), ...after].join("\n"), carried };
 }
 
 /** Where a selection split by splitCarriedText was made: the note's reading, and where the selection starts in it. */

@@ -258,7 +258,12 @@ describe("the clipboard text with definitions in it", () => {
     // line break trimmed away).
     it("keeps the body's own trailing line breaks through the round trip and adds nothing when there is nothing to carry", () => {
         const carried = [{ name: "1", lines: ["[^1]: one"] }];
-        expect(withCarriedText("a[^1]\n", carried)).toBe("a[^1]\n\n\n[^1]: one");
+        // a body that ends in a line break is marked as a whole-line copy,
+        // with a line break at the very end of the text (Jason's ruling
+        // Q16, 2026-10-07; before, "a[^1]\n\n\n[^1]: one", the line break
+        // as an extra blank line in front of the definitions)
+        expect(withCarriedText("a[^1]\n", carried)).toBe("a[^1]\n\n[^1]: one\n");
+        expect(withCarriedText("a[^1]\n\n", carried)).toBe("a[^1]\n\n\n[^1]: one\n");
         expect(splitCarriedText(withCarriedText("a[^1]\n", carried))).toEqual({ body: "a[^1]\n", carried });
         expect(splitCarriedText(withCarriedText("a[^1]\n\n", carried))).toEqual({ body: "a[^1]\n\n", carried });
         expect(withCarriedText("plain", [])).toBe("plain");

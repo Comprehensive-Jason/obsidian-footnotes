@@ -31,6 +31,13 @@ import { handleCopy, handlePaste, resetCarryRegister } from "../../src/commands/
 // src/commands/carry-footnotes-hooks.ts), so a note that simply spaces
 // its definitions by two blank lines gets a body ending in a line break
 // it never had.
+//
+// Since Jason's ruling Q16 (2026-10-07; stage 4 of the result gate design,
+// 2026-10-08), a whole-line copy is marked by a line break at the very end
+// of the copied text, and the blank lines between definitions are spacing
+// on every route, so the same clipboard pasted from another app or a
+// phone keyboard's clipboard history keeps the line whole too
+// (test/whole-line-copy.test.ts holds the three routes agreeing).
 
 interface FakeClipboardEvent {
     clipboardData: { getData(type: string): string; setData(type: string, value: string): void; types: string[] };
@@ -97,8 +104,8 @@ describe("bug: the plugin's own copy of a selection ending in definitions spaced
         // the selection ends right after "two", with no line break
         const clip = copy(note, { line: 0, ch: 0 }, { line: 5, ch: 9 });
         const back = paste(["dest abc def"], { line: 0, ch: 8 }, clip);
-        // Today the note reads "dest abcSee[^1] and[^2].", " def", "",
-        // "[^1]: one", "[^2]: two".
+        // Before the fix the note read "dest abcSee[^1] and[^2].", " def",
+        // "", "[^1]: one", "[^2]: two".
         expect(back.lines[0]).toBe("dest abcSee[^1] and[^2]. def");
     });
 });

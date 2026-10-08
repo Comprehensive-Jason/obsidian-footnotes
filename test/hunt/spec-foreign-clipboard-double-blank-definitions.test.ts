@@ -31,11 +31,23 @@ import { splitCarriedText } from "../../src/commands/carry-footnotes";
 //
 // Source of truth: the clipboard text itself; d77449d's commit message
 // and splitCarriedText's own comment in src/commands/carry-footnotes.ts.
+//
+// Answered (Jason's ruling Q16, 2026-10-07, after he found that Gboard's
+// clipboard history keeps a trailing line break; stage 4 of the result
+// gate design, 2026-10-08): a whole-line copy is marked the way plain
+// editors mark one, by a line break at the very end of the copied text,
+// and read back that way, so the blank lines between two definitions are
+// spacing and nothing else. The foreign two-blank clipboard now pastes
+// inside the line, as the plugin's own copy of the same selection does.
+// The test was it.fails until then. The plugin's own copy of a line-wise
+// selection with a definition carried from outside it now ends its text in
+// a line break (test/whole-line-copy.test.ts), so the two can be told
+// apart.
 
 describe("spec question: a foreign clipboard with two blank lines between its trailing definitions", () => {
-    it.fails("a hand-written clipboard with two blank lines between its definitions keeps its body on one line", () => {
+    it("a hand-written clipboard with two blank lines between its definitions keeps its body on one line", () => {
         const split = splitCarriedText(["See[^1] and[^2].", "", "[^1]: one", "", "", "[^2]: two"].join("\n"));
-        // Today the body is "See[^1] and[^2].\n".
+        // Before the ruling, the body was "See[^1] and[^2].\n".
         expect(split.body).toBe("See[^1] and[^2].");
         expect(split.carried.map((c) => c.name)).toEqual(["1", "2"]);
     });
