@@ -677,15 +677,19 @@ async function main() {
     // A carried paste into the popup (hunt 2026-10-02, round 4, cluster U6;
     // pin bug-carry-paste-into-popup-ignores-note). The popup's editor holds
     // only [^2]'s text, and the embed joins every line of it into the note
-    // as [^2]'s own text, so the paste is planned against the whole note:
-    // the pasted [^1] clashes with the note's own [^1] and becomes [^3], and
-    // its definition goes into the note after the last definition, not into
-    // the popup. Both routes a paste can take are driven: the paste event,
-    // and the input-method route a phone keyboard's clipboard history takes
-    // (CodeMirror's input handlers, called in order the way CodeMirror
-    // calls them, until one takes the text).
+    // as [^2]'s own text, so the paste is planned against the whole note.
+    // The pasted text cites a footnote of its own, which would land inside
+    // [^2]'s text, a footnote inside a footnote, so nothing is pasted: the
+    // note and the popup stay as they were, and the notice says why
+    // (Jason's ruling B4, 2026-10-08, confirmed 2026-10-08 after the stage 3
+    // report). Before, the pasted [^1] became [^3] inside [^2]'s text, with
+    // its definition put into the note. Both routes a paste can take are
+    // driven: the paste event, and the input-method route a phone
+    // keyboard's clipboard history takes (CodeMirror's input handlers,
+    // called in order the way CodeMirror calls them, until one takes the
+    // text).
     for (const route of ["paste event", "input method"]) {
-        await test(`a carried paste into the popup renames a clashing footnote and puts its definition in the note (${route}, 2026-10-06)`, async () => {
+        await test(`a carried paste of a cited sentence into the popup pastes nothing (${route}, 2026-10-08)`, async () => {
             resetSettings({ enablePopupEditor: true, carryFootnotesOnCopy: true });
             await setupNote("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: ");
             setCursorAndRun(0, 19, CMD_AUTONUM); // inside [^2]: opens its popup
@@ -708,13 +712,17 @@ async function main() {
                     `if (handler(view, end, end, ${clipboard}, typed)) return; } view.dispatch(typed()); })();`,
                 );
             }
-            const expected = "Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: see x[^3]\n[^3]: their source";
-            // the main editor shows the note as the embed joins it, at once
+            await pollUntil(
+                "the refused paste's notice",
+                `[...document.querySelectorAll('.notice')].map(n => n.textContent).join('|')`,
+                (v) => typeof v === "string" && v.includes("Nothing was pasted: the pasted footnotes would land inside another footnote."),
+            );
+            const expected = "Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: ";
             await expectEditorText(expected);
             const popupText = readJson(`${popupView}.state.doc.toString()`);
-            if (popupText !== "see x[^3]") throw new Error(`the popup holds ${jsLiteral(popupText)}, expected "see x[^3]"`);
-            // past the embed's own delayed save, then closed: the definition
-            // the paste put outside the popup stays
+            if (popupText !== "") throw new Error(`the popup holds ${jsLiteral(popupText)}, expected nothing`);
+            // past the embed's own delayed save, then closed: the note is
+            // still as it was
             await sleep(2500);
             action(`${popupContent}.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));`);
             await pollUntil("popup closed", `!document.querySelector('.footnote-shortcut-popup')`, (v) => v === true);
