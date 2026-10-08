@@ -16,7 +16,7 @@ import { sanitizeInlineFootnoteContent } from "./inline-footnotes";
 import { simulateChanges } from "../editor/insertion-liveness";
 import { readCell } from "../parsing/cell-reading";
 import { cellImageStarts, imageStartsOn } from "../parsing/landing";
-import { NoteReading } from "../parsing/note-reading";
+import { NoteReading, readNote } from "../parsing/note-reading";
 import { GateReason, judgeEdit } from "../editor/result-gate";
 import {
     autonumFootnoteId,
@@ -256,7 +256,7 @@ export function selectionPressHandled(
         // cell's own text holds no block syntax and never contains a pipe,
         // so the only things that can come before the selection are prose
         // or the start of the cell.
-        const replaceFrom = absorbLeadingSpace(cellText, from, 0);
+        const replaceFrom = absorbLeadingSpace(cellText, from, 0, command !== "inline");
         const lead = cellText.slice(replaceFrom, from);
         if (command === "inline") {
             const wrapped = `^[${sanitizeInlineFootnoteContent(text)}]`;
@@ -391,7 +391,7 @@ export function selectionPressHandled(
             ? { line: trimmed.from.line, ch: 0 }
             : {
                   line: trimmed.from.line,
-                  ch: absorbLeadingSpace(firstLine, trimmed.from.ch, ctx.reading().blockSyntaxEnd(trimmed.from.line)),
+                  ch: absorbLeadingSpace(firstLine, trimmed.from.ch, ctx.reading().blockSyntaxEnd(trimmed.from.line), command !== "inline"),
               };
     const replaceTo = table ? { line: trimmed.to.line, ch: lastLine.length } : trimmed.to;
     const selection: ConvertedSelection = {
@@ -467,14 +467,29 @@ export interface CellSelection {
  * pattern of its own here (hunt 2026-10-05, pin
  * bug-selection-eats-marker-space: the pattern this replaced knew no
  * callout marker and no task box but "[ ]", "[x]", and "[X]").
+ *
+ * The space also stays where a reference glued to the text in front would
+ * be dead and one after the space is live: after bracketed text, "Smith
+ * [2020][^1]" is a reference link to Obsidian (docs/obsidian-reading-rules.md
+ * D7), and a bare web address takes a reference glued to it in. Selecting
+ * "argues this." in "Smith [2020] argues this." gives "Smith [2020] [^1]"
+ * (Jason's ruling Q26, 2026-10-08; hunt 2026-10-08 cycle 6, cluster Z10).
+ * Before, the selection was refused with the link notice. The line is read
+ * on its own for this, both ways, so a line that reads as code alone has
+ * no live reference either way and the space goes as before. Only a
+ * reference is asked about (`reference`): an inline footnote glued to "]"
+ * is read before the link, so "Smith [2020]^[argues this.]" stays as it is.
  */
-export function absorbLeadingSpace(line: string, ch: number, syntaxEnd: number): number {
+export function absorbLeadingSpace(line: string, ch: number, syntaxEnd: number, reference = true): number {
     const before = line.slice(0, ch);
     const run = before.match(/[ \t]+$/);
     if (!run) return ch;
     const prose = before.slice(0, before.length - run[0].length);
     if (prose === "" || prose.length < syntaxEnd) return ch;
     if (prose.endsWith("|")) return ch;
+    // whether a reference written at the end of `text` is live there
+    const liveAtEnd = (text: string) => readNote([`${text}[^1]`]).referencesOn(0).some((reference) => reference.start === text.length);
+    if (reference && !liveAtEnd(prose) && liveAtEnd(before)) return ch;
     return ch - run[0].length;
 }
 

@@ -4,6 +4,7 @@ import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { insertAutonumFootnote, insertInlineFootnote, insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
+import { absorbLeadingSpace } from "../../src/commands/selection-footnote";
 import { InsideLinkNotice } from "../../src/editor/notice";
 import { readNote } from "../../src/parsing/note-reading";
 
@@ -12,7 +13,7 @@ import { readNote } from "../../src/parsing/note-reading";
 // the plugin keep the space in front of the new reference, so the
 // selection converts?
 //
-// What it does now: in "Smith [2020] argues this.", select "argues this."
+// What it did before the ruling: in "Smith [2020] argues this.", select "argues this."
 // and press the numbered or named key; in "Read https://example.com
 // today.", select "today." and press the numbered key. Each is refused
 // with "No footnote was created: Obsidian would read it as part of a
@@ -42,6 +43,12 @@ import { readNote } from "../../src/parsing/note-reading";
 // ruling writes. Which of the two gives way here is a product decision.
 //
 // Hunt 2026-10-08, cycle 6. Cluster Z10, triage question Q26.
+//
+// Answered (Jason's ruling Q26, 2026-10-08), option (a): the space before
+// the new reference stays only where dropping it would make the reference
+// dead; everywhere else it is still dropped (the 2026-09-08 ruling). The
+// tests below were it.fails until then; what the press did before is
+// described above.
 //
 // Origin: pre-existing for the numbered key. The named key's refusal
 // comes before its name dialog since 99d4e6d, where the gate started
@@ -88,16 +95,16 @@ describe("a selection right after bracketed text", () => {
         expect(readNote(["Smith [2020] [^1]", "", "[^1]: argues this."]).referencesOn(0).map((r) => r.name)).toEqual(["1"]);
     });
 
-    // Now: refused with the link notice, and the note is unchanged.
-    it.fails("spec (a): the numbered key converts it and keeps the space in front of the reference", async () => {
+    // Before the ruling: refused with the link notice, and the note unchanged.
+    it("spec (a): the numbered key converts it and keeps the space in front of the reference", async () => {
         const doc = await convert("Smith [2020] argues this.", "argues this.");
         expect(messages()).toEqual([]);
         expect(doc.lines[0]).toBe("Smith [2020] [^1]");
         expect(doc.lines.at(-1)).toBe("[^1]: argues this.");
     });
 
-    // Now: refused with the link notice before the name dialog opens.
-    it.fails("spec: the named key is not refused with the link notice", async () => {
+    // Before the ruling: refused with the link notice before the name dialog opened.
+    it("spec: the named key is not refused with the link notice", async () => {
         await convert("He was right [sic] about it.", "about it.", insertNamedFootnote);
         expect(messages()).not.toContain(InsideLinkNotice);
     });
@@ -114,11 +121,28 @@ describe("a selection right after a bare web address", () => {
         expect(readNote(["Read https://example.com [^1]", "", "[^1]: today."]).referencesOn(0).map((r) => r.name)).toEqual(["1"]);
     });
 
-    // Now: refused with the link notice, and the note is unchanged.
-    it.fails("spec (a): the numbered key converts it and keeps the space in front of the reference", async () => {
+    // Before the ruling: refused with the link notice, and the note unchanged.
+    it("spec (a): the numbered key converts it and keeps the space in front of the reference", async () => {
         const doc = await convert("Read https://example.com today.", "today.");
         expect(messages()).toEqual([]);
         expect(doc.lines[0]).toBe("Read https://example.com [^1]");
         expect(doc.lines.at(-1)).toBe("[^1]: today.");
+    });
+});
+
+describe("the space in front of the new reference (absorbLeadingSpace)", () => {
+    it("stays after bracketed text and a bare web address, where a glued reference would be dead", () => {
+        expect(absorbLeadingSpace("Smith [2020] argues this.", 13, 0)).toBe(13);
+        expect(absorbLeadingSpace("Read https://example.com today.", 25, 0)).toBe(25);
+    });
+
+    it("control: goes after plain prose, a wikilink, and a link, as the 2026-09-08 ruling has it", () => {
+        expect(absorbLeadingSpace("range. The buoy log", 7, 0)).toBe(6);
+        expect(absorbLeadingSpace("Read [[Notes]] today.", 15, 0)).toBe(14);
+        expect(absorbLeadingSpace("Read [the log](https://example.com) today.", 36, 0)).toBe(35);
+    });
+
+    it("control: goes in front of an inline footnote, which is read before the link", () => {
+        expect(absorbLeadingSpace("Smith [2020] argues this.", 13, 0, false)).toBe(12);
     });
 });
