@@ -3,15 +3,16 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
-import { resetNotices } from "../helpers/notices";
+import { noticed, resetNotices } from "../helpers/notices";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
+import { SelectionFormattingNotice } from "../../src/commands/selection-footnote";
 
 // spec question: a selection runs from the end of one paragraph into the
 // next block and ends inside that block's own formatting ("# ", "> ",
 // "3. ", or a callout's "> [!note]" title). Should the numbered key refuse
 // it, as it refuses the same selection on one line?
 //
-// What it does now: "Para one here", a blank line, "# Heading text".
+// What it did before the ruling: "Para one here", a blank line, "# Heading text".
 // Dragging from "here" to just after "# Hea" and pressing the numbered key
 // gives "Para one[^1]ding text": the heading is gone from the page, its
 // leftover text "ding text" has joined the paragraph, and footnote 1 holds
@@ -45,6 +46,13 @@ import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-foo
 //
 // Hunt 2026-10-08, cycle 6. Cluster Z6, triage question Q25.
 //
+// Answered (Jason's ruling Q25, 2026-10-08), option (a), extended: a
+// selection that leaves the next block without its marker is refused with
+// the selection's formatting notice, both when it ends inside the marker
+// and when it takes the marker and part of the block's text. A selection
+// of whole blocks still converts. The tests below were it.fails until
+// then; what the press did before is described above.
+//
 // Origin: pre-existing.
 
 const settings = {
@@ -69,30 +77,45 @@ beforeEach(resetNotices);
 
 describe("a selection from one paragraph that ends inside the next block's formatting", () => {
     // Refused since the fix for cluster Z5 (2026-10-08, the c6fix-A run):
-    // the gate now compares what is left of the selection's last line, and
-    // the heading's leftover "ding text" would read as prose. This answers
-    // the heading case as option (a) as a side effect; the cases below are
-    // still open for Jason's ruling.
+    // the gate compares what is left of the selection's last line, and the
+    // heading's leftover "ding text" would read as prose.
     it("ending inside a heading's '# ' refuses", async () => {
         const lines = ["Para one here", "", "# Heading text"];
         expect(await pressOver(lines, { line: 0, ch: 9 }, { line: 2, ch: 5 })).toEqual(lines);
+        expect(noticed(SelectionFormattingNotice)).toBe(true);
     });
 
-    // Now, in order: "Para one[^1] text here" and "Para one[^1]ird item
-    // text", with the taken "> Quoted" or "3. th" drawn as a quote or a
-    // numbered list in footnote 1.
-    it.fails.each<[string, string[], EditorPosition, EditorPosition]>([
-        ["a quote's '> '", ["Para one here", "", "> Quoted text here"], { line: 0, ch: 9 }, { line: 2, ch: 8 }],
-        ["a numbered item's '3. '", ["Para one here", "", "3. third item text"], { line: 0, ch: 9 }, { line: 2, ch: 5 }],
-    ])("ending inside %s refuses", async (_what, lines, anchor, head) => {
+    // Before the ruling, in order: "Para one[^1] text here",
+    // "Para one[^1]ird item text", and "Intro text[^1] end", with the taken
+    // "> Quoted", "3. th", or "- listed" drawn as a quote or a list in
+    // footnote 1.
+    it.each<[string, string[], EditorPosition, EditorPosition]>([
+        ["ending inside a quote's '> '", ["Para one here", "", "> Quoted text here"], { line: 0, ch: 9 }, { line: 2, ch: 8 }],
+        ["ending inside a numbered item's '3. '", ["Para one here", "", "3. third item text"], { line: 0, ch: 9 }, { line: 2, ch: 5 }],
+        ["taking a list item's '- ' and part of its text", ["Intro text here", "", "- listed end"], { line: 0, ch: 11 }, { line: 2, ch: 8 }],
+        ["taking a quote's second line's '> ' and part of its text", ["Para one here", "", "> Quoted text", "> more quoted"], { line: 0, ch: 9 }, { line: 3, ch: 6 }],
+        ["taking the next list item's '- ' and part of its text", ["- first item here", "- second item"], { line: 0, ch: 13 }, { line: 1, ch: 8 }],
+    ])("a selection %s refuses", async (_what, lines, anchor, head) => {
         expect(await pressOver(lines, anchor, head)).toEqual(lines);
+        expect(noticed(SelectionFormattingNotice)).toBe(true);
     });
 
-    // Now: "Para one[^1]tle", then "> Callout body text" as a plain quote,
-    // and footnote 1 holds "here" and "> [!note] Ti".
-    it.fails("ending inside a callout's title refuses, so the body line below stays a callout", async () => {
+    // Before the ruling: "Para one[^1]tle", then "> Callout body text" as a
+    // plain quote, and footnote 1 held "here" and "> [!note] Ti".
+    it("ending inside a callout's title refuses, so the body line below stays a callout", async () => {
         const lines = ["Para one here", "", "> [!note] Title", "> Callout body text"];
         expect(await pressOver(lines, { line: 0, ch: 9 }, { line: 2, ch: 12 })).toEqual(lines);
+        expect(noticed(SelectionFormattingNotice)).toBe(true);
+    });
+
+    it("control: a selection of whole blocks still converts", async () => {
+        const out = await pressOver(["Intro text here", "", "- listed end", "", "after"], { line: 0, ch: 11 }, { line: 2, ch: 12 });
+        expect(out.slice(0, 3)).toEqual(["Intro text[^1]", "", "after"]);
+    });
+
+    it("control: a selection across two lines of one quote still converts", async () => {
+        const out = await pressOver(["> Quoted text here", "> more quoted"], { line: 0, ch: 14 }, { line: 1, ch: 6 });
+        expect(out[0]).toBe("> Quoted text[^1] quoted");
     });
 
     it("control (ruling B3's own shape, on one line): taking '# Heading' out of '# Heading here' refuses", async () => {

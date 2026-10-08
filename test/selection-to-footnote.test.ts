@@ -25,6 +25,7 @@ import {
     selectionPressHandled,
     submitActiveNameModal,
     SelectionChangedNotice,
+    SelectionFormattingNotice,
     SelectionCommandNotice,
     SelectionSpanNotice,
     TableSelectionNotice,
@@ -1292,11 +1293,14 @@ describe("the block zoo converts (2026-08-19)", () => {
         expect(noticed(InlineSelectionNotice)).toBe(true);
     });
 
-    it("the named modal takes a block-zoo selection too", () => {
-        const doc = fakeEditor(
-            ["pick > quoted", "- listed end"],
-            { line: 0, ch: 5 },
-        );
+    // Expectation changed (Jason's ruling Q25, 2026-10-08): this selection
+    // takes the list item's "- " and part of its text, leaving " end"
+    // without its marker, so it is refused with the selection's formatting
+    // notice. Until then it converted to "pick [^zoo] end" with
+    // "[^zoo]: > quoted" and "    - listed".
+    it("the named modal refuses a selection that takes the next list item's marker and part of its text", () => {
+        const lines = ["pick > quoted", "- listed end"];
+        const doc = fakeEditor([...lines], { line: 0, ch: 5 });
         const problem = convertSelectionToNamed(
             fakePlugin(doc),
             doc,
@@ -1309,11 +1313,34 @@ describe("the block zoo converts (2026-08-19)", () => {
             "zoo",
         );
         expect(problem).toBeNull();
+        expect(doc.lines).toEqual(lines);
+        expect(noticed(SelectionFormattingNotice)).toBe(true);
+    });
+
+    it("the named modal takes a selection of whole blocks", () => {
+        const doc = fakeEditor(
+            ["pick > quoted", "- listed end", "", "after"],
+            { line: 0, ch: 5 },
+        );
+        const problem = convertSelectionToNamed(
+            fakePlugin(doc),
+            doc,
+            {
+                from: { line: 0, ch: 5 },
+                to: { line: 1, ch: 12 },
+                text: "> quoted\n- listed end",
+                lead: "",
+            },
+            "zoo",
+        );
+        expect(problem).toBeNull();
         expect(doc.lines).toEqual([
-            "pick [^zoo] end",
+            "pick [^zoo]",
+            "",
+            "after",
             "",
             "[^zoo]: > quoted",
-            "    - listed",
+            "    - listed end",
         ]);
     });
 });
