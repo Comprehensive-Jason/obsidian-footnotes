@@ -111,6 +111,36 @@ after the fence
 
 - [ ] The footnote renders the code block AND the math block
 
+## Two whole tables, and a one-line quoted code block (added 2026-10-08)
+
+Claude: until 2026-10-08 both of these were refused. Jason ruled that the result gate decides (list A, 2026-10-08), and it lets both through, since what moves into the footnote reads the same there. That they convert is pinned by units (`spec-selection-run-of-whole-tables`, and `selection-to-footnote`'s "a full-line drag on a quoted code line"); this section is only about how the finished footnote looks. Source mode for the tables, as above.
+
+Two tables in one selection: select from the first character of the first table (the `|` before `e`) to the last character of the second table (the `|` after `8`), and press the numbered key.
+
+before the two tables
+
+| e | f |
+| --- | --- |
+| 5 | 6 |
+
+| g | h |
+| --- | --- |
+| 7 | 8 |
+
+after the two tables
+
+- [ ] The footnote renders both tables, one after the other, each with its header row
+
+A quote holding a line of indented code: drag the whole quoted line below, from the start of the line to the start of the line under it, and press the numbered key.
+
+before the quoted code
+
+>     > gap code
+
+after the quoted code
+
+- [ ] The footnote renders a quote holding a code block whose text is `> gap code`, as the line rendered before the press (Obsidian 1.14.4 drew it so on 2026-10-08)
+
 ## Inline key
 
 - [ ] A SINGLE image link selected on its own line + INLINE hotkey: the embed still renders inside the inline footnote

@@ -19,13 +19,14 @@ The smoke suite drives the real plugin inside the running sandbox vault (Obsidia
 | 02 | The popup editor: basics, persistence, rapid entry | 5 |
 | 03 | Navigation: jumps both ways, tricky names, orphans, duplicates | 2 |
 | 04 | Selection to footnote: conversions and their refusals | 5 |
-| 05 | Selection block zoo: every block type travels whole | 13 |
+| 05 | Selection block zoo: every block type travels whole; two whole tables in one selection and a one-line quoted code block (2026-10-08) | 15 |
 | 06 | Tables: inserting in cells, converting in cells, cut refusals | 1 |
 | 07 | Rename footnote: the command and the right-click menu | 6 |
 | 08 | Footnote prefix: inserting under it, the Set footnote prefix command | 2 |
 | 09 | Footnote prefix and the linter (apply-prefix rule) | 1 |
 | 10 | A note whose footnote-prefix property is invalid | 1 |
 | 11 | Protected text and read-only views: creation guards, Reading view, lint, Obsidian `%%` comments | 2 |
+| 11b | A note that ends inside an open code fence: the lint gathers its definitions under the section heading above the fence (companion to sheet 11, added 2026-10-08) | 2 |
 | 12 | Lint triggers (on save, on creation) and the settings page; the command palette and the settings text (from the feature-round sheet, 2026-10-04) | 7 |
 | 14 | Definition labels directly after a prose line are prose (Obsidian's rule, matched 2026-09-09) | 2 |
 | 15 | Delete footnote everywhere: the command, the right-click menu, undo (added 2026-09-21; its phone check moved to sheet P on 2026-10-04); the list-item delete from the feature-round sheet (2026-10-04) | 9 |
