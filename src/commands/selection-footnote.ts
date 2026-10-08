@@ -404,7 +404,10 @@ export function selectionPressHandled(
             ? { line: trimmed.from.line, ch: 0 }
             : {
                   line: trimmed.from.line,
-                  ch: absorbLeadingSpace(firstLine, trimmed.from.ch, ctx.reading().blockSyntaxEnd(trimmed.from.line), command !== "inline"),
+                  ch: absorbLeadingSpace(firstLine, trimmed.from.ch, ctx.reading().blockSyntaxEnd(trimmed.from.line), command !== "inline", {
+                      lines: ctx.lines,
+                      line: trimmed.from.line,
+                  }),
               };
     const replaceTo = table ? { line: trimmed.to.line, ch: lastLine.length } : trimmed.to;
     const selection: ConvertedSelection = {
@@ -487,21 +490,38 @@ export interface CellSelection {
  * D7), and a bare web address takes a reference glued to it in. Selecting
  * "argues this." in "Smith [2020] argues this." gives "Smith [2020] [^1]"
  * (Jason's ruling Q26, 2026-10-08; hunt 2026-10-08 cycle 6, cluster Z10).
- * Before, the selection was refused with the link notice. The line is read
- * on its own for this, both ways, so a line that reads as code alone has
- * no live reference either way and the space goes as before. Only a
+ * Before, the selection was refused with the link notice. Only a
  * reference is asked about (`reference`): an inline footnote glued to "]"
  * is read before the link, so "Smith [2020]^[argues this.]" stays as it is.
+ *
+ * The line is read in its place in the note when `note` gives the note's
+ * lines and the line's number. Read alone, a sub-bullet indented with a
+ * tab or four spaces is indented code, where no reference is live either
+ * way, so the space went and the result gate refused the dead reference
+ * (hunt 2026-10-08 cycle 7, cluster Y9, pin
+ * bug-kept-space-in-indented-sub-bullet). A table cell's text has no note
+ * lines of its own, so it is read alone.
  */
-export function absorbLeadingSpace(line: string, ch: number, syntaxEnd: number, reference = true): number {
+export function absorbLeadingSpace(
+    line: string,
+    ch: number,
+    syntaxEnd: number,
+    reference = true,
+    note?: { lines: readonly string[]; line: number },
+): number {
     const before = line.slice(0, ch);
     const run = before.match(/[ \t]+$/);
     if (!run) return ch;
     const prose = before.slice(0, before.length - run[0].length);
     if (prose === "" || prose.length < syntaxEnd) return ch;
     if (prose.endsWith("|")) return ch;
-    // whether a reference written at the end of `text` is live there
-    const liveAtEnd = (text: string) => readNote([`${text}[^1]`]).referencesOn(0).some((reference) => reference.start === text.length);
+    // whether a reference written at the end of `text`, in place of the
+    // line, is live there
+    const liveAtEnd = (text: string) => {
+        const written = `${text}[^1]`;
+        const reading = note ? readNote(note.lines.map((other, i) => (i === note.line ? written : other))) : readNote([written]);
+        return reading.referencesOn(note?.line ?? 0).some((found) => found.start === text.length);
+    };
     if (reference && !liveAtEnd(prose) && liveAtEnd(before)) return ch;
     return ch - run[0].length;
 }

@@ -110,21 +110,23 @@ describe("Q26's kept space in an indented line", () => {
         expect(doc.lines[0]).toBe("![oyster](oyster.png)[^1]");
     });
 
-    // Now each of these three is refused with "No footnote was created:
-    // Obsidian would read it as part of a link.", and the note is unchanged.
-    it.fails("in a tab-indented sub-bullet the space stays", async () => {
+    // Before the fix each of these three was refused with "No footnote was
+    // created: Obsidian would read it as part of a link.", and the note was
+    // unchanged. absorbLeadingSpace now reads the line in its place in the
+    // note.
+    it("in a tab-indented sub-bullet the space stays", async () => {
         const doc = await select(["- Sources", "\t- Smith [2020] argues this.", "", "After."], 1, "argues this.");
         expect(messages()).toEqual([]);
         expect(doc.lines).toEqual(["- Sources", "\t- Smith [2020] [^1]", "", "After.", "", "[^1]: argues this."]);
     });
 
-    it.fails("in a four-space sub-bullet the space stays", async () => {
+    it("in a four-space sub-bullet the space stays", async () => {
         const doc = await select(["- Sources", "    - Smith [2020] argues this.", "", "After."], 1, "argues this.");
         expect(messages()).toEqual([]);
         expect(doc.lines).toEqual(["- Sources", "    - Smith [2020] [^1]", "", "After.", "", "[^1]: argues this."]);
     });
 
-    it.fails("in a numbered item's second paragraph, indented with a tab, the space stays", async () => {
+    it("in a numbered item's second paragraph, indented with a tab, the space stays", async () => {
         const doc = await select(["1. Sources", "", "\tSmith [2020] argues this.", "", "After."], 2, "argues this.");
         expect(messages()).toEqual([]);
         expect(doc.lines).toEqual(["1. Sources", "", "\tSmith [2020] [^1]", "", "After.", "", "[^1]: argues this."]);
