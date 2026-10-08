@@ -132,13 +132,15 @@ export const SelectionFormattingNotice =
  * or cuts into a footnote, is told so whatever reason the gate gave
  * (`selected`, from selectedNotice): those were the first things checked
  * before the gate decided, and they name what the user selected. Otherwise
- * protected text, and anything the conversion meant to create that would
- * not be live, is the selection cutting through protected text, and a
- * line's formatting is the selection taking part of it.
+ * protected text is the selection cutting through protected text, and a
+ * line's formatting is the selection taking part of it. Anything the
+ * conversion meant to create that would not be live for another reason
+ * gets the press's own notice for it (ruling 7 of the cycle 6 rulings,
+ * 2026-10-08; it borrowed the protected-text notice until then).
  */
 function selectionNotices(selected: string | null): Partial<Record<GateReason, string>> {
     if (selected !== null) return { nested: selected, protected: selected, link: selected, formatting: selected, dead: selected, other: selected };
-    return { protected: ProtectedSelectionNotice, dead: ProtectedSelectionNotice, formatting: SelectionFormattingNotice };
+    return { protected: ProtectedSelectionNotice, formatting: SelectionFormattingNotice };
 }
 
 /**

@@ -34,7 +34,7 @@ import { maskInlineRegions, readCell } from "../parsing/cell-reading";
 import { warnDefinitionCaretIfInside, warnTableEdgeCaretIfOutside, warnProtectedCaretIfInside } from "./press-guards";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
-import { BlockSyntaxNotice, InsideLinkNotice, NestedFootnoteNotice, ReadsDifferentlyNotice, showNotice } from "../editor/notice";
+import { BlockSyntaxNotice, DeadFootnoteNotice, InsideLinkNotice, NestedFootnoteNotice, ReadsDifferentlyNotice, showNotice } from "../editor/notice";
 import { CreatedFootnote, GateReason, GateVerdict, judgeEdit } from "../editor/result-gate";
 
 /**
@@ -45,9 +45,9 @@ import { CreatedFootnote, GateReason, GateVerdict, judgeEdit } from "../editor/r
  * inside a definition gets; protected text, the protected-text notice; a
  * link, the link notice (Jason's ruling, 2026-10-04); a line's
  * formatting, the block-syntax notice (Jason, 2026-10-05); something the
- * press meant to create that would not be live, the protected-text
- * notice, which says where such a footnote dies; and anything else, the
- * general one. A selection conversion speaks in its own words for some
+ * press meant to create that would not be live for any other reason, its
+ * own notice (ruling 7 of the cycle 6 rulings, 2026-10-08; it borrowed the
+ * protected-text notice until then); and anything else, the general one. A selection conversion speaks in its own words for some
  * reasons, and hands them in as `notices`. Shared by every press that
  * creates a footnote. True means the press was refused.
  */
@@ -58,7 +58,7 @@ export function refusedCreation(verdict: GateVerdict, notices: Partial<Record<Ga
         protected: ProtectedCreationNotice,
         link: InsideLinkNotice,
         formatting: BlockSyntaxNotice,
-        dead: ProtectedCreationNotice,
+        dead: DeadFootnoteNotice,
         other: ReadsDifferentlyNotice,
         ...notices,
     };
