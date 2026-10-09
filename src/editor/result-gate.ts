@@ -91,6 +91,8 @@ export interface EditIntent {
     merged?: readonly string[];
     /** The footnotes whose definition the action makes out of text already in the note, a lazy label given its blank line (fix-lazy). */
     defined?: readonly string[];
+    /** The footnote whose text the action ends early, and the line of the note before where it now stops: a lazy label inside that footnote's text, past its look-ahead, given its blank line (fix-lazy). The lines from there on become the definitions the action makes; the footnote's text above them must read the same. */
+    shortened?: { name: string; line: number };
     /** Whether the action moves references and inline footnotes along their lines, past the punctuation next to them (the lint's punctuation rule): a definition whose text changed only so still reads the same. */
     footnotesMoved?: boolean;
     /** The footnotes the action turns into inline footnotes (Convert normal to inline): their definitions go, and their text moves into an inline footnote where each reference was. */
@@ -593,11 +595,13 @@ function ownSpans(side: Side, i: number, length: number): { start: number; end: 
  * a footnote's text, a cut from it) is left out of its lines, and a line
  * that held only that text with it: the user's own text is theirs to
  * change, and a footnote it brings is judged as nesting (check 2).
+ * A definition the action ends early (EditIntent.shortened) is compared
+ * up to `end`, the line above where it now stops.
  */
-function definitionKey(side: Side, definition: Definition): string {
+function definitionKey(side: Side, definition: Definition, end = definition.end): string {
     const { quotes, listItems, footnotes } = definition.container;
     const lines: string[] = [];
-    for (let i = definition.start; i <= definition.end; i++) {
+    for (let i = definition.start; i <= end; i++) {
         // a definition held inside this one is compared on its own
         if (i > definition.start && side.reading.definitionAt(i) !== definition) continue;
         // where the action moves footnotes along their lines, a line is
@@ -1168,8 +1172,20 @@ export function judgeEdit(
     const shape = blockShapeVerdict(oldSide, newSide, created, defined, definedAfter) ?? mergedShapeVerdict(oldSide, newSide, merged, mergedAfter);
     if (shape !== null) return shape;
 
-    // 1. untouched footnotes read the same
+    // 1. untouched footnotes read the same. A footnote the action ends
+    // early is compared before the edit only up to the line where it now
+    // stops: the lines from there on are the lazy label's, which became a
+    // definition of their own (fix-lazy next to a long footnote; rule E4
+    // of docs/obsidian-reading-rules.md; pin
+    // bug-label-past-lookahead-not-lazy). The line must sit inside that
+    // footnote's text, below its label, or nothing is ended early.
+    const { shortened } = intent;
+    const endsEarly =
+        shortened === undefined
+            ? undefined
+            : beforeReading.definitions.find((definition) => fold(definition.name) === fold(shortened.name) && definition.start < shortened.line && shortened.line <= definition.end);
     return untouchedVerdict(oldSide, newSide, {
+        shortened: endsEarly === undefined || shortened === undefined ? null : { definition: endsEarly, end: shortened.line - 1 },
         removed: new Set([...[...removed].map(before), ...inlined]),
         rewritten: new Set([...rewritten, ...mergedAfter]),
         defined: definedAfter,
@@ -1627,6 +1643,8 @@ function untouchedVerdict(
     oldSide: Side,
     newSide: Side,
     names: {
+        /** the definition before the edit that the action ends early, and its last line now (EditIntent.shortened) */
+        shortened: { definition: Definition; end: number } | null;
         removed: ReadonlySet<string>;
         rewritten: ReadonlySet<string>;
         defined: ReadonlySet<string>;
@@ -1669,7 +1687,8 @@ function untouchedVerdict(
             if (!inWindow(side, definition.start)) continue;
             const name = side.map(fold(definition.name));
             if (skipped(name) || names.rewritten.has(name) || owned(side, definition.start, definition.labelStart)) continue;
-            out.set(name, [...(out.get(name) ?? []), definitionKey(side, definition)]);
+            const end = side === oldSide && definition === names.shortened?.definition ? names.shortened.end : definition.end;
+            out.set(name, [...(out.get(name) ?? []), definitionKey(side, definition, end)]);
         }
         return out;
     };

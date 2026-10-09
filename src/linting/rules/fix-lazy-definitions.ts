@@ -75,7 +75,8 @@ export function fixLazyDefinitions(markdown: string): string {
 function fixLazyDefinitionsOnce(markdown: string): string {
     return rewriteDocument(markdown, (text, view) => {
         let lines = view.lines;
-        let lazy = lazyDefinitionLabelLines(lines);
+        let read = readNote(lines);
+        let lazy = lazyDefinitionLabelLines(lines, undefined, read);
         if (lazy.length === 0) return text;
         // labels the rule has decided to leave alone, by line number in the
         // CURRENT numbering (an insertion above one shifts it down by one)
@@ -116,13 +117,23 @@ function fixLazyDefinitionsOnce(markdown: string): string {
                     const label = reading.labelLines[line] ? reading.labelOn(line) : null;
                     return label === null ? [] : [label.name];
                 });
-            if (!rulePasses(lines, trial, { defined })) {
+            // A lazy label can sit inside a footnote's own text: one typed
+            // straight under a footnote longer than Obsidian's look-ahead
+            // reads as more of that footnote (rule E4 of
+            // docs/obsidian-reading-rules.md). Its blank line ends that
+            // footnote's text above the label, which the gate is told, so
+            // it still refuses any other change to that footnote (pin
+            // bug-label-past-lookahead-not-lazy).
+            const holder = read.definitionAt(at);
+            const shortened = holder !== null && holder.start < at ? { name: holder.name, line: at } : undefined;
+            if (!rulePasses(lines, trial, { defined, ...(shortened ? { shortened } : {}) })) {
                 skipped.add(at);
                 continue;
             }
             lines = trial;
+            read = reading;
             skipped = new Set([...skipped].map((line) => (line >= at ? line + 1 : line)));
-            lazy = lazyDefinitionLabelLines(lines);
+            lazy = lazyDefinitionLabelLines(lines, undefined, read);
         }
         return lines.join("\n");
     });

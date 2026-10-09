@@ -4,6 +4,7 @@ import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
 import { noticeLintAlerts } from "../../src/linting/lint-alerts";
 import { lintFootnotes } from "../../src/linting/linter";
+import { judgeEdit } from "../../src/editor/result-gate";
 import { fixLazyDefinitions } from "../../src/linting/rules/fix-lazy-definitions";
 import { readNote } from "../../src/parsing/note-reading";
 
@@ -61,7 +62,13 @@ import { readNote } from "../../src/parsing/note-reading";
 // footnote of its own. A label past the look-ahead is inside the long
 // footnote's definition, so it is skipped and never counted as lazy. Fix-
 // lazy, the lazy-label alert, and the orphan rule's exemption all get
-// their lazy labels through it.
+// their lazy labels through it. With that fixed (c7fix-C), fix-lazy found
+// the label, but the result gate refused its blank line: footnote 1 loses
+// the label's line from its text, and check 1 compared footnote 1's whole
+// text before with its text after. Fix-lazy now tells the gate which
+// footnote it ends early and where (EditIntent.shortened), and the gate
+// compares that footnote's text above the label alone (c8-tail,
+// 2026-10-09).
 
 /** "A long discursive note:" and "oysters" 180 times: a footnote whose label line runs to 1,470 characters. */
 const Long = `A long discursive note: ${Array.from({ length: 180 }, () => "oysters").join(" ")}.`;
@@ -79,12 +86,11 @@ describe("Delete orphaned references on, a label straight under a long footnote"
         expect(out).toContain("[^2]: Capital, vol. 3.");
     });
 
-    // Still open after c7fix-C: fix-lazy finds the label now, but the
-    // result gate refuses its blank line, since footnote 1 loses the
-    // label's line from its text (check 1 compares footnote 1's text
-    // before and after; src/editor/result-gate.ts). So the reference and
-    // the label stay, and the alert says to add the blank line.
-    it.fails("ends with footnote 2 defined", () => {
+    // Open from c7fix-C to c8-tail: fix-lazy found the label, but the
+    // result gate refused its blank line, since footnote 1 loses the
+    // label's line from its text. The reference and the label stayed, and
+    // the alert said to add the blank line.
+    it("ends with footnote 2 defined", () => {
         const out = lintFootnotes(note, { removeOrphanedReferences: true });
         expect(names(out)).toEqual(["1", "2"]);
     });
@@ -105,10 +111,10 @@ describe("default settings, the same note: what the user is told", () => {
         expect(said).not.toContain("Write its definition");
     });
 
-    // Now: footnote 2 runs over lines 3 and 4, with "[^3]: Heinrich
-    // 2013." as its lazy text, and footnote 3 has no definition. Still
-    // open after c7fix-C, for the result gate's reason above.
-    it.fails("packed by hand: short, long, short", () => {
+    // Before c8-tail: footnote 2 ran over lines 3 and 4, with "[^3]:
+    // Heinrich 2013." as its lazy text, and footnote 3 had no definition,
+    // for the result gate's reason above.
+    it("packed by hand: short, long, short", () => {
         const packed = ["One[^1] two[^2] three[^3].", "", "[^1]: Brenner 2006.", `[^2]: ${Long}`, "[^3]: Heinrich 2013."].join("\n");
         const out = lintFootnotes(packed);
         expect(names(out)).toEqual(["1", "2", "3"]);
@@ -124,15 +130,46 @@ describe("a label written straight under a long footnote by the old append", () 
         expect(names(old)).toEqual(["a"]);
     });
 
-    // Now fix-lazy gives the note back unchanged. Still open after
-    // c7fix-C, for the result gate's reason above.
-    it.fails("fix-lazy gives b its definition back", () => {
+    // Before c8-tail fix-lazy gave the note back unchanged, for the result
+    // gate's reason above.
+    it("fix-lazy gives b its definition back", () => {
         expect(names(fixLazyDefinitions(old))).toEqual(["a", "b"]);
     });
 
-    // Now the default lint moves only the period; [^b] stays undefined.
-    // Still open after c7fix-C, for the result gate's reason above.
-    it.fails("the default lint gives b its definition back", () => {
+    // Before c8-tail the default lint moved only the period, and [^b]
+    // stayed undefined.
+    it("the default lint gives b its definition back", () => {
         expect(names(lintFootnotes(old))).toEqual(["a", "b"]);
+    });
+});
+
+// The gate's side of the fix: told that footnote a ends early, above the
+// label's line, it passes the blank line fix-lazy adds there, and it still
+// refuses any other change to footnote a.
+describe("the result gate, told that footnote a ends where [^b]'s label sits", () => {
+    const before = ["Text[^a] and[^b].", "", `[^a]: ${Long}`, "[^b]: short"];
+    const after = ["Text[^a] and[^b].", "", `[^a]: ${Long}`, "", "[^b]: short"];
+    const told = { defined: ["b"], shortened: { name: "a", line: 3 } };
+
+    it("passes the blank line above the label", () => {
+        expect(judgeEdit(before, after, told)).toEqual({ pass: true });
+    });
+
+    // A characterization: this is what the gate said before c8-tail.
+    it("control: not told, it refuses the blank line as a change to footnote a", () => {
+        expect(judgeEdit(before, after, { defined: ["b"] })).toMatchObject({ pass: false, check: 1, detail: "[^a]" });
+    });
+
+    it("refuses when footnote a's text above the label changes too", () => {
+        const changed = [...after.slice(0, 2), `[^a]: ${Long.replace("discursive", "short")}`, ...after.slice(3)];
+        expect(judgeEdit(before, changed, told)).toMatchObject({ pass: false, check: 1, detail: "[^a]" });
+    });
+
+    it("refuses when the line it names is footnote a's own label line, not its text", () => {
+        expect(judgeEdit(before, after, { defined: ["b"], shortened: { name: "a", line: 2 } })).toMatchObject({ pass: false, check: 1, detail: "[^a]" });
+    });
+
+    it("refuses when it names a footnote that does not hold the line", () => {
+        expect(judgeEdit(before, after, { defined: ["b"], shortened: { name: "b", line: 3 } })).toMatchObject({ pass: false, check: 1, detail: "[^a]" });
     });
 });
