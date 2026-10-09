@@ -1,9 +1,9 @@
-import { Editor } from "obsidian";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
-import FootnotePlugin from "../../src/main";
-import { buildDefinitionAppend } from "../../src/commands/definition-append";
-import { docContext } from "../../src/editor/doc-context";
+import { fakeEditor } from "../helpers/fake-editor";
+import { fakePlugin } from "../helpers/fake-plugin";
+import { messages, resetNotices } from "../helpers/notices";
+import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { lintFootnotes } from "../../src/linting/linter";
 import { definitionsHoldingTheMoveBack, moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 
@@ -27,6 +27,19 @@ import { definitionsHoldingTheMoveBack, moveFootnoteDefinitionsToBottom } from "
 
 const DOC = "---\n\nalpha[^1]. alpha\n\n[^Note]: alpha";
 const HEADING = "---\n## Footnotes";
+
+/** The settings a press reads, with the Section heading setting on. */
+const pressSettings = {
+    insertAtEndOfWord: true,
+    footnotePlacement: "after" as const,
+    enablePopupEditor: false,
+    enableFootnotePrefix: false,
+    enableFootnoteSectionHeading: true,
+    enableRemoveBlankLastLines: true,
+    lintOnFootnoteCreation: false,
+};
+
+beforeEach(resetNotices);
 
 describe("phantom frontmatter from a leading thematic break", () => {
     it("move-to-bottom leaves the note as it is rather than add a --- divider", () => {
@@ -77,43 +90,25 @@ describe("phantom frontmatter from a leading thematic break", () => {
         expect(out).toBe("---\n\nalpha[^1]. alpha\n\n[^2]: alpha");
     });
 
-    it("the insert path's first-footnote heading gets the same guard", () => {
-        const doc = {
-            getLine: (n: number) => ["---", "", "alpha"][n],
-            lineCount: () => 3,
-            lastLine: () => 2,
-        } as unknown as Editor;
-        const plugin = {
-            settings: {
-                enableRemoveBlankLastLines: true,
-                enableFootnoteSectionHeading: true,
-                footnoteSectionHeading: HEADING,
-            },
-        } as unknown as FootnotePlugin;
-        const definition = buildDefinitionAppend(docContext(doc), "1", true, plugin);
-        expect(definition.prepend).toEqual({
-            from: { line: 0, ch: 0 },
-            text: "\n",
-        });
-        // cursor accounts for the whole document shifting down one line:
-        // insertion line 2 + five inserted lines ("\n\n---\n## Footnotes\n\n[^1]: ")
-        // + the prepended blank
-        expect(definition.cursor.line).toBe(2 + 5 + 1);
+    // Subtraction pass 2026-10-08: the gate now refuses this rare shape on
+    // the insert path too. The append used to put a blank line at the top
+    // of the note in the same edit (its prepend; cursor on line 2 + 5 + 1),
+    // so the note's "---" stayed a thematic break; now the result gate
+    // refuses the press, as it refuses the move above, and the note is left
+    // as it was.
+    it("the insert path's first-footnote heading is refused by the result gate", async () => {
+        const note = ["---", "", "alpha"];
+        const doc = fakeEditor([...note], { wholeDoc: true, edits: true, words: true, cursor: { line: 2, ch: 5 } });
+        await insertAutonumFootnote(fakePlugin({ ...pressSettings, footnoteSectionHeading: HEADING }, doc));
+        expect(doc.lines).toEqual(note);
+        // the head would read as frontmatter, which the gate counts as
+        // protected text, hence this notice
+        expect(messages()).toEqual(["No footnote was created: footnotes can't go inside code, math, or other protected text."]);
     });
 
-    it("the insert path leaves ----free headings and normal notes alone", () => {
-        const doc = {
-            getLine: (n: number) => ["---", "", "alpha"][n],
-            lineCount: () => 3,
-            lastLine: () => 2,
-        } as unknown as Editor;
-        const plugin = {
-            settings: {
-                enableRemoveBlankLastLines: true,
-                enableFootnoteSectionHeading: true,
-                footnoteSectionHeading: "## Footnotes",
-            },
-        } as unknown as FootnotePlugin;
-        expect(buildDefinitionAppend(docContext(doc), "1", true, plugin).prepend).toBeUndefined();
+    it("the insert path leaves ----free headings and normal notes alone", async () => {
+        const doc = fakeEditor(["---", "", "alpha"], { wholeDoc: true, edits: true, words: true, cursor: { line: 2, ch: 5 } });
+        await insertAutonumFootnote(fakePlugin({ ...pressSettings, footnoteSectionHeading: "## Footnotes" }, doc));
+        expect(doc.lines).toEqual(["---", "", "alpha[^1]", "", "## Footnotes", "", "[^1]: "]);
     });
 });

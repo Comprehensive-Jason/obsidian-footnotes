@@ -7,7 +7,6 @@ import { definitionLabel } from "../parsing/footnote-grammar";
 import { trimmedSectionHeading } from "../linting/linter";
 import { labelOutrunsLookahead } from "../linting/rules/move-footnotes-to-the-bottom";
 import { findLineRunEnd } from "../parsing/line-edits";
-import { readNote } from "../parsing/note-reading";
 
 // Where a new footnote definition goes. This module holds the
 // section-heading setting and the append edit, both of which every
@@ -82,7 +81,7 @@ export function buildDefinitionAppend(
     isFirstFootnote: boolean,
     plugin: FootnotePlugin,
     whole?: { from: number; to: number },
-): { change: EditorChange; cursor: EditorPosition; prepend?: EditorChange; heading?: TextRange } {
+): { change: EditorChange; cursor: EditorPosition; heading?: TextRange } {
     const lines = ctx.lines;
     const reading = ctx.reading();
     const isProtected = reading.protectedLines;
@@ -256,27 +255,7 @@ export function buildDefinitionAppend(
     // definition can be inserted (the swallowed-prose bug again).
     if (openFrom !== -1 && needsSeparator(fromLine)) text += "\n";
 
-    // The first footnote's section heading may itself start with a "---"
-    // divider at the left margin. If the note's first line is also a bare
-    // "---", meaning a horizontal rule with no partner, adding that second
-    // divider makes Obsidian re-read the whole top of the note as YAML
-    // frontmatter and swallow the prose in it. The same danger that
-    // preserveLeadingThematicBreak handles in
-    // move-footnotes-to-the-bottom, checked against Obsidian's own
-    // metadataCache on 2026-08-10.
-    //
-    // The fix: add a blank line at the very top in the same edit. That
-    // pins line 0 as ordinary content, and it renders exactly the same.
-    let prepend: EditorChange | undefined;
-    if (isFirstFootnote && lines[0] === "---" && !isProtected[0]) {
-        const candidate = lines.slice(0, fromLine + 1).join("\n") + text;
-        if (readNote(candidate.split("\n")).protectedLines[0]) {
-            prepend = { from: { line: 0, ch: 0 }, text: "\n" };
-            cursor.line += 1;
-            if (written) written = { from: { ...written.from, line: written.from.line + 1 }, to: { ...written.to, line: written.to.line + 1 } };
-        }
-    }
-    return { change: { from, to, text }, cursor, prepend, ...(written ? { heading: written } : {}) };
+    return { change: { from, to, text }, cursor, ...(written ? { heading: written } : {}) };
 }
 
 /**
@@ -304,7 +283,6 @@ function seedDefinitionBody(
     definition: {
         change: EditorChange;
         cursor: EditorPosition;
-        prepend?: EditorChange;
         heading?: TextRange;
     },
     footnoteId: string,
@@ -312,7 +290,6 @@ function seedDefinitionBody(
 ): {
     change: EditorChange;
     cursor: EditorPosition;
-    prepend?: EditorChange;
     heading?: TextRange;
     labelLineOffset: number;
 } {
@@ -427,12 +404,12 @@ export function planDefinitionAppend(opts: {
     const text = seeded.change.text.split("\n");
     text.splice(seeded.labelLineOffset + bodyExtraLines + 1, 0, ...(opts.moreDefinitionLines ?? []));
     const change = { ...seeded.change, text: text.join("\n") };
-    const append = seeded.prepend ? [seeded.prepend, change] : [change];
+    const append = [change];
     const final = simulateChanges(middle, append);
     // An edit's text starts after anything the append inserts right where
-    // it starts (the prepended blank line at the top of the note), and
-    // ends before anything the append inserts right where it ends (the
-    // definition, written straight after a reference that ends the note).
+    // it starts, and ends before anything the append inserts right where
+    // it ends (the definition, written straight after a reference that
+    // ends the note).
     const edits = editStarts.map((start, i) => {
         const editLines = opts.edits[i].text.split("\n");
         const end =

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
-import { resetNotices } from "../helpers/notices";
+import { messages, resetNotices } from "../helpers/notices";
 import { handlePaste, resetCarryRegister } from "../../src/commands/carry-footnotes-hooks";
 
 // BUG (annoyance): after a paste that carries footnotes, the caret lands
@@ -74,15 +74,18 @@ describe("the caret after a paste whose definition lands above the paste point",
         expect(dest.cursor).toEqual({ line: 5, ch: 19 });
     });
 
-    it("lands after the pasted body when the first-footnote append adds a line at the top", () => {
+    // Subtraction pass 2026-10-08: the gate now refuses this rare shape. A
+    // note that opens with a bare "---", under a Section heading that
+    // starts with "---", used to get a blank line added at its top so the
+    // first "---" did not read as frontmatter, and the caret was pinned
+    // after "Textc[^7]" on the line that pushed down. The append no longer
+    // adds that line, the head would read as frontmatter, and the result
+    // gate refuses the paste: nothing is pasted.
+    it("is refused when the first-footnote append would turn the note's head into frontmatter", () => {
         const heading = { enableFootnoteSectionHeading: true, footnoteSectionHeading: "---\n# Footnotes" };
         const dest = editor(["---", "Text"], { line: 1, ch: 4 });
         handlePaste(fakePlugin({ ...on, ...heading }, dest), clipboardEvent("c[^7]\n\n[^7]: seven") as never, dest);
-        // The heading starts with "---", so a blank line is added at the
-        // top of the note to keep the note's first "---" from reading as
-        // frontmatter. That line lands above the paste too, so the body
-        // moves from line 1 to line 2, and the caret is left on the "---".
-        const at = dest.cursor;
-        expect(dest.lines[at.line].slice(0, at.ch)).toBe("Textc[^7]");
+        expect(dest.lines).toEqual(["---", "Text"]);
+        expect(messages()).toEqual(["Nothing was pasted: footnotes can't go inside code, math, or other protected text."]);
     });
 });
