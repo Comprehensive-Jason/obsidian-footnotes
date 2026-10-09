@@ -353,6 +353,21 @@ function unmarked(line: string): string {
     return line;
 }
 
+/** The lines of `side` that the user's own text (Side.usersText) takes up whole, from their first character to their last. */
+function wholeOwnLines(side: Side): Set<number> {
+    const whole = new Set<number>();
+    for (const range of side.usersText) {
+        if (!precedes(range.from, range.to)) continue;
+        // a stretch that ends at a line's start holds none of that line
+        const last = range.to.ch > 0 ? range.to.line : range.to.line - 1;
+        for (let line = range.from.line; line <= last; line++) {
+            const end = { line, ch: (side.lines[line] ?? "").length };
+            if (!precedes({ line, ch: 0 }, range.from) && !precedes(range.to, end)) whole.add(line);
+        }
+    }
+    return whole;
+}
+
 /** Whether the checks look at the stretches the edit can have changed alone (editWindows); off only in the test that holds them to the whole note's verdict. */
 let windowsOn = true;
 
@@ -692,6 +707,23 @@ const listKind = (kind: string | undefined): boolean => kind !== undefined && /^
 
 /** A line's blocks up to (not including) the one at `depth`, without the marks for where each starts: what holds that block. */
 const heldBy = (kinds: readonly string[], depth: number): string => kinds.slice(0, depth).join(" ").replace(/\^/g, "");
+
+/**
+ * The line where line `line`'s block number `depth` (counted from the
+ * outermost, from 0) begins on `side`: the nearest line at or above it
+ * where that block carries its start mark, each line between holding the
+ * same block in the same containers. Null when there is none.
+ */
+function blockStart(side: Side, line: number, depth: number): number | null {
+    const kinds = (side.reading.lineBlocks[line] ?? "").split(" ");
+    const kind = kinds[depth].replace(/^\^/, "");
+    for (let above = line; above >= 0; above--) {
+        const aboveKinds = (side.reading.lineBlocks[above] ?? "").split(" ");
+        if (aboveKinds[depth]?.replace(/^\^/, "") !== kind || heldBy(aboveKinds, depth) !== heldBy(kinds, depth)) return null;
+        if (aboveKinds[depth].startsWith("^")) return above;
+    }
+    return null;
+}
 
 /**
  * The line where the list that holds line `line` of `side` starts, the
@@ -1256,7 +1288,38 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
         // to the lines around it
         const nextToUsersText =
             lineInRanges(newSide.usersText, j - 1) || lineInRanges(newSide.usersText, j + 1) || lineInRanges(oldSide.usersText, i - 1) || lineInRanges(oldSide.usersText, i + 1);
-        return sameKind(was, is, nextToUsersText) || (is === was.replace(/(^| )paragraph$/, "$1^paragraph") && openedByFootnotesAlone(i));
+        return sameKind(was, is, nextToUsersText) || (is === was.replace(/(^| )paragraph$/, "$1^paragraph") && openedByFootnotesAlone(i)) || begunInUsersText(i, was, is);
+    };
+    // Whether line `i` reads differently only because a quote or a list's
+    // item that held it began on a line the user's own text took out whole
+    // (a cut). Such a container goes with its first line, and what it held
+    // comes up a level: the sub-item under a cut parent item becomes an
+    // item of the list, and the item's second paragraph a paragraph of its
+    // own. Or it begins again further down: the next item starts the list
+    // in its place. The editor's own cut does the same (ADR 0003). Before,
+    // only a line next to the cut text was forgiven, and only for where a
+    // block starts, so Shift+Down and Ctrl+X on an item's first line that
+    // cited a footnote were refused when a sub-item or a second paragraph
+    // was under it (hunt 2026-10-09 cycle 8, cluster V7, pin
+    // bug-cut-first-line-of-item-with-more-under-it-refused).
+    const takenWhole = wholeOwnLines(oldSide);
+    const begunInUsersText = (i: number, was: string, is: string): boolean => {
+        if (takenWhole.size === 0) return false;
+        const kinds = was.split(" ");
+        const begun = new Set<number>();
+        kinds.forEach((kind, depth) => {
+            if (!/^\^?(?:blockquote|list|list\.ordered|listItem)$/.test(kind)) return;
+            const start = blockStart(oldSide, i, depth);
+            if (start !== null && takenWhole.has(start)) begun.add(depth);
+        });
+        if (begun.size === 0) return false;
+        const isKinds = is.split(" ");
+        const unmarked = (kind: string) => kind.replace(/^\^/, "");
+        // gone with their first line
+        const left = kinds.filter((_, depth) => !begun.has(depth));
+        if (left.map(unmarked).join(" ") === isKinds.map(unmarked).join(" ")) return true;
+        // begun again on a later line
+        return kinds.length === isKinds.length && kinds.every((kind, depth) => kind === isKinds[depth] || (begun.has(depth) && unmarked(kind) === unmarked(isKinds[depth])));
     };
     // Whether the lines above line `i` before the edit, in the paragraph
     // `i` carried on, held only footnotes, and so the paragraph's text began

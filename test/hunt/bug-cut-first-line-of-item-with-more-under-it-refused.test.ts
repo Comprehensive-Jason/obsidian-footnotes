@@ -115,7 +115,7 @@ beforeEach(() => {
 
 describe("a Shift+Down cut of a list item's first line, the item having more under it", () => {
     // Now: refused, the note unchanged.
-    it.fails("outline: the first parent bullet, its sub-bullet left behind", () => {
+    it("outline: the first parent bullet, its sub-bullet left behind", () => {
         const note = ["- Oysters filter water[^1].", "  - up to 50 gallons a day", "- Tides rise.", "", "[^1]: Smith 2020."];
         const c = cut(note, { line: 0, ch: 0 }, { line: 1, ch: 0 });
         expect(messages(), state(c)).not.toContain(Refused);
@@ -125,7 +125,7 @@ describe("a Shift+Down cut of a list item's first line, the item having more und
     });
 
     // Now: refused. Numbered and task lists are refused the same way (the survey).
-    it.fails("outline, a numbered list: the first parent item", () => {
+    it("outline, a numbered list: the first parent item", () => {
         const note = ["Steps:", "", "1. Collect oysters[^1].", "   - at low tide", "2. Measure them.", "", "[^1]: Smith 2020."];
         const c = cut(note, { line: 2, ch: 0 }, { line: 3, ch: 0 });
         expect(messages(), state(c)).not.toContain(Refused);
@@ -133,7 +133,7 @@ describe("a Shift+Down cut of a list item's first line, the item having more und
     });
 
     // Now: refused.
-    it.fails("a bullet with a second paragraph: its first line", () => {
+    it("a bullet with a second paragraph: its first line", () => {
         const note = ["- Oysters filter water[^1].", "", "  They also build reefs.", "- Tides rise.", "", "[^1]: Smith 2020."];
         const c = cut(note, { line: 0, ch: 0 }, { line: 1, ch: 0 });
         expect(messages(), state(c)).not.toContain(Refused);
