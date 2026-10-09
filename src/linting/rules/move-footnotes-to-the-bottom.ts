@@ -16,34 +16,6 @@ import { FootnoteRule } from "../rule";
 // changes nothing.
 
 /**
- * Guard against a note's first line turning into frontmatter.
- *
- * A note whose FIRST line is "---" with no matching "---" later on reads as
- * a horizontal rule. But add a "---" or "..." at the left margin further
- * down, and Obsidian re-reads the whole top of the note as a YAML
- * frontmatter block. Everything caught in it, prose and references alike,
- * quietly stops being part of the note's body. (Verified against
- * metadataCache's section types, 2026-08-10.)
- *
- * This was found by the differential test that compares the plugin against
- * the remark parser: gathering definitions under a "---\n## Footnotes"
- * heading closed that phantom block, and reindex then handed the name of a
- * swallowed reference to an orphaned definition.
- *
- * So when rebuilding the note would flip that reading, one blank line goes
- * in front. It renders exactly the same, and frontmatter can only open on
- * the very first line, so line 0 stays ordinary content for good.
- */
-function preserveLeadingThematicBreak(
-    firstLineWasProtected: boolean,
-    rebuilt: string,
-): string {
-    if (firstLineWasProtected || !rebuilt.startsWith("---")) return rebuilt;
-    if (!readNote(rebuilt.split("\n")).protectedLines[0]) return rebuilt;
-    return "\n" + rebuilt;
-}
-
-/**
  * How far into a definition Obsidian looks for what ends it: 1,024
  * characters, counted from the start of its label line (remark-footnotes'
  * maxSlice; docs/obsidian-reading-rules.md E4, live 2026-10-03).
@@ -109,7 +81,12 @@ export function moveFootnoteDefinitionsToBottom(markdown: string, sectionHeading
         // that keeps "   thin prose" under a list item from becoming that
         // item's second paragraph, and the indented code under it from
         // waking up as live text (found by the conservation property, the
-        // runtime swap step 2, 2026-10-03).
+        // runtime swap step 2, 2026-10-03). And a note whose first line is
+        // a "---" with nothing to close it, under a section heading that
+        // holds a "---" line: the heading's line would close it, and
+        // Obsidian would read the top of the note as frontmatter (pin
+        // bug-phantom-frontmatter; the move once put a blank line in front
+        // instead, removed in the subtraction pass, 2026-10-08).
         return moved !== text && !rulePasses(text.split("\n"), moved.split("\n"), { insertedText: heading }) ? text : moved;
     });
 }
@@ -134,7 +111,6 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): { t
     const trailingNewlines = view.trimTrailingBlankLines();
 
     const { reading, blocks } = view;
-    const isProtected = reading.protectedLines;
     if (blocks.length === 0) return { text, heading: [] };
 
     // Packed label to label, except after a block whose last line is
@@ -238,11 +214,7 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): { t
         const remainder = rest.slice(chunkEnd);
         while (remainder.length > 0 && remainder[0] === "") remainder.shift();
         if (remainder.length > 0) out.push("", ...remainder);
-        const anchored = preserveLeadingThematicBreak(
-            isProtected[0],
-            out.join("\n") + "\n".repeat(trailingNewlines),
-        );
-        return { text: anchored, heading: [] };
+        return { text: out.join("\n") + "\n".repeat(trailingNewlines), heading: [] };
     }
 
     const base = body.join("\n");
@@ -262,13 +234,12 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): { t
             ? (sectionHeading !== "" ? sectionHeading + "\n\n" : "") +
               definitions
             : base + headingPart + "\n\n" + definitions;
-    const unanchored = result + "\n".repeat(trailingNewlines);
-    const rebuilt = preserveLeadingThematicBreak(isProtected[0], unanchored);
+    const rebuilt = result + "\n".repeat(trailingNewlines);
     if (sectionHeading === "") return { text: rebuilt, heading: [] };
     // the heading's lines: the first ones, or the ones under the body and
-    // a blank line, one lower when a blank line went in at the top
+    // a blank line
     const headingLines = sectionHeading.split("\n");
-    const start = (base === "" ? 0 : body.length + 1) + (rebuilt === unanchored ? 0 : 1);
+    const start = base === "" ? 0 : body.length + 1;
     return {
         text: rebuilt,
         heading: [{ from: { line: start, ch: 0 }, to: { line: start + headingLines.length - 1, ch: headingLines[headingLines.length - 1].length } }],

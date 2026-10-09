@@ -5,7 +5,7 @@ import FootnotePlugin from "../../src/main";
 import { buildDefinitionAppend } from "../../src/commands/definition-append";
 import { docContext } from "../../src/editor/doc-context";
 import { lintFootnotes } from "../../src/linting/linter";
-import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
+import { definitionsHoldingTheMoveBack, moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-footnotes-to-the-bottom";
 
 // Found by the remark differential oracle on its first soak (2026-08-10),
 // ground truth verified against Obsidian's metadataCache: a note whose
@@ -18,15 +18,27 @@ import { moveFootnoteDefinitionsToBottom } from "../../src/linting/rules/move-fo
 // existed. Fix: when a rebuild/insert would flip that interpretation, a
 // blank line is prepended (renders identically; frontmatter can only open
 // on the very first line).
+//
+// Subtraction pass 2026-10-08: the gate now refuses this rare shape on the
+// lint's side. The move no longer puts a blank line in front; the result
+// gate refuses a move that would turn the top of the note into
+// frontmatter, so the lint leaves the definitions where they are and the
+// move alert names them. The insert path keeps its own blank line.
 
 const DOC = "---\n\nalpha[^1]. alpha\n\n[^Note]: alpha";
 const HEADING = "---\n## Footnotes";
 
 describe("phantom frontmatter from a leading thematic break", () => {
-    it("move-to-bottom pins line 0 as content before adding a --- divider", () => {
-        expect(moveFootnoteDefinitionsToBottom(DOC, HEADING)).toBe(
-            "\n---\n\nalpha[^1]. alpha\n\n---\n## Footnotes\n\n[^Note]: alpha",
-        );
+    it("move-to-bottom leaves the note as it is rather than add a --- divider", () => {
+        // before the subtraction pass: "\n---\n\nalpha[^1]. alpha\n\n---\n## Footnotes\n\n[^Note]: alpha"
+        expect(moveFootnoteDefinitionsToBottom(DOC, HEADING)).toBe(DOC);
+        // The definition already ends this note, so only the heading is
+        // missing and the move alert has nothing to name. A definition in
+        // the middle of such a note stays where it is, and the alert names it.
+        expect(definitionsHoldingTheMoveBack(DOC, HEADING)).toEqual([]);
+        const middle = "---\n\n[^Note]: alpha\n\nalpha[^1]. alpha";
+        expect(moveFootnoteDefinitionsToBottom(middle, HEADING)).toBe(middle);
+        expect(definitionsHoldingTheMoveBack(middle, HEADING)).toEqual(["Note"]);
     });
 
     it("move-to-bottom leaves real frontmatter and ----free headings alone", () => {
@@ -58,12 +70,11 @@ describe("phantom frontmatter from a leading thematic break", () => {
             sectionHeading: HEADING,
         });
         // the orphaned definition takes [^2] - NOT the orphaned
-        // reference's [^1], which still points nowhere on purpose
-        expect(out).toBe(
-            "\n---\n\nalpha[^1]. alpha\n\n---\n## Footnotes\n\n[^2]: alpha",
-        );
-        // and Obsidian reads the head as a thematic break, not YAML
-        // (verified live via metadataCache sections)
+        // reference's [^1], which still points nowhere on purpose. The
+        // move is held back (subtraction pass 2026-10-08; before it the
+        // lint gave "\n---\n\nalpha[^1]. alpha\n\n---\n## Footnotes\n\n[^2]: alpha"),
+        // so the head stays a thematic break, not YAML
+        expect(out).toBe("---\n\nalpha[^1]. alpha\n\n[^2]: alpha");
     });
 
     it("the insert path's first-footnote heading gets the same guard", () => {
