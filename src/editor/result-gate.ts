@@ -9,7 +9,7 @@
 //    mean to change keeps its definition's text and its live references,
 //    wherever they now sit, so the lint's moves still pass.
 // 2. No footnote ends up inside a footnote that was not there before (ADR
-//    0001).
+//    0001), a reference that only gets its definition included.
 // 3. Protected text reads the same, word for word: code, math, comments,
 //    and frontmatter.
 // 4. Links, images, and embeds are still drawn as before.
@@ -876,6 +876,11 @@ function createdVerdict(after: Side, created: readonly CreatedFootnote[]): GateV
     return Pass;
 }
 
+/** The names `side` gives a definition anywhere in the note, written as `side.map` gives them. A definition hidden in a comment or in code is not in the reading, so it defines nothing. */
+function definedNames(side: Side): Set<string> {
+    return new Set(side.reading.definitions.map((definition) => side.map(fold(definition.name))));
+}
+
 /**
  * Check 2: every footnote that sits inside another footnote, as a pair of
  * the one around it and what sits in it. The one around it is a
@@ -886,10 +891,22 @@ function createdVerdict(after: Side, created: readonly CreatedFootnote[]): GateV
  * the action takes out), and `holders` turns the name of the footnote
  * around into the one the pair is written with (null to leave the pair
  * out).
+ *
+ * A reference counts only when the note on this side defines its name.
+ * Obsidian draws a reference with no definition as plain text, so it is
+ * no footnote yet. It becomes one when the edit gives it a definition, and
+ * if it sits inside another footnote's definition, that is a footnote
+ * inside a footnote the edit made, even though the reference was there
+ * before (Jason's ruling 1, 2026-10-09; pin
+ * bug-definition-completes-nested-reference). Such a reference can sit far
+ * from the lines the edit changed, so the references to every name in
+ * `cameAlive`, the names the edit gives a definition, are looked at all
+ * through the note, not only in the stretches the checks look at.
  */
-function nestingPairs(side: Side, skipped: (line: number, ch: number) => boolean, holders: (name: string) => string | null): string[] {
+function nestingPairs(side: Side, skipped: (line: number, ch: number) => boolean, holders: (name: string) => string | null, cameAlive: ReadonlySet<string>): string[] {
     const reading = side.reading;
     const pairs: string[] = [];
+    const defined = definedNames(side);
     const add = (holder: string, what: string) => {
         const around = holders(holder);
         if (around !== null) pairs.push(`${around}>${what}`);
@@ -899,11 +916,12 @@ function nestingPairs(side: Side, skipped: (line: number, ch: number) => boolean
         if (definition !== null) add(side.map(fold(definition.name)), what);
     };
     for (const reference of reading.references) {
-        if (!inWindow(side, reference.line) || skipped(reference.line, reference.start)) continue;
+        const name = side.map(fold(reference.name));
+        if (!(inWindow(side, reference.line) || cameAlive.has(name)) || skipped(reference.line, reference.start)) continue;
         // a reference the reading finds but does not count as live sits
         // inside an inline footnote (rule E3), a footnote in a footnote too
-        if (!reference.live) add("^", side.map(fold(reference.name)));
-        else inside(reference.line, reference.start, side.map(fold(reference.name)));
+        if (!reference.live) add("^", name);
+        else if (defined.has(name)) inside(reference.line, reference.start, name);
     }
     const notes = reading.inlineNotes.filter((note) => inWindow(side, note.line));
     for (const note of notes) {
@@ -1055,8 +1073,11 @@ export function judgeEdit(
     );
     const converted = new Set([...inlined, ...(intent.inlineRemoved ? createdNames : [])]);
     const holder = (left: ReadonlySet<string>) => (name: string) => (left.has(name) ? null : name === "^" || converted.has(name) ? "*" : name);
-    const outerBefore = nestingPairs(oldSide, (line, ch) => inRanges(oldSide.ranges, line, ch), holder(new Set([...removed].map(before))));
-    const outerAfter = nestingPairs(newSide, () => false, holder(new Set([...removedAfter, ...definedAfter, ...pasted])));
+    // the names the note has a definition for only after the edit
+    const definedBefore = definedNames(oldSide);
+    const cameAlive = new Set([...definedNames(newSide)].filter((name) => !definedBefore.has(name)));
+    const outerBefore = nestingPairs(oldSide, (line, ch) => inRanges(oldSide.ranges, line, ch), holder(new Set([...removed].map(before))), cameAlive);
+    const outerAfter = nestingPairs(newSide, () => false, holder(new Set([...removedAfter, ...definedAfter, ...pasted])), cameAlive);
     const nested = surplus(counted(outerAfter), counted(outerBefore));
     if (nested !== null) return refuse("nested", 2, nested);
 

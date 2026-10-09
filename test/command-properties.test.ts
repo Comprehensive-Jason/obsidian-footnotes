@@ -469,10 +469,20 @@ describe("creation-command invariants over random documents", () => {
                         ) ||
                         typedStarts[typedLine] ||
                         readNote(doc.lines).definitionAt(typedLine) !== null;
+                    // A reference with the typed name that already sits
+                    // inside a definition (on its lazy or indented line)
+                    // would come alive as a footnote inside a footnote once
+                    // the name gets its definition, so the second press
+                    // refuses to nest there too (Jason's ruling 1,
+                    // 2026-10-09; pin bug-definition-completes-nested-reference).
+                    const typedReading = readNote(doc.lines);
+                    const nestsElsewhere = typedReading.references.some(
+                        (o) => o.live && o.name.toLowerCase() === name.toLowerCase() && typedReading.definitionAt(o.line) !== null,
+                    );
                     await insertNamedFootnote(plugin);
                     const folded = name.toLowerCase();
                     const definitionsAfter = definitionNamesFolded(doc.lines);
-                    if (insideDefinition) {
+                    if (insideDefinition || nestsElsewhere) {
                         expect([...definitionsAfter].sort()).toEqual(
                             [...definitionsBefore].sort(),
                         );
