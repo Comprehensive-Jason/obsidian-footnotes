@@ -66,6 +66,33 @@ export function punctuationAt(text: string, i: number, images: ReadonlySet<numbe
 }
 
 /**
+ * Where the word in front of column `at` of `text` ends, when only spaces
+ * stand between the two; `at` itself when no word ends there. A footnote
+ * reference belongs right after its word, so the spaces a user typed in
+ * front of one ("water [^1].") go with the reference wherever the
+ * reference moves, or is cut out (Jason's ruling Q35, 2026-10-09; his
+ * attach ruling of 2026-09-08 covers the space the plugin writes).
+ *
+ * The spaces are spaces and tabs. With `typographic`, the no-break spaces
+ * French puts before ";", ":", "!", and "?" (U+00A0 and the narrow
+ * U+202F) count too: a reference moved back in front of "Vraiment ?" lands
+ * on the word, "Vraiment[^1] ?", the space staying with the "?" (ruling
+ * Q35, which settles G9 with it).
+ *
+ * No word ends there when what comes before the spaces is punctuation, a
+ * table's "|", or the line's block syntax: `textStart` is the column where
+ * the line's text begins (NoteReading.blockSyntaxEnd), so the space after
+ * "- " or "> " is never taken.
+ */
+export function wordEndBefore(text: string, at: number, textStart: number, typographic = false): number {
+    const space = typographic ? /[ \t\u00a0\u202f]/ : /[ \t]/;
+    let end = at;
+    while (end > textStart && space.test(text[end - 1])) end--;
+    if (end === at || end <= textStart || text[end - 1] === "|" || punctuationAt(text, end - 1)) return at;
+    return end;
+}
+
+/**
  * The columns of `line` where `reading` draws an image or an embed: the
  * column of its "!", for every link that starts with one and that the
  * note draws (drawnAsLink, judged with `linkLabels`). This is the `images`

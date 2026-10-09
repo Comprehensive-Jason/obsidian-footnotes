@@ -17,7 +17,8 @@ import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after
 // requires the colon right after the name, and Obsidian agrees: "[^1][^2]:
 // x" is two live references and a literal colon, never a definition).
 // The rule's own single-reference behavior shows it: "see [^1]: x" becomes
-// "see :[^1] x". The two-reference run at column 0 (or behind a quote
+// "see :[^1] x" ("see:[^1] x" since Jason's ruling Q35, 2026-10-09). The
+// two-reference run at column 0 (or behind a quote
 // marker) is the same shape, and the guard lets it keep the colon in
 // front.
 //
@@ -43,7 +44,9 @@ describe("a run of references before a colon at the line's start", () => {
     });
 
     it("control: a single reference before a colon mid-line crosses it", () => {
-        expect(footnoteAfterPunctuation("see [^1]: x")).toBe("see :[^1] x");
+        // the space typed in front of the reference goes with it (Jason's
+        // ruling Q35, 2026-10-09; "see :[^1] x" until then)
+        expect(footnoteAfterPunctuation("see [^1]: x")).toBe("see:[^1] x");
     });
 
     it("an indented reference before a colon under a paragraph crosses it (four spaces is never a label)", () => {

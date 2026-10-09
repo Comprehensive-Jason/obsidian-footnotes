@@ -38,7 +38,7 @@ import { lineKey, unmatchedRuns } from "./document-diff";
 import { tableRowCellSpans } from "./table-cursor";
 import { escapedAt } from "../parsing/footnote-grammar";
 import { labelShapedLines, lazyDefinitionLabelLines } from "../parsing/label-shapes";
-import { drawnLinkShapes } from "../parsing/landing";
+import { drawnLinkShapes, punctuationAt } from "../parsing/landing";
 import { Definition, NoteReading, readNote } from "../parsing/note-reading";
 
 /** A place in a note: a line and a column, both counted from 0. */
@@ -1202,6 +1202,13 @@ function onlyFootnotes(line: string): boolean {
  * not a pattern, since a pattern took "\^[^x]" (an escaped caret before a
  * reference) for an inline footnote, and stopped an inline footnote at a
  * "]" inside its code span.
+ *
+ * The spaces typed in front of a footnote that punctuation follows go with
+ * the footnote, so "water [^1]." has the words "water.", as "water.[^1]"
+ * does: such spaces belong to the reference, and the lint's punctuation
+ * rule and a deletion take them with it (Jason's ruling Q35, 2026-10-09;
+ * pin spec-punctuation-rule-space-before-reference). In front of a word
+ * they stay, so two words the edit runs together still read differently.
  */
 function wordsOn(side: Side, i: number): string {
     const line = side.lines[i] ?? "";
@@ -1212,9 +1219,16 @@ function wordsOn(side: Side, i: number): string {
     spans.sort((a, b) => a.start - b.start);
     let out = "";
     let at = 0;
-    for (const span of spans) {
-        if (span.start > at) out += line.slice(at, span.start);
+    for (let k = 0; k < spans.length; k++) {
+        const span = spans[k];
+        let text = span.start > at ? line.slice(at, span.start) : "";
         at = Math.max(at, span.end);
+        // the footnotes written back to back with this one, and whether
+        // punctuation follows the last of them
+        let last = at;
+        for (let next = k + 1; next < spans.length && spans[next].start <= last; next++) last = Math.max(last, spans[next].end);
+        if (punctuationAt(line, last)) text = text.replace(/[ \t]+$/, "");
+        out += text;
     }
     return (out + line.slice(at)).replace(/\s+/g, " ").trim();
 }

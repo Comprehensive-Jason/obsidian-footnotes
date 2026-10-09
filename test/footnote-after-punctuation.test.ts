@@ -73,8 +73,9 @@ describe("footnoteAfterPunctuation", () => {
     it("never tears the tail reference out of an inline footnote: the footnote moves whole (N1, 2026-09-21)", () => {
         // before N1 the inline footnote was left where it was; now it is a
         // movable unit of its own, and its "[^1]" body is still never a
-        // reference
-        expect(footnoteAfterPunctuation("see ^[^1]. end")).toBe("see .^[^1] end");
+        // reference. The space typed in front of it goes with it (Jason's
+        // ruling Q35, 2026-10-09; "see .^[^1] end" until then).
+        expect(footnoteAfterPunctuation("see ^[^1]. end")).toBe("see.^[^1] end");
     });
 
     it("moves the live reference on a line while leaving the escaped one", () => {

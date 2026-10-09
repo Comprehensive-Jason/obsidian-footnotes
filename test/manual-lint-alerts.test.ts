@@ -114,8 +114,12 @@ describe("orphans, strays, and empties", () => {
 
     it("with 'Delete orphaned references' on, every stray goes and the spacing heals", () => {
         const lines = lintedProse({ removeOrphanedReferences: true });
+        // "and [^c#d], a hashed" loses the space in front of the cut
+        // reference too, since punctuation follows it (Jason's ruling Q35,
+        // 2026-10-09, which settles D10); until then this line read "...
+        // [^bad name] and , a hashed ..."
         expect(lines[3]).toBe(
-            'Fixture: text[^used] here, a stray with no definition and five more strays in a row here, an empty [^] reference, an untouched prefix placeholder [^3.] in this sentence, hand-typed invalid names [^bad name] and , a hashed name that does have a definition,[^#jump] a nesting footnote,[^nest] a footnote with a fenced code block in its body,[^fence] and dup here.[^dup]',
+            'Fixture: text[^used] here, a stray with no definition and five more strays in a row here, an empty [^] reference, an untouched prefix placeholder [^3.] in this sentence, hand-typed invalid names [^bad name] and, a hashed name that does have a definition,[^#jump] a nesting footnote,[^nest] a footnote with a fenced code block in its body,[^fence] and dup here.[^dup]',
         );
         // the line of three backticked and hashed names empties out too
         expect(lines[5]).toBe("x y");

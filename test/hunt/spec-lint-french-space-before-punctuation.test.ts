@@ -23,6 +23,15 @@ import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after
 // and whether it should apply to every space or only the no-break spaces
 // French uses is Jason's call.
 //
+// Answered (Jason's ruling Q35, 2026-10-09, which settles G9 with it):
+// the spaces typed between a word and its reference belong to the
+// reference, and a space in front of the punctuation stays with the
+// punctuation, so the reference attaches to its word. Moving "Vraiment
+// ?[^1]" back in front of the "?", the lint hops back over the space as
+// well, to "Vraiment[^1] ?", as the press puts it. Any space counts, the
+// no-break spaces French uses and a plain one. The test below was it.fails
+// until then.
+//
 // Hunt 2026-10-02, round 3, lens gram-off. Cluster G9.
 //
 // Source of truth: French typographic convention (a no-break space before
@@ -30,11 +39,22 @@ import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after
 // among the "before" conventions (FootnotePlacement), and the press's own
 // landing as the plugin's other reading of the same sentence.
 
-describe("spec question: French spacing before high punctuation under 'before'", () => {
-    it.fails("the lint puts a hand-typed call after ' ?' (no-break space) back on the word", () => {
-        // Today: "Vraiment\u00A0[^1]?"
-        expect(footnoteAfterPunctuation("Vraiment\u00A0?[^1]\n\n[^1]: n", "before")).toBe(
-            "Vraiment[^1]\u00A0?\n\n[^1]: n",
-        );
+describe("ruling Q35: French spacing before high punctuation under 'before'", () => {
+    it("the lint puts a hand-typed call after ' ?' (no-break space) back on the word", () => {
+        expect(footnoteAfterPunctuation("Vraiment\u00A0?[^1]\n\n[^1]: n", "before")).toBe("Vraiment[^1]\u00A0?\n\n[^1]: n");
+    });
+    it("the same with a narrow no-break space and a plain space", () => {
+        expect(footnoteAfterPunctuation("Vraiment\u202F![^1]\n\n[^1]: n", "before")).toBe("Vraiment[^1]\u202F!\n\n[^1]: n");
+        expect(footnoteAfterPunctuation("Vraiment ?[^1]\n\n[^1]: n", "before")).toBe("Vraiment[^1] ?\n\n[^1]: n");
+    });
+    it("the call the press writes, glued to the word, stays", () => {
+        expect(footnoteAfterPunctuation("Vraiment[^1]\u00A0?\n\n[^1]: n", "before")).toBe("Vraiment[^1]\u00A0?\n\n[^1]: n");
+    });
+    it("control: under 'after', a call after ' ?' stays, and one glued to the word stays too", () => {
+        expect(footnoteAfterPunctuation("Vraiment\u00A0?[^1]\n\n[^1]: n", "after")).toBe("Vraiment\u00A0?[^1]\n\n[^1]: n");
+        expect(footnoteAfterPunctuation("Vraiment[^1]\u00A0?\n\n[^1]: n", "after")).toBe("Vraiment[^1]\u00A0?\n\n[^1]: n");
+    });
+    it("control: a list marker's space is never hopped over", () => {
+        expect(footnoteAfterPunctuation("- ?[^1]\n\n[^1]: n", "before")).toBe("- [^1]?\n\n[^1]: n");
     });
 });

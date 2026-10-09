@@ -70,7 +70,10 @@ describe("the seam a deleted orphan leaves", () => {
     it("swallows a following SPACE only - never the next character", () => {
         expect(removeOrphanedFootnoteReferences("start [^9]end")).toBe("start end");
         expect(removeOrphanedFootnoteReferences("[^9]end")).toBe("end");
-        expect(removeOrphanedFootnoteReferences("a [^9]! b")).toBe("a ! b");
+        // the space in front of a cut reference that punctuation follows
+        // goes with it (Jason's ruling Q35, 2026-10-09, which settles D10;
+        // "a ! b" until then), and the "!" still stays
+        expect(removeOrphanedFootnoteReferences("a [^9]! b")).toBe("a! b");
     });
 
     it("takes the WHOLE run of spaces before a reference that closed the line", () => {

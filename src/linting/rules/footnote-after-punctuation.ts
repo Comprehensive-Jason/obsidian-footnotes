@@ -1,6 +1,6 @@
 import { holdBack, rulePasses } from "../rule-gate";
 import { definitionLabelIn } from "../../parsing/label-shapes";
-import { ClosingMarkChars, FootnotePlacement, imageStartsOn, linkLikeEndAt, punctuationAt, referenceLandingAfter } from "../../parsing/landing";
+import { ClosingMarkChars, FootnotePlacement, imageStartsOn, linkLikeEndAt, punctuationAt, referenceLandingAfter, wordEndBefore } from "../../parsing/landing";
 import { NoteReading, readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
@@ -79,6 +79,10 @@ function movableUnits(reading: NoteReading, i: number, from: number): MovableUni
 // `linkEndsAt` says whether, with the stretch written as the text it is
 // given, a link, an address, or a wikilink ends at a column of it.
 //
+// `textStart` is the column of the stretch where the line's text begins,
+// past its block syntax ("- ", "> ", "# "): spaces in front of it are the
+// syntax's, never a word's (wordEndBefore).
+//
 // `keeps` is asked about each move before it is made, with the stretch as
 // the move would leave it, and a move it turns down is not made. The
 // first pass over a note allows every move; a line where a footnote died
@@ -91,6 +95,7 @@ function swapInSegment(
     keeps: (segment: string) => boolean = () => true,
     images: ReadonlySet<number> = new Set(),
     linkEndsAt: (segment: string, at: number) => boolean = () => false,
+    textStart = 0,
 ): string {
     let out = "";
     let copied = 0;
@@ -125,7 +130,21 @@ function swapInSegment(
         // The run's move, or null when it stays where it is: the run is
         // written between `before` and `after`, and the three take the
         // place of the text from `copied` up to `to`.
+        // Where the word in front of the run ends. Spaces typed between the
+        // word and the run go with the run, so a reference moved past its
+        // punctuation lands on the word: "water [^1]." becomes
+        // "water.[^1]" under After, not "water .[^1]", and "water[^1]."
+        // under Before (Jason's ruling Q35, 2026-10-09; hunt 2026-10-09
+        // cycle 8, cluster V12, pin
+        // spec-punctuation-rule-space-before-reference). A spaced run with
+        // no punctuation after it stays as typed.
+        const wordEnd = Math.max(copied, wordEndBefore(original, start, textStart));
         const move = ((): { before: string; after: string; to: number } | null => {
+            // A link, an address, or a wikilink that ends at the word and
+            // would take the run in, glued to it ("See https://e.org
+            // [^1]."), is kept apart from the run by the spaces, so the run
+            // stays where it is, as the email's period does below.
+            if (wordEnd < start && linkEndsAt(original, wordEnd) && !linkEndsAt(original.slice(0, wordEnd) + original.slice(start), wordEnd)) return null;
             // The run of punctuation AND closing marks immediately after
             // it, the same walk the insert commands use
             // (referenceLandingAfter: "bravo[^1]". becomes "bravo".[^1],
@@ -144,10 +163,21 @@ function swapInSegment(
                 // 2026-09-21). A run after a closing mark stays: the marker
                 // belongs outside the quote in every convention found,
                 // punctuation inside the quote or not.
-                if (placement !== "before" || !punctuationAt(masked, start - 1, images)) return null;
+                if (placement !== "before") return null;
+                if (!punctuationAt(masked, start - 1, images)) {
+                    // A spaced run in front of punctuation attaches to its
+                    // word (ruling Q35).
+                    return wordEnd < start && punctuationAt(masked, end, images) ? { before: original.slice(copied, wordEnd), after: "", to: end } : null;
+                }
                 let punctuationStart = start;
                 while (punctuationAt(masked, punctuationStart - 1, images)) punctuationStart--;
-                return { before: original.slice(copied, punctuationStart), after: original.slice(punctuationStart, start), to: end };
+                // A space in front of the punctuation stays with it, and the
+                // run lands on the word: "Vraiment ?[^1]", with the no-break
+                // space French puts before a "?", becomes "Vraiment[^1] ?",
+                // where the press puts it (ruling Q35, which settles G9; pin
+                // spec-lint-french-space-before-punctuation).
+                const landing = Math.max(copied, wordEndBefore(original, punctuationStart, textStart, true));
+                return { before: original.slice(copied, landing), after: original.slice(landing, start), to: end };
             }
             // A run of references that already comes AFTER punctuation or a
             // closing mark is where it should be. Any punctuation after it
@@ -166,9 +196,13 @@ function swapInSegment(
             // the lint leaves it there. It used to try the move, which the
             // result gate refused, and every lint said it could not move
             // the reference (hunt 2026-10-09, cycle 8, cluster V13, pin
-            // bug-lint-alerts-on-email-period-reference).
-            if (placement === "after" && linkEndsAt(original, start) && !linkEndsAt(original.slice(0, start) + original.slice(end, punctuationEnd) + original.slice(start, end) + original.slice(punctuationEnd), start)) return null;
-            return { before: original.slice(copied, start) + original.slice(end, punctuationEnd), after: "", to: punctuationEnd };
+            // bug-lint-alerts-on-email-period-reference). A run typed with a
+            // space after the address attaches to it there, in front of the
+            // period (ruling Q35).
+            if (placement === "after" && linkEndsAt(original, wordEnd) && !linkEndsAt(original.slice(0, wordEnd) + original.slice(end, punctuationEnd) + original.slice(start, end) + original.slice(punctuationEnd), wordEnd)) {
+                return wordEnd < start ? { before: original.slice(copied, wordEnd), after: "", to: end } : null;
+            }
+            return { before: original.slice(copied, wordEnd) + original.slice(end, punctuationEnd), after: "", to: punctuationEnd };
         })();
         const refused = move !== null && !keeps(out + move.before + run + move.after + original.slice(move.to));
         if (move === null || refused) {
@@ -292,6 +326,7 @@ function placedOnce(markdown: string, placement: "after" | "before"): string {
                     (segment) => keeps(line.slice(0, prefixLength) + segment),
                     new Set([...imageStartsOn(reading, i)].map((column) => column - prefixLength)),
                     linkEndsAt,
+                    Math.max(0, reading.blockSyntaxEnd(i) - prefixLength),
                 )
             );
         };

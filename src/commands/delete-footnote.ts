@@ -148,7 +148,7 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
             .filter((occurrence) => occurrence.name.toLowerCase() === folded)
             .reverse();
         references += hits.length;
-        return hits.reduce((kept, { start, end }) => cutOne(kept, start, end), line);
+        return hits.reduce((kept, { start, end }) => cutOne(kept, start, end, reading.blockSyntaxEnd(i)), line);
     });
     if (references === 0 && definitions === 0) return { kind: "nothing" };
     // A line the reference cuts leave blank, with text right above it and

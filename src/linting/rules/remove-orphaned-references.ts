@@ -1,6 +1,7 @@
 import { rulePasses } from "../rule-gate";
 import { readNote } from "../../parsing/note-reading";
 import { labelShapedLines } from "../../parsing/label-shapes";
+import { punctuationAt, wordEndBefore } from "../../parsing/landing";
 import { normalizeEol, restoreEol } from "../../parsing/line-edits";
 import { FootnoteRule } from "../rule";
 
@@ -205,7 +206,7 @@ export function removeOrphanedFootnoteReferences(markdown: string, orphanSafePre
     // (Kimi hunt cycle 4), and a name half deleted would confuse the alert
     // that speaks in names. The whole set is tried first, since that is
     // the common case and costs one judgment.
-    const all = lines.map((line, i) => orphansOn(i).reduce((text, { start, end }) => cutOne(text, start, end), line));
+    const all = lines.map((line, i) => orphansOn(i).reduce((text, { start, end }) => cutOne(text, start, end, reading.blockSyntaxEnd(i)), line));
     const orphanNames: string[] = [];
     for (let i = 0; i < lines.length; i++) {
         for (const { name } of reading.referencesOn(i)) {
@@ -225,7 +226,7 @@ export function removeOrphanedFootnoteReferences(markdown: string, orphanSafePre
                 .referencesOn(i)
                 .filter(({ name }) => name.toLowerCase() === folded)
                 .reverse()
-                .reduce((text, { start, end }) => cutOne(text, start, end), line),
+                .reduce((text, { start, end }) => cutOne(text, start, end, now.blockSyntaxEnd(i)), line),
         );
         if (trial.every((line, i) => line === current[i])) continue;
         if (!rulePasses(current, trial, { removed: [folded] })) continue;
@@ -243,11 +244,18 @@ export function removeOrphanedFootnoteReferences(markdown: string, orphanSafePre
  * it. Spaces the line already ended with stay, because two of them at the
  * end of a line are a markdown line break the user typed on purpose.
  *
+ * A reference that punctuation follows takes the spaces typed in front of
+ * it too, since they belong to it: "word [^1]." becomes "word.", not
+ * "word ." (Jason's ruling Q35, 2026-10-09, which settles D10; pin
+ * spec-delete-stray-space-before-punctuation). `textStart` is the column
+ * where the line's text begins (NoteReading.blockSyntaxEnd), so the space
+ * after "- " or "> " stays (wordEndBefore).
+ *
  * Shared with the Delete footnote command, which cuts references the same
  * way (T4, 2026-09-21).
  */
-export function cutOne(line: string, start: number, end: number): string {
-    const head = line.slice(0, start);
+export function cutOne(line: string, start: number, end: number, textStart = 0): string {
+    const head = line.slice(0, punctuationAt(line, end) ? wordEndBefore(line, start, textStart) : start);
     let copied = end;
     if (line[copied] === " " && (head === "" || head.endsWith(" "))) copied++;
     const tail = line.slice(copied);
