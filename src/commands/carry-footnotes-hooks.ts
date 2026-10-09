@@ -531,8 +531,7 @@ function editorOwning(plugin: FootnotePlugin, view: EditorView): Editor | null {
  *
  * `pasted` is the text as it arrived, definition lines and all. Returns
  * false, having changed nothing, when its footnote syntax all lands in
- * protected text, pasted as it is or with only the text in front of the
- * definitions landed at the caret: a paste inside a code block, a math
+ * protected text, pasted as it is: a paste inside a code block, a math
  * block, or the frontmatter. Nothing there needs a definition, so the
  * editor pastes the text as it is, definition lines and all, as plain text
  * inside the block. Taking such a paste over pulled the definitions out of
@@ -580,14 +579,17 @@ function landCarriedText(
     // bug-carry-paste-over-selection-holding-definitions: Ctrl+A and paste
     // pointed the pasted reference at the definition it was deleting).
     const cleared = simulateChanges(noteLines, [{ from: noteFrom, to: noteTo, text: "" }]);
-    // Both ways the text could land are asked: the whole clipboard pasted as
-    // it is, which is what the editor would do, and the text in front of
-    // the definitions, which is what the plugin lands at the caret. A
-    // clipboard of definition lines alone has nothing in front of them, so
-    // only the first can find it in a code block; and a text of several
-    // lines pasted into inline code breaks out of the code span, so only
-    // the second finds the text in front of the definitions inside it.
-    if (landsInProtectedText(cleared, noteFrom, inNote(normalizeEol(pasted).text)) || landsInProtectedText(cleared, noteFrom, inNote(body))) return false;
+    // The whole clipboard is asked, pasted as it is, which is what the
+    // editor would do: a clipboard of definition lines alone has nothing in
+    // front of them, so only this can find it in a code block. A text of
+    // several lines pasted into inline code or math breaks out of it, so the
+    // plugin lands it, and the result gate refuses that paste as one that
+    // puts footnotes in protected text. The text in front of the definitions
+    // used to be asked too, and such a paste was left to the editor, whose
+    // raw paste could define a name twice (subtraction pass 2026-10-08;
+    // hunt 2026-10-06 cycle 4, cluster K7, pin
+    // spec-raw-paste-into-inline-code-escapes-span).
+    if (landsInProtectedText(cleared, noteFrom, inNote(normalizeEol(pasted).text))) return false;
     // The body is planned where it lands, with any blank line in front of
     // it and after it already there: the planner reads its footnotes in
     // place (renames only change names, so the blank lines asOwnParagraph

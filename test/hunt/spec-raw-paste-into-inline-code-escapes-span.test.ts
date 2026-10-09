@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
-import { resetNotices } from "../helpers/notices";
+import { messages, resetNotices } from "../helpers/notices";
 import { handlePaste, resetCarryRegister } from "../../src/commands/carry-footnotes-hooks";
 import { readNote } from "../../src/parsing/note-reading";
 
@@ -34,6 +34,15 @@ import { readNote } from "../../src/parsing/note-reading";
 //
 // Source of truth: the README's Paste paragraph ("so the pasted
 // footnotes come out unique with no setup"); d38781d's commit message.
+//
+// Ruled: Jason's ruling on cycle 4's Q15 (this cluster), with Q7 and Q20,
+// that a refused carried paste pastes nothing (the result gate's stage 3,
+// 2026-10-08). Subtraction pass 2026-10-08: the gate now refuses this rare
+// shape. The paste no longer asks whether the text in front of the
+// definitions lands in protected text, so the plugin takes the paste over,
+// and the result gate refuses it as one that puts footnotes in protected
+// text: the note is left as it was, and the notice says why. Before: the
+// paste was left to the editor, whose raw paste defined [^1] twice.
 
 /** A stand-in for the browser's clipboard event: it reads `text` and records what the plugin writes back. */
 function clipboardEvent(text = "") {
@@ -70,17 +79,22 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
-describe("spec question: a carried paste into inline code that breaks out of the code span", () => {
-    it.fails("the editor's raw paste is not the outcome: pasted definitions come out unique", () => {
+describe("ruled: a carried paste into inline code that breaks out of the code span", () => {
+    it("is refused: nothing is pasted, the notice says why, and [^1] keeps one definition", () => {
         const note = ["Use `abc` here[^1].", "", "[^1]: mine"];
         const clip = ["x[^1]", "", "[^1]: theirs"].join("\n");
         const back = paste(note, { line: 0, ch: 8 }, clip);
-        // When the plugin leaves the paste alone, the fake editor changes
-        // nothing, so the note the editor's own paste gives is built here:
-        // the clipboard written in at the caret, as it is.
-        const after = back.taken ? back.lines : [...("Use `abc" + clip + "` here[^1].").split("\n"), "", "[^1]: mine"];
-        // Today the plugin leaves it to the editor, and that note defines [^1] twice.
-        const defs = readNote(after).definitions.filter((d) => d.name.toLowerCase() === "1");
-        expect(defs.length).toBe(1);
+        expect(back.taken).toBe(true);
+        expect(back.lines).toEqual(note);
+        expect(messages()).toEqual(["Nothing was pasted: footnotes can't go inside code, math, or other protected text."]);
+        expect(readNote(back.lines).definitions.filter((d) => d.name.toLowerCase() === "1").length).toBe(1);
+    });
+
+    it("is refused inside inline math too", () => {
+        const note = ["Use $a+b$ here.", ""];
+        const back = paste(note, { line: 0, ch: 7 }, ["x[^1]", "", "[^1]: theirs"].join("\n"));
+        expect(back.taken).toBe(true);
+        expect(back.lines).toEqual(note);
+        expect(messages()).toEqual(["Nothing was pasted: footnotes can't go inside code, math, or other protected text."]);
     });
 });

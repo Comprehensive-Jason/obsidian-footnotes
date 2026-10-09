@@ -632,8 +632,8 @@ interface Landing {
  * keeps a comment's text for that reason.
  *
  * The paste asks this of the whole clipboard, its definition lines
- * included, and of the text in front of them (landCarriedText in
- * carry-footnotes-hooks.ts). It used to ask only of the text in front, so
+ * included (landCarriedText in carry-footnotes-hooks.ts). It used to ask
+ * only of the text in front of them, so
  * a clipboard of definition lines and nothing else (or prose citing
  * nothing, then its definitions) never counted as landing in a code block,
  * and the definitions were pulled out of the code (hunt 2026-10-06 cycle
