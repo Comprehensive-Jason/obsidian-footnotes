@@ -1,7 +1,7 @@
 import { holdBack, rulePasses } from "../rule-gate";
 import { definitionLabelIn } from "../../parsing/label-shapes";
-import { ClosingMarkChars, FootnotePlacement, imageStartsOn, punctuationAt, referenceLandingAfter } from "../../parsing/landing";
-import { NoteReading } from "../../parsing/note-reading";
+import { ClosingMarkChars, FootnotePlacement, imageStartsOn, linkLikeEndAt, punctuationAt, referenceLandingAfter } from "../../parsing/landing";
+import { NoteReading, readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
 
@@ -76,6 +76,9 @@ function movableUnits(reading: NoteReading, i: number, from: number): MovableUni
 // the "!", as the press puts it (hunt 2026-10-06, cycle 4, pin
 // bug-bang-before-undefined-brackets).
 //
+// `linkEndsAt` says whether, with the stretch written as the text it is
+// given, a link, an address, or a wikilink ends at a column of it.
+//
 // `keeps` is asked about each move before it is made, with the stretch as
 // the move would leave it, and a move it turns down is not made. The
 // first pass over a note allows every move; a line where a footnote died
@@ -87,6 +90,7 @@ function swapInSegment(
     placement: FootnotePlacement = "after",
     keeps: (segment: string) => boolean = () => true,
     images: ReadonlySet<number> = new Set(),
+    linkEndsAt: (segment: string, at: number) => boolean = () => false,
 ): string {
     let out = "";
     let copied = 0;
@@ -152,6 +156,18 @@ function swapInSegment(
             // to. Under "before" the forward move only ever carries a run
             // out of a quote, which is right wherever the run started.
             if (placement === "after" && start > 0 && (punctuationAt(masked, start - 1, images) || ClosingMarkChars.includes(masked[start - 1]))) return null;
+            // A run right after a link that would take the punctuation in,
+            // were the run moved past it, is where it should be too. An
+            // email address takes in a period that text follows: in "Write
+            // to me@example.com.[^1]" the period is part of the address, and
+            // only "me@example.com[^1]." leaves it to the sentence
+            // (docs/obsidian-reading-rules.md D8). That is where a press
+            // puts the reference (Jason's ruling Q30, 2026-10-08), so
+            // the lint leaves it there. It used to try the move, which the
+            // result gate refused, and every lint said it could not move
+            // the reference (hunt 2026-10-09, cycle 8, cluster V13, pin
+            // bug-lint-alerts-on-email-period-reference).
+            if (placement === "after" && linkEndsAt(original, start) && !linkEndsAt(original.slice(0, start) + original.slice(end, punctuationEnd) + original.slice(start, end) + original.slice(punctuationEnd), start)) return null;
             return { before: original.slice(copied, start) + original.slice(end, punctuationEnd), after: "", to: punctuationEnd };
         })();
         const refused = move !== null && !keeps(out + move.before + run + move.after + original.slice(move.to));
@@ -256,6 +272,16 @@ function placedOnce(markdown: string, placement: "after" | "before"): string {
             const textStart = reading.containerEnd(i);
             const shaped = definitionLabelIn(line.slice(textStart));
             const prefixLength = reading.labelOn(i)?.labelEnd ?? (shaped === null ? 0 : textStart + shaped.labelEnd);
+            // Whether a link ends at column `at` of the stretch written as
+            // `segment`. The note is read again only for a stretch that
+            // differs from the line, which happens only for a run right
+            // after a link.
+            const linkEndsAt = (segment: string, at: number): boolean => {
+                const written = line.slice(0, prefixLength) + segment;
+                const read = written === line ? reading : readNote(lines.map((text, j) => (j === i ? written : text)));
+                const linkEnd = linkLikeEndAt(read, i, prefixLength + at - 1);
+                return linkEnd?.line === i && linkEnd.ch === prefixLength + at;
+            };
             return (
                 line.slice(0, prefixLength) +
                 swapInSegment(
@@ -265,6 +291,7 @@ function placedOnce(markdown: string, placement: "after" | "before"): string {
                     placement,
                     (segment) => keeps(line.slice(0, prefixLength) + segment),
                     new Set([...imageStartsOn(reading, i)].map((column) => column - prefixLength)),
+                    linkEndsAt,
                 )
             );
         };

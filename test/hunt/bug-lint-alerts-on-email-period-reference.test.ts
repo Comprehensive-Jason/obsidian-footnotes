@@ -51,14 +51,14 @@ const Held = "could not move to the other side of its punctuation";
 beforeEach(resetNotices);
 
 describe("the lint and a reference in front of an email address's period (ruling Q30)", () => {
-    it.fails("After, the default lint: the note stays, and no alert names the reference", () => {
+    it("After, the default lint: the note stays, and no alert names the reference", () => {
         const note = "Write to me@example.com[^1].\n\n[^1]: Office hours only.";
         const { linted, alerts } = alertsAfterLint(note);
         expect(linted).toBe(note);
         expect(alerts.filter((alert) => alert.includes(Held))).toEqual([]);
     });
 
-    it.fails("After, in a table cell: the note stays, and no alert names the reference", () => {
+    it("After, in a table cell: the note stays, and no alert names the reference", () => {
         const note = "| Contact |\n| --- |\n| Write to me@example.com[^1]. |\n\n[^1]: Office hours only.";
         const { linted, alerts } = alertsAfterLint(note);
         expect(linted).toBe(note);
