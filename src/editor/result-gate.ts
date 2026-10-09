@@ -892,16 +892,20 @@ function definedNames(side: Side): Set<string> {
  * around into the one the pair is written with (null to leave the pair
  * out).
  *
- * A reference counts only when the note on this side defines its name.
- * Obsidian draws a reference with no definition as plain text, so it is
- * no footnote yet. It becomes one when the edit gives it a definition, and
- * if it sits inside another footnote's definition, that is a footnote
- * inside a footnote the edit made, even though the reference was there
- * before (Jason's ruling 1, 2026-10-09; pin
- * bug-definition-completes-nested-reference). Such a reference can sit far
- * from the lines the edit changed, so the references to every name in
- * `cameAlive`, the names the edit gives a definition, are looked at all
- * through the note, not only in the stretches the checks look at.
+ * A reference with no definition counts as a footnote already: it is
+ * live (CONTEXT.md), and a selection that carries one into a new footnote
+ * makes a footnote inside a footnote (ADR 0001; hunt 2026-10-09 cycle 8,
+ * cluster V1, pin bug-selection-holding-undefined-reference-converts).
+ * The one exception is a name in `cameAlive`, a name the edit gives a
+ * definition: on the side before the edit, its references are left out.
+ * Obsidian draws a reference with no definition as plain text, so it
+ * becomes a footnote only when the edit defines it, and if it sits inside
+ * another footnote's definition, that is a footnote inside a footnote the
+ * edit made, even though the reference was there before (Jason's ruling 1,
+ * 2026-10-09; pin bug-definition-completes-nested-reference). Such a
+ * reference can sit far from the lines the edit changed, so the references
+ * to every name in `cameAlive` are looked at all through the note, not
+ * only in the stretches the checks look at.
  */
 function nestingPairs(side: Side, skipped: (line: number, ch: number) => boolean, holders: (name: string) => string | null, cameAlive: ReadonlySet<string>): string[] {
     const reading = side.reading;
@@ -921,7 +925,7 @@ function nestingPairs(side: Side, skipped: (line: number, ch: number) => boolean
         // a reference the reading finds but does not count as live sits
         // inside an inline footnote (rule E3), a footnote in a footnote too
         if (!reference.live) add("^", name);
-        else if (defined.has(name)) inside(reference.line, reference.start, name);
+        else if (defined.has(name) || !cameAlive.has(name)) inside(reference.line, reference.start, name);
     }
     const notes = reading.inlineNotes.filter((note) => inWindow(side, note.line));
     for (const note of notes) {

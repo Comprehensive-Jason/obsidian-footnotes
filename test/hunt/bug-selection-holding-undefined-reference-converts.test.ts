@@ -72,27 +72,27 @@ const DRAFT = ["Smith says[^smith] something.", "", "Later text cites [^smith] a
 beforeEach(resetNotices);
 
 describe("a selection holding a reference with no definition yet", () => {
-    it.fails("the numbered key on the whole first sentence is refused with the nesting notice", async () => {
+    it("the numbered key on the whole first sentence is refused with the nesting notice", async () => {
         const doc = await select(DRAFT, { line: 0, ch: 0 }, { line: 0, ch: 29 });
         expect(doc.lines).toEqual(DRAFT);
         expect(messages()).toContain(NestedFootnoteNotice);
     });
 
-    it.fails("the numbered key on a whole bullet holding the reference is refused too", async () => {
+    it("the numbered key on a whole bullet holding the reference is refused too", async () => {
         const lines = ["Profit rates fell[^smith] in the period.", "", "- Brenner disagrees[^smith].", "- Shaikh agrees.", "", "Closing."];
         const doc = await select(lines, { line: 2, ch: 0 }, { line: 2, ch: 28 });
         expect(doc.lines).toEqual(lines);
         expect(messages()).toContain(NestedFootnoteNotice);
     });
 
-    it.fails("the numbered key on the last words of a sentence, the reference among them, is refused too", async () => {
+    it("the numbered key on the last words of a sentence, the reference among them, is refused too", async () => {
         const lines = ["Brenner disagrees with Smith[^smith] on rates.", "", "Later [^smith] again."];
         const doc = await select(lines, { line: 0, ch: 18 }, { line: 0, ch: 46 });
         expect(doc.lines).toEqual(lines);
         expect(messages()).toContain(NestedFootnoteNotice);
     });
 
-    it.fails("the named key on the same selection is refused before its name modal opens", async () => {
+    it("the named key on the same selection is refused before its name modal opens", async () => {
         // the modal is a no-op in the unit tests, so an opened modal shows
         // as no notice and no change; at 3a47f7a the gate's first ask,
         // under the next free number, refused before the modal
