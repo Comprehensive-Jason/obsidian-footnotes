@@ -619,13 +619,13 @@ function landCarriedText(
     const noteEdits = editsAt(noteFrom, noteTo, inNote(text), inNote(after));
     let changes: EditorChange[] = noteEdits;
     let noteAfter: string[] | null = null;
-    // the line of the note after the paste where the carried definitions start, for the result gate
-    let appendedFrom: number | null = null;
-    const textLines = text.split("\n");
-    let end: EditorPosition =
-        textLines.length === 1
-            ? { line: from.line, ch: from.ch + text.length }
-            : { line: from.line + textLines.length - 1, ch: textLines[textLines.length - 1].length };
+    // For the result gate: where the pasted text and its blank line after
+    // sit in the note after the paste, and the lines the carried
+    // definitions take there (null when the paste adds none). Without
+    // definitions the pasted text starts where the paste does.
+    let landed: NoteRange = { from: noteFrom, to: endOf(noteFrom, inNote(text) + inNote(after)) };
+    let appended: NoteRange | null = null;
+    let end = endOf(from, text);
     if (plan.definitions.length > 0) {
         // where a creation press would put a definition, seeded with the
         // first carried block's body and extended with the rest, planned
@@ -650,9 +650,21 @@ function landCarriedText(
         });
         changes = append.changes;
         noteAfter = append.final;
+        // The definitions can go in above the pasted text (under a
+        // definition block in the middle of the note) and push it down, so
+        // both are taken from the append's own positions in the note after
+        // the paste. Measured in the note before the definitions went in,
+        // the gate left out the wrong lines as the paste's own, and a link
+        // or code span below them read as gone (hunt 2026-10-09 cycle 8,
+        // pin bug-carried-paste-below-mid-note-definitions-refused).
+        landed = { from: append.edits[0].start, to: append.edits[append.edits.length - 1].end };
         // from the section heading the append writes above a first
-        // footnote, when it writes one (DefinitionAppendPlan's heading)
-        appendedFrom = append.heading.length > 0 ? append.heading[0].from.line : append.labelLine;
+        // footnote, when it writes one (DefinitionAppendPlan's heading), to
+        // the end of the last carried definition
+        appended = {
+            from: { line: append.heading.length > 0 ? append.heading[0].from.line : append.labelLine, ch: 0 },
+            to: { line: append.labelLine + carriedLines(plan.definitions).length, ch: 0 },
+        };
         // in the popup the definitions land outside its text, so the caret
         // there stays right after the pasted text
         if (!popup) end = append.edits[0].end;
@@ -666,7 +678,7 @@ function landCarriedText(
         : null;
     if (popup && !around) return false;
     const finalNote = noteAfter ?? simulateChanges(noteLines, noteEdits);
-    const verdict = judgeEdit(noteLines, finalNote, pasteIntent(finalNote, { from: noteFrom, to: noteTo }, inNote(text) + inNote(after), appendedFrom, plan.definitions));
+    const verdict = judgeEdit(noteLines, finalNote, pasteIntent(finalNote, { from: noteFrom, to: noteTo }, landed, appended, plan.definitions));
     if (!verdict.pass) {
         showNotice(verdict.reason === "nested" ? PasteNestedNotice : verdict.reason === "protected" ? PasteProtectedNotice : PasteReadsDifferentlyNotice, 8000);
         return true;
@@ -721,24 +733,29 @@ function landCarriedText(
     return true;
 }
 
+/** Where `text` ends when it is written at `start`. */
+function endOf(start: EditorPosition, text: string): EditorPosition {
+    const lines = text.split("\n");
+    return lines.length === 1 ? { line: start.line, ch: start.ch + text.length } : { line: start.line + lines.length - 1, ch: lines[lines.length - 1].length };
+}
+
 /**
  * What a carried paste means to change, for the result gate: to take out
- * the selection `replaced` (when there is one), to write `pasted` where it
- * started, and to add the carried `definitions`, which start on line
- * `appendedFrom` of `after`, the note as the paste leaves it (null when it
- * adds none), or under the section heading that starts there. The
+ * the selection `replaced` (when there is one), a stretch of the note
+ * before, and to write the pasted text, which sits at `landed` in `after`,
+ * the note as the paste leaves it, and the carried `definitions`, which
+ * take the lines `appended` of `after` (null when it adds none), under the
+ * section heading that starts there when the paste writes one. The
  * definitions come from the clipboard and the heading from the settings, so
  * their lines are text the paste writes in too.
  */
-function pasteIntent(after: string[], replaced: NoteRange, pasted: string, appendedFrom: number | null, definitions: readonly CarriedDefinition[]): EditIntent {
-    const lines = pasted.split("\n");
-    const end = lines.length === 1 ? { line: replaced.from.line, ch: replaced.from.ch + pasted.length } : { line: replaced.from.line + lines.length - 1, ch: lines[lines.length - 1].length };
-    const inserted: NoteRange[] = [{ from: replaced.from, to: end }];
+function pasteIntent(after: string[], replaced: NoteRange, landed: NoteRange, appended: NoteRange | null, definitions: readonly CarriedDefinition[]): EditIntent {
+    const inserted: NoteRange[] = [landed];
     const created: CreatedFootnote[] = [];
-    if (appendedFrom !== null) {
-        inserted.push({ from: { line: appendedFrom, ch: 0 }, to: { line: after.length, ch: 0 } });
+    if (appended !== null) {
+        inserted.push(appended);
         // each block's label at the margin, after the block before it
-        let from = appendedFrom;
+        let from = appended.from.line;
         for (const block of definitions) {
             let line = after.findIndex((text, i) => i >= from && text.startsWith(`[^${block.name}]:`));
             if (line === -1) line = from;

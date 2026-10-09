@@ -93,7 +93,7 @@ describe("a carried paste into a paragraph below a definition in the middle of t
         ["a wikilink", "The tide rose more slowly, see [[Tides]]."],
     ];
     for (const [what, later] of laters) {
-        it.fails(`pastes a sentence citing a footnote into a later paragraph holding ${what}`, () => {
+        it(`pastes a sentence citing a footnote into a later paragraph holding ${what}`, () => {
             const after = paste(mid(later), at(later), " " + SENTENCE.split("\n")[0].replace(/\.$/, "") + "\n\n" + SENTENCE.split("\n\n")[1]);
             expect(messages().filter((m) => m.startsWith("Nothing was pasted"))).toEqual([]);
             expect(after.join("\n")).toContain("Smith found the same[^2]");
@@ -107,7 +107,7 @@ describe("a carried paste into a paragraph below a definition in the middle of t
         expect(after.join("\n")).toContain("Smith found the same[^2]");
     });
 
-    it.fails("moves a sentence with its footnote down the note: cut, then paste into a later paragraph holding a link", () => {
+    it("moves a sentence with its footnote down the note: cut, then paste into a later paragraph holding a link", () => {
         const before = ["Intro[^1] text.", "", "[^1]: One.", "", "Oysters filter water[^2].", "", "[^2]: Jones 2019.", "", "The tide rose, see [the survey](https://example.org)."];
         // Shift+Down on "Oysters filter water[^2]." and Ctrl+X: the line and its definition, which nothing else cites, go to the clipboard
         const doc = fakeEditor(before, { wholeDoc: true, edits: true, cursor: { line: 5, ch: 0 }, selection: { anchor: { line: 4, ch: 0 }, head: { line: 5, ch: 0 } } });
