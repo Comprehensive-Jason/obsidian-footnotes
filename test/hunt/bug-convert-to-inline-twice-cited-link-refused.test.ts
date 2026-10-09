@@ -55,7 +55,7 @@ describe("Convert normal footnotes to inline: a footnote cited twice whose text 
         ["inline math", "Where $x = 2$ holds."],
     ];
     for (const [what, body] of bodies) {
-        it.fails(`a footnote cited twice whose text holds ${what} converts to two copies`, () => {
+        it(`a footnote cited twice whose text holds ${what} converts to two copies`, () => {
             const result = convert(["See this[^1] and that[^1].", "", `[^1]: ${body}`]);
             expect(result.refused).toBeUndefined();
             expect(result.markdown).toBe(`See this^[${body}] and that^[${body}].`);

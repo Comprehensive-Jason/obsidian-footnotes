@@ -1,4 +1,4 @@
-import { normalizeEol, removeLineRanges, restoreEol } from "../parsing/line-edits";
+import { normalizeEol, removeLineRanges, removeLineRangesKeeping, restoreEol } from "../parsing/line-edits";
 import { Definition, readNote } from "../parsing/note-reading";
 import { sanitizeInlineFootnoteContent } from "./inline-footnotes";
 import { Editor, EditorChange, MarkdownView } from "obsidian";
@@ -174,18 +174,28 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
 
     // the replacements, rightmost first on each line so that one keeps the
     // offsets of the ones before it
-    const replacements = new Map<number, { start: number; end: number; text: string }[]>();
+    // `again` marks every copy after a footnote's first: its text is the
+    // footnote's text written again
+    const replacements = new Map<number, { start: number; end: number; text: string; again: boolean }[]>();
     for (const { body, refs: its } of eligible) {
-        for (const ref of its) {
+        for (const [index, ref] of its.entries()) {
             // a pipe inside a table row's cell ends the cell, so it is
             // escaped there, the way Obsidian itself writes one
             const inline = `^[${tableRows[ref.line] ? body.replace(/\\[\s\S]|\|/g, (m) => (m === "|" ? "\\|" : m)) : body}]`;
-            replacements.set(ref.line, [...(replacements.get(ref.line) ?? []), { start: ref.start, end: ref.end, text: inline }]);
+            replacements.set(ref.line, [...(replacements.get(ref.line) ?? []), { start: ref.start, end: ref.end, text: inline, again: index > 0 }]);
         }
     }
+    // where the text of each copy written again sits on its rewritten line,
+    // between the copy's "^[" and its "]"
+    const again: { line: number; from: number; to: number }[] = [];
     const replaced = lines.map((line, i) => {
         const edits = replacements.get(i);
         if (!edits) return line;
+        let shift = 0;
+        for (const edit of [...edits].sort((a, b) => a.start - b.start)) {
+            if (edit.again) again.push({ line: i, from: edit.start + shift + 2, to: edit.start + shift + edit.text.length - 1 });
+            shift += edit.text.length - (edit.end - edit.start);
+        }
         return edits
             .sort((a, b) => b.start - a.start)
             .reduce((kept, edit) => kept.slice(0, edit.start) + edit.text + kept.slice(edit.end), line);
@@ -196,7 +206,20 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
     // done.
     const dead = eligible.map(({ block }) => block).sort((a, b) => a.start - b.start);
     const out = removeLineRanges(replaced, dead);
-    const intent = { inlined: eligible.map(({ block }) => block.name), inlineCreated: eligible.reduce((n, { refs: its }) => n + its.length, 0) };
+    // The text of every copy after a footnote's first is told to the gate
+    // as text the conversion writes in. The first copy is where the
+    // definition's text moves to; the others hold the same links, code,
+    // and math again, which the gate counted as new and refused the whole
+    // note for (hunt 2026-10-09 cycle 8, pin
+    // bug-convert-to-inline-twice-cited-link-refused). A reference never
+    // sits on a definition's line here (that footnote is skipped as
+    // nested), so its line is one the removal keeps, and
+    // removeLineRangesKeeping says where it went.
+    const insertedText = again.map(({ line, from, to }) => {
+        const at = removeLineRangesKeeping(replaced, dead, line).keep;
+        return { from: { line: at, ch: from }, to: { line: at, ch: to } };
+    });
+    const intent = { inlined: eligible.map(({ block }) => block.name), inlineCreated: eligible.reduce((n, { refs: its }) => n + its.length, 0), insertedText };
     if (!judgeEdit(lines, out, intent, reading).pass) return unchanged(named, ConvertByHand);
 
     return {
