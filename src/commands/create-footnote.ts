@@ -31,7 +31,7 @@ import {
 import { ProtectedCreationNotice, safeInsertionCh, simulateChanges } from "../editor/insertion-liveness";
 import { lintAfterFootnoteCreation } from "../linting/linter";
 import { maskInlineRegions, readCell } from "../parsing/cell-reading";
-import { warnDefinitionCaretIfInside, warnTableEdgeCaretIfOutside, warnProtectedCaretIfInside } from "./press-guards";
+import { warnTableEdgeCaretIfOutside, warnProtectedCaretIfInside } from "./press-guards";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
 import { BlockSyntaxNotice, DeadFootnoteNotice, InsideLinkNotice, NestedFootnoteNotice, ReadsDifferentlyNotice, showNotice } from "../editor/notice";
@@ -511,12 +511,12 @@ export function createAutonumFootnote(
     ctx: DocContext = docContext(doc),
 ): boolean {
     // Creating a footnote inside protected text is refused outright: code,
-    // math, a comment, or the frontmatter.
+    // math, a comment, or the frontmatter. A caret inside another
+    // footnote's definition reaches this step only on a blank line between
+    // its continuation lines, since the jump step takes every other line of
+    // one; the result gate refuses the nested footnote there (the
+    // subtraction pass of 2026-10-08).
     if (warnProtectedCaretIfInside(doc, cell, cursorPosition, ctx)) return true;
-    // The same goes for a caret inside another footnote's definition. In
-    // practice that means a continuation line, since a press on the label
-    // line was already taken by the jump steps earlier in the cascade.
-    if (warnDefinitionCaretIfInside(doc, cell, cursorPosition, ctx)) return true;
     // And for a caret on a table row but outside its cells, or on the row
     // of dashes under the header, where a reference would break the table.
     if (warnTableEdgeCaretIfOutside(cell, cursorPosition, ctx)) return true;
@@ -668,12 +668,12 @@ export function createMatchingFootnoteDefinition(
     // A reference sitting inside another footnote's definition (on a
     // continuation line, lazy or indented) would get a definition of its
     // own here, and that completes a nested footnote, which the plugin
-    // refuses to create everywhere (ADR 1). The same guard the creation
-    // steps run. Found by the named-flow property once a plain line under
-    // a definition counted as its continuation (GLM hunt cycle 1,
-    // 2026-09-16).
-    if (warnDefinitionCaretIfInside(doc, null, cursorPosition, ctx)) return true;
-
+    // refuses to create everywhere (ADR 1). Such a press never gets here:
+    // the jump step before this one takes every press on a definition's
+    // text (shouldJumpFromDefinitionToReference in navigation.ts), and the
+    // multi-caret press checks each of its carets itself. (Found by the
+    // named-flow property, GLM hunt cycle 1, 2026-09-16; the guard that
+    // stood here went in the subtraction pass of 2026-10-08.)
     const list = listExistingFootnoteDefinitions(doc, ctx);
 
     // Footnote names ignore case, so a "[^note]:" definition already
@@ -807,11 +807,10 @@ export function createFootnoteReference(
     // check above, or hopping the caret out of a live "[^]" would show a
     // refusal message it does not deserve.
     if (warnProtectedCaretIfInside(doc, null, cursorPosition, ctx)) return true;
-    // The same goes for a caret inside another footnote's definition
-    // (Jason's ruling 2026-08-13).
-    if (warnDefinitionCaretIfInside(doc, null, cursorPosition, ctx)) return true;
-    // And for a caret on a table row but outside its cells, or on the row
-    // of dashes under the header, where a placeholder would break the table.
+    // A caret inside another footnote's definition is the result gate's to
+    // refuse, as createAutonumFootnote says. And a caret on a table row but
+    // outside its cells, or on the row of dashes under the header, where a
+    // placeholder would break the table, is refused here.
     if (warnTableEdgeCaretIfOutside(null, cursorPosition, ctx)) return true;
 
     const prefix = resolvePrefix();

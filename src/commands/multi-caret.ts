@@ -244,10 +244,9 @@ function multiCaretTargets(
             showNotice(MultiCaretNestedNotice, 8000);
             return "handled";
         }
-        // A caret in protected text, or inside a definition, refuses with
-        // its own message, exactly as the single-caret creation guards do.
+        // A caret in protected text refuses with its own message, exactly
+        // as the single-caret creation guard does.
         if (warnProtectedCaretIfInside(doc, null, pos, ctx)) return "handled";
-        if (warnDefinitionCaretIfInside(doc, null, pos, ctx)) return "handled";
         // and a caret at a table row's edge or on its delimiter row, where
         // the single-caret press refuses too (Kimi hunt cycle 1, 2026-09-16)
         if (warnTableEdgeCaretIfOutside(null, pos, ctx)) return "handled";

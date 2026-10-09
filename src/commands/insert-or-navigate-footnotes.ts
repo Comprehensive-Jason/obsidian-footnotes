@@ -313,10 +313,10 @@ export async function insertInlineFootnote(plugin: FootnotePlugin) {
         }
         // the blank line between two of a definition's continuation lines
         // is inside the definition too, but carries no definition-shaped
-        // text for the jump step to see: refuse there like the numbered and
-        // named keys do, instead of planting a nested "^[]" (GLM sweep
-        // 2026-09-13)
-        if (warnDefinitionCaretIfInside(doc, cell, cursorPosition, ctx)) return;
+        // text for the jump step to see. A "^[]" planted there would be
+        // nested, and the result gate refuses it with the nesting notice
+        // (GLM sweep 2026-09-13; the subtraction pass of 2026-10-08 left it
+        // to the gate)
         // inside a real reference, navigate instead of nesting "^[]"
         if (navigateReferenceIfInside(plugin, doc, cell, ctx)) return;
         // creating a footnote inside protected text (code, math, comments,
@@ -360,7 +360,11 @@ export async function pasteInlineFootnote(plugin: FootnotePlugin) {
         ) {
             return;
         }
-        // the same definition-interior guard as the inline key above
+        // inside a definition, on the blank line between two of its
+        // continuation lines, where the jump step above sees no definition
+        // text, the press is refused here rather than by the result gate, so
+        // that a refused press never reads the clipboard (GLM sweep
+        // 2026-09-13)
         if (warnDefinitionCaretIfInside(doc, pasteCell, pastePosition, pasteCtx)) return;
         if (navigateReferenceIfInside(plugin, doc, pasteCell, pasteCtx)) return;
         // creating a footnote inside protected text (code, math, comments,
