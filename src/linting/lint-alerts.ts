@@ -1,6 +1,6 @@
 import type FootnotePlugin from "../main";
 import { footnotePrefix, footnotePrefixProblem } from "../parsing/footnote-prefix";
-import { definitionLabelWithName, underlinedLazyLabelNames } from "../parsing/label-shapes";
+import { definitionLabelWithName, labelShapedLines, underlinedLazyLabelNames } from "../parsing/label-shapes";
 import { normalizeEol } from "../parsing/line-edits";
 import { readNote } from "../parsing/note-reading";
 import {
@@ -513,10 +513,25 @@ function noticeInvalidNames(lines: string[]) {
  * without throwing text away, so the lint reports it instead. That is the
  * same never-silent policy orphans and duplicates follow.
  *
- * Fakes inside protected text do not count.
+ * Fakes inside protected text do not count, and neither does the "[^2]"
+ * of a lazy label (a label Obsidian reads as plain text carrying on the
+ * text above it). A label typed straight under a footnote longer than
+ * Obsidian's 1,024-character look-ahead is one: Obsidian reads it as more
+ * of the long footnote, so its "[^2]" sits inside that footnote's text.
+ * What the user meant is a footnote beside the long one, and the alert
+ * that helps is the lazy-label one, "Add a blank line above it". This
+ * alert used to say a footnote was nested in the long one as well (hunt
+ * 2026-10-08, cycle 7, cluster Y7; pin bug-nested-alert-on-lazy-label).
+ * A reference after the label on its line still counts.
  */
 export function nestedFootnoteDefinitionNames(lines: string[]): string[] {
     const reading = readNote(lines);
+    // The lines a lazy label starts. Finding them reads the note again, so
+    // it is done only once a definition holds a reference. A lazy label
+    // starts its line's text, so its "[^2]" is the line's first reference.
+    let lazyLabelLines: Set<number> | undefined;
+    const startsLazyLabel = (line: number, index: number) =>
+        index === 0 && (lazyLabelLines ??= new Set(labelShapedLines(lines, undefined, reading).map((label) => label.line))).has(line);
     const names: string[] = [];
     // One entry per NAME, ignoring case, the same way the duplicate and
     // orphan alerts do it. A name defined twice with both copies nested
@@ -544,7 +559,7 @@ export function nestedFootnoteDefinitionNames(lines: string[]): string[] {
             // a definition (hunt 2026-10-05, round 2, pin
             // bug-alerts-multi-line-inline).
             nested =
-                reading.referencesOn(i).some((occurrence) => occurrence.start >= startAt) ||
+                reading.referencesOn(i).some((occurrence, index) => occurrence.start >= startAt && !startsLazyLabel(i, index)) ||
                 reading.inlineNotesOn(i).some((note) => note.open >= startAt) ||
                 reading.inlineNoteHolding(i, lines[i].length) !== null;
         }
