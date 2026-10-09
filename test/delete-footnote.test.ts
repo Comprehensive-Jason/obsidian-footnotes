@@ -99,12 +99,27 @@ describe("deleteFootnoteEverywhere", () => {
         });
     });
 
-    it("refuses a definition whose line closes a %% comment, since cutting the line would leave the comment open", () => {
-        const plan = del(["p[^c] q", "", "%%", "hidden", "%% [^c]: after the closer"], "c");
-        expect(plan.kind).toBe("refused");
-        if (plan.kind !== "refused") throw new Error("unreachable");
-        expect(plan.reason).toContain('"[^c]:"');
-        expect(plan.reason).toContain("%%");
+    // Subtraction pass 2026-10-08: the command used to refuse a definition
+    // that shares its line with other text. Its line is now cut back to the
+    // text in front of the label, the way a list marker's line is, and the
+    // result gate judges the deletion. Characterization tests: the trailing
+    // space after "%%" and "[!note]" is what the cut leaves, pinned as it is.
+    it("deletes a definition whose line closes a %% comment, keeping the closer", () => {
+        expect(del(["p[^c] q", "", "%%", "hidden", "%% [^c]: after the closer"], "c")).toEqual({
+            kind: "deleted",
+            markdown: "p q\n\n%%\nhidden\n%% ",
+            references: 1,
+            definitions: 1,
+        });
+    });
+
+    it("deletes a definition on a callout's marker line, keeping the marker", () => {
+        expect(del(["p[^c] q", "", "> [!note] [^c]: x"], "c")).toEqual({
+            kind: "deleted",
+            markdown: "p q\n\n> [!note] ",
+            references: 1,
+            definitions: 1,
+        });
     });
 
     it("deletes a lazy label (a label directly under prose) as the definition the user meant", () => {

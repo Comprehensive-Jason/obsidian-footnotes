@@ -42,7 +42,7 @@ export type DeleteFootnotePlan =
       }
     /** the note holds no live reference or definition with this name */
     | { kind: "nothing" }
-    /** the deletion would change how Obsidian reads text it was not asked to touch, or the definition is one the plugin never cuts; nothing was changed and `reason` says why, in the toast's words */
+    /** the deletion would change how Obsidian reads text it was not asked to touch, or the definition holds another; nothing was changed and `reason` says why, in the toast's words */
     | { kind: "refused"; reason: string };
 
 /**
@@ -65,17 +65,12 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     // definition ends, so one over several lines is no longer refused; on
     // a list marker's line the bullet stays, see definitionCuts). A
     // definition whose label follows other text on its line (a callout's
-    // title, the "%%" closing a comment) is never cut, since the line would
-    // take that text with it, leaving the callout untitled or the comment
-    // open over the rest of the note; the command refuses and says so.
+    // marker, the "%%" closing a comment) goes the same way: its line is
+    // cut back to the text in front of the label, so the callout and the
+    // comment stay as they were. The result gate below judges that, as it
+    // judges every deletion (subtraction pass 2026-10-08: the command used
+    // to refuse such a definition outright).
     const named = reading.definitions.filter((definition) => definition.name.toLowerCase() === folded);
-    const unremovable = named.find((definition) => !definition.removable);
-    if (unremovable) {
-        return {
-            kind: "refused",
-            reason: `Nothing was deleted: the ${quotedDefinitionLabel(unremovable.name)} definition shares its line with other text, such as a callout's title or the "%%" that closes a comment, which cutting it would take too. Delete it by hand.`,
-        };
-    }
     // A definition can hold another footnote's definition inside its body
     // (an indented "[^b]: inner" under "[^a]: outer"). Cutting the outer
     // block would cut the inner definition too, and the text citing it
