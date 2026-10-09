@@ -140,3 +140,42 @@ describe("the punctuation rule and a space typed before a reference, under Befor
         expect(before("Oysters filter water[^1].\n\n[^1]: Smith.")).toBe("Oysters filter water[^1].");
     });
 });
+
+// Ruling Q35 applied after punctuation too (Jason, 2026-10-09, run
+// c8-tail): the space typed before a reference goes, and then the usual
+// placement runs, so no stray space is left in front of the punctuation
+// that follows, and the user's own punctuation stays as typed. Before
+// c8-tail the rule attached a spaced reference only to a word, and "A
+// claim, [^1]." linted to "A claim, .[^1]".
+describe("ruling Q35 after punctuation: a reference typed with a space after a comma", () => {
+    const before = (note: string) => lintFootnotes(note, { ...defaults, placement: "before" }).split("\n")[0];
+    it("under After, the space goes and the reference moves past the full stop", () => {
+        expect(first("A claim, [^1].\n\n[^1]: Smith.")).toBe("A claim,.[^1]");
+        expect(first("The answer: [^1]! More.\n\n[^1]: Smith.")).toBe("The answer:![^1] More.");
+    });
+    it("under Before, the space goes and the reference moves back in front of the comma, onto the word", () => {
+        expect(before("A claim, [^1].\n\n[^1]: Smith.")).toBe("A claim[^1],.");
+    });
+    it("control: with no punctuation after it, the reference stays as typed under both", () => {
+        expect(first("A claim, [^1] and more.\n\n[^1]: Smith.")).toBe("A claim, [^1] and more.");
+        expect(before("A claim, [^1] and more.\n\n[^1]: Smith.")).toBe("A claim, [^1] and more.");
+    });
+    it("after a bare web address and a comma, it stays where it was typed under both, and nothing is said", () => {
+        for (const placement of ["after", "before"] as const) {
+            const note = "See https://example.org, [^1].\n\n[^1]: Smith.";
+            const { linted, alerts } = alertsAfterLint(note, { footnotePlacement: placement });
+            expect(linted).toBe(note);
+            expect(alerts).toEqual([]);
+        }
+    });
+    it("after a markdown link and a comma, it moves as after a word", () => {
+        expect(first("See [the survey](https://example.org), [^1].\n\n[^1]: Smith.")).toBe("See [the survey](https://example.org),.[^1]");
+    });
+    it("a second lint changes nothing, under After and Before", () => {
+        const note = "A claim, [^1]. The answer: [^2]!\n\n[^1]: Smith.\n\n[^2]: Jones.";
+        for (const placement of ["after", "before"] as const) {
+            const once = lintFootnotes(note, { ...defaults, placement });
+            expect(lintFootnotes(once, { ...defaults, placement })).toBe(once);
+        }
+    });
+});

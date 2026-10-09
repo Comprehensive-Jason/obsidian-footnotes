@@ -66,12 +66,17 @@ export function punctuationAt(text: string, i: number, images: ReadonlySet<numbe
 }
 
 /**
- * Where the word in front of column `at` of `text` ends, when only spaces
- * stand between the two; `at` itself when no word ends there. A footnote
- * reference belongs right after its word, so the spaces a user typed in
- * front of one ("water [^1].") go with the reference wherever the
- * reference moves, or is cut out (Jason's ruling Q35, 2026-10-09; his
- * attach ruling of 2026-09-08 covers the space the plugin writes).
+ * Where the text in front of column `at` of `text` ends, a word or the
+ * punctuation after one, when only spaces stand between the two; `at`
+ * itself when nothing ends there. A footnote reference belongs right after
+ * that text, so the spaces a user typed in front of one ("water [^1].")
+ * go with the reference wherever the reference moves, or is cut out
+ * (Jason's ruling Q35, 2026-10-09; his attach ruling of 2026-09-08 covers
+ * the space the plugin writes). After punctuation the spaces go the same
+ * way, so no stray space is left in front of the punctuation that follows:
+ * "A claim, [^1]." lints to "A claim,.[^1]", the user's own punctuation
+ * kept as typed (ruling Q35 applied after punctuation, 2026-10-09; before
+ * it, the lint gave "A claim, .[^1]").
  *
  * The spaces are spaces and tabs. With `typographic`, the no-break spaces
  * French puts before ";", ":", "!", and "?" (U+00A0 and the narrow
@@ -79,16 +84,16 @@ export function punctuationAt(text: string, i: number, images: ReadonlySet<numbe
  * on the word, "Vraiment[^1] ?", the space staying with the "?" (ruling
  * Q35, which settles G9 with it).
  *
- * No word ends there when what comes before the spaces is punctuation, a
- * table's "|", or the line's block syntax: `textStart` is the column where
- * the line's text begins (NoteReading.blockSyntaxEnd), so the space after
- * "- " or "> " is never taken.
+ * Nothing ends there when what comes before the spaces is a table's "|"
+ * or the line's block syntax: `textStart` is the column where the line's
+ * text begins (NoteReading.blockSyntaxEnd), so the space after "- " or
+ * "> " is never taken.
  */
 export function wordEndBefore(text: string, at: number, textStart: number, typographic = false): number {
     const space = typographic ? /[ \t\u00a0\u202f]/ : /[ \t]/;
     let end = at;
     while (end > textStart && space.test(text[end - 1])) end--;
-    if (end === at || end <= textStart || text[end - 1] === "|" || punctuationAt(text, end - 1)) return at;
+    if (end === at || end <= textStart || text[end - 1] === "|") return at;
     return end;
 }
 

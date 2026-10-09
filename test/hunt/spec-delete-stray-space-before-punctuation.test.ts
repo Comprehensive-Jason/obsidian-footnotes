@@ -46,6 +46,11 @@ describe("ruling Q35: a space in front of a cut reference", () => {
     it("control: the space after a list marker stays", () => {
         expect(md(["- [^1].", "", "[^1]: x"], "1")).toBe("- .");
     });
+    // Ruling Q35 applied after punctuation too (run c8-tail, 2026-10-09);
+    // before it, "word, [^1]." became "word, .".
+    it("after a comma, the space goes too, and the punctuation stays as typed", () => {
+        expect(md(["word, [^1].", "", "[^1]: x"], "1")).toBe("word,.");
+    });
     it("the orphan rule cuts the same way", () => {
         expect(removeOrphanedFootnoteReferences("word [^9].\n\nmore[^1]\n\n[^1]: x")).toBe("word.\n\nmore[^1]\n\n[^1]: x");
     });

@@ -130,21 +130,26 @@ function swapInSegment(
         // The run's move, or null when it stays where it is: the run is
         // written between `before` and `after`, and the three take the
         // place of the text from `copied` up to `to`.
-        // Where the word in front of the run ends. Spaces typed between the
-        // word and the run go with the run, so a reference moved past its
-        // punctuation lands on the word: "water [^1]." becomes
-        // "water.[^1]" under After, not "water .[^1]", and "water[^1]."
-        // under Before (Jason's ruling Q35, 2026-10-09; hunt 2026-10-09
-        // cycle 8, cluster V12, pin
-        // spec-punctuation-rule-space-before-reference). A spaced run with
-        // no punctuation after it stays as typed.
+        // Where the word in front of the run ends, or the punctuation after
+        // it. Spaces typed between the word and the run go with the run, so
+        // a reference moved past its punctuation lands on the word: "water
+        // [^1]." becomes "water.[^1]" under After, not "water .[^1]", and
+        // "water[^1]." under Before (Jason's ruling Q35, 2026-10-09; hunt
+        // 2026-10-09 cycle 8, cluster V12, pin
+        // spec-punctuation-rule-space-before-reference). After punctuation
+        // they go too: "A claim, [^1]." becomes "A claim,.[^1]" under
+        // After (ruling Q35 applied after punctuation, 2026-10-09). A spaced
+        // run with no punctuation after it stays as typed.
         const wordEnd = Math.max(copied, wordEndBefore(original, start, textStart));
         const move = ((): { before: string; after: string; to: number } | null => {
-            // A link, an address, or a wikilink that ends at the word and
-            // would take the run in, glued to it ("See https://e.org
+            // A link, an address, or a wikilink that ends at the word, or in
+            // front of the punctuation after it, and would take the run in,
+            // glued to it ("See https://e.org [^1].", "See https://e.org,
             // [^1]."), is kept apart from the run by the spaces, so the run
             // stays where it is, as the email's period does below.
-            if (wordEnd < start && linkEndsAt(original, wordEnd) && !linkEndsAt(original.slice(0, wordEnd) + original.slice(start), wordEnd)) return null;
+            let linkEnd = wordEnd;
+            while (linkEnd > textStart && punctuationAt(masked, linkEnd - 1, images)) linkEnd--;
+            if (wordEnd < start && linkEndsAt(original, linkEnd) && !linkEndsAt(original.slice(0, wordEnd) + original.slice(start), linkEnd)) return null;
             // The run of punctuation AND closing marks immediately after
             // it, the same walk the insert commands use
             // (referenceLandingAfter: "bravo[^1]". becomes "bravo".[^1],
@@ -164,12 +169,15 @@ function swapInSegment(
                 // belongs outside the quote in every convention found,
                 // punctuation inside the quote or not.
                 if (placement !== "before") return null;
-                if (!punctuationAt(masked, start - 1, images)) {
-                    // A spaced run in front of punctuation attaches to its
-                    // word (ruling Q35).
-                    return wordEnd < start && punctuationAt(masked, end, images) ? { before: original.slice(copied, wordEnd), after: "", to: end } : null;
-                }
-                let punctuationStart = start;
+                // A spaced run in front of punctuation sits, once its spaces
+                // go, right after the text in front of them (ruling Q35), and
+                // moves from there as any run does: "A claim, [^1]." is
+                // "A claim,[^1]." without the space, so it becomes "A
+                // claim[^1],.". A spaced run with no punctuation after it
+                // stays as typed.
+                const at = wordEnd < start && punctuationAt(masked, end, images) ? wordEnd : start;
+                if (!punctuationAt(masked, at - 1, images)) return at < start ? { before: original.slice(copied, at), after: "", to: end } : null;
+                let punctuationStart = at;
                 while (punctuationAt(masked, punctuationStart - 1, images)) punctuationStart--;
                 // A space in front of the punctuation stays with it, and the
                 // run lands on the word: "Vraiment ?[^1]", with the no-break
@@ -177,7 +185,7 @@ function swapInSegment(
                 // where the press puts it (ruling Q35, which settles G9; pin
                 // spec-lint-french-space-before-punctuation).
                 const landing = Math.max(copied, wordEndBefore(original, punctuationStart, textStart, true));
-                return { before: original.slice(copied, landing), after: original.slice(landing, start), to: end };
+                return { before: original.slice(copied, landing), after: original.slice(landing, at), to: end };
             }
             // A run of references that already comes AFTER punctuation or a
             // closing mark is where it should be. Any punctuation after it

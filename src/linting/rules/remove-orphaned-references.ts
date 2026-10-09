@@ -247,9 +247,10 @@ export function removeOrphanedFootnoteReferences(markdown: string, orphanSafePre
  * A reference that punctuation follows takes the spaces typed in front of
  * it too, since they belong to it: "word [^1]." becomes "word.", not
  * "word ." (Jason's ruling Q35, 2026-10-09, which settles D10; pin
- * spec-delete-stray-space-before-punctuation). `textStart` is the column
- * where the line's text begins (NoteReading.blockSyntaxEnd), so the space
- * after "- " or "> " stays (wordEndBefore).
+ * spec-delete-stray-space-before-punctuation), and "word, [^1]." becomes
+ * "word,." (the same ruling applied after punctuation). `textStart` is
+ * the column where the line's text begins (NoteReading.blockSyntaxEnd),
+ * so the space after "- " or "> " stays (wordEndBefore).
  *
  * Shared with the Delete footnote command, which cuts references the same
  * way (T4, 2026-09-21).
