@@ -14,6 +14,12 @@
 // second line becomes part of the bullet, a change the user may not see).
 // This file asserts (a).
 //
+// Answered (Jason's ruling Q34, 2026-10-09), option (a): the cut goes
+// through as the editor's own cut does, since every change in how the
+// note reads comes from the user's own cut, and nothing is lost: "- First
+// paragraph goes on" / "over two lines.", with footnote 1 on the
+// clipboard. The spec test below was it.fails until then.
+//
 // Hunt 2026-10-09, cycle 8, lens the gate. Source: ADR 0003 (do what the
 // editor would do); ruling B1. Same family as V7
 // (bug-cut-first-line-of-item-with-more-under-it-refused).
@@ -85,11 +91,25 @@ describe("a cut from a bullet into the paragraph under the list", () => {
         expect(messages()).not.toContain(NothingCutNotice);
         expect(c.lines[0]).toBe("- First paragraph goes on.");
     });
-    it.fails("spec: with a two-line paragraph under the list, the cut goes through as the editor's does", () => {
+    it("ruling Q34: with a two-line paragraph under the list, the cut goes through as the editor's does", () => {
         const before = ["- First point[^1] made", "", "The next paragraph goes on", "over two lines.", "", "[^1]: Smith 2020."];
         const c = cut(before, { line: 0, ch: 7 }, { line: 2, ch: 8 });
         expect(messages()).not.toContain(NothingCutNotice);
-        expect(c.lines.slice(0, 2)).toEqual(["- First paragraph goes on", "over two lines."]);
+        expect(c.taken).toBe(true);
+        expect(c.lines).toEqual(["- First paragraph goes on", "over two lines."]);
+        expect(c.clip).toContain("[^1]: Smith 2020.");
+    });
+    it("ruling Q34: a three-line paragraph comes along whole", () => {
+        const before = ["- First point[^1] made", "", "The next paragraph goes on", "over three", "lines.", "", "[^1]: Smith 2020."];
+        const c = cut(before, { line: 0, ch: 7 }, { line: 2, ch: 8 });
+        expect(messages()).not.toContain(NothingCutNotice);
+        expect(c.lines).toEqual(["- First paragraph goes on", "over three", "lines."]);
+    });
+    it("ruling Q34: the same from a quote's line, the paragraph's second line coming into the quote", () => {
+        const before = ["> A quote[^1] here", "", "The next paragraph goes on", "over two lines.", "", "[^1]: Smith 2020."];
+        const c = cut(before, { line: 0, ch: 9 }, { line: 2, ch: 8 });
+        expect(messages()).not.toContain(NothingCutNotice);
+        expect(c.lines).toEqual(["> A quote paragraph goes on", "over two lines."]);
     });
 });
 

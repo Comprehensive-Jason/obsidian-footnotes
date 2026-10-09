@@ -1310,7 +1310,26 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
         // to the lines around it
         const nextToUsersText =
             lineInRanges(newSide.usersText, j - 1) || lineInRanges(newSide.usersText, j + 1) || lineInRanges(oldSide.usersText, i - 1) || lineInRanges(oldSide.usersText, i + 1);
-        return sameKind(was, is, nextToUsersText) || (is === was.replace(/(^| )paragraph$/, "$1^paragraph") && openedByFootnotesAlone(i)) || begunInUsersText(i, was, is);
+        return sameKind(was, is, nextToUsersText) || (is === was.replace(/(^| )paragraph$/, "$1^paragraph") && openedByFootnotesAlone(i)) || begunInUsersText(i, was, is) || joinedInUsersText(i, was, is);
+    };
+    // Whether line `i` reads differently only because the paragraph it
+    // carried on began on a line the user's own text (a cut) ran into from
+    // a line above. What the cut left of that first line joins the line the
+    // cut began on, and the paragraph's later lines come along as more of
+    // it, in whatever holds that line: "over two lines." under "The next
+    // paragraph goes on" becomes more of the bullet "- First paragraph goes
+    // on" when the cut runs from the bullet's end into "The next". The
+    // editor's own cut does the same, and nothing is lost (Jason's ruling
+    // Q34, 2026-10-09; ADR 0003; hunt 2026-10-09 cycle 8, cluster V8, pin
+    // spec-cut-bullet-into-two-line-paragraph). A line that starts a block
+    // of its own after the edit ("> on here." under a joined quote line) is
+    // still compared as before.
+    const joinedInUsersText = (i: number, was: string, is: string): boolean => {
+        // a line that carries on a paragraph, before and after
+        const carriesOn = (blocks: string) => /(?:^| )paragraph$/.test(blocks);
+        if (!carriesOn(was) || !carriesOn(is)) return false;
+        const start = blockStart(oldSide, i, was.split(" ").length - 1);
+        return start !== null && oldSide.usersText.some((range) => range.from.line < start && start <= range.to.line);
     };
     // Whether line `i` reads differently only because a quote or a list's
     // item that held it began on a line the user's own text took out whole
