@@ -22,12 +22,15 @@
 
 import { spawnSync } from "node:child_process";
 import { mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync, closeSync, writeSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 // Every copy of the repo on the machine (worktrees, scratch copies) shares
-// this one folder, so the slots count runs machine-wide.
-export const GUARD_DIR = join(tmpdir(), "obsidian-footnotes-test-runs");
+// this one folder, so the slots count runs machine-wide. It sits in the
+// user's own home folder, not the shared system temp folder, so another
+// account on the machine cannot plant or change the guard's files (GitHub
+// code scanning, alerts 16 to 18, 2026-10-09).
+export const GUARD_DIR = join(homedir(), ".cache", "obsidian-footnotes-test-runs");
 export const STOP_FILE = join(GUARD_DIR, "stop");
 export const STOP_MINUTES = 5;
 
@@ -123,6 +126,12 @@ function tryTakeSlot(count, record) {
     return undefined;
 }
 
+// Clears slots left by runs that ended, then tries to take a free one.
+function tryTakeSlotAfterCleanup(count, record) {
+    clearLeftoverSlots();
+    return tryTakeSlot(count, record);
+}
+
 function positiveNumber(value, fallback) {
     const number = Number(value);
     return Number.isFinite(number) && number > 0 ? number : fallback;
@@ -135,7 +144,7 @@ export default async function setup(project) {
     }
     const slotCount = positiveNumber(env.FOOTNOTES_TEST_SLOTS, 2);
     const maxMinutes = positiveNumber(env.FOOTNOTES_TEST_MAX_MINUTES, 30);
-    mkdirSync(GUARD_DIR, { recursive: true });
+    mkdirSync(GUARD_DIR, { recursive: true, mode: 0o700 });
 
     const refuseIfStopped = () => {
         const until = stoppedUntil();
@@ -148,12 +157,12 @@ export default async function setup(project) {
 
     const started = Date.now();
     const record = { pid: process.pid, started, cwd: process.cwd(), deadline: started + maxMinutes * 60_000 };
-    let slotPath;
     let lastNotice = 0;
-    while (!slotPath) {
-        clearLeftoverSlots();
-        slotPath = tryTakeSlot(slotCount, record);
-        if (slotPath) break;
+    // Keep trying for a slot until one frees up; the loop ends once a slot
+    // is taken, or by throwing when the stop switch is on or the wait runs
+    // out.
+    let slotPath = tryTakeSlotAfterCleanup(slotCount, record);
+    while (slotPath === undefined) {
         refuseIfStopped();
         if (Date.now() - started > maxMinutes * 60_000) {
             throw new Error(`[test guard] Waited ${maxMinutes} minutes for a test slot and gave up.`);
@@ -164,6 +173,7 @@ export default async function setup(project) {
             console.error(`[test guard] ${slotCount} test runs are already going (${holders}); waiting for one to finish. If they are leftovers, "npm run tests:stop" ends them.`);
         }
         await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+        slotPath = tryTakeSlotAfterCleanup(slotCount, record);
     }
     // The waiting counts toward nothing: the time limit starts now.
     const deadline = Date.now() + maxMinutes * 60_000;

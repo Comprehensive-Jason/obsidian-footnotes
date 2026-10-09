@@ -27,7 +27,7 @@ if (mode === "--resume") {
         console.log(`pid ${slot.pid}, running ${minutes} min, in ${slot.cwd}`);
     }
 } else {
-    mkdirSync(GUARD_DIR, { recursive: true });
+    mkdirSync(GUARD_DIR, { recursive: true, mode: 0o700 });
     // The stop goes up first, so a loop cannot slip a new run in between.
     writeFileSync(STOP_FILE, String(Date.now() + STOP_MINUTES * 60_000));
     let ended = 0;
