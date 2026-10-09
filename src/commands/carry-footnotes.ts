@@ -707,23 +707,20 @@ export function withCarriedText(body: string, carried: CarriedDefinition[]): str
 
 /**
  * The lines of the carried blocks one under the other, the way both the
- * clipboard text and the paste write them.
- *
- * A label at the start of a line ends the block above it, almost always.
- * Where it does not (the block above ends inside raw HTML, which runs on
- * until a blank line), the label would read as more of that block, and
- * its footnote would lose its definition; that block gets a blank line in
- * front. Each block keeps its own lines otherwise (hunt 2026-10-05, pin
+ * clipboard text and the paste write them. Every carried block was lifted
+ * to the top level (liftedBlocks), so its label starts its line and ends
+ * the block above it (hunt 2026-10-05, pin
  * bug-carried-second-definition-glued).
+ *
+ * A blank line used to go in front of a block whose label would read as
+ * more of the block above, one that ended inside raw HTML. No carried
+ * block ends that way: an HTML line right under a definition is a block of
+ * its own, not part of the definition. So the check went in the
+ * subtraction pass of 2026-10-08, and a paste whose label did not come out
+ * live would be refused by the result gate.
  */
 export function carriedLines(carried: readonly CarriedDefinition[]): string[] {
-    const joined: string[] = [];
-    for (const block of carried) {
-        const start = joined.length;
-        joined.push(...block.lines);
-        if (start > 0 && readNote(joined).labelOn(start)?.movable !== true) joined.splice(start, 0, "");
-    }
-    return joined;
+    return carried.flatMap((block) => block.lines);
 }
 
 /**
@@ -878,8 +875,10 @@ export interface CutPlan extends CarriedDefinitions {
  * The clipboard carries it (carriedBlocks, the reader copy uses too). Once
  * the selection is gone, nothing references it, read by the orphan rule's
  * own reader on the note as it reads then, chains included; a definition
- * that was an orphan before the cut, and one the plugin never cuts (its
- * line closes a comment), are not the cut's to take, and nor is one that
+ * that was an orphan before the cut, and one the orphan rule never cuts
+ * (its line closes a comment, which that reader always counts as in use;
+ * the cut stopped checking it again in the subtraction pass of
+ * 2026-10-08), are not the cut's to take, and nor is one that
  * a definition staying in the note still cites. Deleting the selection
  * left its lines whole (leftWhole). And taking it out changes how no
  * other line of the note reads, as the result gate judges the cut against
@@ -952,7 +951,7 @@ export function planCut(
     const joinedReading = readNote(joined);
     const undone = (block: Definition) => joinedReading.labelOn(moved(block.start)) === null && !wasOrphan.has(block.name.toLowerCase());
     const candidates = blocks
-        .filter((block) => leftWhole(lines, from, to, block) && (orphanedAt.has(moved(block.start)) || undone(block)) && block.removable)
+        .filter((block) => leftWhole(lines, from, to, block) && (orphanedAt.has(moved(block.start)) || undone(block)))
         .map((block) => ({ ...block, start: moved(block.start), end: moved(block.end) }));
     // A definition the cut leaves in place, such as one between two lists,
     // still travels on the clipboard, so pasting the text back reuses it
