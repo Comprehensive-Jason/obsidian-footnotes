@@ -275,10 +275,7 @@ function bodyWithout(lines: string[], blocks: readonly Definition[]): string[] {
  */
 export function definitionsHoldingTheMoveBack(markdown: string, sectionHeading = ""): string[] {
     if (!markdown.includes("[^")) return [];
-    // the note as the rule sees it: plain line endings, no blank lines at
-    // the end
-    const lines = normalizeEol(markdown).text.split("\n");
-    while (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+    const lines = linesAsTheRuleSeesThem(markdown);
     const reading = readNote(lines);
     const blocks = movedDefinitions(reading);
     // A note that ends inside an open fence or comment, whose move the
@@ -293,14 +290,8 @@ export function definitionsHoldingTheMoveBack(markdown: string, sectionHeading =
     if (alreadyGathered) return [];
     // the move as the rule makes it, under the lint's section heading (pin
     // bug-move-alert-ignores-heading), judged as the rule judges it
-    const note = lines.join("\n");
-    let moved = note;
-    let heading: NoteRange[] = [];
-    rewriteDocument(note, (text, view) => {
-        ({ text: moved, heading } = gathered(text, view, sectionHeading));
-        return text;
-    });
-    if (moved === note) return [];
+    const { moved, heading } = moveAsTheRuleMakesIt(lines, sectionHeading);
+    if (moved === lines.join("\n")) return [];
     const verdict = judgeEdit(lines, moved.split("\n"), { insertedText: heading });
     if (verdict.pass) return [];
     // The definitions whose own move the gate refuses, judged as taken out
@@ -321,6 +312,53 @@ export function definitionsHoldingTheMoveBack(markdown: string, sectionHeading =
         if (!names.some((name) => name.toLowerCase() === block.name.toLowerCase())) names.push(block.name);
     }
     return names;
+}
+
+/**
+ * Whether the section heading is what holds the move back: the move writes
+ * the heading, the result gate refuses that move, and the same move without
+ * the heading changes nothing or passes. Such a heading would change how
+ * Obsidian reads the text around it, whatever the reason: a "---" line in
+ * it would close a "---" at the top of the note into frontmatter, or a
+ * link reference definition in it would turn "[link]" in the text into a
+ * link. The rule then leaves the note as it is, and the move alert names
+ * the heading, as it names the definitions the move left where they were
+ * (Jason's ruling 2, 2026-10-09; ADR 0002: the lint is never silent; pin
+ * bug-held-section-heading-silent). Without this, a note whose definitions
+ * already end it got no word at all: there was no definition to name.
+ *
+ * `sectionHeading` is the heading the lint gathered under, as the rule
+ * takes it; empty means no heading, and nothing is held.
+ */
+export function sectionHeadingHeldBack(markdown: string, sectionHeading: string): boolean {
+    if (sectionHeading === "" || !markdown.includes("[^")) return false;
+    const lines = linesAsTheRuleSeesThem(markdown);
+    const note = lines.join("\n");
+    const withHeading = moveAsTheRuleMakesIt(lines, sectionHeading);
+    // a heading already in the note is gathered under, not written
+    if (withHeading.heading.length === 0 || withHeading.moved === note) return false;
+    if (judgeEdit(lines, withHeading.moved.split("\n"), { insertedText: withHeading.heading }).pass) return false;
+    const { moved } = moveAsTheRuleMakesIt(lines, "");
+    return moved === note || judgeEdit(lines, moved.split("\n"), {}).pass;
+}
+
+/** The note as the rule sees it: plain line endings, and no blank lines at the end. */
+function linesAsTheRuleSeesThem(markdown: string): string[] {
+    const lines = normalizeEol(markdown).text.split("\n");
+    while (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+    return lines;
+}
+
+/** The move as the rule makes it on `lines`, under `sectionHeading`, before the result gate judges it, and where the heading is in it when the move writes one (gathered). */
+function moveAsTheRuleMakesIt(lines: readonly string[], sectionHeading: string): { moved: string; heading: NoteRange[] } {
+    const note = lines.join("\n");
+    let moved = note;
+    let heading: NoteRange[] = [];
+    rewriteDocument(note, (text, view) => {
+        ({ text: moved, heading } = gathered(text, view, sectionHeading));
+        return text;
+    });
+    return { moved, heading };
 }
 
 /**

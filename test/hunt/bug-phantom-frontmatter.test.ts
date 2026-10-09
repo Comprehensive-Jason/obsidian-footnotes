@@ -46,8 +46,10 @@ describe("phantom frontmatter from a leading thematic break", () => {
         // before the subtraction pass: "\n---\n\nalpha[^1]. alpha\n\n---\n## Footnotes\n\n[^Note]: alpha"
         expect(moveFootnoteDefinitionsToBottom(DOC, HEADING)).toBe(DOC);
         // The definition already ends this note, so only the heading is
-        // missing and the move alert has nothing to name. A definition in
-        // the middle of such a note stays where it is, and the alert names it.
+        // missing and the move alert has no definition to name; it names
+        // the heading instead (Jason's ruling 2, 2026-10-09; pin
+        // bug-held-section-heading-silent). A definition in the middle of
+        // such a note stays where it is, and the alert names it.
         expect(definitionsHoldingTheMoveBack(DOC, HEADING)).toEqual([]);
         const middle = "---\n\n[^Note]: alpha\n\nalpha[^1]. alpha";
         expect(moveFootnoteDefinitionsToBottom(middle, HEADING)).toBe(middle);

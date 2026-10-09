@@ -15,7 +15,7 @@ import {
 import { configuredSectionHeading, heldByTheLint, lastLintHeldBack, lintOptionsFromSettings, sectionHeadingProblem } from "./linter";
 import { labelInsideTable } from "./rewrite-document";
 import { duplicateFootnoteDefinitionNames, mergeDuplicateFootnoteDefinitions } from "./rules/merge-duplicate-definitions";
-import { definitionsHoldingTheMoveBack } from "./rules/move-footnotes-to-the-bottom";
+import { definitionsHoldingTheMoveBack, sectionHeadingHeldBack } from "./rules/move-footnotes-to-the-bottom";
 import {
     definitionsHeldBy,
     orphanedFootnoteDefinitionNames,
@@ -347,11 +347,18 @@ function noticeOrphanedDefinitions(
 // decision Q5, 2026-10-05). Only while the rule is on. The gathering is
 // worked out under the section heading the lint uses, which it drops when
 // the heading holds a reference (hunt 2026-10-06, cycle 5, pin
-// bug-move-alert-ignores-heading).
+// bug-move-alert-ignores-heading). A section heading the move could not
+// add is named too, in its own alert, since the heading is the one thing
+// the user cannot move by hand: it comes from the settings (Jason's ruling
+// 2, 2026-10-09; pin bug-held-section-heading-silent).
 function noticeUngatheredDefinitions(plugin: FootnotePlugin, markdown: string) {
     if (!plugin.settings.lintMoveToBottom) return;
-    const heading = configuredSectionHeading(plugin);
-    const names = definitionsHoldingTheMoveBack(markdown, sectionHeadingProblem(heading) === null ? heading : "");
+    const configured = configuredSectionHeading(plugin);
+    const heading = sectionHeadingProblem(configured) === null ? configured : "";
+    if (sectionHeadingHeldBack(markdown, heading)) {
+        showNotice("The lint could not add the footnote section heading, because it would change how Obsidian reads the text around it.", 8000);
+    }
+    const names = definitionsHoldingTheMoveBack(markdown, heading);
     if (names.length === 0) return;
     showNotice(
         names.length === 1
