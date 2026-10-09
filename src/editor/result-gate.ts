@@ -1055,6 +1055,21 @@ export function judgeEdit(
 
     editWindows(oldSide, newSide, renamed);
 
+    // 3, asked first: frontmatter the note did not have before. A note
+    // that opens with a bare "---" reads it as a horizontal rule until a
+    // "---" line further down closes it, and then the top of the note
+    // reads as frontmatter, its note properties. That is the note's
+    // formatting changing, not text written into protected text, so it is
+    // refused as a line's formatting, before check 6 finds what the action
+    // wrote hidden in the new frontmatter (Jason's ruling 3, 2026-10-09;
+    // pin bug-frontmatter-from-nothing-notice). Frontmatter the action
+    // writes itself, a paste of it at the top, is the user's own text.
+    const frontmatter = (side: Side) => side.reading.protectedSpans.find((span) => span.kind === "frontmatter");
+    const madeFrontmatter = frontmatter(newSide);
+    if (madeFrontmatter !== undefined && frontmatter(oldSide) === undefined && !owned(newSide, madeFrontmatter.startLine, 0)) {
+        return refuse("formatting", 3, `frontmatter on lines ${String(madeFrontmatter.startLine)} to ${String(madeFrontmatter.endLine)}`);
+    }
+
     // 6. what the action meant to create is live
     const made = createdVerdict(newSide, created);
     if (!made.pass) return made;

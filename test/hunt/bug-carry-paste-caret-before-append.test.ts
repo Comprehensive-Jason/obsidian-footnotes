@@ -80,12 +80,16 @@ describe("the caret after a paste whose definition lands above the paste point",
     // first "---" did not read as frontmatter, and the caret was pinned
     // after "Textc[^7]" on the line that pushed down. The append no longer
     // adds that line, the head would read as frontmatter, and the result
-    // gate refuses the paste: nothing is pasted.
+    // gate refuses the paste: nothing is pasted. Until Jason's ruling 3
+    // (2026-10-09) the notice was the protected-text one, "Nothing was
+    // pasted: footnotes can't go inside code, math, or other protected
+    // text."; frontmatter appearing out of nothing is now a line's
+    // formatting (pin bug-frontmatter-from-nothing-notice).
     it("is refused when the first-footnote append would turn the note's head into frontmatter", () => {
         const heading = { enableFootnoteSectionHeading: true, footnoteSectionHeading: "---\n# Footnotes" };
         const dest = editor(["---", "Text"], { line: 1, ch: 4 });
         handlePaste(fakePlugin({ ...on, ...heading }, dest), clipboardEvent("c[^7]\n\n[^7]: seven") as never, dest);
         expect(dest.lines).toEqual(["---", "Text"]);
-        expect(messages()).toEqual(["Nothing was pasted: footnotes can't go inside code, math, or other protected text."]);
+        expect(messages()).toEqual(["Nothing was pasted: it would change how Obsidian reads the text around it."]);
     });
 });

@@ -103,9 +103,12 @@ describe("phantom frontmatter from a leading thematic break", () => {
         const doc = fakeEditor([...note], { wholeDoc: true, edits: true, words: true, cursor: { line: 2, ch: 5 } });
         await insertAutonumFootnote(fakePlugin({ ...pressSettings, footnoteSectionHeading: HEADING }, doc));
         expect(doc.lines).toEqual(note);
-        // the head would read as frontmatter, which the gate counts as
-        // protected text, hence this notice
-        expect(messages()).toEqual(["No footnote was created: footnotes can't go inside code, math, or other protected text."]);
+        // The head would read as frontmatter. The gate counted that as
+        // protected text until Jason's ruling 3 (2026-10-09), and the press
+        // said "footnotes can't go inside code, math, or other protected
+        // text."; frontmatter appearing out of nothing is now a line's
+        // formatting (pin bug-frontmatter-from-nothing-notice).
+        expect(messages()).toEqual(["No footnote was created: a footnote here would break the line's formatting. Move the caret into the text."]);
     });
 
     it("the insert path leaves ----free headings and normal notes alone", async () => {
