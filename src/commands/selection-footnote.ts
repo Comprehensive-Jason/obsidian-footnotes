@@ -8,6 +8,7 @@ import {
     endOfWordForSelection,
     moveCursorAndSetJumpPoint,
     startOfWordOffset,
+    TrailingBlockId,
 } from "../editor/cursor-motion";
 import { commandHotkeys } from "../editor/obsidian-internals";
 import { planDefinitionAppend } from "./definition-append";
@@ -399,7 +400,6 @@ export function selectionPressHandled(
         showNotice(InlineSelectionNotice, 8000);
         return true;
     }
-    const text = rangeText(ctx.lines, trimmed.from, trimmed.to);
     // What the conversion could break is the result gate's to judge once the
     // edit is worked out (convertMainSelectionToInline,
     // convertMainSelection). A selection that sits inside another footnote's
@@ -427,6 +427,28 @@ export function selectionPressHandled(
         showNotice(PartOfListNotice, 8000);
         return true;
     }
+    // A selection that ends with the line's block id converts the text in
+    // front of the id, and the id stays at the line's end. A block id is
+    // the " ^i1" that Obsidian writes at the end of a line when the user
+    // copies a link to its block, and it counts only there
+    // (docs/obsidian-reading-rules.md D4). Carried into the footnote, it
+    // marked the footnote's line instead, so every link to the item pointed
+    // into the footnote: "- An item ^i1" selected whole now gives "- [^1]
+    // ^i1" with "[^1]: An item" (Jason's ruling Q32, 2026-10-09; hunt
+    // 2026-10-09 cycle 8, cluster V4, pin
+    // spec-selection-moves-block-id-into-footnote). A press does the same
+    // (adjustFootnotePosition). The checks above judge the selection as the
+    // user made it, so a whole line still counts as whole there. A
+    // selection that takes the line's own marker ("- ", "> ", "# ") takes
+    // whole blocks, and the id goes with them as before: left behind, it
+    // would stand alone where the item or the heading was, and the result
+    // gate would refuse the line for losing its formatting.
+    const blockId = ctx.lines[trimmed.to.line].search(TrailingBlockId);
+    const keepsMarker = ctx.reading().blockSyntaxEnd(trimmed.to.line) <= (trimmed.from.line === trimmed.to.line ? trimmed.from.ch : 0);
+    if (blockId !== -1 && keepsMarker && trimmed.to.ch > blockId && comparePositions(trimmed.from, { line: trimmed.to.line, ch: blockId }) < 0) {
+        trimmed.to = { line: trimmed.to.line, ch: blockId };
+    }
+    const text = rangeText(ctx.lines, trimmed.from, trimmed.to);
     const notices = selectionNotices(selected);
     // The new reference sits snug against the text in front of the
     // selection, so the run of whitespace before it is replaced along with

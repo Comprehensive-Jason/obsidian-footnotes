@@ -11,8 +11,16 @@
 // Options: (a) the id stays at the line's end: "- [^1] ^i1" with "[^1]: An
 // item" (live: i1 stays on the item); (b) refuse a selection that ends
 // with a block id; (c) leave it: the user selected the id.
-// This file asserts (a) or (b): the id stays on the line, or nothing
+// This file asserted (a) or (b): the id stays on the line, or nothing
 // changes.
+//
+// Answered (Jason's ruling Q32, 2026-10-09), option (a): the selection
+// converts the text in front of the id, and the id stays at the line's
+// end, so links keep pointing at the item: "- An item ^i1" selected whole
+// gives "- [^1] ^i1" with "[^1]: An item"; the same for a quote line and a
+// drag from a word to the line's end, as cluster Z12 did for presses. The
+// tests below were it.fails until then and now assert the decided result
+// exactly; what the selection did before is described above.
 //
 // Hunt 2026-10-09, cycle 8, lens presses and selections. Source: rule D4;
 // cluster Z12 and its live answers (a block id must stay at its block's
@@ -46,7 +54,8 @@
 // ending in its block id, or the note is left as it was.
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
+import { insertAutonumFootnote, insertInlineFootnote } from "../../src/commands/insert-or-navigate-footnotes";
+import { readNote } from "../../src/parsing/note-reading";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
@@ -64,17 +73,48 @@ async function select(lines: string[], anchor: Pos, head: Pos) {
 beforeEach(resetNotices);
 
 describe("a selection that ends with the line's block id", () => {
-    const cases: [string, string[], Pos, Pos, string][] = [
-        ["a drag from a word to the line's end", ["Oysters filter water. ^water1", "", "See [[#^water1]]."], { line: 0, ch: 8 }, { line: 0, ch: 29 }, " ^water1"],
-        ["a list item selected whole (ruling Q27's shape)", ["- An item ^i1", "- Another item", "", "See [[#^i1]]."], { line: 0, ch: 0 }, { line: 0, ch: 13 }, " ^i1"],
-        ["a quote line selected whole", ["> A quote worth keeping. ^q1", "", "See [[#^q1]]."], { line: 0, ch: 0 }, { line: 0, ch: 28 }, " ^q1"],
+    const cases: [string, string[], Pos, Pos, string, string][] = [
+        ["a drag from a word to the line's end", ["Oysters filter water. ^water1", "", "See [[#^water1]]."], { line: 0, ch: 8 }, { line: 0, ch: 29 }, "Oysters[^1] ^water1", "[^1]: filter water."],
+        ["a list item selected whole (ruling Q27's shape)", ["- An item ^i1", "- Another item", "", "See [[#^i1]]."], { line: 0, ch: 0 }, { line: 0, ch: 13 }, "- [^1] ^i1", "[^1]: An item"],
+        ["a quote line selected whole", ["> A quote worth keeping. ^q1", "", "See [[#^q1]]."], { line: 0, ch: 0 }, { line: 0, ch: 28 }, "> [^1] ^q1", "[^1]: A quote worth keeping."],
     ];
-    for (const [name, lines, anchor, head, id] of cases) {
-        it.fails(`${name}: the line keeps its block id at its end`, async () => {
+    for (const [name, lines, anchor, head, line, definition] of cases) {
+        it(`${name}: the text goes into the footnote, and the line keeps its block id at its end`, async () => {
             const doc = await select(lines, anchor, head);
-            expect(doc.lines[0].endsWith(id)).toBe(true);
+            expect(doc.lines[0]).toBe(line);
+            expect(doc.lines).toContain(definition);
+            expect(readNote(doc.lines).definitions.map((found) => found.name)).toEqual(["1"]);
         });
     }
+
+    it("a selection that ends inside the block id converts the text in front of it", async () => {
+        const doc = await select(["- An item ^i1", "", "See [[#^i1]]."], { line: 0, ch: 2 }, { line: 0, ch: 11 });
+        expect(doc.lines[0]).toBe("- [^1] ^i1");
+        expect(doc.lines).toContain("[^1]: An item");
+    });
+
+    it("the inline key leaves the block id at the line's end too", async () => {
+        const doc = fakeEditor(["Oysters filter water. ^water1"], { cursor: { line: 0, ch: 29 }, selection: { anchor: { line: 0, ch: 8 }, head: { line: 0, ch: 29 } }, edits: true, wholeDoc: true, words: true });
+        await insertInlineFootnote(fakePlugin(settings, doc));
+        expect(doc.lines[0]).toBe("Oysters^[filter water.] ^water1");
+    });
+
+    // Not in the ruling's examples; the rule as written covers it: a whole
+    // paragraph's text goes into the footnote, and the id stays on the
+    // line where the paragraph was, now holding the reference.
+    it("a whole paragraph over two lines: the id stays on the reference's line", async () => {
+        const doc = await select(["Intro.", "", "Line one", "line two ^p1", "", "See [[#^p1]]."], { line: 2, ch: 0 }, { line: 3, ch: 12 });
+        expect(doc.lines.slice(0, 3)).toEqual(["Intro.", "", "[^1] ^p1"]);
+        expect(doc.lines.slice(-2)).toEqual(["[^1]: Line one", "    line two"]);
+    });
+
+    // A selection that takes a line's own marker takes whole blocks (ruling
+    // Q25), and the id goes with them, as before the ruling: left behind,
+    // " ^x" would stand alone where the item was.
+    it("control: a whole list, its last item ending with an id, moves into the footnote with the id", async () => {
+        const doc = await select(["Intro.", "", "- a", "- b ^x", "", "After."], { line: 2, ch: 0 }, { line: 3, ch: 6 });
+        expect(doc.lines).toEqual(["Intro.", "", "[^1]", "", "After.", "", "[^1]: - a", "    - b ^x"]);
+    });
 
     it("control: a selection that stops before the block id leaves the id on the line", async () => {
         const doc = await select(["Oysters filter water. ^water1", "", "See [[#^water1]]."], { line: 0, ch: 8 }, { line: 0, ch: 21 });

@@ -272,7 +272,7 @@ export function startOfWordOffset(text: string, offset: number): number {
  * and Latin letters, digits, or dashes, the only characters Obsidian allows
  * in one (Obsidian Help, Link to blocks).
  */
-const TrailingBlockId = /[ \t]+\^[A-Za-z0-9-]+$/;
+export const TrailingBlockId = /[ \t]+\^[A-Za-z0-9-]+$/;
 
 /**
  * Where a reference that would land at column `ch` of `line` goes instead
