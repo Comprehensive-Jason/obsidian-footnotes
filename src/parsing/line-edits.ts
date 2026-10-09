@@ -231,14 +231,20 @@ function sameBlankQuoteLine(a: string, b: string): boolean {
 
 /**
  * How cutting `definitions` out of `lines` goes: the lines with every label
- * that sits on a list marker's line trimmed back to the marker, and the
+ * that has other text in front of it trimmed back to that text, and the
  * ranges of whole lines to remove (removeLineRanges). A definition's lines
- * go whole, except on a list marker's line, where only the definition goes
- * and the bullet stays, an empty item, because that is what Obsidian's own
- * delete leaves (Jason, 2026-09-24, on the feature-round sheet; since Jason's ruling 1,
- * option a, 2026-10-03, for every rule that cuts a definition). Pass only
- * definitions that are `removable`. `lines` comes back as the same array
- * when nothing was trimmed.
+ * go whole when only indentation and quote markers sit in front of its
+ * label. Otherwise only the definition goes and the text in front stays.
+ * On a list marker's line that leaves the bullet, an empty item, because
+ * that is what Obsidian's own delete leaves (Jason, 2026-09-24, on the
+ * feature-round sheet; since Jason's ruling 1, option a, 2026-10-03, for
+ * every rule that cuts a definition). Delete footnote everywhere also
+ * passes definitions that are not `removable`, such as one after a
+ * comment's closing "%%", on a callout's marker line, or after the
+ * frontmatter's closing "---" (the subtraction pass, 2026-10-08): the
+ * "%% ", "> [!note] ", or "--- " in front stays, and the result gate judges
+ * what is left (Jason accepts the space left at the end, 2026-10-09).
+ * `lines` comes back as the same array when nothing was trimmed.
  */
 export function definitionCuts(
     lines: string[],
@@ -248,8 +254,8 @@ export function definitionCuts(
     const ranges: { start: number; end: number }[] = [];
     for (const definition of definitions) {
         const before = lines[definition.start].slice(0, definition.labelStart);
-        // a removable label has only indentation, quote markers, and list
-        // markers before it, so anything else there is a list marker
+        // anything in front of the label but indentation and quote markers
+        // (a list marker, or other text) stays on the line
         if (/[^\s>]/.test(before)) {
             if (trimmed === lines) trimmed = lines.slice();
             trimmed[definition.start] = before;

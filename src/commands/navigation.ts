@@ -38,9 +38,13 @@ export function shouldJumpFromDefinitionToReference(
     // pressing the hotkey there used to insert a new footnote instead of
     // jumping back (bug reported 2026-07-17).
     //
-    // A blank line carries nothing to jump from. Inside a definition the
-    // press refuses there instead (warnDefinitionCaretIfInside, GLM sweep
-    // 2026-09-13), and anywhere else it creates as usual.
+    // A blank line carries nothing to jump from, so the press goes on to
+    // create. Inside a definition, the result gate then refuses the
+    // numbered, named, and inline keys as a footnote inside a footnote
+    // (the subtraction pass, 2026-10-08). The paste key refuses there
+    // earlier, through warnDefinitionCaretIfInside, so it never reads the
+    // clipboard for a press it would refuse (GLM sweep 2026-09-13).
+    // Anywhere else the press creates as usual.
     if (lineText.trim() === "") return false;
 
     // #41: a "[^x]:" inside a code block is not a definition, and a
