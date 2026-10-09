@@ -20,7 +20,7 @@ interface MovableUnit {
     start: number;
     /** just past the last character */
     end: number;
-    /** a "[^x]" reference (true) or an inline footnote (false); only a lone reference can be a label the label reader missed */
+    /** a "[^x]" reference (true) or an inline footnote (false), which the lint's alert names differently */
     reference: boolean;
 }
 
@@ -84,8 +84,6 @@ function swapInSegment(
     original: string,
     masked: string,
     units: readonly MovableUnit[],
-    insideBody = false,
-    mayBeLabel = true,
     placement: FootnotePlacement = "after",
     keeps: (segment: string) => boolean = () => true,
     images: ReadonlySet<number> = new Set(),
@@ -114,31 +112,12 @@ function swapInSegment(
         }
         const start = units[k].start;
         const end = units[last].end;
-        const loneReference = last === k && units[k].reference && carried === "";
         const runUnits = [...carriedUnits, ...units.slice(k, last + 1)];
         k = last + 1;
         // the run's text, with a run carried to it in front
         const run = carried + original.slice(start, end);
         carried = "";
         carriedUnits = [];
-        // Whether this run, written at `at` with the character `next` right
-        // after it, is a definition label: a SINGLE reference followed by
-        // ":" with nothing but whitespace, quote markers, or dead text
-        // before it. Such a label can only sit after a blank line or at the
-        // top of the note; the same shape directly under prose is lazy
-        // paragraph text, a live reference before a colon. A RUN of two or
-        // more references is never a label, and neither is a reference at
-        // the start of a definition's BODY: "[^1][^2]: x" is two live
-        // references and a literal colon to Obsidian, and "[^1]: [^2]: x" a
-        // definition whose body starts with a reference (Kimi hunt cycle 4,
-        // probed 2026-09-16). Both directions of the move ask it, so a
-        // label is never moved and a move never makes one.
-        const labelAt = (at: number, next: string | undefined) =>
-            loneReference &&
-            !insideBody &&
-            mayBeLabel &&
-            next === ":" &&
-            masked.slice(0, at).replace(/[>%\0\s]/g, "") === "";
         // The run's move, or null when it stays where it is: the run is
         // written between `before` and `after`, and the three take the
         // place of the text from `copied` up to `to`.
@@ -164,20 +143,8 @@ function swapInSegment(
                 if (placement !== "before" || !punctuationAt(masked, start - 1, images)) return null;
                 let punctuationStart = start;
                 while (punctuationAt(masked, punctuationStart - 1, images)) punctuationStart--;
-                // A reference moved in front of a line-initial colon would
-                // become a label: ":[^1] text" would turn into "[^1]: text",
-                // a second definition of footnote 1 (hunt 2026-10-02, pin
-                // bug-placement-before-colon-makes-label).
-                if (labelAt(punctuationStart, masked[punctuationStart])) return null;
                 return { before: original.slice(copied, punctuationStart), after: original.slice(punctuationStart, start), to: end };
             }
-            // A label the label reader did not claim stays where it is: one
-            // indented past three spaces inside a list item ("    [^113]:
-            // def", a definition to Obsidian that the plugin does not model
-            // yet), or one after a "%%" that is not a block's closer.
-            // Swapping its colon would turn it into ":[^113]" for good
-            // (Claude sweep 2026-09-13).
-            if (labelAt(start, masked[end])) return null;
             // A run of references that already comes AFTER punctuation or a
             // closing mark is where it should be. Any punctuation after it
             // belongs to the next clause, and moving the references again
@@ -280,27 +247,21 @@ function placedOnce(markdown: string, placement: "after" | "before"): string {
             // manual lint-alerts tests, 2026-09-20; hunt 2026-10-02, cluster Q1). A lazy
             // label's start is stepped over too, so the label the user
             // meant stays whole for fix-lazy to repair.
-            // a byte order mark in front of a line-0 label is not text
-            // the label reader sees, so it is stepped over first (the old
-            // colon guard happened to cover it; spec-bom-before-line-zero-label)
-            const bom = line.startsWith("\ufeff") ? 1 : 0;
             // A lazy label is read from where the line's containers end,
             // as labelShapedLines reads it, so one at a list item's content
             // column of 4 or more ("10. item" puts it at column 4) is a
             // label too. Read from the margin it sat four spaces in, and its
             // "[^b]" was moved after the colon, ":[^b] lazy" (hunt
             // 2026-10-05, round 2, pin bug-punctuation-wide-item-label).
-            const textStart = Math.max(bom, reading.containerEnd(i));
+            const textStart = reading.containerEnd(i);
             const shaped = definitionLabelIn(line.slice(textStart));
-            const prefixLength = reading.labelOn(i)?.labelEnd ?? (shaped === null ? bom : textStart + shaped.labelEnd);
+            const prefixLength = reading.labelOn(i)?.labelEnd ?? (shaped === null ? 0 : textStart + shaped.labelEnd);
             return (
                 line.slice(0, prefixLength) +
                 swapInSegment(
                     line.slice(prefixLength),
                     masked.slice(prefixLength),
                     movableUnits(reading, i, prefixLength),
-                    prefixLength > bom,
-                    i === 0 || lines[i - 1].trim() === "",
                     placement,
                     (segment) => keeps(line.slice(0, prefixLength) + segment),
                     new Set([...imageStartsOn(reading, i)].map((column) => column - prefixLength)),
