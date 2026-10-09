@@ -156,11 +156,13 @@ function selectionNotices(selected: string | null): Partial<Record<GateReason, s
  * refusal (selectionNotices): the selection cutting through a table
  * (tableVerdict), or a footnote it holds or cuts into, which would nest it
  * in the new footnote's body or cut it in half
- * (selectionTouchesFootnote); null when it does neither.
+ * (selectionTouchesFootnote), or a line of a definition, which would nest
+ * one footnote in the other; null when it does none of these.
  */
 function selectedNotice(ctx: DocContext, from: EditorPosition, to: EditorPosition): string | null {
     if (tableVerdict(ctx, from, to) === "cuts") return TableSelectionNotice;
-    return selectionTouchesFootnote(ctx, from, to) ? NestedFootnoteNotice : null;
+    const lapsDefinition = ctx.reading().definitions.some((definition) => from.line <= definition.end && to.line >= definition.start);
+    return lapsDefinition || selectionTouchesFootnote(ctx, from, to) ? NestedFootnoteNotice : null;
 }
 
 export type FootnoteCommandKind = "autonum" | "named" | "inline" | "paste";
@@ -376,33 +378,24 @@ export function selectionPressHandled(
         return true;
     }
     const text = rangeText(ctx.lines, trimmed.from, trimmed.to);
-    // A selection that sits inside another footnote's definition, or laps
-    // over one, would nest footnotes inside each other. It is refused just
-    // as the caret presses are (Jason's ruling 2026-08-13). Any overlap at
-    // all counts: starting inside a definition would nest the new footnote
-    // into the old one; swallowing one would nest the old one into the new
-    // footnote. Every definition counts, wherever it sits: one in a
-    // blockquote or callout with its quoted continuation (second review
-    // 2026-09-09, Kimi hunt cycle 3, 2026-09-16), and one in a list item
-    // (Jason's ruling 1, option a, 2026-10-03).
-    if (
-        ctx.reading().definitions.some(
-            (definition) => trimmed.from.line <= definition.end && trimmed.to.line >= definition.start,
-        )
-    ) {
-        showNotice(NestedFootnoteNotice, 8000);
-        return true;
-    }
-    // Everything else the conversion could break is the result gate's to
-    // judge once the edit is worked out (convertMainSelectionToInline,
-    // convertMainSelection): a footnote the selection holds would sit in
-    // the new one; a selection that swallows one delimiter of a code span
-    // or a fence opener, or the first backtick of one, would leave the
-    // rest of the note reading differently (found by the conversion
-    // property test, 2026-08-12); one that takes part of a table shreds
-    // it (Jason's ruling, 2026-09-04). Protected text and a table the
-    // selection holds whole travel into the footnote (2026-08-19; sheet
-    // 05, 2026-09-09).
+    // What the conversion could break is the result gate's to judge once the
+    // edit is worked out (convertMainSelectionToInline,
+    // convertMainSelection). A selection that sits inside another footnote's
+    // definition, or laps over one, would nest footnotes inside each other,
+    // and the gate refuses it, told with the nesting notice (selectedNotice;
+    // Jason's ruling 2026-08-13): starting inside a definition would nest the new footnote
+    // into the old one, and swallowing one would nest the old one into the
+    // new footnote, wherever the definition sits, in a quote, a callout, or
+    // a list item (Kimi hunt cycle 3, 2026-09-16; Jason's ruling 1, option
+    // a, 2026-10-03). The selection refused that itself until the
+    // subtraction pass of 2026-10-08. Likewise a footnote the selection
+    // holds would sit in the new one; a selection that swallows one
+    // delimiter of a code span or a fence opener, or the first backtick of
+    // one, would leave the rest of the note reading differently (found by
+    // the conversion property test, 2026-08-12); one that takes part of a
+    // table shreds it (Jason's ruling, 2026-09-04). Protected text and a
+    // table the selection holds whole travel into the footnote (2026-08-19;
+    // sheet 05, 2026-09-09).
     const table = tableVerdict(ctx, trimmed.from, trimmed.to) === "whole";
     const selected = selectedNotice(ctx, trimmed.from, trimmed.to);
     // Some of a list's items, each whole, are refused (ruling Q31). A
