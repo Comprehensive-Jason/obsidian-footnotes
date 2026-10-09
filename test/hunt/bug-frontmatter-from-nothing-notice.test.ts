@@ -12,13 +12,20 @@
 // math, or other protected text." Frontmatter that appears out of nothing
 // is the note's formatting changing, so the gate now reports it as a line's
 // formatting: the press shows the block-syntax notice, and a carried paste
-// and a selection show their own formatting notices.
+// its own notice for text that reads differently.
+//
+// A selection showed its own formatting notice, "the selection takes part
+// of the line's formatting. Select the whole line, or only its text.",
+// whose advice does not help, since the selection takes none of a line's
+// formatting. Jason's wording ruling of 2026-10-09: it shows the general
+// notice, "No footnote was created: it would change how Obsidian reads the
+// text around it." (fix job c8fix-B, hunt 2026-10-09 cycle 8).
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
-import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
+import { insertAutonumFootnote, insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { handlePaste, resetCarryRegister } from "../../src/commands/carry-footnotes-hooks";
 import { judgeEdit } from "../../src/editor/result-gate";
 
@@ -77,9 +84,29 @@ describe("frontmatter that an edit would make out of nothing is reported as form
         expect(messages()).toEqual(["Nothing was pasted: it would change how Obsidian reads the text around it."]);
     });
 
-    it("a selection turned into a footnote is refused with the selection's formatting notice", async () => {
+    // Until Jason's wording ruling of 2026-10-09 these two expected the
+    // selection's formatting notice, "No footnote was created: the
+    // selection takes part of the line's formatting. Select the whole line,
+    // or only its text."
+    it("a selection turned into a footnote is refused with the general notice", async () => {
         const note = ["---", "", "alpha beta"];
         const doc = fakeEditor([...note], { wholeDoc: true, edits: true, cursor: { line: 2, ch: 6 }, selection: { anchor: { line: 2, ch: 6 }, head: { line: 2, ch: 10 } } });
+        await insertAutonumFootnote(fakePlugin(settings, doc));
+        expect(doc.lines).toEqual(note);
+        expect(messages()).toEqual(["No footnote was created: it would change how Obsidian reads the text around it."]);
+    });
+
+    it("the named key on a selection is refused with the general notice before its name modal opens", async () => {
+        const note = ["---", "", "alpha beta"];
+        const doc = fakeEditor([...note], { wholeDoc: true, edits: true, cursor: { line: 2, ch: 6 }, selection: { anchor: { line: 2, ch: 6 }, head: { line: 2, ch: 10 } } });
+        await insertNamedFootnote(fakePlugin(settings, doc));
+        expect(doc.lines).toEqual(note);
+        expect(messages()).toEqual(["No footnote was created: it would change how Obsidian reads the text around it."]);
+    });
+
+    it("control: a selection that takes part of a line's formatting still gets the selection's formatting notice", async () => {
+        const note = ["> The sky is blue today."];
+        const doc = fakeEditor([...note], { wholeDoc: true, edits: true, cursor: { line: 0, ch: 9 }, selection: { anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 9 } } });
         await insertAutonumFootnote(fakePlugin(settings, doc));
         expect(doc.lines).toEqual(note);
         expect(messages()).toEqual(["No footnote was created: the selection takes part of the line's formatting. Select the whole line, or only its text."]);

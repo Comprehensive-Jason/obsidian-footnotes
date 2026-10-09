@@ -17,7 +17,7 @@ import { simulateChanges } from "../editor/insertion-liveness";
 import { readCell } from "../parsing/cell-reading";
 import { cellImageStarts, imageStartsOn } from "../parsing/landing";
 import { NoteReading, readNote } from "../parsing/note-reading";
-import { GateReason, judgeEdit } from "../editor/result-gate";
+import { GateReason, GateVerdict, judgeEdit } from "../editor/result-gate";
 import {
     autonumFootnoteId,
     definitionAppendVerdict,
@@ -30,6 +30,7 @@ import {
     nameAlreadyUsed,
     NestedFootnoteNotice,
     NoFootnoteCreated,
+    ReadsDifferentlyNotice,
     showNotice,
 } from "../editor/notice";
 import { cellSelection, isTableDelimiterRow, TableCellEditor, tableRowCellSpans } from "../editor/table-cursor";
@@ -149,6 +150,23 @@ export const PartOfListNotice = NoFootnoteCreated + "select one item's text, or 
 function selectionNotices(selected: string | null): Partial<Record<GateReason, string>> {
     if (selected !== null) return { nested: selected, protected: selected, link: selected, formatting: selected, dead: selected, other: selected };
     return { protected: ProtectedSelectionNotice, formatting: SelectionFormattingNotice };
+}
+
+/**
+ * Shows the notice for a selection conversion the result gate refused, as
+ * refusedCreation does, and returns true when it was refused. One reason
+ * is told differently: frontmatter the conversion would make out of
+ * nothing, which the gate gives as a line's formatting from its check 3 (a
+ * note opening with "---" and a section heading that starts with "---").
+ * The selection takes none of a line's formatting there, so the
+ * selection's formatting notice would give advice that does not help, and
+ * the general notice is shown instead (Jason's wording ruling, 2026-10-09;
+ * pin bug-frontmatter-from-nothing-notice). A notice that names what the
+ * selection takes (selectedNotice) still comes first.
+ */
+function refusedSelection(verdict: GateVerdict, notices: Partial<Record<GateReason, string>>): boolean {
+    const madeFrontmatter = !verdict.pass && verdict.reason === "formatting" && verdict.check === 3;
+    return refusedCreation(verdict, madeFrontmatter && notices.formatting === SelectionFormattingNotice ? { ...notices, formatting: ReadsDifferentlyNotice } : notices);
 }
 
 /**
@@ -442,7 +460,7 @@ export function selectionPressHandled(
         // next free number, and a selection it refuses is refused before
         // any modal opens; it is asked again under the typed name.
         const probe = autonumFootnoteId(plugin, doc, ctx);
-        if (probe !== null && refusedCreation(conversion(plugin, ctx, selection, probe).verdict, notices)) return true;
+        if (probe !== null && refusedSelection(conversion(plugin, ctx, selection, probe).verdict, notices)) return true;
         new NameSelectionModal(plugin, doc, { kind: "main", selection: { ...selection, notices } }).open();
         return true;
     }
@@ -946,7 +964,7 @@ function convertMainSelectionToInline(
     const text = `^[${sanitizeInlineFootnoteContent(selection.text)}]`;
     const simulated = simulateChanges(ctx.lines, [{ from: selection.from, to: selection.to, text }]);
     const verdict = judgeEdit(ctx.lines, simulated, { created: [{ kind: "inline", text, at: [selection.from] }] }, ctx.reading());
-    if (refusedCreation(verdict, notices)) return;
+    if (refusedSelection(verdict, notices)) return;
     const after = { line: selection.from.line, ch: selection.from.ch + text.length };
     moveCursorAndSetJumpPoint(doc, selection.from, after, plugin, [
         { from: selection.from, to: selection.to, text },
@@ -977,7 +995,7 @@ function convertMainSelection(
 ): void {
     if (footnoteId === null) return;
     const { body, plan, verdict } = conversion(plugin, ctx, selection, footnoteId);
-    if (refusedCreation(verdict, selection.notices ?? selectionNotices(null))) return;
+    if (refusedSelection(verdict, selection.notices ?? selectionNotices(null))) return;
 
     landDefinitionBackedInsertion({
         plugin,
@@ -1055,7 +1073,7 @@ function convertCellSelection(
     if (footnoteId === null) return;
     const footnoteReference = referenceText(footnoteId);
     const notices = selection.notices ?? selectionNotices(null);
-    if (refusedCreation(definitionAppendVerdict(plugin, doc, footnoteId, selection.text.split("\n").length, selection.text), notices)) return;
+    if (refusedSelection(definitionAppendVerdict(plugin, doc, footnoteId, selection.text.split("\n").length, selection.text), notices)) return;
     if (
         !replaceInTableCell(cell, footnoteReference, selection.from, selection.to, footnoteReference.length, docContext(doc).reading().linkLabels, {
             body: selection.text,
