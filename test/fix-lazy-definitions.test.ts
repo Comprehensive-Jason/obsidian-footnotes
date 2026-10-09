@@ -1,4 +1,5 @@
 import { readNote } from "../src/parsing/note-reading";
+import { judgeEdit } from "../src/editor/result-gate";
 import fc from "fast-check";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -94,16 +95,37 @@ describe("fixLazyDefinitions inserts the blank line a hidden definition needs", 
                 // it needs would make the definition swallow protected text
                 // below it (the swallow guard, 2026-09-15), or would not make
                 // it a definition at all in Obsidian's reading (the runtime
-                // swap, 2026-10-03): for every label still lazy, inserting
-                // its blank line must change the set of protected lines or
-                // leave the label undefined.
+                // swap, 2026-10-03), or the result gate refuses it: for every
+                // label still lazy, inserting its blank line must change the
+                // set of protected lines, leave the label undefined, or be
+                // refused by the gate.
                 const fixedLines = fixed.split(/\r?\n/);
                 const leftover = lazyDefinitionLabelLines(fixedLines);
                 for (const at of leftover) {
                     const markers = (/^((?: {0,3}>[ \t]?)*)/.exec(fixedLines[at])?.[1] ?? "").trimEnd();
                     const trialLines = [...fixedLines.slice(0, at), markers, ...fixedLines.slice(at)];
                     const trial = trialLines.join("\n");
-                    if (!readNote(trialLines).labelLines[at + 1]) continue;
+                    const reading = readNote(trialLines);
+                    if (!reading.labelLines[at + 1]) continue;
+                    // The gate refuses a blank line that would bring a
+                    // reference to life inside another footnote, a footnote
+                    // inside a footnote (Jason's ruling 1, 2026-10-09; seed
+                    // 1218550354 found "> [^42]: ..." under a quote line,
+                    // with a "[^42]" on footnote 1's continuation line). The
+                    // label then stays lazy, and the lazy-label alert names
+                    // it (Jason's ruling 5 of the cycle 8 rulings,
+                    // 2026-10-09). The labels the blank line makes
+                    // definitions are worked out as fix-lazy works them out.
+                    const defined = leftover
+                        .map((line) => (line >= at ? line + 1 : line))
+                        .flatMap((line) => {
+                            const label = reading.labelLines[line] ? reading.labelOn(line) : null;
+                            return label === null ? [] : [label.name];
+                        });
+                    if (!judgeEdit(fixedLines, trialLines, { defined }).pass) {
+                        expect(lazyDefinitionLabelNames(fixedLines)).toContain(reading.labelOn(at + 1)?.name);
+                        continue;
+                    }
                     expect(protectedTexts(trial)).not.toBe(protectedTexts(fixed));
                 }
                 // every input line survives, in order; the extra lines are insertable
@@ -121,6 +143,15 @@ describe("fixLazyDefinitions inserts the blank line a hidden definition needs", 
             }),
             { numRuns: 200 },
         );
+    });
+
+    // The property's counterexample at seed 1218550354, kept as a plain
+    // case (characterization: fix-lazy already did this; the property was
+    // what did not allow for it).
+    it("leaves a label lazy when its blank line would nest a footnote, and the alert names it", () => {
+        const doc = "> quoted[^42]\n> [^42]: a quoted definition\n\n[^1]: aside ^[nested inline]\n    continued sees [^42]";
+        expect(fixLazyDefinitions(doc)).toBe(doc);
+        expect(lazyDefinitionLabelNames(doc.split("\n"))).toEqual(["42"]);
     });
 
     it("is in the rule registry, first, with runnable examples", () => {
