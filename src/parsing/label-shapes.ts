@@ -175,7 +175,7 @@ export function definitionLabelWithName(line: string, masked: string) {
  * (result-gate.ts).
  */
 export function labelShapedLines(lines: string[], range?: { from: number; to: number }, reading: NoteReading = readNote(lines)): { line: number; name: string; underlined: boolean }[] {
-    const out: { line: number; name: string; underlined: boolean }[] = [];
+    const found: { line: number; name: string; owner: Definition | null }[] = [];
     const first = Math.max(0, range?.from ?? 0);
     const last = Math.min(lines.length, range?.to ?? lines.length);
     // where each line starts, to place a label among the comments
@@ -190,34 +190,73 @@ export function labelShapedLines(lines: string[], range?: { from: number; to: nu
         if (!reading.referencesOn(i).some((reference) => reference.start === labelStart)) continue;
         const at = offset + labelStart;
         if (reading.comments.some((comment) => comment.from <= at && at < comment.to)) continue;
-        const owner = reading.definitionAt(i);
-        if (owner !== null && !besideWithBlankAbove(lines, i, owner)) continue;
-        // a "===" or "---" under the label makes it a heading's text (or,
-        // inside a longer paragraph, plain text a blank line above would
-        // turn INTO a heading), so a blank line above cannot fix it (Kimi
-        // hunt cycle 3, probed in Reading view 2026-09-16: fix-lazy piled
-        // twenty blank lines above such a label)
-        const underlined = underlinedAt(reading, lines, i);
-        out.push({ line: i, name: hit.name, underlined });
+        found.push({ line: i, name: hit.name, owner: reading.definitionAt(i) });
     }
-    return out;
+    const beside = besideWithBlankAbove(lines, reading, found.filter((label) => label.owner !== null));
+    return found
+        .filter((label) => label.owner === null || beside.has(label.line))
+        .map((label) => ({
+            line: label.line,
+            name: label.name,
+            // a "===" or "---" under the label makes it a heading's text
+            // (or, inside a longer paragraph, plain text a blank line above
+            // would turn INTO a heading), so a blank line above cannot fix
+            // it (Kimi hunt cycle 3, probed in Reading view 2026-09-16:
+            // fix-lazy piled twenty blank lines above such a label)
+            underlined: underlinedAt(reading, lines, label.line),
+        }));
 }
 
 /**
- * Whether the label on line `i`, read as more text of the definition
- * `owner`, becomes a definition of its own once a blank line goes in above
- * it, and not one nested in `owner`. The question is answered by reading
- * the note with that blank line in place, the very note fix-lazy would
- * write (a bare ">" line in a quote). A label indented four spaces under
- * the long footnote would join that footnote's text after the blank line,
- * as a footnote nested in it, so it does not count.
+ * Of the labels in `labels`, each read as more text of the definition
+ * that owns it, the lines of those that become a definition of their own
+ * once a blank line goes in above them, and not one nested in their owner.
+ * The question is answered by reading the note with those blank lines in
+ * place, the very note fix-lazy would write (a bare ">" line in a quote).
+ * A label indented four spaces under the long footnote would join that
+ * footnote's text after the blank line, as a footnote nested in it, so it
+ * does not count.
+ *
+ * Every label gets its blank line in the same trial note, so the note is
+ * usually read once however many labels there are. Reading it once per
+ * label made a lint read it about n x n times with n footnotes packed
+ * under a long one (28 s at 200 footnotes; hunt 2026-10-09, cycle 8,
+ * cluster V14, pin bug-lint-cost-square-under-long-footnote).
+ *
+ * A blank line above one label can change what a later label sits in: it
+ * can make a list or a code fence out of lazy text past the long
+ * footnote's look-ahead (rule E4). So the shared trial answers for a label
+ * only when it reads the line above the label's blank line in the same
+ * blocks as the note does, and those are nothing but footnotes, quotes,
+ * and a paragraph. Past a blank line, those hold the label the same way
+ * wherever they started. A list item is left out, since how far in a line
+ * must be to stay in one depends on its marker, which the reading's
+ * blocks do not record. Any other label is read with only its own blank
+ * line, as before.
  */
-function besideWithBlankAbove(lines: readonly string[], i: number, owner: Definition): boolean {
-    const markers = (QuoteMarkers.exec(lines[i])?.[1] ?? "").trimEnd();
-    const trial = readNote([...lines.slice(0, i), markers, ...lines.slice(i)]);
-    // in the trial the label is on line i + 1
-    const made = trial.labelOn(i + 1);
-    return made !== null && made.container.footnotes <= owner.container.footnotes;
+function besideWithBlankAbove(lines: readonly string[], reading: NoteReading, labels: readonly { line: number; owner: Definition | null }[]): Set<number> {
+    const beside = new Set<number>();
+    if (labels.length === 0) return beside;
+    const blankFor = (i: number) => (QuoteMarkers.exec(lines[i])?.[1] ?? "").trimEnd();
+    const shared: string[] = [];
+    let next = 0;
+    for (const label of labels) {
+        shared.push(...lines.slice(next, label.line), blankFor(label.line));
+        next = label.line;
+    }
+    shared.push(...lines.slice(next));
+    const sharedReading = readNote(shared);
+    labels.forEach((label, k) => {
+        // in the shared trial the label is below its own blank line and the
+        // k blank lines that went in above the labels before it
+        const at = label.line + k + 1;
+        const blocksAbove = (reading.lineBlocks[label.line - 1] ?? "").replace(/\^/g, "");
+        const made = blocksAbove === (sharedReading.lineBlocks[at - 2] ?? "").replace(/\^/g, "") && /^(?:(?:footnoteDefinition|blockquote) )*paragraph$/.test(blocksAbove)
+            ? sharedReading.labelOn(at)
+            : readNote([...lines.slice(0, label.line), blankFor(label.line), ...lines.slice(label.line)]).labelOn(label.line + 1);
+        if (made !== null && label.owner !== null && made.container.footnotes <= label.owner.container.footnotes) beside.add(label.line);
+    });
+    return beside;
 }
 
 /**

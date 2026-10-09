@@ -51,16 +51,18 @@ function lintReadings(text: string): number {
 }
 
 describe("the lint's cost under a long first footnote", () => {
-    it.fails("grows in step with the footnotes packed under the long one, not with their square", () => {
+    it("grows in step with the footnotes packed under the long one, not with their square", () => {
         const at10 = lintReadings(longFirstPacked(10));
         const at40 = lintReadings(longFirstPacked(40));
         // four times the footnotes may cost about four times the readings;
-        // eight times is the square showing (now 86 against about 940)
+        // eight times is the square showing (86 against about 940 before
+        // the fix, 25 against 85 after it)
         expect(at40).toBeLessThanOrEqual(at10 * 6);
     });
 
-    it.fails("stays within a few readings per footnote", () => {
-        // 34d5377 read this note 3 times; now about 1,400
+    it("stays within a few readings per footnote", () => {
+        // 34d5377 read this note 3 times, f99b7a6 about 1,400, and the
+        // fix 105
         expect(lintReadings(longFirstPacked(50))).toBeLessThan(200);
     });
 
