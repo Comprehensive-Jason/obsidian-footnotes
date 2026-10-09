@@ -126,7 +126,11 @@ export function warnProtectedCaretIfInside(
         // "inside" depends on whether an open region crosses that edge. A
         // caret at position 0 of the line that CLOSES a comment, or at the
         // end of a line whose tail opened a region, is inside that region
-        // even though the character next to it is on another line.
+        // even though the character next to it is on another line. A press
+        // that would undo a "%%" comment's mark, between its two "%" or in
+        // front of a block comment's opener, is the result gate's to refuse
+        // (result-gate.ts, check 3; the subtraction pass of 2026-10-08,
+        // pin bug-press-at-comment-opener).
         const openAtStart = reading.regionOpenAt(line);
         const openAtEnd =
             line + 1 < ctx.lines.length
@@ -139,8 +143,7 @@ export function warnProtectedCaretIfInside(
                 cursorPosition.ch,
                 openAtStart,
                 openAtEnd,
-            ) ||
-            caretUndoesCommentMark(ctx, cursorPosition);
+            );
     }
     if (!inside) return false;
     // The address and title of a link reference definition ("[ref]:
@@ -153,57 +156,6 @@ export function warnProtectedCaretIfInside(
     // spec-link-definition-address-notice).
     showNotice(!cell && onLinkDefinition(ctx.reading(), cursorPosition.line) ? InsideLinkNotice : ProtectedCreationNotice, 8000);
     return true;
-}
-
-/**
- * Whether text written at the caret would undo the mark of a "%%" comment.
- * A "%%" comment is Obsidian's own comment: Reading view hides everything
- * from its opening "%%" (the opener) to its closing "%%" (the closer). Its
- * text is not blotted out in the masked twin, since a reference inside one
- * counts (Jason's ruling A1), so the masked-span check above never sees
- * these marks.
- *
- * Two spots undo a mark. One is between the two "%" of an opener or a
- * closer, where "%[^1]%" is no mark at all. The other is in front of the
- * opener of a block comment, one that runs over several lines: a line
- * opens a block comment only when its text starts with "%%"
- * (docs/obsidian-reading-rules.md F1), so "[^1]%%" opens nothing, the
- * hidden lines show, and the old closer opens a new comment that hides the
- * rest of the note. Writing in front of a comment inside a line, or in
- * front of a closer, leaves the comment as it was. So a press at either
- * spot refuses, as one at a code fence's or a "$$" block's opening line
- * does (hunt 2026-10-06, cycle 5, cluster X1, pin
- * bug-press-at-comment-opener).
- */
-function caretUndoesCommentMark(ctx: DocContext, cursorPosition: EditorPosition): boolean {
-    const { line, ch } = cursorPosition;
-    // a line with no "%" has no mark, and most lines stop here
-    if (!(ctx.lines[line] ?? "").includes("%")) return false;
-    const comments = ctx.reading().comments.filter((comment) => comment.startLine <= line && line <= comment.endLine);
-    if (comments.length === 0) return false;
-    // where line `i` starts in the note, counted as the reading counts a
-    // comment's ends: the lines joined by line breaks, with a stray
-    // carriage return at a line's end left out
-    const lineStart = (i: number) => {
-        let offset = 0;
-        for (let k = 0; k < i; k++) offset += ctx.lines[k].replace(/\r$/, "").length + 1;
-        return offset;
-    };
-    return comments.some((comment) => {
-        // the opener's first "%", on the comment's first line; a block
-        // comment's stretch starts at its line's indentation, before it
-        const fromCh = comment.from - lineStart(comment.startLine);
-        const openerCh = ctx.lines[comment.startLine].indexOf("%%", fromCh);
-        if (line === comment.startLine) {
-            if (ch === openerCh + 1) return true;
-            if (comment.block && comment.endLine > comment.startLine && fromCh <= ch && ch <= openerCh) return true;
-        }
-        // the closer, when the comment has one: its last two characters
-        if (line !== comment.endLine) return false;
-        const toCh = comment.to - lineStart(line);
-        const closed = ctx.lines[line].slice(toCh - 2, toCh) === "%%" && (line > comment.startLine || toCh - 2 >= openerCh + 2);
-        return closed && ch === toCh - 1;
-    });
 }
 
 /**
