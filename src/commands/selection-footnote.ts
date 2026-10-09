@@ -155,13 +155,17 @@ function selectionNotices(selected: string | null): Partial<Record<GateReason, s
 /**
  * Shows the notice for a selection conversion the result gate refused, as
  * refusedCreation does, and returns true when it was refused. One reason
- * is told differently: frontmatter the conversion would make out of
- * nothing, which the gate gives as a line's formatting from its check 3 (a
- * note opening with "---" and a section heading that starts with "---").
- * The selection takes none of a line's formatting there, so the
- * selection's formatting notice would give advice that does not help, and
- * the general notice is shown instead (Jason's wording ruling, 2026-10-09;
- * pin bug-frontmatter-from-nothing-notice). A notice that names what the
+ * is told differently: protected text the conversion would make out of
+ * nothing, which the gate gives as a line's formatting from its check 3.
+ * That is frontmatter (a note opening with "---" and a section heading
+ * that starts with "---"), and since the gate's cluster V6 fix also code,
+ * math, or a comment that the edit brings into being where there was none
+ * (hunt 2026-10-09 cycle 8, pin
+ * bug-press-above-two-paragraph-definition-notice). The selection takes
+ * none of a line's formatting there, so the selection's formatting notice
+ * would give advice that does not help, and the general notice is shown
+ * instead (Jason's wording ruling, 2026-10-09; pin
+ * bug-frontmatter-from-nothing-notice). A notice that names what the
  * selection takes (selectedNotice) still comes first.
  */
 function refusedSelection(verdict: GateVerdict, notices: Partial<Record<GateReason, string>>): boolean {
