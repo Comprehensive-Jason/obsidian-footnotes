@@ -61,7 +61,9 @@ export interface NoteRange {
  *   `references` and, when `definition` is given, a new definition whose
  *   label is on line `definition.line`, written as `definition.lines`
  *   lines. A press that only adds the definition for a reference already
- *   in the note gives no references.
+ *   in the note gives no references. `replaced`, when given, is the
+ *   stretch of the note before that the first reference stands in place
+ *   of: the selection the action turned into the footnote.
  * - "placeholder": the empty reference `text` ("[^]", or "[^2.]" with a
  *   prefix) at each of `at`, waiting for a name to be typed into it.
  * - "inline": the inline footnote `text` ("^[...]") at each of `at`;
@@ -69,7 +71,7 @@ export interface NoteRange {
  *   key's clipboard) rather than from the note (a selection).
  */
 export type CreatedFootnote =
-    | { kind: "footnote"; name: string; references: readonly NotePosition[]; definition?: { line: number; lines: number } }
+    | { kind: "footnote"; name: string; references: readonly NotePosition[]; definition?: { line: number; lines: number }; replaced?: NoteRange }
     | { kind: "placeholder"; text: string; at: readonly NotePosition[] }
     | { kind: "inline"; text: string; at: readonly NotePosition[]; fromOutside?: boolean };
 
@@ -775,30 +777,6 @@ function listStartOf(side: Side, line: number, depth: number, memo: Map<string, 
 }
 
 /**
- * Whether the line `merged`, which an edit made of the lines `first` to
- * `last` (a selection across lines, replaced by its reference), still
- * holds text of `last`: it holds more than the start of `first`, and it
- * ends as `last` does. Each is compared by its text without footnotes
- * (lineKey). A selection that takes the whole of `last` leaves the start
- * of `first` alone.
- *
- * A merged line that holds nothing but footnotes holds no text of `last`:
- * a selection of whole blocks leaves its reference alone on the line.
- * Asked of it, lineKey gave back "[^1]" itself, the line having no text
- * without its footnotes, and "[^1]" ends in "]" as a last line ending in a
- * wikilink or an embed does, so a whole list of wikilinks was refused
- * (hunt 2026-10-08 cycle 7, cluster Y1, pin
- * bug-whole-blocks-ending-in-wikilink-refused).
- */
-function holdsTextOfLast(first: string, last: string, merged: string): boolean {
-    if (onlyFootnotes(merged)) return false;
-    const [start, end, line] = [lineKey(first), lineKey(last), lineKey(merged)];
-    let fromStart = 0;
-    while (fromStart < line.length && line[fromStart] === start[fromStart]) fromStart++;
-    return fromStart < line.length && end !== "" && line.endsWith(end[end.length - 1]);
-}
-
-/**
  * Whether a line of a lazy label's paragraph reads, once fix-lazy has made
  * the label a definition (`is`), as it did before (`was`): it carried on
  * the paragraph, and its own block, the innermost, is the same kind, start
@@ -1423,6 +1401,34 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
         if (footnote.kind === "footnote") for (const at of footnote.references) createdLines.add(at.line);
         else for (const at of footnote.at) for (let line = at.line; line <= at.line + footnote.text.split("\n").length - 1; line++) createdLines.add(line);
     }
+    // A selection the action turned into a footnote, when it spans lines:
+    // the lines it ran over before the edit, and the line its reference
+    // stands on after it, which is all that is left of them. The line-up
+    // pairs them with each other and with no other line. Paired by their
+    // text without footnotes, they lined up by chance: "- First point"
+    // over "- Second point", with " point" and "- Second" selected, leaves
+    // "- First[^1] point", the first bullet's own text, so it was taken
+    // for the first bullet with a reference added, and the second bullet
+    // for a line deleted whole (run q25-bullet, 2026-10-09, pin
+    // bug-selection-into-next-bullet-ending-alike-converts).
+    const selections: { replaced: NoteRange; line: number }[] = [];
+    const selectedBefore = new Set<number>();
+    const selectedAfter = new Set<number>();
+    for (const footnote of created) {
+        if (footnote.kind !== "footnote" || footnote.replaced === undefined || footnote.references.length === 0) continue;
+        const { from, to } = footnote.replaced;
+        if (from.line === to.line) continue;
+        selections.push({ replaced: footnote.replaced, line: footnote.references[0].line });
+        for (let line = from.line; line <= to.line; line++) selectedBefore.add(line);
+        selectedAfter.add(footnote.references[0].line);
+    }
+    // each body line as the line-up keys it; a line a selection ran over,
+    // or the line it left, carries a mark of its side's own, so it lines
+    // up with no line of the other side
+    const oldKey = (i: number) => lineKey(oldText(i)) + (selectedBefore.has(i) ? "\u0000selected before" : "");
+    const newKey = (j: number) => lineKey(newText(j)) + (selectedAfter.has(j) ? "\u0000selected after" : "");
+    // two body lines with the same text, neither of them a selection's
+    const sameText = (i: number, j: number) => !selectedBefore.has(i) && !selectedAfter.has(j) && oldText(i) === newText(j);
     // a line paired with one before whose words changed, footnotes aside,
     // with no footnote the action created on it
     const reworded = (i: number, j: number) => !createdLines.has(j) && wordsOn(oldSide, i) !== wordsOn(newSide, j);
@@ -1519,23 +1525,20 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
     // line-up.
     function lineUp(oldBody: readonly number[], newBody: readonly number[]): GateVerdict | null {
         let head = 0;
-        while (head < oldBody.length && head < newBody.length && oldText(oldBody[head]) === newText(newBody[head])) {
+        while (head < oldBody.length && head < newBody.length && sameText(oldBody[head], newBody[head])) {
             if (!paired(oldBody[head], newBody[head])) return formatting(newBody[head]);
             head++;
         }
         let oldTail = oldBody.length;
         let newTail = newBody.length;
-        while (oldTail > head && newTail > head && oldText(oldBody[oldTail - 1]) === newText(newBody[newTail - 1])) {
+        while (oldTail > head && newTail > head && sameText(oldBody[oldTail - 1], newBody[newTail - 1])) {
             oldTail--;
             newTail--;
             if (!paired(oldBody[oldTail], newBody[newTail])) return formatting(newBody[newTail]);
         }
         const oldMiddle = oldBody.slice(head, oldTail);
         const newMiddle = newBody.slice(head, newTail);
-        const runs = unmatchedRuns(
-            oldMiddle.map((i) => lineKey(oldText(i))),
-            newMiddle.map((j) => lineKey(newText(j))),
-        );
+        const runs = unmatchedRuns(oldMiddle.map(oldKey), newMiddle.map(newKey));
         let i = 0;
         let j = 0;
         for (const run of [...runs, { aStart: oldMiddle.length, aEnd: oldMiddle.length, bStart: newMiddle.length, bEnd: newMiddle.length }]) {
@@ -1563,27 +1566,31 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
                 const isBlocks = newSide.reading.lineBlocks[is[k]] ?? "";
                 if (usersText ? containersOf(wasBlocks) !== containersOf(isBlocks) : !sameKind(wasBlocks, isBlocks) || !sameCells(was[k], is[k])) return formatting(is[k]);
             }
-            // Lines the edit runs into one: what is left of the last of
-            // them now ends that one line, and must read there as it did.
-            // It keeps its own kind of block (prose stays prose, a table
-            // row a row, a heading a heading) and its containers (a quote
-            // line stays in its quote, a list item's line in its list), and
-            // the last line may not have started a block of its own other
-            // than a paragraph: its marker ("- ", "> ", "3. ", a callout's
-            // title) went with the selection, so the rest of that block
-            // would join the first line's. A selection from prose into a
-            // table's last row left the rest of the row on the prose's
-            // line, read as prose, and only the first line was compared
-            // (hunt 2026-10-08, cycle 6, pin
+            // Lines a selection runs into one: what is left of its last
+            // line now ends the line the selection began on, and must read
+            // there as it did. It keeps its own kind of block (prose stays
+            // prose, a table row a row, a heading a heading) and its
+            // containers (a quote line stays in its quote, a list item's
+            // line in its list), and the last line may not have started a
+            // block of its own other than a paragraph: its marker ("- ",
+            // "> ", "3. ", a callout's title) went with the selection, so
+            // the rest of that block would join the first line's. A
+            // selection from prose into a table's last row left the rest of
+            // the row on the prose's line, read as prose, and only the
+            // first line was compared (hunt 2026-10-08, cycle 6, pin
             // bug-selection-into-table-last-row-converts). A selection
             // ending inside the next block's marker, or taking the marker
             // and part of its text, left that text without its marker
             // (Jason's ruling Q25, 2026-10-08; cluster Z6). A selection of
-            // whole blocks leaves nothing of the last line, so it is not
-            // compared here.
-            const last = was[was.length - 1];
-            if (!usersText && was.length > 1 && is.length === 1 && holdsTextOfLast(oldText(was[0]), oldText(last), newText(is[0]))) {
-                const lastBlocks = oldSide.reading.lineBlocks[last] ?? "";
+            // whole blocks leaves nothing of its last line, so it is not
+            // compared here. What is left is the text after the
+            // selection's end, read off the note. It was guessed from the
+            // lines' text before, and the guess missed it when the leftover
+            // happened to end the first line too (pin
+            // bug-selection-into-next-bullet-ending-alike-converts).
+            const selection = is.length === 1 ? selections.find((one) => one.line === is[0] && was.includes(one.replaced.to.line)) : undefined;
+            if (selection !== undefined && (oldSide.lines[selection.replaced.to.line] ?? "").slice(selection.replaced.to.ch).trim() !== "") {
+                const lastBlocks = oldSide.reading.lineBlocks[selection.replaced.to.line] ?? "";
                 const joined = newSide.reading.lineBlocks[is[0]] ?? "";
                 const unmarked = (blocks: string) => containersOf(blocks).replace(/\^/g, "");
                 const startsBlock = lastBlocks.split(" ").some((kind) => kind.startsWith("^") && kind !== "^paragraph");

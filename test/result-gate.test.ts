@@ -176,6 +176,23 @@ describe("check 5: block shape", () => {
         expect(reasonOf(before, after, { created: [{ kind: "footnote", name: "1", references: [{ line: 3, ch: 0 }], definition: { line: 5, lines: 3 } }] })).toBe("formatting");
     });
 
+    // A selection the action declares (replaced) is lined up by where it
+    // ran, not by its lines' text (pin
+    // bug-selection-into-next-bullet-ending-alike-converts).
+    it("refuses a selection into the next bullet whose leftover reads like the first bullet's own text", () => {
+        const before = ["- First point", "- Second point"];
+        const after = ["- First[^1] point", "", "[^1]: point", "    - Second"];
+        const selected: NoteRange = { from: { line: 0, ch: 7 }, to: { line: 1, ch: 8 } };
+        expect(reasonOf(before, after, { created: [{ kind: "footnote", name: "1", references: [{ line: 0, ch: 7 }], definition: { line: 2, lines: 2 }, replaced: selected }] })).toBe("formatting");
+    });
+
+    it("passes a declared selection of a paragraph's end and the whole list under it", () => {
+        const before = ["Intro point", "", "- First point", "- Second point", "", "after"];
+        const after = ["Intro[^1]", "", "after", "", "[^1]: point", "    ", "    - First point", "    - Second point"];
+        const selected: NoteRange = { from: { line: 0, ch: 5 }, to: { line: 3, ch: 14 } };
+        expect(reasonOf(before, after, { created: [{ kind: "footnote", name: "1", references: [{ line: 0, ch: 5 }], definition: { line: 4, lines: 4 }, replaced: selected }] })).toBe("pass");
+    });
+
     it("passes a press inside a quote", () => {
         expect(reasonOf(["> quoted text"], ["> quoted text[^1]", "", "[^1]: "], press("1", 0, 13, 2))).toBe("pass");
     });

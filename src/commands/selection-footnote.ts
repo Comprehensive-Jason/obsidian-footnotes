@@ -1113,10 +1113,25 @@ function conversion(plugin: FootnotePlugin, ctx: DocContext, selection: Converte
     // The gate's verdict, as createAutonumFootnote asks for it, for a body
     // that was filled in ahead of time and may span lines: the new
     // definition has to take in every one of those continuation lines.
+    // The gate is told the stretch the reference replaces, so it reads
+    // what is left of the selection's last line off the note, and never
+    // guesses it from the lines' text (pin
+    // bug-selection-into-next-bullet-ending-alike-converts).
     const verdict = judgeEdit(
         ctx.lines,
         plan.final,
-        { created: [{ kind: "footnote", name: footnoteId, references: [plan.edits[0].start], definition: { line: plan.labelLine, lines: body.split("\n").length } }], insertedText: plan.heading },
+        {
+            created: [
+                {
+                    kind: "footnote",
+                    name: footnoteId,
+                    references: [plan.edits[0].start],
+                    definition: { line: plan.labelLine, lines: body.split("\n").length },
+                    replaced: { from: selection.from, to: selection.to },
+                },
+            ],
+            insertedText: plan.heading,
+        },
         ctx.reading(),
     );
     return { body, plan, verdict };
