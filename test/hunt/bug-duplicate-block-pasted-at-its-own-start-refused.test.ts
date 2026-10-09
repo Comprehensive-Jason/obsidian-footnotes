@@ -131,14 +131,14 @@ describe("duplicating a block by copying it and pasting it at its own start", ()
     const twice = ["Intro.", "", "Water[^1].", "", "Water[^1].", "", "End.", "", "[^1]: x"];
 
     // Now: refused, "Nothing was pasted: it would change how Obsidian reads the text around it."
-    it.fails("a paragraph", () => {
+    it("a paragraph", () => {
         const clip = copy(note, { line: 2, ch: 0 }, { line: 4, ch: 0 });
         const out = paste(note, { line: 2, ch: 0 }, clip);
         expect(out, state({ clip, out })).toEqual(twice);
     });
 
     // Now: refused the same way.
-    it.fails("a section: heading and paragraph", () => {
+    it("a section: heading and paragraph", () => {
         const n = ["## Log", "", "Rain fell[^1].", "", "Sun shone.", "", "[^1]: x"];
         const clip = copy(n, { line: 0, ch: 0 }, { line: 4, ch: 0 });
         const out = paste(n, { line: 0, ch: 0 }, clip);
@@ -146,7 +146,7 @@ describe("duplicating a block by copying it and pasting it at its own start", ()
     });
 
     // Now: refused the same way.
-    it.fails("a callout", () => {
+    it("a callout", () => {
         const n = ["> [!quote] Source", "> Rain fell[^1].", "", "End.", "", "[^1]: x"];
         const clip = copy(n, { line: 0, ch: 0 }, { line: 3, ch: 0 });
         const out = paste(n, { line: 0, ch: 0 }, clip);
@@ -159,15 +159,18 @@ describe("duplicating a block by copying it and pasting it at its own start", ()
         expect(out, state({ clip, out })).toEqual(twice);
     });
 
-    it("control: the gate passes the same edit declared as the second copy, and refuses it declared as the first", () => {
+    // Until the fix (2026-10-09, c8fix-A) this test said the gate refuses
+    // the edit declared as the first copy, check 1: that refusal was the
+    // bug itself. Either copy may be the one the paste wrote, so both pass.
+    it("control: the gate passes the same edit declared as the second copy, and declared as the first", () => {
         expect(judgeEdit(note, twice, { insertedText: [{ from: { line: 4, ch: 0 }, to: { line: 6, ch: 0 } }] }).pass).toBe(true);
-        expect(judgeEdit(note, twice, { insertedText: [{ from: { line: 2, ch: 0 }, to: { line: 4, ch: 0 } }] })).toMatchObject({ pass: false, check: 1 });
+        expect(judgeEdit(note, twice, { insertedText: [{ from: { line: 2, ch: 0 }, to: { line: 4, ch: 0 } }] }).pass).toBe(true);
     });
 });
 
 describe("cutting the first of two identical blocks", () => {
     // Now: refused, "Nothing was cut: it would change how Obsidian reads the text around it."
-    it.fails("two identical paragraphs: cut the first with its blank line", () => {
+    it("two identical paragraphs: cut the first with its blank line", () => {
         const n = ["Water[^1].", "", "Water[^1].", "", "End[^1].", "", "[^1]: x"];
         const c = cut(n, { line: 0, ch: 0 }, { line: 2, ch: 0 });
         expect(c.lines, state(c)).toEqual(["Water[^1].", "", "End[^1].", "", "[^1]: x"]);

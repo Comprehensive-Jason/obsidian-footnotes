@@ -413,8 +413,19 @@ function editWindows(oldSide: Side, newSide: Side, renamed: ReadonlyMap<string, 
         const lines = holding(side, names);
         return lines.size === 0 ? side.lines : side.lines.map((line, i) => (lines.has(i) ? line + mark : line));
     };
-    const a = marked(oldSide, new Set(renamed.keys()), RenamedMarks[0]);
-    const b = marked(newSide, new Set(renamed.values()), RenamedMarks[1]);
+    // A line the user's own text takes up whole, taken out or written in
+    // (a cut, a paste), is marked too: it is new or gone, so it lines up
+    // with no line of the other note. Unmarked, a copy of a paragraph
+    // pasted at that paragraph's own start lined up with the paragraph,
+    // and the paragraph itself was taken for the new one; its footnotes
+    // then looked added, and the paste was refused (hunt 2026-10-09 cycle
+    // 8, cluster V9, pin bug-duplicate-block-pasted-at-its-own-start-refused).
+    const ownMarked = (side: Side, lines: readonly string[], mark: string) => {
+        const whole = wholeOwnLines(side);
+        return whole.size === 0 ? lines : lines.map((line, i) => (whole.has(i) ? line + mark : line));
+    };
+    const a = ownMarked(oldSide, marked(oldSide, new Set(renamed.keys()), RenamedMarks[0]), "\u0000removed");
+    const b = ownMarked(newSide, marked(newSide, new Set(renamed.values()), RenamedMarks[1]), "\u0000inserted");
     const labelsAlike = oldSide.reading.linkLabels.size === newSide.reading.linkLabels.size && [...oldSide.reading.linkLabels].every((label) => newSide.reading.linkLabels.has(label));
     if (!labelsAlike) {
         oldSide.windows = [{ from: 0, to: a.length }];
