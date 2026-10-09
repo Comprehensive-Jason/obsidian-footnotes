@@ -135,6 +135,16 @@ export const SelectionFormattingNotice =
 // ruling Q31, 2026-10-08; hunt 2026-10-08 cycle 7, cluster Y12).
 export const PartOfListNotice = NoFootnoteCreated + "select one item's text, or the whole list.";
 
+// A selection of some but not all of a quote's lines, each whole, is
+// refused the same way. One quote line selected whole converts its text
+// (ruling Q27), and a whole quote converts as whole blocks (ruling Q25).
+// Two of three lines fell between them: the first two were refused with
+// advice the user had already followed, and the last two went into the
+// footnote with their "> " markers, leaving "[^1]" as lazy text of the
+// quote (Jason's ruling Q33, 2026-10-09; hunt 2026-10-09 cycle 8, cluster
+// V5). A callout's body lines count as a quote's lines.
+export const PartOfQuoteNotice = NoFootnoteCreated + "select one line's text, or the whole quote.";
+
 /**
  * The notices a selection conversion the result gate refused is told
  * with, where they are not a press's (refusedCreation in
@@ -427,6 +437,11 @@ export function selectionPressHandled(
         showNotice(PartOfListNotice, 8000);
         return true;
     }
+    // Some of a quote's lines, each whole, are refused too (ruling Q33).
+    if (selected === null && someWholeQuoteLines(ctx.reading(), ctx.lines, trimmed.from, trimmed.to)) {
+        showNotice(PartOfQuoteNotice, 8000);
+        return true;
+    }
     // A selection that ends with the line's block id converts the text in
     // front of the id, and the id stays at the line's end. A block id is
     // the " ^i1" that Obsidian writes at the end of a line when the user
@@ -641,6 +656,33 @@ function someWholeListItems(reading: NoteReading, lines: readonly string[], from
     const below = listsOn(to.line + 1);
     const goesOnBelow = below.length >= depth && !below[depth - 1].startsWith("^");
     return goesOnAbove || goesOnBelow;
+}
+
+/**
+ * Whether the selection from `from` to `to` spans lines and takes some
+ * but not all of one quote's lines, each whole: it starts at or before a
+ * quote line's marker, ends at the end of a line, stays inside the quote,
+ * and the quote goes on above it or below it (ruling Q33). A callout is a
+ * quote whose first line is its title, so its body lines alone count too.
+ *
+ * The quote is the innermost one the first line sits in: line `line` sits
+ * in it when its blocks (NoteReading.lineBlocks) hold at least as many
+ * quotes. Two quotes never touch without a blank line between them, since
+ * a quote line under a quote carries it on, so the line above or below
+ * sitting in a quote that deep means the quote goes on.
+ */
+function someWholeQuoteLines(reading: NoteReading, lines: readonly string[], from: EditorPosition, to: EditorPosition): boolean {
+    if (from.line === to.line) return false;
+    // how many quotes line `line` sits in
+    const depthOf = (line: number) => (reading.lineBlocks[line] ?? "").split(" ").filter((block) => block === "blockquote").length;
+    const depth = depthOf(from.line);
+    if (depth === 0) return false;
+    if ((lines[from.line] ?? "").slice(0, from.ch).trim() !== "" || from.ch >= reading.blockSyntaxEnd(from.line)) return false;
+    if ((lines[to.line] ?? "").slice(to.ch).trim() !== "") return false;
+    for (let line = from.line + 1; line <= to.line; line++) {
+        if (depthOf(line) < depth) return false;
+    }
+    return (from.line > 0 && depthOf(from.line - 1) >= depth) || depthOf(to.line + 1) >= depth;
 }
 
 /**

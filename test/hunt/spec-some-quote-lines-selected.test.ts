@@ -13,7 +13,15 @@
 // select one line's text, or the whole quote."; (b) convert like Q27, the
 // reference keeping "> ": "> [^1]" / "> Three." with "[^1]: One." / "
 // Two." (live: one quote "[1] Three.", footnote "One. Two."); (c) leave it.
-// This file asserts (a) or (b).
+// This file asserted (a) or (b).
+//
+// Answered (Jason's ruling Q33, 2026-10-09), option (a) with the first
+// draft notice: a selection of some but not all of a quote's lines, each
+// whole (two of three; a callout's body lines too), is refused, the note
+// unchanged, with "No footnote was created: select one line's text, or the
+// whole quote." The tests below were it.fails until then and now assert
+// the refusal and its notice; what the selection did before is described
+// above.
 //
 // Hunt 2026-10-09, cycle 8, lens presses and selections. Source: rulings
 // Q25, Q27 (quote lines), and Q31.
@@ -41,13 +49,14 @@
 // - every body line of a callout (its title not selected) converts the same
 //   way: "> [!note] Title" / "[^1]" with the body as a quote in the footnote.
 //
-// The assertions are fix-shape-neutral: either the press is refused with
-// advice the user has not already followed, or it converts the way Q27
-// does, the "> " staying on the reference's line and out of the footnote.
+// The assertions were fix-shape-neutral until the ruling: either the press
+// is refused with advice the user has not already followed, or it converts
+// the way Q27 does, the "> " staying on the reference's line and out of
+// the footnote.
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { SelectionFormattingNotice } from "../../src/commands/selection-footnote";
+import { insertAutonumFootnote, insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
+import { PartOfQuoteNotice } from "../../src/commands/selection-footnote";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
@@ -62,15 +71,11 @@ async function select(lines: string[], anchor: Pos, head: Pos) {
     return doc;
 }
 
-/** Refused with advice the user did not already follow, or converted keeping the quote markers on the reference's line and out of the footnote. */
-function asQ27OrFollowableRefusal(before: string[], after: string[], refLine: number, prefix: string) {
-    if (after.join("\n") === before.join("\n")) {
-        expect(messages()).not.toContain(SelectionFormattingNotice);
-        return;
-    }
-    expect(after[refLine].startsWith(prefix)).toBe(true);
-    const definition = after.findIndex((line) => /^\[\^\d+\]: /.test(line));
-    expect(after[definition]).not.toMatch(/^\[\^\d+\]: >/);
+/** The selection from `anchor` to `head` refused, the note unchanged, with the quote's notice and no other. */
+async function refusedAsPartOfQuote(lines: string[], anchor: Pos, head: Pos) {
+    const doc = await select(lines, anchor, head);
+    expect(doc.lines).toEqual(lines);
+    expect(messages()).toEqual([PartOfQuoteNotice]);
 }
 
 const QUOTE = ["Intro.", "", "> One.", "> Two.", "> Three.", "", "After."];
@@ -78,20 +83,27 @@ const QUOTE = ["Intro.", "", "> One.", "> Two.", "> Three.", "", "After."];
 beforeEach(resetNotices);
 
 describe("some but not all of a quote's lines, each whole", () => {
-    it.fails("the first two of three: refused with advice the user can follow, or converted as Q27 does", async () => {
-        const doc = await select(QUOTE, { line: 2, ch: 0 }, { line: 3, ch: 6 });
-        asQ27OrFollowableRefusal(QUOTE, doc.lines, 2, "> ");
+    it("the first two of three: refused with the quote's notice", async () => {
+        await refusedAsPartOfQuote(QUOTE, { line: 2, ch: 0 }, { line: 3, ch: 6 });
     });
 
-    it.fails("the last two of three: the reference keeps its quote marker and the footnote holds no quote marker", async () => {
-        const doc = await select(QUOTE, { line: 3, ch: 0 }, { line: 4, ch: 8 });
-        asQ27OrFollowableRefusal(QUOTE, doc.lines, 3, "> ");
+    it("the last two of three: refused with the quote's notice", async () => {
+        await refusedAsPartOfQuote(QUOTE, { line: 3, ch: 0 }, { line: 4, ch: 8 });
     });
 
-    it.fails("every body line of a callout, its title not selected: the same", async () => {
-        const lines = ["> [!note] Field notes", "> The tide rose at six.", "> Oysters closed.", "", "After."];
-        const doc = await select(lines, { line: 1, ch: 0 }, { line: 2, ch: 17 });
-        asQ27OrFollowableRefusal(lines, doc.lines, 1, "> ");
+    it("every body line of a callout, its title not selected: refused the same", async () => {
+        await refusedAsPartOfQuote(["> [!note] Field notes", "> The tide rose at six.", "> Oysters closed.", "", "After."], { line: 1, ch: 0 }, { line: 2, ch: 17 });
+    });
+
+    it("two of a callout's three body lines: refused the same", async () => {
+        await refusedAsPartOfQuote(["> [!note] Field notes", "> The tide rose at six.", "> Oysters closed.", "> Gulls left.", "", "After."], { line: 2, ch: 0 }, { line: 3, ch: 13 });
+    });
+
+    it("the named key is refused before its modal opens", async () => {
+        const doc = fakeEditor(QUOTE, { cursor: { line: 3, ch: 6 }, selection: { anchor: { line: 2, ch: 0 }, head: { line: 3, ch: 6 } }, edits: true, wholeDoc: true, words: true });
+        await insertNamedFootnote(fakePlugin(settings, doc));
+        expect(doc.lines).toEqual(QUOTE);
+        expect(messages()).toEqual([PartOfQuoteNotice]);
     });
 
     it("control: one quote line selected whole converts as Q27 rules", async () => {
@@ -102,6 +114,11 @@ describe("some but not all of a quote's lines, each whole", () => {
 
     it("control: the whole quote converts as whole blocks (Q25)", async () => {
         const doc = await select(QUOTE, { line: 2, ch: 0 }, { line: 4, ch: 8 });
+        expect(doc.lines.slice(0, 5)).toEqual(["Intro.", "", "[^1]", "", "After."]);
+    });
+
+    it("control: a whole callout, its title with it, converts as whole blocks (Q25)", async () => {
+        const doc = await select(["Intro.", "", "> [!note] Field notes", "> The tide rose at six.", "", "After."], { line: 2, ch: 0 }, { line: 3, ch: 23 });
         expect(doc.lines.slice(0, 5)).toEqual(["Intro.", "", "[^1]", "", "After."]);
     });
 });
