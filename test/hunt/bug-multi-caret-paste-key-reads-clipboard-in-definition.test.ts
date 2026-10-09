@@ -63,7 +63,7 @@ afterEach(() => {
 });
 
 describe("the paste key's multi-caret press with a caret at the end of a definition's text", () => {
-    it.fails("is refused with the nesting notice without reading the clipboard", async () => {
+    it("is refused with the nesting notice without reading the clipboard", async () => {
         clipboard("Smith 2020");
         const doc = fakeEditor(NOTE, { carets: [{ line: 2, ch: 10 }, { line: 4, ch: 10 }], edits: true, wholeDoc: true, words: true });
         await pasteInlineFootnote(fakePlugin(settings, doc));
@@ -72,7 +72,7 @@ describe("the paste key's multi-caret press with a caret at the end of a definit
         expect(reads).toBe(0);
     });
 
-    it.fails("with an empty clipboard, still says why the press is refused (the nesting notice)", async () => {
+    it("with an empty clipboard, still says why the press is refused (the nesting notice)", async () => {
         clipboard("");
         const doc = fakeEditor(NOTE, { carets: [{ line: 2, ch: 10 }, { line: 4, ch: 10 }], edits: true, wholeDoc: true, words: true });
         await pasteInlineFootnote(fakePlugin(settings, doc));

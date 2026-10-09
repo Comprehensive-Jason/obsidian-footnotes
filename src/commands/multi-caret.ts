@@ -331,6 +331,15 @@ export async function multiCaretPastePressHandled(
     const targets = multiCaretTargets(plugin, doc, ctx, false);
     if (targets === null) return false;
     if (targets === "handled") return true;
+    // A caret inside a footnote's definition refuses here, before the
+    // clipboard is read. The result gate would refuse the nested footnote
+    // as well, but only after the read, and an empty clipboard would answer
+    // first with its own notice. The other keys leave this case to the
+    // gate, and the single-caret paste key keeps the same guard (hunt
+    // 2026-10-09 cycle 8, bug-multi-caret-paste-key-reads-clipboard-in-definition).
+    for (const range of doc.listSelections()) {
+        if (warnDefinitionCaretIfInside(doc, null, range.head, ctx)) return true;
+    }
 
     const text = await readInlineFootnoteFromClipboard(plugin);
     if (text === null) return true;
