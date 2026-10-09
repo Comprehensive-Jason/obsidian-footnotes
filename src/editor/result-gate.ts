@@ -1143,9 +1143,20 @@ export function judgeEdit(
     const nested = surplus(counted(outerAfter), counted(outerBefore));
     if (nested !== null) return refuse("nested", 2, nested);
 
-    // 3. protected text reads the same
-    const hidden = surplus(counted(protectedTexts(oldSide)), counted(protectedTexts(newSide))) ?? surplus(counted(protectedTexts(newSide)), counted(protectedTexts(oldSide)));
+    // 3. protected text reads the same. Protected text that changed or went
+    // is refused as protected text. Protected text the note after has and
+    // the note before did not, all of it new, is the note's formatting
+    // changing, as frontmatter out of nothing is above: a press on the blank
+    // line above a footnote with an indented second paragraph makes the
+    // label lazy text, and the second paragraph turns into indented code
+    // (Jason's rulings B2 and 3; hunt 2026-10-09 cycle 8, cluster V6, pin
+    // bug-press-above-two-paragraph-definition-notice).
+    const protectedBefore = counted(protectedTexts(oldSide));
+    const protectedAfter = counted(protectedTexts(newSide));
+    const hidden = surplus(protectedBefore, protectedAfter);
     if (hidden !== null) return refuse("protected", 3, readable(hidden));
+    const madeProtected = surplus(protectedAfter, protectedBefore);
+    if (madeProtected !== null) return refuse("formatting", 3, readable(madeProtected));
 
     // 4. links are drawn as before
     const linksBefore = counted(linkShapes(oldSide));

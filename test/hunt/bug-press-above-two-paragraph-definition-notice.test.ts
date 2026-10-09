@@ -53,7 +53,7 @@ async function pressAt(lines: string[], line: number) {
 beforeEach(resetNotices);
 
 describe("a press on the blank line above a footnote with a second paragraph", () => {
-    it.fails("is refused with the block-syntax notice, as above any definition (ruling B2)", async () => {
+    it("is refused with the block-syntax notice, as above any definition (ruling B2)", async () => {
         const lines = ["Text with a long note[^1] and more.", "", "[^1]: First paragraph.", "", "    Second paragraph.", "", "After."];
         const doc = await pressAt(lines, 1);
         expect(doc.lines).toEqual(lines);
