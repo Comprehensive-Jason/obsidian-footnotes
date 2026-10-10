@@ -132,7 +132,9 @@ export const SelectionFormattingNotice =
 // and a whole list converts as whole blocks (ruling Q25); two of three
 // items fall between them, and "[^1]" left above or below the rest of a
 // numbered list would make an item read as more of its paragraph (Jason's
-// ruling Q31, 2026-10-08; hunt 2026-10-08 cycle 7, cluster Y12).
+// ruling Q31, 2026-10-08; hunt 2026-10-08 cycle 7, cluster Y12). Part of
+// one item with the whole items after it is part of the list too, and is
+// refused the same way (Jason's ruling, 2026-10-09; run q31-partial).
 export const PartOfListNotice = NoFootnoteCreated + "select one item's text, or the whole list.";
 
 // A selection of some but not all of a quote's lines, each whole, is
@@ -430,10 +432,12 @@ export function selectionPressHandled(
     // sheet 05, 2026-09-09).
     const table = tableVerdict(ctx, trimmed.from, trimmed.to) === "whole";
     const selected = selectedNotice(ctx, trimmed.from, trimmed.to);
-    // Some of a list's items, each whole, are refused (ruling Q31). A
-    // footnote the selection holds or cuts into is named first, since
-    // selecting the whole list would still not convert it.
-    if (selected === null && someWholeListItems(ctx.reading(), ctx.lines, trimmed.from, trimmed.to)) {
+    // Part of a list, items taken but not all of the list, is refused
+    // (ruling Q31, and Jason's ruling of 2026-10-09 for part of one item
+    // with the whole items after it). A footnote the selection holds or
+    // cuts into is named first, since selecting the whole list would still
+    // not convert it.
+    if (selected === null && partOfList(ctx.reading(), ctx.lines, trimmed.from, trimmed.to)) {
         showNotice(PartOfListNotice, 8000);
         return true;
     }
@@ -627,35 +631,61 @@ function wholeListItemLine(reading: NoteReading, lines: readonly string[], from:
 }
 
 /**
- * Whether the selection from `from` to `to` spans lines and takes some
- * but not all of one list's items, each whole: it starts at a list item's
- * marker, ends at the end of a line, stays inside the list, and the list
- * goes on above it or below it (ruling Q31).
+ * Whether the selection from `from` to `to` spans lines, ends at the end
+ * of a line, and takes part of a list: it takes the marker of one of the
+ * list's items but leaves some of the list behind (ruling Q31). What is
+ * left behind can be items above or below the selection, or the start of
+ * the item the selection starts in.
+ *
+ * So two whole items of three are refused (Q31), and so is part of one
+ * item with the whole items after it, "point" in "- a point" through
+ * "- b point" (Jason's ruling of 2026-10-09, run q31-partial, pin
+ * spec-part-of-item-with-whole-items-selected). Every list the selection
+ * takes a marker of is judged, a sub-list's and the list around it alike.
+ * A selection that takes no marker stays inside one item and is that
+ * item's text. A whole list, from its first marker to its end, converts as
+ * whole blocks (ruling Q25), and so does a paragraph with the whole list
+ * under it. A selection ending inside a line is left to the result gate,
+ * which refuses one that takes the next item's marker (ruling Q25).
  *
  * The note reading lists the blocks each line belongs to, outermost first,
  * with a "^" on the ones that start on that line ("^list ^listItem
  * ^paragraph" for a list's first item, "list ^listItem ^paragraph" for a
- * later one, "list" for a blank line between items). The list the first
- * item belongs to is the innermost list on its line; it goes on above when
- * it does not start there, and below when the next line is still in it.
+ * later one, "list" for a blank line between items). A line's lists and
+ * its items pair up by depth, since every item sits in a list. The walk
+ * down the selection keeps, for each depth, whether the list there started
+ * inside the selection and whether the selection took one of its markers.
  */
-function someWholeListItems(reading: NoteReading, lines: readonly string[], from: EditorPosition, to: EditorPosition): boolean {
+function partOfList(reading: NoteReading, lines: readonly string[], from: EditorPosition, to: EditorPosition): boolean {
     if (from.line === to.line) return false;
+    if ((lines[to.line] ?? "").slice(to.ch).trim() !== "") return false;
+    const blocksOn = (line: number) => (reading.lineBlocks[line] ?? "").split(" ");
     // the lists line `line` sits in, outermost first ("list", or
     // "list.ordered" for a numbered one, each with "^" where it starts)
-    const listsOn = (line: number) => (reading.lineBlocks[line] ?? "").split(" ").filter((block) => /^\^?list(?:\.|$)/.test(block));
-    const lists = listsOn(from.line);
-    const depth = lists.length;
-    if (depth === 0 || !(reading.lineBlocks[from.line] ?? "").split(" ").includes("^listItem")) return false;
-    if ((lines[from.line] ?? "").slice(0, from.ch).trim() !== "" || from.ch >= reading.blockSyntaxEnd(from.line)) return false;
-    if ((lines[to.line] ?? "").slice(to.ch).trim() !== "") return false;
-    for (let line = from.line + 1; line <= to.line; line++) {
-        if ((lines[line] ?? "").trim() !== "" && listsOn(line).length < depth) return false;
+    const listsOn = (line: number) => blocksOn(line).filter((block) => /^\^?list(?:\.|$)/.test(block));
+    const startedInside: boolean[] = [];
+    const tookMarker: boolean[] = [];
+    for (let line = from.line; line <= to.line; line++) {
+        const lists = listsOn(line);
+        const items = blocksOn(line).filter((block) => /^\^?listItem$/.test(block));
+        // On its first line the selection takes what starts there only when
+        // it starts in front of where the block syntax ends; the trimming
+        // has already stepped it past any space there.
+        const takes = line > from.line || from.ch < reading.blockSyntaxEnd(line);
+        for (let depth = 0; depth < lists.length; depth++) {
+            if (line === from.line || lists[depth].startsWith("^")) {
+                startedInside[depth] = takes && lists[depth].startsWith("^");
+                tookMarker[depth] = false;
+            }
+            if (!takes || items[depth] !== "^listItem") continue;
+            // an item of a list that goes on above the selection
+            if (!startedInside[depth]) return true;
+            tookMarker[depth] = true;
+        }
     }
-    const goesOnAbove = !lists[depth - 1].startsWith("^");
+    // an item of a list that goes on below the selection
     const below = listsOn(to.line + 1);
-    const goesOnBelow = below.length >= depth && !below[depth - 1].startsWith("^");
-    return goesOnAbove || goesOnBelow;
+    return listsOn(to.line).some((_, depth) => tookMarker[depth] && depth < below.length && !below[depth].startsWith("^"));
 }
 
 /**
