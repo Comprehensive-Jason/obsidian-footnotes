@@ -434,11 +434,14 @@ export function selectionPressHandled(
     const selected = selectedNotice(ctx, trimmed.from, trimmed.to);
     // Part of a list, items taken but not all of the list, is refused
     // (ruling Q31, and Jason's ruling of 2026-10-09 for part of one item
-    // with the whole items after it). A footnote the selection holds or
-    // cuts into is named first, since selecting the whole list would still
-    // not convert it.
+    // with the whole items after it). A run of whole items is the one
+    // exception: it moves into the footnote (movedItems; Jason's ruling,
+    // 2026-10-17). A footnote the selection holds or cuts into is named
+    // first, since selecting the whole list would still not convert it.
     if (selected === null && partOfList(ctx.reading(), ctx.lines, trimmed.from, trimmed.to)) {
-        showNotice(PartOfListNotice, 8000);
+        const items = movedItems(ctx.reading(), ctx.lines, trimmed.from, trimmed.to);
+        if (items === null) showNotice(PartOfListNotice, 8000);
+        else convertIntoDefinition(plugin, doc, ctx, command, items);
         return true;
     }
     // Some of a quote's lines, each whole, are refused too (ruling Q33).
@@ -500,24 +503,34 @@ export function selectionPressHandled(
         convertMainSelectionToInline(plugin, doc, selection, ctx, notices);
         return true;
     }
+    convertIntoDefinition(plugin, doc, ctx, command, { ...selection, notices });
+    return true;
+}
+
+/**
+ * Converts `selection` into a new footnote's definition, for the numbered
+ * key, or through the modal that asks for its name, for the named key.
+ */
+function convertIntoDefinition(plugin: FootnotePlugin, doc: Editor, ctx: DocContext, command: FootnoteCommandKind, selection: ConvertedSelection) {
     if (command === "named") {
         // The modal asks for a name, so the gate is asked first under the
         // next free number, and a selection it refuses is refused before
         // any modal opens; it is asked again under the typed name.
         const probe = autonumFootnoteId(plugin, doc, ctx);
-        if (probe !== null && refusedSelection(conversion(plugin, ctx, selection, probe).verdict, notices)) return true;
-        new NameSelectionModal(plugin, doc, { kind: "main", selection: { ...selection, notices } }).open();
-        return true;
+        if (probe !== null && refusedSelection(conversion(plugin, ctx, selection, probe).verdict, selection.notices ?? selectionNotices(null))) return;
+        new NameSelectionModal(plugin, doc, { kind: "main", selection }).open();
+        return;
     }
-    convertMainSelection(plugin, doc, { ...selection, notices }, ctx, autonumFootnoteId(plugin, doc, ctx));
-    return true;
+    convertMainSelection(plugin, doc, selection, ctx, autonumFootnoteId(plugin, doc, ctx));
 }
 
 /**
  * A selection that is about to become a footnote. `from` up to (but not
  * including) `to` is the range the new reference replaces. `text` is what
  * moves into the footnote. `lead` is the whitespace swallowed in front of
- * the text: it is part of the replaced range, never part of the body.
+ * the text: it is part of the replaced range, never part of the body. For
+ * a run of whole list items, `moved` says where the reference goes
+ * instead, and `from` to `to` is only taken out (movedItems).
  */
 export interface ConvertedSelection {
     from: EditorPosition;
@@ -529,6 +542,8 @@ export interface ConvertedSelection {
     trail?: string;
     /** The notices a refusal of this conversion is told with (selectionNotices). */
     notices?: Partial<Record<GateReason, string>>;
+    /** For a run of whole list items moved into the footnote: `at`, where the reference goes, at the end of the item above the run or of the paragraph introducing the list, and `span`, the note's text from there to `to` when the selection was made, which the named modal checks is still there. */
+    moved?: { at: EditorPosition; span: string };
 }
 
 /** The same thing as ConvertedSelection, but for a table cell's own editor: the positions are offsets into the cell's text. */
@@ -686,6 +701,90 @@ function partOfList(reading: NoteReading, lines: readonly string[], from: Editor
     // an item of a list that goes on below the selection
     const below = listsOn(to.line + 1);
     return listsOn(to.line).some((_, depth) => tookMarker[depth] && depth < below.length && !below[depth].startsWith("^"));
+}
+
+/**
+ * The selection from `from` to `to` as a run of whole list items moving
+ * into a new footnote, or null when it is not one, or nothing above it can
+ * hold the reference (Jason's ruling, 2026-10-17; pin
+ * spec-whole-items-move-into-footnote). partOfList has already found that
+ * it takes part of a list.
+ *
+ * A run starts at an item's marker, with only indentation before it, and
+ * ends at the end of an item, so that the line after it starts the next
+ * item of the same list, or the list has ended. Its items' sub-items and
+ * second paragraphs come with them. The reference goes at the end of the
+ * item above the run: of that item's own text, since its last sub-item's
+ * text would make the footnote the sub-item's. When the run starts the
+ * list, the reference ends the paragraph introducing it, the one right
+ * above the list; a list that opens the note, or sits under a heading,
+ * has none, and its items stay where they are. So does a list in a quote
+ * or a callout, whose items' "> " markers cannot move into a footnote.
+ *
+ * The footnote's text is the items as the note writes them, numbers and
+ * task boxes kept, with a sub-list's indentation taken off. The blank
+ * lines between the run and the next item go with the run; when the run
+ * ends the list, the blank lines between it and the item above go
+ * instead, and the blank line after the list stays.
+ */
+function movedItems(reading: NoteReading, lines: readonly string[], from: EditorPosition, to: EditorPosition): ConvertedSelection | null {
+    const blocksOn = (line: number) => (reading.lineBlocks[line] ?? "").split(" ");
+    // the lists and the items line `line` sits in, outermost first, each
+    // with "^" where it starts (as in partOfList)
+    const listsOn = (line: number) => blocksOn(line).filter((block) => /^\^?list(?:\.|$)/.test(block));
+    const itemsOn = (line: number) => blocksOn(line).filter((block) => /^\^?listItem$/.test(block));
+    const blank = (line: number) => (lines[line] ?? "").trim() === "";
+    // the depth of the list whose item starts where the selection does
+    const depth = itemsOn(from.line).indexOf("^listItem");
+    const indent = (lines[from.line] ?? "").slice(0, from.ch);
+    if (depth === -1 || indent.trim() !== "" || blocksOn(from.line).includes("blockquote")) return null;
+    for (let line = from.line + 1; line <= to.line; line++) {
+        const lists = listsOn(line);
+        if (lists.length <= depth || lists[depth].startsWith("^")) return null;
+    }
+    // the first line after the run that is not a blank line between items
+    let next = to.line + 1;
+    while (next < lines.length && blank(next) && itemsOn(next).length <= depth) next++;
+    const listGoesOn = listsOn(next).length > depth && !listsOn(next)[depth].startsWith("^");
+    const startsList = listsOn(from.line)[depth].startsWith("^");
+    if ((listGoesOn && itemsOn(next)[depth] !== "^listItem") || (startsList && !listGoesOn)) return null;
+    // The line whose end takes the reference: the last line of the item
+    // above's own text, or the paragraph right above the list. It has to
+    // sit in what the run's first line sits in, down to the item above or
+    // down to the list, and be a line of a paragraph.
+    const unmarked = blocksOn(from.line).map((block) => block.replace(/^\^/, ""));
+    let lists = 0;
+    const listAt = unmarked.findIndex((block) => /^list(?:\.|$)/.test(block) && lists++ === depth);
+    const wanted = [...unmarked.slice(0, startsList ? listAt : listAt + 2), "paragraph"].join(" ");
+    let above = from.line - 1;
+    while (above >= 0 && (blank(above) || (!startsList && listsOn(above).length > depth + 1))) above--;
+    if (above < 0 || blocksOn(above).map((block) => block.replace(/^\^/, "")).join(" ") !== wanted) return null;
+    // in front of a block id, which counts only at the line's end
+    // (docs/obsidian-reading-rules.md D4; ruling Q32)
+    const blockId = lines[above].search(TrailingBlockId);
+    const at = { line: above, ch: blockId === -1 ? lines[above].trimEnd().length : blockId };
+    let first = from.line;
+    if (!listGoesOn) while (first - 1 > above && blank(first - 1)) first--;
+    const end = listGoesOn ? next : to.line + 1;
+    // whole lines are taken out, with the line break after them, or the
+    // one before them when they end the note
+    const removeFrom = end < lines.length ? { line: first, ch: 0 } : { line: first - 1, ch: lines[first - 1].length };
+    const removeTo = end < lines.length ? { line: end, ch: 0 } : { line: end - 1, ch: lines[end - 1].length };
+    const text = lines
+        .slice(from.line, to.line + 1)
+        .map((line) => (line.startsWith(indent) ? line.slice(indent.length) : line.trimStart()))
+        .join("\n")
+        .trimEnd();
+    return {
+        from: removeFrom,
+        to: removeTo,
+        text,
+        lead: "",
+        // a refusal of the moved items by the result gate is told as part
+        // of a list, whose advice still holds
+        notices: { protected: ProtectedSelectionNotice, formatting: PartOfListNotice },
+        moved: { at, span: rangeText(lines, at, removeTo) },
+    };
 }
 
 /**
@@ -873,7 +972,7 @@ function selectionTouchesFootnote(
 
 /** The text between `from` and `to`, lines joined with "\n". This is a stand-in for the editor's own getRange that also works against the fake editor the tests use. */
 function rangeText(
-    lines: string[],
+    lines: readonly string[],
     from: EditorPosition,
     to: EditorPosition,
 ): string {
@@ -971,11 +1070,9 @@ export function convertSelectionToNamed(
     const ctx = docContext(doc);
     const problem = namedSelectionProblem(doc, name, ctx);
     if (problem !== null) return problem;
-    if (
-        selection.to.line >= doc.lineCount() ||
-        rangeText(ctx.lines, selection.from, selection.to) !==
-            selection.lead + selection.text + (selection.trail ?? "")
-    ) {
+    // moved list items are checked from where the reference goes
+    const captured = selection.moved === undefined ? selection.lead + selection.text + (selection.trail ?? "") : selection.moved.span;
+    if (selection.to.line >= doc.lineCount() || rangeText(ctx.lines, selection.moved?.at ?? selection.from, selection.to) !== captured) {
         showNotice(SelectionChangedNotice, 8000);
         return null;
     }
@@ -1099,7 +1196,7 @@ function convertMainSelection(
         plugin,
         doc,
         changes: plan.changes,
-        origin: selection.from,
+        origin: selection.moved?.at ?? selection.from,
         footnoteId,
         definitionCursor: plan.cursor,
         afterReference: plan.edits[0].end,
@@ -1127,6 +1224,19 @@ function conversion(plugin: FootnotePlugin, ctx: DocContext, selection: Converte
     // continuation lines indented four spaces under the label
     // (2026-08-19).
     const body = indentDefinitionBody(selection.text);
+    // Moved list items leave their lines, and the reference goes at the end
+    // of the line above them (movedItems). When that is where the lines
+    // taken out begin, the two make one edit, as they do for any other
+    // selection, whose reference goes where the selection was.
+    const at = selection.moved?.at ?? selection.from;
+    const reference = referenceText(footnoteId);
+    const edits =
+        at.line === selection.from.line
+            ? [{ from: at, to: selection.to, text: reference + ctx.lines[at.line].slice(at.ch, selection.from.ch) }]
+            : [
+                  { from: at, to: at, text: reference },
+                  { from: selection.from, to: selection.to, text: "" },
+              ];
     // The definition is planned against the note with the selection
     // already replaced (see planDefinitionAppend), so a section heading
     // the selection swallows is simply gone, and nothing the append does
@@ -1135,7 +1245,7 @@ function conversion(plugin: FootnotePlugin, ctx: DocContext, selection: Converte
     // own for that).
     const plan = planDefinitionAppend({
         lines: ctx.lines,
-        edits: [{ from: selection.from, to: selection.to, text: referenceText(footnoteId) }],
+        edits,
         footnoteId,
         plugin,
         body,
@@ -1147,6 +1257,15 @@ function conversion(plugin: FootnotePlugin, ctx: DocContext, selection: Converte
     // what is left of the selection's last line off the note, and never
     // guesses it from the lines' text (pin
     // bug-selection-into-next-bullet-ending-alike-converts).
+    //
+    // Moved list items are told as the user's own text instead, taken out
+    // where they were and written into the footnote after its label, as a
+    // cut and its paste are. Taken out, the first items of a list leave the
+    // next one to start it, as the editor's own cut does; told only as
+    // taken out, code in an item read as code made out of nothing in the
+    // footnote.
+    const movedText = selection.moved !== undefined;
+    const written = { from: { line: plan.labelLine, ch: plan.final[plan.labelLine].length - body.split("\n")[0].length }, to: plan.cursor };
     const verdict = judgeEdit(
         ctx.lines,
         plan.final,
@@ -1157,10 +1276,11 @@ function conversion(plugin: FootnotePlugin, ctx: DocContext, selection: Converte
                     name: footnoteId,
                     references: [plan.edits[0].start],
                     definition: { line: plan.labelLine, lines: body.split("\n").length },
-                    replaced: { from: selection.from, to: selection.to },
+                    replaced: movedText ? undefined : { from: selection.from, to: selection.to },
                 },
             ],
-            insertedText: plan.heading,
+            removedText: movedText ? [{ from: selection.from, to: selection.to }] : undefined,
+            insertedText: movedText ? [...plan.heading, written] : plan.heading,
         },
         ctx.reading(),
     );

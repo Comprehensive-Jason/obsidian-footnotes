@@ -46,6 +46,19 @@ import { PartOfListNotice } from "../../src/commands/selection-footnote";
 // below were it.fails until then; the last two bullets, a numbered list,
 // and a list with blank lines between its items were added with the fix.
 //
+// Ruled again (Jason, 2026-10-17), replacing the refusal for whole items:
+// a run of whole items moves into a new footnote, close to option (a).
+// The reference ends the item just above the run, or, when the run starts
+// the list, the paragraph introducing it; with no paragraph above, the
+// selection is still refused with the list notice. The footnote holds the
+// items as a list, numbers kept as typed. The tests below were rewritten
+// from the refusal to that (run list-run); the shapes the new ruling
+// brings, and its refusals, are pinned in
+// spec-whole-items-move-into-footnote. Option (a)'s worry stands where it
+// applies: a numbered list right under its paragraph is still refused,
+// since its items left would start at 3 and could not break into the
+// paragraph (rule B5).
+//
 // Why it is a question and not a bug: the refusal itself is the result
 // gate doing its job. The "result gate" is the one check every edit passes
 // before it is written: the note after must read the same as the note
@@ -80,42 +93,54 @@ async function pressOver(anchor: { line: number; ch: number }, head: { line: num
 
 beforeEach(resetNotices);
 
-describe("Q31: two whole bullets of a three-bullet list selected", () => {
+describe("Q31, ruled again 2026-10-17: two whole bullets of a three-bullet list selected", () => {
     it("control: the whole list converts as whole blocks", async () => {
         const doc = await pressOver({ line: 2, ch: 0 }, { line: 5, ch: 0 });
         expect(messages()).toEqual([]);
         expect(doc.lines[2]).toBe("[^1]");
     });
 
-    // Before the ruling: refused with "No footnote was created: the
+    // Before ruling Q31: refused with "No footnote was created: the
     // selection takes part of the line's formatting. Select the whole line,
-    // or only its text."
+    // or only its text." From Q31 to the ruling of 2026-10-17: refused with
+    // PartOfListNotice, the note unchanged.
     it.each([
         ["with the line break (a triple-click dragged down)", { line: 4, ch: 0 }],
         ["without the last line break", { line: 3, ch: 14 }],
-    ])("ruling (c), %s: refused with the notice that says to select one item's text or the whole list", async (_what, head) => {
+    ])("the first two bullets, %s: they move into the footnote, its reference ending the paragraph above the list", async (_what, head) => {
         const doc = await pressOver({ line: 2, ch: 0 }, head);
-        expect(doc.lines).toEqual(list);
-        expect(messages()).toEqual([PartOfListNotice]);
+        expect(messages()).toEqual([]);
+        expect(doc.lines.slice(0, 5)).toEqual(["Intro.[^1]", "", "- Third point", "", "After."]);
+        expect(doc.lines.slice(-2)).toEqual(["[^1]: - First point", "    - Second point"]);
     });
 
-    it("the last two bullets: refused the same way", async () => {
+    it("the last two bullets: they move into the footnote, its reference ending the first bullet", async () => {
         const doc = await pressOver({ line: 3, ch: 0 }, { line: 5, ch: 0 });
-        expect(doc.lines).toEqual(list);
-        expect(messages()).toEqual([PartOfListNotice]);
+        expect(messages()).toEqual([]);
+        expect(doc.lines.slice(0, 5)).toEqual(["Intro.", "", "- First point[^1]", "", "After."]);
+        expect(doc.lines.slice(-2)).toEqual(["[^1]: - Second point", "    - Third point"]);
     });
 
-    it("two items of a numbered list, and two of a list with blank lines between its items: refused the same way", async () => {
+    it("two items of a numbered list, and two of a list with blank lines between its items: they move the same way", async () => {
         const numbered = ["Intro.", "", "1. First", "2. Second", "3. Third", "", "After."];
         const first = fakeEditor([...numbered], { cursor: { line: 4, ch: 0 }, selection: { anchor: { line: 2, ch: 0 }, head: { line: 4, ch: 0 } }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin({ ...DEFAULT_SETTINGS, enablePopupEditor: false }, first));
-        expect(first.lines).toEqual(numbered);
-        expect(messages()).toEqual([PartOfListNotice]);
-        resetNotices();
+        expect(messages()).toEqual([]);
+        expect(first.lines.slice(0, 5)).toEqual(["Intro.[^1]", "", "3. Third", "", "After."]);
+        expect(first.lines.slice(-2)).toEqual(["[^1]: 1. First", "    2. Second"]);
         const loose = ["Intro.", "", "- First", "", "- Second", "", "- Third", "", "After."];
         const second = fakeEditor([...loose], { cursor: { line: 7, ch: 0 }, selection: { anchor: { line: 4, ch: 0 }, head: { line: 7, ch: 0 } }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin({ ...DEFAULT_SETTINGS, enablePopupEditor: false }, second));
-        expect(second.lines).toEqual(loose);
+        expect(messages()).toEqual([]);
+        expect(second.lines.slice(0, 5)).toEqual(["Intro.", "", "- First[^1]", "", "After."]);
+        expect(second.lines.slice(-3)).toEqual(["[^1]: - Second", "    ", "    - Third"]);
+    });
+
+    it("a list that opens the note has no paragraph above to hold the reference: still refused with the list notice", async () => {
+        const opening = ["- First point", "- Second point", "- Third point"];
+        const doc = fakeEditor([...opening], { cursor: { line: 1, ch: 14 }, selection: { anchor: { line: 0, ch: 0 }, head: { line: 1, ch: 14 } }, edits: true, wholeDoc: true, words: true });
+        await insertAutonumFootnote(fakePlugin({ ...DEFAULT_SETTINGS, enablePopupEditor: false }, doc));
+        expect(doc.lines).toEqual(opening);
         expect(messages()).toEqual([PartOfListNotice]);
     });
 
