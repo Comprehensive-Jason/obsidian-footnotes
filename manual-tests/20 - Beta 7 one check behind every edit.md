@@ -12,16 +12,6 @@ Switch this note to Source mode for this section (the plain-text editor, from th
 
 - [ ] Select from the very start of the quote line above through the word `sky`, so the selection takes the `> ` with it, and press the numbered key: nothing changes, and the notice reads "No footnote was created: the selection takes part of the line's formatting. Select the whole line, or only its text." (Jason's pick, 2026-10-08; spec-selection-from-margin-takes-marker)
 
-List fixture:
-
-- First point
-- Second point
-- Third point
-
-End of the list fixture.
-
-- [ ] Select the first two bullets of the List fixture whole, from the start of `- First point` to the end of `- Second point`, and press the numbered key: nothing changes, and the notice reads "No footnote was created: select one item's text, or the whole list." (Jason's ruling Q31, 2026-10-08)
-
 Quote fixture:
 
 > One.
@@ -79,6 +69,16 @@ See [[#^i1]] for the item.
 - [ ] Brackets: put the caret right after the `5` in the Brackets fixture and press the numbered key: the line reads `as noted [see p. 5[^1]] here.` In Reading view the superscript sits inside the brackets, right after the 5, and footnote 1 is listed at the bottom (Jason's ruling Q2, 2026-10-07; before beta 7 the press was refused with the link notice)
 - [ ] Email: put the caret at the very end of the Email fixture (after the full stop) and press the numbered key: the line reads `Write to me@example.com[^1].` (Jason's ruling Q30, 2026-10-08). In Reading view the address is still a link, the link stops at the end of `com` without taking the full stop, and the superscript and then the full stop follow it
 - [ ] Block id: triple-click `- An item ^i1` in the Block id fixture (the whole line) and press the numbered key: the line becomes `- [^1] ^i1`, and the definition reads `[^1]: An item` (Jason's ruling Q32, 2026-10-09). In Reading view the bullet shows the superscript with the `^i1` hidden, and clicking the `^i1` link in the line under the list jumps to that bullet, not into the footnote (Obsidian 1.14.4 registered the block on the bullet's line, 2026-10-09)
+
+List fixture:
+
+- First point
+- Second point
+- Third point
+
+End of the list fixture.
+
+- [ ] Whole bullets: in Source mode, select the first two bullets of the List fixture whole, from the start of `- First point` to the end of `- Second point`, and press the numbered key: the two bullets leave the list, `List fixture:` now ends in `[^1]`, and the definition reads `[^1]: - First point` with `    - Second point` under it (Jason's ruling, 2026-10-17; corrected that day, since until then the press was refused with "No footnote was created: select one item's text, or the whole list.", ruling Q31). In Reading view the list shows only Third point, and footnote 1 at the bottom shows First point and Second point as a bulleted list. Back in the editor, one Ctrl+Z puts both bullets back and takes the reference and the definition away together
 
 ## Cut, paste, and undo in the live editor
 
