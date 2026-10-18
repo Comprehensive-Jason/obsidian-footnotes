@@ -649,8 +649,9 @@ function wholeListItemLine(reading: NoteReading, lines: readonly string[], from:
  * Whether the selection from `from` to `to` spans lines, ends at the end
  * of a line, and takes part of a list: it takes the marker of one of the
  * list's items but leaves some of the list behind (ruling Q31). What is
- * left behind can be items above or below the selection, or the start of
- * the item the selection starts in.
+ * left behind can be items above or below the selection, the start of the
+ * item the selection starts in, or the text of the item that a sub-list
+ * the selection starts at sits under.
  *
  * So two whole items of three are refused (Q31), and so is part of one
  * item with the whole items after it, "point" in "- a point" through
@@ -660,7 +661,12 @@ function wholeListItemLine(reading: NoteReading, lines: readonly string[], from:
  * A selection that takes no marker stays inside one item and is that
  * item's text. A whole list, from its first marker to its end, converts as
  * whole blocks (ruling Q25), and so does a paragraph with the whole list
- * under it. A selection ending inside a line is left to the result gate,
+ * under it. A whole sub-list does not: it is part of the item it sits
+ * under, and moves like any run of whole items (movedItems). Down the
+ * whole-block path it kept its indent, which nests its items under its
+ * first one in a footnote, and left the reference on a line of its own
+ * (run sublist, 2026-10-17, pin bug-whole-sub-list-keeps-indent). A
+ * selection ending inside a line is left to the result gate,
  * which refuses one that takes the next item's marker (ruling Q25).
  *
  * The note reading lists the blocks each line belongs to, outermost first,
@@ -695,6 +701,9 @@ function partOfList(reading: NoteReading, lines: readonly string[], from: Editor
             if (!takes || items[depth] !== "^listItem") continue;
             // an item of a list that goes on above the selection
             if (!startedInside[depth]) return true;
+            // an item of a sub-list that the selection starts at, under an
+            // item that starts above the selection
+            if (line === from.line && depth > 0 && items[depth - 1] !== "^listItem") return true;
             tookMarker[depth] = true;
         }
     }
@@ -717,9 +726,11 @@ function partOfList(reading: NoteReading, lines: readonly string[], from: Editor
  * item above the run: of that item's own text, since its last sub-item's
  * text would make the footnote the sub-item's. When the run starts the
  * list, the reference ends the paragraph introducing it, the one right
- * above the list; a list that opens the note, or sits under a heading,
- * has none, and its items stay where they are. So does a list in a quote
- * or a callout, whose items' "> " markers cannot move into a footnote.
+ * above the list: for a sub-list, the text of the item it sits under, and
+ * that holds for a whole sub-list too (pin bug-whole-sub-list-keeps-indent).
+ * A list that opens the note, or sits under a heading, has none, and its
+ * items stay where they are. So does a list in a quote or a callout, whose
+ * items' "> " markers cannot move into a footnote.
  *
  * The footnote's text is the items as the note writes them, numbers and
  * task boxes kept, with a sub-list's indentation taken off. The blank
@@ -747,7 +758,10 @@ function movedItems(reading: NoteReading, lines: readonly string[], from: Editor
     while (next < lines.length && blank(next) && itemsOn(next).length <= depth) next++;
     const listGoesOn = listsOn(next).length > depth && !listsOn(next)[depth].startsWith("^");
     const startsList = listsOn(from.line)[depth].startsWith("^");
-    if ((listGoesOn && itemsOn(next)[depth] !== "^listItem") || (startsList && !listGoesOn)) return null;
+    // The run has to end where an item does. A whole list ends with it as
+    // well; partOfList lets only a sub-list's through to here, since a
+    // whole list of its own converts as whole blocks (ruling Q25).
+    if (listGoesOn && itemsOn(next)[depth] !== "^listItem") return null;
     // The line whose end takes the reference: the last line of the item
     // above's own text, or the paragraph right above the list. It has to
     // sit in what the run's first line sits in, down to the item above or
