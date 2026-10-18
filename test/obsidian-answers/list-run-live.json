@@ -1,0 +1,10 @@
+[
+{"id":"lr:middle","text":"Reasons:\n\n- A\n- B[^1]\n- E\n\n[^1]: - C\n    - D","defs":[["1",6,0,7]],"refs":[["1",3,3]],"code":[]},
+{"id":"lr:numbered","text":"Steps:\n\n1. A\n2. B[^1]\n5. E\n\n[^1]: 3. C\n    4. D","defs":[["1",6,0,7]],"refs":[["1",3,4]],"code":[]},
+{"id":"lr:start","text":"Reasons:[^1]\n\n- C\n- D\n\n[^1]: - A\n    - B","defs":[["1",5,0,6]],"refs":[["1",0,8]],"code":[]},
+{"id":"lr:sub-items","text":"Reasons:\n- A[^1]\n- C\n\n[^1]: - B\n      - b1\n      - b2","defs":[["1",4,0,6]],"refs":[["1",1,3]],"code":[]},
+{"id":"lr:loose","text":"Reasons:\n\n- A[^1]\n\n- D\n\n[^1]: - B\n    \n    - C","defs":[["1",6,0,8]],"refs":[["1",2,3]],"code":[]},
+{"id":"lr:code-item","text":"Reasons:\n- A[^1]\n- C\n\n[^1]: - B uses `x`\n      ```\n      code\n      ```","defs":[["1",4,0,7]],"refs":[["1",1,3]],"code":[]},
+{"id":"lr:task-end","text":"Todo:\n- [ ] A[^1]\n\n[^1]: - [x] B\n    - [ ] C","defs":[["1",3,0,4]],"refs":[["1",1,7]],"code":[]},
+{"id":"lr:block-id","text":"Reasons:\n- A[^1] ^a1\n\n[^1]: - B\n    - C\n\nSee [[#^a1]].","defs":[["1",3,0,4]],"refs":[["1",1,3]],"code":[]}
+]

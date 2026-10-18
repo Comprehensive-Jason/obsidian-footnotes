@@ -61,6 +61,10 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 //   it, text right under a quote or a list inside a footnote, a label whose
 //   text starts with "2.", and a label after a quote's empty line with a
 //   quote line under it.
+// - list-run-live: the notes that list items moved into a footnote leave
+//   (Jason's ruling, 2026-10-17), asked of the live app on 2026-10-17: a
+//   run from the middle, the start, and the end of a list, numbered, loose,
+//   with sub-items, with code in an item, and next to a block id.
 //
 // The comparison is the live oracle's own (scripts/oracle/compare.mts), so a
 // note agrees here exactly when `npm run oracle -- check --reader` would find
@@ -69,7 +73,7 @@ import { readerFacts } from "../scripts/oracle/reader-facts";
 // notes, run the live oracle with --answers (TESTING.md) and add the file to
 // AnswerFiles.
 
-const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes", "swap34-probes", "h2-live-probes", "gate-s3-live", "gate-s45-live", "c6-hunt-live"];
+const AnswerFiles = ["fuzz-20261003", "reproducers", "recorded-facts", "pins", "probes", "broad-20261004", "overnight-probes", "swap34-probes", "h2-live-probes", "gate-s3-live", "gate-s45-live", "c6-hunt-live", "list-run-live"];
 
 /**
  * Notes on which the reader and Obsidian still disagree, by id, with the
