@@ -106,7 +106,10 @@ function caretArtifact(
  *
  *   every caret on a reference of the same name with no definition: they
  *   all get their ONE shared definition, then the popup or the jump and
- *   the creation lint, through createMatchingFootnoteDefinition
+ *   the creation lint, through createMatchingFootnoteDefinition, for every
+ *   key, the paste key too, as at a single caret (the paste key refused
+ *   here until 2026-10-22, the one key with a special case; run
+ *   toast-consolidate)
  *
  * Anything mixed keeps the atomic refusal: different kinds, different
  * names, some empty and some filled. So does a name that already works,
@@ -119,7 +122,6 @@ function multiCaretContinuation(
     ctx: DocContext,
     carets: EditorPosition[],
     artifacts: NonNullable<CaretArtifact>[],
-    allowDefinitionContinuation: boolean,
 ): "handled" {
     const refuse = (): "handled" => {
         showNotice(InFootnotesNotice, 8000);
@@ -159,12 +161,6 @@ function multiCaretContinuation(
     if (warnPrefilledReferenceIfInside(plugin, doc, null, first)) {
         return "handled";
     }
-    // The paste key's meaning is "wrap the clipboard", so carets on
-    // references of the same name are refused for that key. At a single
-    // caret on such a reference it makes the definition, as the other keys
-    // do (seen live, run toast-bugs, 2026-10-22); whether it should here
-    // too is a question for Jason.
-    if (!allowDefinitionContinuation) return refuse();
     // A reference sitting inside another footnote's definition (a name
     // typed on the line right under a definition is its lazy continuation)
     // would complete a nested footnote once the shared definition exists,
@@ -217,7 +213,6 @@ function multiCaretTargets(
     plugin: FootnotePlugin,
     doc: Editor,
     ctx: DocContext,
-    allowDefinitionContinuation: boolean,
 ): EditorPosition[] | "handled" | null {
     const ranges = doc.listSelections();
     if (ranges.length < 2) return null;
@@ -237,7 +232,6 @@ function multiCaretTargets(
             ctx,
             ranges.map((range) => range.head),
             artifacts,
-            allowDefinitionContinuation,
         );
     }
     for (const [index, range] of ranges.entries()) {
@@ -298,7 +292,7 @@ export function multiCaretPressHandled(
     // then a second one in the cascade (review B3, 2026-09-09).
     if (doc.listSelections().length < 2) return false;
     const ctx = docContext(doc);
-    const targets = multiCaretTargets(plugin, doc, ctx, true);
+    const targets = multiCaretTargets(plugin, doc, ctx);
     if (targets === null) return false;
     if (targets === "handled") return true;
 
@@ -336,7 +330,7 @@ export async function multiCaretPastePressHandled(
     if (cellActive) return false;
     if (doc.listSelections().length < 2) return false;
     const ctx = docContext(doc);
-    const targets = multiCaretTargets(plugin, doc, ctx, false);
+    const targets = multiCaretTargets(plugin, doc, ctx);
     if (targets === null) return false;
     if (targets === "handled") return true;
     // A caret inside a footnote's definition refuses here, before the

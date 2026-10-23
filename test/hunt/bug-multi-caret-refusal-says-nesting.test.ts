@@ -13,9 +13,10 @@ import { MultiCaretInFootnotesNotice, MultiCaretNestedNotice } from "../helpers/
 // any of these: the carets sit in footnotes of different kinds (a reference
 // and an inline footnote), in references of different names, in inline
 // footnotes some empty and some filled, all in a reference whose footnote
-// already has a definition, or (the paste key) all in references of one
-// name. The press there would mean different things at different carets,
-// or there is nothing to carry on from, so it is refused whole. Seen live
+// already has a definition, or (the paste key, until 2026-10-22) all in
+// references of one name. The press there would mean different things at
+// different carets, or there is nothing to carry on from, so it is refused
+// whole. Seen live
 // on sprout's Obsidian 1.14.4 on 2026-10-22 (run toast-bugs): each case
 // left the note and the carets as they were under the nesting toast.
 //
@@ -78,12 +79,6 @@ describe("every caret inside a footnote, the press refused: the notice says wher
         });
     }
 
-    it("paste key, both in references of one name with no definition", async () => {
-        const doc = await press(pasteInlineFootnote, [inside("[^c]"), inside("[^c]", 1)]);
-        expect(doc.lines).toEqual(NOTE);
-        expect(messages()).toEqual([MultiCaretInFootnotesNotice]);
-    });
-
     it("the notice reads as drafted", () => {
         expect(MultiCaretInFootnotesNotice).toBe("No footnotes were created: the cursors are inside existing footnotes. Move them into the text.");
     });
@@ -96,8 +91,18 @@ describe("controls", () => {
         expect(messages()).toEqual([MultiCaretNestedNotice]);
     });
 
-    it("numbered key, both in references of one name with no definition: the definition is made", async () => {
-        const doc = await press(insertAutonumFootnote, [inside("[^c]"), inside("[^c]", 1)]);
+    // The paste key carries on here like the other keys, and like the paste
+    // key at one caret, instead of refusing (the orchestrator's call on the
+    // toast-bugs decisions, 2026-10-22, run toast-consolidate): it used to
+    // be refused, the one key with a special case.
+    it.each(keys)("%s key, both in references of one name with no definition: the definition is made", async (_key, command) => {
+        const doc = await press(command, [inside("[^c]"), inside("[^c]", 1)]);
+        expect(doc.lines).toContain("[^c]: ");
+        expect(messages()).toEqual([]);
+    });
+
+    it("paste key, one caret in a reference with no definition: the definition is made, as with several", async () => {
+        const doc = await press(pasteInlineFootnote, [inside("[^c]")]);
         expect(doc.lines).toContain("[^c]: ");
         expect(messages()).toEqual([]);
     });
