@@ -15,7 +15,7 @@ import {
     insertNamedFootnote,
     pasteInlineFootnote,
 } from "../src/commands/insert-or-navigate-footnotes";
-import { MultiCaretNestedNotice, NestedFootnoteNotice } from "../src/editor/notice";
+import { MultiCaretInFootnotesNotice, MultiCaretNestedNotice, NestedFootnoteNotice } from "../src/editor/notice";
 import { PrefixOnlyNotice } from "../src/commands/press-guards";
 import { ProtectedCreationNotice } from "../src/editor/insertion-liveness";
 
@@ -417,6 +417,9 @@ describe("a second press with EVERY caret inside the same footnote continues it 
         );
     });
 
+    // These two refusals told the nesting notice until 2026-10-22, when
+    // run toast-bugs gave them a notice of their own: nothing would be
+    // nested here (bug-multi-caret-refusal-says-nesting).
     it("carets inside DIFFERENTLY named references keep the atomic refusal", async () => {
         const before = ["a[^one] b[^two] end"];
         const doc = fakeEditor(before, [
@@ -425,7 +428,7 @@ describe("a second press with EVERY caret inside the same footnote continues it 
         ]);
         await insertNamedFootnote(fakePlugin(doc));
         expect(doc.lines).toEqual(before);
-        expect(noticed(MultiCaretNestedNotice)).toBe(true);
+        expect(noticed(MultiCaretInFootnotesNotice)).toBe(true);
     });
 
     it("carets inside an already-DEFINED reference keep the atomic refusal", async () => {
@@ -436,6 +439,6 @@ describe("a second press with EVERY caret inside the same footnote continues it 
         ]);
         await insertNamedFootnote(fakePlugin(doc));
         expect(doc.lines).toEqual(before);
-        expect(noticed(MultiCaretNestedNotice)).toBe(true);
+        expect(noticed(MultiCaretInFootnotesNotice)).toBe(true);
     });
 });

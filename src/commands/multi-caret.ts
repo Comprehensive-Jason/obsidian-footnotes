@@ -28,7 +28,7 @@ import {
     warnTableEdgeCaretIfOutside,
 } from "./press-guards";
 
-import { MultiCaretNestedNotice, showNotice } from "../editor/notice";
+import { MultiCaretInFootnotesNotice, MultiCaretNestedNotice, showNotice } from "../editor/notice";
 // The multi-caret press: several Alt-clicked carets all get the SAME
 // footnote (Jason's ask 2026-08-22, for one source cited in many places;
 // always on, no toggle, his call). What each key does:
@@ -49,9 +49,13 @@ import { MultiCaretNestedNotice, showNotice } from "../editor/notice";
 // back. Before this, extra carets were quietly ignored, which served
 // nobody.
 
-// The message shown when the carets disagree is MultiCaretNestedNotice
-// (editor/notice.ts). It is the same sentence about nesting that the
-// single-caret guards use, with a plural opening.
+// Two messages refuse such a press (editor/notice.ts). A caret inside a
+// footnote beside carets on plain text gets MultiCaretNestedNotice, the
+// sentence about nesting the single-caret guards use with a plural opening,
+// since the new footnote would go inside that one. Carets that are all
+// inside footnotes but cannot carry on together get
+// MultiCaretInFootnotesNotice, since nothing would be nested there (run
+// toast-bugs, 2026-10-22).
 
 /** What a caret is sitting inside, used by the continuation check. These are the same three tests the guard sweep refuses on. An inline footnote is reported ahead of a reference on purpose, because an inline footnote's body can contain reference-shaped text; the single-caret guards order them the same way. */
 type CaretArtifact =
@@ -116,7 +120,7 @@ function multiCaretContinuation(
     allowDefinitionContinuation: boolean,
 ): "handled" {
     const refuse = (): "handled" => {
-        showNotice(MultiCaretNestedNotice, 8000);
+        showNotice(MultiCaretInFootnotesNotice, 8000);
         return "handled";
     };
     // The one that comes first in the note (Jason's consistency ruling,
@@ -153,9 +157,11 @@ function multiCaretContinuation(
     if (warnPrefilledReferenceIfInside(plugin, doc, null, first)) {
         return "handled";
     }
-    // The paste key does not carry on into a definition at a single caret
-    // either. Its meaning is "wrap the clipboard", so carets on references
-    // of the same name are refused for that key.
+    // The paste key's meaning is "wrap the clipboard", so carets on
+    // references of the same name are refused for that key. At a single
+    // caret on such a reference it makes the definition, as the other keys
+    // do (seen live, run toast-bugs, 2026-10-22); whether it should here
+    // too is a question for Jason.
     if (!allowDefinitionContinuation) return refuse();
     // A reference sitting inside another footnote's definition (a name
     // typed on the line right under a definition is its lazy continuation)

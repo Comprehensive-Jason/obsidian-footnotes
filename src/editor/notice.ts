@@ -33,6 +33,12 @@ export const LintingCanceled = "Linting canceled: ";
 const NestingRule = "footnotes can't be nested inside other footnotes.";
 export const NestedFootnoteNotice = NoFootnoteCreated + NestingRule;
 export const MultiCaretNestedNotice = NoFootnotesCreated + NestingRule;
+/** A press with several carets, every one inside a footnote, that cannot go
+ * on at all of them: the carets sit in different footnotes, in one that
+ * already has its definition, or the key is the paste key. Nothing would be
+ * nested there, so the nesting notice was not true (run toast-bugs,
+ * 2026-10-22; the plainer of two drafts, for Jason's review). */
+export const MultiCaretInFootnotesNotice = NoFootnotesCreated + "the carets are inside existing footnotes. Move them into the text.";
 
 /** A press with the caret in a line's block syntax: a quote or list marker, a
  * task box, a heading's "#" marks, a thematic break, a setext underline
