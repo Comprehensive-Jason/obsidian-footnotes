@@ -47,8 +47,8 @@ import { lintFootnotes } from "../../src/linting/linter";
 /** "A long discursive note:" and "oysters" 180 times: a footnote whose label line runs to 1,470 characters. */
 const Long = `A long discursive note: ${Array.from({ length: 180 }, () => "oysters").join(" ")}.`;
 
-const NestedAlert = "nested inside";
-const LazyAlert = "Add a blank line above it";
+const NestedAlert = "inside the definition of";
+const LazyAlert = "as plain text, not as a footnote definition. Put a blank line above it.";
 
 /** The alerts a lint with fix-lazy turned off leaves on `lines`. */
 function alertsWithoutFixLazy(lines: string[]): string {

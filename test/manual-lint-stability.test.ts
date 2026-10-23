@@ -53,7 +53,7 @@ describe("a definition on line 1 with a divider under it", () => {
     it("the underlined-definition alert explains why nothing moved", () => {
         noticeLintAlerts(fakePlugin({}), lintFootnotes(FIXTURE));
         expect(messages()).toContain(
-            'This note has a footnote definition that Obsidian reads as a heading because a line of "=" or "-" sits right under it ("[^t1]:"). Put a blank line between the definition and that line.',
+            'Obsidian reads "[^t1]:" as a heading, not as a footnote definition. Put a blank line between it and the line of "=" or "-" under it.',
         );
     });
 

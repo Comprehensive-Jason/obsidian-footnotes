@@ -2686,7 +2686,7 @@ async function main() {
         await pollUntil(
             "the lazy-definition alert",
             `[...document.querySelectorAll('.notice')].map(n => n.textContent).join('|')`,
-            (v) => typeof v === "string" && v.includes("reads as plain text") && v.includes("[^1]:"),
+            (v) => typeof v === "string" && v.includes("as plain text, not as a footnote definition") && v.includes("[^1]:"),
         );
         await expectEditorText("Alpha[^1] here.\n[^1]: def\n\nTail.");
     });

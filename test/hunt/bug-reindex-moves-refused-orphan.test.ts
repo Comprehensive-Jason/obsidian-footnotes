@@ -49,6 +49,8 @@ describe("reindex moves an orphan the orphan rule refused", () => {
         const once = lintFootnotes(NOTE, OPTIONS);
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS, lintDeleteOrphanedDefinitions: true }), once);
         // Before the fix, no alert named [^b].
-        expect(messages().some((m) => m.includes('"[^b]"'))).toBe(true);
+        // the held-back alert names the definition by its label since
+        // 2026-10-22 (Jason's shared vocabulary)
+        expect(messages().some((m) => m.includes('"[^b]:"'))).toBe(true);
     });
 });

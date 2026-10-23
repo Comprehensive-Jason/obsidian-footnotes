@@ -46,7 +46,8 @@ function alertsAfterLint(text: string, settings: Partial<FootnotePluginSettings>
     return { linted, alerts: messages() };
 }
 
-const Held = "could not move to the other side of its punctuation";
+// the held-back alert since 2026-10-22 (Jason's shared vocabulary)
+const Held = "The lint left";
 
 beforeEach(resetNotices);
 

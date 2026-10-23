@@ -37,11 +37,9 @@ describe("the orphan alert for a definition on a callout's title line", () => {
     it("an orphaned definition on a callout's title line, deletion on: the alert gives the general reason, not a comment's closer", () => {
         const note = ["a b", "", "> [!note] [^o]: on the title line", "> callout body"];
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS, lintDeleteOrphanedDefinitions: true }), note.join("\n"));
-        const orphan = messages().find((m) => m.includes("nothing references"));
-        expect(orphan).toBeDefined();
-        // Before: the reason spoke of the lines around it and a comment's closer.
-        expect(orphan).toBe(
-            'This note has a footnote definition nothing references ("[^o]"), and the lint left it in place, because deleting it would change how Obsidian reads the lines around it. Add its reference in the text, or delete the definition by hand.',
-        );
+        // Before: the reason spoke of the lines around it and a comment's
+        // closer. Since 2026-10-22 the held-back alert gives the general
+        // reason for everything the lint left (Jason's shared vocabulary).
+        expect(messages()).toContain('The lint left "[^o]:" as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.');
     });
 });

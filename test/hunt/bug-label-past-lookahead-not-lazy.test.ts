@@ -107,7 +107,7 @@ describe("default settings, the same note: what the user is told", () => {
         noticeLintAlerts(fakePlugin({}), out);
         const fixed = names(out).includes("2");
         const said = messages().join(" | ");
-        expect(fixed || said.includes("Add a blank line above it"), said).toBe(true);
+        expect(fixed || said.includes("Put a blank line above it"), said).toBe(true);
         expect(said).not.toContain("Write its definition");
     });
 

@@ -81,9 +81,9 @@ describe("an underlined label at a wide item's content column", () => {
             noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS }), note.join("\n"));
             // Before the fix: the lazy-label alert ("no blank line above") spoke;
             // before the correction of 2026-10-08, the underline's ("reads as a heading").
-            expect(messages()).toContain('This note has a footnote definition that Obsidian reads as plain text ("[^b]:"). Put a blank line above it and another below it.');
-            expect(messages().some((m) => m.includes("reads as a heading"))).toBe(false);
-            expect(messages().some((m) => m.includes("no blank line above"))).toBe(false);
+            expect(messages()).toContain('Obsidian reads "[^b]:" as plain text, not as a footnote definition. Put a blank line above it and another below it.');
+            expect(messages().some((m) => m.includes("as a heading, not as"))).toBe(false);
+            expect(messages().some((m) => m.endsWith("Put a blank line above it."))).toBe(false);
         });
 
         // Changed 2026-10-06 (hunt cycle 5, cluster X35): this test first

@@ -28,7 +28,7 @@ import {
     removeOrphanedFootnoteReferences,
 } from "./rules/remove-orphaned-references";
 
-import { addReferenceOrDeleteDefinition, showNotice } from "../editor/notice";
+import { addReferenceOrDeleteDefinition, andList, showNotice } from "../editor/notice";
 // The lint alerts, shown after a lint has run. Every way of starting a lint
 // ends here, reporting what the rules could not fix, or were not allowed
 // to: empty "[^]" placeholders, orphans while their delete toggles are off,
@@ -137,7 +137,12 @@ function noticeEmptyReferences(markdown: string, prefix: string) {
  * them to go and fix them (his L-series pass, 2026-09-08).
  */
 function referenceList(names: string[]): string {
-    return names.map((name) => (name.startsWith("^[") ? `"${name}"` : quotedReference(name))).join(", ");
+    return names.map(quotedName).join(", ");
+}
+
+/** One name as referenceList spells it. */
+function quotedName(name: string): string {
+    return name.startsWith("^[") ? `"${name}"` : quotedReference(name);
 }
 
 /**
@@ -148,85 +153,83 @@ function labelList(names: string[]): string {
     return names.map(quotedDefinitionLabel).join(", ");
 }
 
-// A "[^x]:" line directly under a line of prose is not a definition to
-// Obsidian; it is more paragraph text (the prose-label rule, 2026-09-09).
-// The definition the user typed is one blank line short of existing.
+// A label line Obsidian does not read as a definition gets one alert, in
+// one shape: what Obsidian reads it as, then the fix that applies (Jason's
+// shared vocabulary, 2026-10-22). Three shapes need it:
 //
-// These need their own alert because the general missing-definition alert
-// would tell the user to "write its definition", which is the wrong advice:
-// they already wrote it. So these names get this alert and are left out of
-// that one. The orphan rule exempts them too, from its alert and from
-// deletion alike. Like every alert, this one is never silent. A label
-// that also has a line of "-" or "=" right under it gets the alert after
-// this one instead (`both`).
+// - A "[^x]:" line directly under a line of prose is plain text to
+//   Obsidian, more of the paragraph (the prose-label rule, 2026-09-09):
+//   the definition the user typed is one blank line short of existing.
+//   The general missing-definition alert would tell the user to "write
+//   its definition", which is the wrong advice, since they already wrote
+//   it. So these names get this alert and are left out of that one; the
+//   orphan rule exempts them too, from its alert and from deletion alike.
+// - A "[^x]:" line with a setext underline ("===", "---", "--") directly
+//   under it is a heading to Obsidian. The blank line that helps is the
+//   one BETWEEN the label and the underline (Kimi hunt cycle 3, probed in
+//   Reading view 2026-09-16).
+// - A label right under a paragraph's text with a line of "-" or "=" under
+//   it is plain text, and a blank line above alone would make it a
+//   heading: it needs one above and one below (underlinedLazyLabelNames;
+//   Jason's ruling Q9, 2026-10-07; pin bug-underlined-label-wide-item).
+//   The other two leave its names to this one (`both`).
+//
+// Like every alert, these are never silent.
+
+/** The alert for labels Obsidian reads as `readsAs` rather than as
+ * definitions, ending with `fix`: the singular advice, then the plural. */
+function noticeNotDefinitions(names: readonly string[], readsAs: "plain text" | "a heading", fix: [one: string, many: string]) {
+    if (names.length === 0) return;
+    const one = names.length === 1;
+    const as = readsAs === "a heading" && !one ? "headings" : readsAs;
+    showNotice(
+        `Obsidian reads ${andList(names.map(quotedDefinitionLabel))} as ${as}, not as ${one ? "a footnote definition" : "footnote definitions"}. ${one ? fix[0] : fix[1]}`,
+        8000,
+    );
+}
+
 function noticeLazyDefinitions(lines: string[], both: ReadonlySet<string>) {
     const names = lazyDefinitionLabelNames(lines).filter((name) => !both.has(name.toLowerCase()));
-    if (names.length === 0) return;
-    showNotice(
-        names.length === 1
-            ? `This note has a footnote definition that Obsidian reads as plain text because there is no blank line above it (${labelList(names)}). Add a blank line above it.`
-            : `This note has ${names.length} footnote definitions that Obsidian reads as plain text because there is no blank line above them (${labelList(names)}). Add a blank line above each.`,
-        8000,
-    );
+    noticeNotDefinitions(names, "plain text", ["Put a blank line above it.", "Put a blank line above each."]);
 }
 
-// A "[^x]:" line with a setext underline ("===", "---", "--") directly
-// under it is a heading to Obsidian, not a definition, and inside a longer
-// paragraph it is plain text that a blank line above would turn into a
-// heading. Either way the blank line that helps is the one BETWEEN the
-// label and the underline, so these labels get their own alert and are
-// left out of the lazy one and its fix (Kimi hunt cycle 3, probed in
-// Reading view 2026-09-16). Never silent, like every alert. Jason
-// approved the wording on 2026-09-20. A label inside a longer paragraph,
-// which reads as plain text, gets the alert below instead (`both`).
 function noticeUnderlinedDefinitions(lines: string[], both: ReadonlySet<string>) {
     const names = underlinedDefinitionLabelNames(lines).filter((name) => !both.has(name.toLowerCase()));
-    if (names.length === 0) return;
-    showNotice(
-        names.length === 1
-            ? `This note has a footnote definition that Obsidian reads as a heading because a line of "=" or "-" sits right under it (${labelList(names)}). Put a blank line between the definition and that line.`
-            : `This note has ${names.length} footnote definitions that Obsidian reads as headings because a line of "=" or "-" sits right under them (${labelList(names)}). Put a blank line between each definition and that line.`,
-        8000,
-    );
+    noticeNotDefinitions(names, "a heading", [
+        'Put a blank line between it and the line of "=" or "-" under it.',
+        'Put a blank line between each and the line of "=" or "-" under it.',
+    ]);
 }
 
-// A label right under a paragraph's text, with a line of "-" or "=" right
-// under it, reads as plain text, and a blank line above alone would make
-// it a heading: it needs one above and one below (underlinedLazyLabelNames;
-// Jason's ruling Q9, 2026-10-07). The lazy-label alert told the user to
-// add the blank line above, and the underline's said it read as a heading,
-// both wrong for it, so it gets this one alert instead (pin
-// bug-underlined-label-wide-item).
 function noticeUnderlinedLazyDefinitions(names: readonly string[]) {
-    if (names.length === 0) return;
+    noticeNotDefinitions(names, "plain text", ["Put a blank line above it and another below it.", "Put a blank line above and below each."]);
+}
+
+// Everything the lint left undone because doing it would change how
+// Obsidian reads the note gets one alert, after every other check has had
+// its say (Jason's shared vocabulary, 2026-10-22). It names what was left,
+// with one general sentence that names no cause, so a new reason for
+// leaving something never makes the text wrong (Jason, 2026-10-05; hunt
+// 2026-10-05, pin spec-callout-title-orphan-alert-wording). Until
+// 2026-10-22 each rule had an alert of its own: an orphaned reference or
+// definition its delete toggle left, definitions the move to the bottom
+// left, the section heading it could not add, a reference left on the
+// wrong side of its punctuation, a footnote left without the prefix or
+// unrenamed, definitions left out of order, and a duplicate the merge
+// could not touch. `left` holds what was left, quoted, in the order the
+// checks found it: footnotes as "[^a]", definitions as "[^a]:", and the
+// heading as "the footnote section heading".
+function noticeHeldBack(left: readonly string[]) {
+    const items = [...new Set(left)];
+    if (items.length === 0) return;
+    const one = items.length === 1;
     showNotice(
-        names.length === 1
-            ? `This note has a footnote definition that Obsidian reads as plain text (${labelList([...names])}). Put a blank line above it and another below it.`
-            : `This note has ${names.length} footnote definitions that Obsidian reads as plain text (${labelList([...names])}). Put a blank line above and below each.`,
+        one
+            ? `The lint left ${items[0]} as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.`
+            : `The lint left ${andList(items)} as they are, because changing them would change how Obsidian reads the text around them. Fix them by hand.`,
         8000,
     );
 }
-
-// Why the lint left an orphan in place with its delete toggle on, in one
-// general sentence that names no cause, so a new reason for leaving one
-// never makes the text wrong (Jason, 2026-10-05; hunt 2026-10-05, pin
-// spec-callout-title-orphan-alert-wording, where it blamed a comment's
-// closer for a definition on a callout's title). `them` is "it" or "them";
-// `doing` is what the lint held back from, deleting unless it says moving
-// (the move alert, Jason's triage decision Q5, 2026-10-05).
-function leftInPlace(them: "it" | "them", doing: "deleting" | "moving" = "deleting"): string {
-    return `the lint left ${them} in place, because ${doing} ${them} would change how Obsidian reads the lines around ${them}.`;
-}
-
-// The same reason for a change the lint left undone where nothing moved:
-// `doing` is what it held back from (merging, renaming).
-function leftAsTheyAre(them: "it" | "them", doing: string): string {
-    return `the lint left ${them} as ${them === "it" ? "it is" : "they are"}, because ${doing} ${them} would change how Obsidian reads the lines around ${them}.`;
-}
-
-// Why the lint left a duplicate's copies alone with merging on (Jason,
-// 2026-10-05; see noticeDuplicateDefinitions).
-const MergeLeftAsTheyAre = leftAsTheyAre("them", "merging");
 
 // The alert half of "Delete orphaned references". While that toggle is off,
 // the lint reports orphaned references instead of deleting them: an orphan
@@ -238,8 +241,8 @@ const MergeLeftAsTheyAre = leftAsTheyAre("them", "merging");
 // remove-orphaned-references.ts). The alert used to assume the toggle had
 // dealt with every orphan and said nothing, so the survivor was neither
 // deleted nor reported, on that save and every later one (Kimi and Claude
-// sweeps 2026-09-13; ADR 2, lint is never silent). Now it says the rule
-// left it, and why. A single-rule command such as Move definitions to
+// sweeps 2026-09-13; ADR 2, lint is never silent). Now it is returned for
+// the held-back alert (noticeHeldBack). A single-rule command such as Move definitions to
 // bottom also ends here, and an orphan a full lint WOULD delete is not
 // reported after one of those: the next lint takes it, as before.
 //
@@ -256,7 +259,7 @@ function noticeOrphanedReferences(
     prefix: string,
     precomputed: { lines: string[] },
     afterLint: boolean,
-) {
+): string[] {
     // a reference whose name is invalid (a "#", a backtick) is the
     // invalid-name alert's to report; naming it here as well would ask
     // the user to write a definition that could never bind (Jason's
@@ -264,7 +267,7 @@ function noticeOrphanedReferences(
     let names = orphanedFootnoteReferenceNames(markdown, prefix, precomputed).filter(
         (name) => footnoteNameProblem(name) === null,
     );
-    if (names.length === 0) return;
+    if (names.length === 0) return [];
     if (afterLint && plugin.settings.lintDeleteOrphanedReferences) {
         // Each orphan is judged on its own by the rule now (Kimi hunt
         // cycle 4, 2026-09-16), so the ones it would still leave are the
@@ -275,14 +278,7 @@ function noticeOrphanedReferences(
             const left = new Set(orphanedFootnoteReferenceNames(after, prefix).map((n) => n.toLowerCase()));
             names = names.filter((name) => left.has(name.toLowerCase()));
         }
-        if (names.length === 0) return;
-        showNotice(
-            names.length === 1
-                ? `This note has a footnote reference with no definition (${referenceList(names)}), and ${leftInPlace("it")} Write its definition or delete the reference by hand.`
-                : `This note has ${names.length} footnote references with no definition (${referenceList(names)}), and ${leftInPlace("them")} Write their definitions or delete the references by hand.`,
-            8000,
-        );
-        return;
+        return names.map(quotedName);
     }
     showNotice(
         names.length === 1
@@ -290,6 +286,7 @@ function noticeOrphanedReferences(
             : `This note has ${names.length} footnote references with no definition (${referenceList(names)}). Write their definitions or delete the references.`,
         8000,
     );
+    return [];
 }
 
 // Orphaned definitions that were kept get an alert as well (ruling: Jason,
@@ -302,15 +299,16 @@ function noticeOrphanedDefinitions(
     markdown: string,
     precomputed: { lines: string[] },
     afterLint: boolean,
-) {
+): string[] {
     let names = orphanedFootnoteDefinitionNames(markdown, precomputed);
-    if (names.length === 0) return;
+    if (names.length === 0) return [];
     if (afterLint && plugin.settings.lintDeleteOrphanedDefinitions) {
         // With the toggle ON, an orphaned definition still in the note is
         // one the rule refused to cut (the cut would change how a nearby
         // line is read, take a callout's title or a comment's closer with
-        // it, or take a definition nested inside it); say so rather than
-        // pass it over (ADR 2; Kimi hunt cycle 2, 2026-09-16).
+        // it, or take a definition nested inside it); it goes to the
+        // held-back alert rather than being passed over (ADR 2; Kimi hunt
+        // cycle 2, 2026-09-16).
         // Each orphan is judged on its own by the rule now (cycle 4), so
         // the ones it would still leave are the refused ones: those are
         // named, and one the next lint deletes is not.
@@ -319,14 +317,7 @@ function noticeOrphanedDefinitions(
             const left = new Set(orphanedFootnoteDefinitionNames(after).map((n) => n.toLowerCase()));
             names = names.filter((name) => left.has(name.toLowerCase()));
         }
-        if (names.length === 0) return;
-        showNotice(
-            names.length === 1
-                ? `This note has a footnote definition nothing references (${referenceList(names)}), and ${leftInPlace("it")} Add its reference in the text, or delete the definition by hand.`
-                : `This note has ${names.length} footnote definitions nothing references (${referenceList(names)}), and ${leftInPlace("them")} Add their references in the text, or delete the definitions by hand.`,
-            8000,
-        );
-        return;
+        return names.map(quotedDefinitionLabel);
     }
     showNotice(
         names.length === 1
@@ -334,6 +325,7 @@ function noticeOrphanedDefinitions(
             : `This note has ${names.length} footnote definitions nothing references (${referenceList(names)}). Add their references in the text, or delete the definitions.`,
         8000,
     );
+    return [];
 }
 
 // The alert half of "Move footnotes to the bottom". The rule gathers every
@@ -342,30 +334,21 @@ function noticeOrphanedDefinitions(
 // would join them), it leaves them all where they are. That used to happen
 // without a word on every lint (hunt 2026-10-05 round 2, cluster L8; ADR 2,
 // the lint is never silent). Now the definitions that held the move back
-// are named, with the general "left in place" reason, so the user can
-// move them by hand and let the next lint gather the rest (Jason's triage
-// decision Q5, 2026-10-05). Only while the rule is on. The gathering is
+// are returned for the held-back alert, so the user can move them by hand
+// and let the next lint gather the rest (Jason's triage decision Q5,
+// 2026-10-05). Only while the rule is on. The gathering is
 // worked out under the section heading the lint uses, which it drops when
 // the heading holds a reference (hunt 2026-10-06, cycle 5, pin
 // bug-move-alert-ignores-heading). A section heading the move could not
-// add is named too, in its own alert, since the heading is the one thing
-// the user cannot move by hand: it comes from the settings (Jason's ruling
-// 2, 2026-10-09; pin bug-held-section-heading-silent).
-function noticeUngatheredDefinitions(plugin: FootnotePlugin, markdown: string) {
-    if (!plugin.settings.lintMoveToBottom) return;
+// add is named too, since the heading is the one thing the user cannot
+// move by hand: it comes from the settings (Jason's ruling 2, 2026-10-09;
+// pin bug-held-section-heading-silent).
+function ungatheredDefinitions(plugin: FootnotePlugin, markdown: string): string[] {
+    if (!plugin.settings.lintMoveToBottom) return [];
     const configured = configuredSectionHeading(plugin);
     const heading = sectionHeadingProblem(configured) === null ? configured : "";
-    if (sectionHeadingHeldBack(markdown, heading)) {
-        showNotice("The lint could not add the footnote section heading, because it would change how Obsidian reads the text around it.", 8000);
-    }
-    const names = definitionsHoldingTheMoveBack(markdown, heading);
-    if (names.length === 0) return;
-    showNotice(
-        names.length === 1
-            ? `This note has a footnote definition the lint could not move to the bottom (${referenceList(names)}), and ${leftInPlace("it", "moving")} Move it by hand, and the next lint gathers the rest.`
-            : `This note has ${names.length} footnote definitions the lint could not move to the bottom (${referenceList(names)}), and ${leftInPlace("them", "moving")} Move them by hand, and the next lint gathers the rest.`,
-        8000,
-    );
+    const left = sectionHeadingHeldBack(markdown, heading) ? ["the footnote section heading"] : [];
+    return [...left, ...definitionsHoldingTheMoveBack(markdown, heading).map(quotedDefinitionLabel)];
 }
 
 // The changes the result gate held back inside the punctuation rule, apply
@@ -374,38 +357,20 @@ function noticeUngatheredDefinitions(plugin: FootnotePlugin, markdown: string) {
 // without the note's prefix, footnotes reindex left unnumbered or unnamed,
 // and definitions it left out of order. Each used to be held back without a word
 // (ADR 0002, the lint is never silent; stage 5 of the result gate
-// design, 2026-10-08). They are named with the general "left in place"
-// or "left as it is" reason, and no advice: doing it by hand would change
-// the note's reading the same way. Only after a lint that held something
-// back (lastLintHeldBack), since a lint the gate passed whole held nothing.
-function noticeHeldChanges(plugin: FootnotePlugin, markdown: string, afterLint: boolean) {
-    if (!afterLint || !lastLintHeldBack(markdown)) return;
+// design, 2026-10-08). They are returned for the held-back alert:
+// references and renamed footnotes as "[^a]", definitions left out of
+// order as "[^a]:". Only after a lint that held something back
+// (lastLintHeldBack), since a lint the gate passed whole held nothing.
+function heldChanges(plugin: FootnotePlugin, markdown: string, afterLint: boolean): string[] {
+    if (!afterLint || !lastLintHeldBack(markdown)) return [];
     const heading = configuredSectionHeading(plugin);
     const held = heldByTheLint(markdown, lintOptionsFromSettings(plugin, sectionHeadingProblem(heading) === null ? heading : "", markdown));
-    const say = (names: string[] | undefined, one: (list: string) => string, many: (count: number, list: string) => string) => {
-        if (!names || names.length === 0) return;
-        showNotice(names.length === 1 ? one(referenceList(names)) : many(names.length, referenceList(names)), 8000);
-    };
-    say(
-        held.get("punctuation"),
-        (list) => `This note has a footnote reference the lint could not move to the other side of its punctuation (${list}), and ${leftInPlace("it", "moving")}`,
-        (count, list) => `This note has ${count} footnote references the lint could not move to the other side of their punctuation (${list}), and ${leftInPlace("them", "moving")}`,
-    );
-    say(
-        held.get("prefix"),
-        (list) => `This note has a footnote the lint could not give the note's prefix (${list}), and ${leftAsTheyAre("it", "renaming")}`,
-        (count, list) => `This note has ${count} footnotes the lint could not give the note's prefix (${list}), and ${leftAsTheyAre("them", "renaming")}`,
-    );
-    say(
-        held.get("rename"),
-        (list) => `This note has a footnote the lint could not rename (${list}), and ${leftAsTheyAre("it", "renaming")}`,
-        (count, list) => `This note has ${count} footnotes the lint could not rename (${list}), and ${leftAsTheyAre("them", "renaming")}`,
-    );
-    say(
-        held.get("order"),
-        (list) => `This note has a footnote definition the lint could not put in order (${list}), and ${leftInPlace("it", "moving")}`,
-        (count, list) => `This note has ${count} footnote definitions the lint could not put in order (${list}), and ${leftInPlace("them", "moving")}`,
-    );
+    return [
+        ...(held.get("punctuation") ?? []).map(quotedName),
+        ...(held.get("prefix") ?? []).map(quotedName),
+        ...(held.get("rename") ?? []).map(quotedName),
+        ...(held.get("order") ?? []).map(quotedDefinitionLabel),
+    ];
 }
 
 // The alert half of "Merge duplicate definitions". While that toggle is
@@ -425,29 +390,24 @@ function noticeDuplicateDefinitions(
     markdown: string,
     precomputed: { lines: string[] },
     afterLint: boolean,
-) {
+): string[] {
     const names = duplicateFootnoteDefinitionNames(markdown, precomputed);
-    if (names.length === 0) return;
+    if (names.length === 0) return [];
     const merging = plugin.settings.lintMergeDuplicateDefinitions;
     if (merging && afterLint) {
         // With the toggle on, a duplicate the merge rule can still not
         // touch is one with a copy the merge never moves: on the line of a
         // "%%" comment's closer, holding a table, or inside a list item or a
-        // quote. It is named rather than passed over (ADR 2; Kimi hunt
+        // quote. It goes to the held-back alert rather than being passed
+        // over (ADR 2; Kimi hunt
         // cycle 4, 2026-09-16), with one general reason, so a new case
         // never makes the text wrong (Jason, 2026-10-05, after the reason
         // named a closer or a table for a copy in a list item; hunt
         // 2026-10-05, pin bug-duplicate-alert-container-reason).
         // A duplicate the merge would still fix is left to the next lint,
         // which merges it.
-        if (mergeDuplicateFootnoteDefinitions(markdown) !== markdown) return;
-        showNotice(
-            names.length === 1
-                ? `This note defines ${referenceList(names)} more than once, and ${MergeLeftAsTheyAre} Obsidian renders only the last definition. Merge them by hand.`
-                : `This note defines ${names.length} footnotes more than once (${referenceList(names)}), and ${MergeLeftAsTheyAre} Obsidian renders only each one's last definition. Merge them by hand.`,
-            8000,
-        );
-        return;
+        if (mergeDuplicateFootnoteDefinitions(markdown) !== markdown) return [];
+        return names.map(quotedDefinitionLabel);
     }
     const advice = merging ? "Merge them." : `Merge them, or turn on "Merge duplicate definitions".`;
     showNotice(
@@ -456,6 +416,7 @@ function noticeDuplicateDefinitions(
             : `This note defines ${names.length} footnotes more than once (${referenceList(names)}). Obsidian renders only each one's last definition. ${advice}`,
         8000,
     );
+    return [];
 }
 
 /**
@@ -535,6 +496,17 @@ function noticeInvalidNames(lines: string[]) {
  * A reference after the label on its line still counts.
  */
 export function nestedFootnoteDefinitionNames(lines: string[]): string[] {
+    return nestedFootnotes(lines).map(({ outer }) => outer);
+}
+
+/**
+ * The same definitions, each with what is nested inside it, so the alert
+ * can name both (Jason, 2026-10-22): `outer` is the definition's name, and
+ * `inner` lists what it holds, quoted the way the alert says it, in the
+ * order the note reads them: a reference as "[^b]", an inline footnote by
+ * its text as "^[text]", and a definition written in its body as "[^b]:".
+ */
+function nestedFootnotes(lines: string[]): { outer: string; inner: string[] }[] {
     const reading = readNote(lines);
     // The lines a lazy label starts. Finding them reads the note again, so
     // it is done only once a definition holds a reference. A lazy label
@@ -542,12 +514,16 @@ export function nestedFootnoteDefinitionNames(lines: string[]): string[] {
     let lazyLabelLines: Set<number> | undefined;
     const startsLazyLabel = (line: number, index: number) =>
         index === 0 && (lazyLabelLines ??= new Set(labelShapedLines(lines, undefined, reading).map((label) => label.line))).has(line);
-    const names: string[] = [];
+    const found: { outer: string; inner: string[] }[] = [];
     // One entry per NAME, ignoring case, the same way the duplicate and
     // orphan alerts do it. A name defined twice with both copies nested
     // used to be reported twice, which made the notice's count too high
-    // (bug hunt, 2026-08-25).
-    const seen = new Set<string>();
+    // (bug hunt, 2026-08-25). The second copy's nested footnotes join the
+    // first's.
+    const byName = new Map<string, { outer: string; inner: string[] }>();
+    // an inline footnote's text as the note has it, over its lines
+    const inlineText = (note: { line: number; open: number; closeLine: number; close: number }) =>
+        `"${lines.slice(note.line, note.closeLine + 1).map((line, k, all) => line.slice(k === 0 ? note.open : 0, k === all.length - 1 ? note.close + 1 : line.length)).join(" ")}"`;
     // Every definition's text, wherever the definition sits: at the top
     // level, in a blockquote or callout (the C22 ruling; Kimi sweep
     // 2026-09-13), or in a list item (Jason's ruling 1, option a,
@@ -555,40 +531,57 @@ export function nestedFootnoteDefinitionNames(lines: string[]): string[] {
     // label line after the label and the lines of its body.
     const spans = reading.definitions;
     for (const span of spans) {
+        const inner: { line: number; at: number; text: string }[] = [];
         // a definition written inside this one's body is nesting too, and
         // the alert ADR 0001 promises for it used to stay silent (hunt
         // 2026-10-05, pin bug-nested-definition-deleted-with-outer)
-        let nested = definitionsHeldBy(spans, span).length > 0;
-        for (let i = span.start; i <= span.end && !nested; i++) {
+        for (const held of definitionsHeldBy(spans, span)) inner.push({ line: held.start, at: -1, text: quotedDefinitionLabel(held.name) });
+        for (let i = span.start; i <= span.end; i++) {
             const startAt = i === span.start ? span.labelEnd : 0;
+            reading.referencesOn(i).forEach((occurrence, index) => {
+                if (occurrence.start >= startAt && !startsLazyLabel(i, index)) inner.push({ line: i, at: occurrence.start, text: quotedReference(occurrence.name) });
+            });
+            for (const note of reading.inlineNotesOn(i)) {
+                if (note.open >= startAt) inner.push({ line: i, at: note.open, text: `"${lines[i].slice(note.open, note.close + 1)}"` });
+            }
             // inlineNotesOn lists only the inline footnotes wholly on one
             // line. One that runs over a line break holds the end of the
             // line it opens on, so the definition holds one when one holds
-            // the end of any of its lines. It can only have opened in the
-            // definition's own text, since a paragraph never runs on into
-            // a definition (hunt 2026-10-05, round 2, pin
+            // the end of the line it opens on. It can only have opened in
+            // the definition's own text, since a paragraph never runs on
+            // into a definition (hunt 2026-10-05, round 2, pin
             // bug-alerts-multi-line-inline).
-            nested =
-                reading.referencesOn(i).some((occurrence, index) => occurrence.start >= startAt && !startsLazyLabel(i, index)) ||
-                reading.inlineNotesOn(i).some((note) => note.open >= startAt) ||
-                reading.inlineNoteHolding(i, lines[i].length) !== null;
+            const running = reading.inlineNoteHolding(i, lines[i].length);
+            if (running !== null && running.line === i) inner.push({ line: i, at: running.open, text: inlineText(running) });
         }
-        if (nested && !seen.has(span.name.toLowerCase())) {
-            seen.add(span.name.toLowerCase());
-            names.push(span.name);
+        if (inner.length === 0) continue;
+        const texts = inner.sort((a, b) => a.line - b.line || a.at - b.at).map(({ text }) => text);
+        const entry = byName.get(span.name.toLowerCase());
+        if (entry) {
+            entry.inner.push(...texts.filter((text) => !entry.inner.includes(text)));
+            continue;
         }
+        const added = { outer: span.name, inner: [...new Set(texts)] };
+        byName.set(span.name.toLowerCase(), added);
+        found.push(added);
     }
-    return names;
+    return found;
 }
 
 
+// The nested alert names the footnotes that sit inside a definition and
+// the definition they sit in, so the advice says which one to move
+// (Jason, 2026-10-22; the singular used to name only the outer definition
+// and then say "Move it into the text", meaning the inner one).
 function noticeNestedFootnotes(lines: string[]) {
-    const names = nestedFootnoteDefinitionNames(lines);
-    if (names.length === 0) return;
+    const nested = nestedFootnotes(lines);
+    if (nested.length === 0) return;
+    const inner = [...new Set(nested.flatMap((entry) => entry.inner))];
+    const outer = nested.map((entry) => quotedReference(entry.outer));
+    const one = inner.length === 1;
     showNotice(
-        names.length === 1
-            ? `This note has a footnote nested inside another footnote's definition (${referenceList(names)}). Nested footnotes don't survive export and most tools can't read them. Move it into the text.`
-            : `This note has footnotes nested inside ${names.length} footnote definitions (${referenceList(names)}). Nested footnotes don't survive export and most tools can't read them. Move them into the text.`,
+        `${andList(inner)} ${one ? "sits" : "sit"} inside the ${outer.length === 1 ? "definition" : "definitions"} of ${andList(outer)}. ` +
+            `Nested footnotes don't survive export and most tools can't read them. Move ${one ? inner[0] : "them"} into the text.`,
         8000,
     );
 }
@@ -723,7 +716,7 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string, after
     const prefix = orphanSafePrefixFor(plugin, markdown);
     const lines = normalizeEol(markdown).text.split("\n");
     noticeEmptyReferences(markdown, prefix);
-    noticeOrphanedReferences(plugin, markdown, prefix, { lines }, afterLint);
+    const left = noticeOrphanedReferences(plugin, markdown, prefix, { lines }, afterLint);
     // the labels the two alerts below leave to the one after them
     const both = underlinedLazyLabelNames(lines);
     const bothFolded = new Set(both.map((name) => name.toLowerCase()));
@@ -732,10 +725,11 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string, after
     noticeUnderlinedLazyDefinitions(both);
     noticeCommentedDefinitions(markdown);
     noticeDefinitionsInsideTables(markdown);
-    noticeOrphanedDefinitions(plugin, markdown, { lines }, afterLint);
-    noticeUngatheredDefinitions(plugin, markdown);
-    noticeHeldChanges(plugin, markdown, afterLint);
-    noticeDuplicateDefinitions(plugin, markdown, { lines }, afterLint);
+    left.push(...noticeOrphanedDefinitions(plugin, markdown, { lines }, afterLint));
+    left.push(...ungatheredDefinitions(plugin, markdown));
+    left.push(...heldChanges(plugin, markdown, afterLint));
+    left.push(...noticeDuplicateDefinitions(plugin, markdown, { lines }, afterLint));
+    noticeHeldBack(left);
     noticeNestedFootnotes(lines);
     noticeInvalidNames(lines);
 }

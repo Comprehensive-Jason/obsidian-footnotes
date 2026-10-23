@@ -25,7 +25,10 @@ import { lintNote } from "../../src/linting/linter";
 import { noticeLintAlerts } from "../../src/linting/lint-alerts";
 import type { FootnotePluginSettings } from "../../src/settings";
 
-const HeadingHeld = "The lint could not add the footnote section heading, because it would change how Obsidian reads the text around it.";
+// the held-back alert since 2026-10-22 (Jason's shared vocabulary): the
+// heading alone, or the heading with the definitions the move left
+const HeadingHeld = "The lint left the footnote section heading as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.";
+const namesHeading = (alert: string) => alert.includes("the footnote section heading");
 
 /** Lints `text` with the move on and the Section heading setting set to `heading`, shows the alerts for the result, and returns both. */
 function alertsAfterLint(text: string, heading: string, settings: Partial<FootnotePluginSettings> = {}) {
@@ -58,8 +61,7 @@ describe("the move alert names a section heading the lint could not add", () => 
         const doc = "---\n\n[^Note]: alpha\n\nalpha[^1]. alpha";
         const { linted, alerts } = alertsAfterLint(doc, "---\n## Footnotes");
         expect(linted).toBe(doc);
-        expect(alerts).toContain(HeadingHeld);
-        expect(alerts.some((alert) => alert.includes("could not move to the bottom") && alert.includes('"[^Note]"'))).toBe(true);
+        expect(alerts).toContain('The lint left the footnote section heading and "[^Note]:" as they are, because changing them would change how Obsidian reads the text around them. Fix them by hand.');
     });
 
     it("a heading that would turn text into a link: nothing added, and the heading named", () => {
@@ -72,20 +74,20 @@ describe("the move alert names a section heading the lint could not add", () => 
     it("control: a heading the lint can add is added, and nothing is said about it", () => {
         const { linted, alerts } = alertsAfterLint("See here[^1].\n\n[^1]: one", "## Footnotes");
         expect(linted).toBe("See here[^1].\n\n## Footnotes\n\n[^1]: one");
-        expect(alerts).not.toContain(HeadingHeld);
+        expect(alerts.some(namesHeading)).toBe(false);
     });
 
     it("control: a definition held between two lists is named, and the heading is not", () => {
         const doc = "- a[^1]\n\n[^1]: one\n- b";
         const { linted, alerts } = alertsAfterLint(doc, "## Footnotes");
         expect(linted).toBe(doc);
-        expect(alerts).not.toContain(HeadingHeld);
-        expect(alerts.some((alert) => alert.includes("could not move to the bottom") && alert.includes('"[^1]"'))).toBe(true);
+        expect(alerts.some(namesHeading)).toBe(false);
+        expect(alerts).toContain('The lint left "[^1]:" as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.');
     });
 
     it("control: with the move off, nothing is said about the heading", () => {
         const doc = "---\n\nalpha[^1]. alpha\n\n[^Note]: alpha";
         const { alerts } = alertsAfterLint(doc, "---\n## Footnotes", { lintMoveToBottom: false });
-        expect(alerts).not.toContain(HeadingHeld);
+        expect(alerts.some(namesHeading)).toBe(false);
     });
 });

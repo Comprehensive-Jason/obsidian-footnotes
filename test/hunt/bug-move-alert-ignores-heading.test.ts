@@ -58,7 +58,7 @@ describe("the move alert with a section heading and a list after it", () => {
         const after = lintFootnotes(doc, { sectionHeading: heading });
         expect(after).toBe("x[^c] here.\n\n# Footnotes\n\n  [^c]: def\n\n- item");
         noticeLintAlerts(fakePlugin({ lintMoveToBottom: true, enableFootnoteSectionHeading: true, footnoteSectionHeading: heading }), after);
-        expect(messages().filter((m) => m.includes("could not move to the bottom"))).toEqual([]);
+        expect(messages().filter((m) => m.startsWith("The lint left"))).toEqual([]);
     });
 
     // Now: ["c"]. Told the heading the lint used (the pin first called it

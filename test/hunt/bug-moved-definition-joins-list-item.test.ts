@@ -82,7 +82,7 @@ describe("move-to-bottom puts an indented top-level label into the list item abo
         expect(out).toBe(doc);
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS }), out);
         expect(messages()).toContain(
-            'This note has a footnote definition the lint could not move to the bottom ("[^c]"), and the lint left it in place, because moving it would change how Obsidian reads the lines around it. Move it by hand, and the next lint gathers the rest.',
+            'The lint left "[^c]:" as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.',
         );
     });
 });

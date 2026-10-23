@@ -57,7 +57,7 @@ describe("spec question: the lazy alert's advice for a label a blank line above 
         const advice = messages().filter((m) => m.includes('"[^1]:"'));
         expect(advice.length).toBeGreaterThan(0);
         // Before the ruling the one alert ended "Add a blank line above it."
-        expect(advice.every((m) => m.endsWith("Add a blank line above it."))).toBe(false);
-        expect(advice).toEqual(['This note has a footnote definition that Obsidian reads as plain text ("[^1]:"). Put a blank line above it and another below it.']);
+        expect(advice.every((m) => m.endsWith("Put a blank line above it."))).toBe(false);
+        expect(advice).toEqual(['Obsidian reads "[^1]:" as plain text, not as a footnote definition. Put a blank line above it and another below it.']);
     });
 });

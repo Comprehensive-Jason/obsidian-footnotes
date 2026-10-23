@@ -80,7 +80,10 @@ describe("the orphaned-definition alert and the chain it stands in for", () => {
     it.fails("names the second definition the deletion would take as well", () => {
         resetNotices();
         noticeLintAlerts(alertPlugin(), CHAIN);
-        expect(messages().some((m) => m.includes("[^b]"))).toBe(true);
+        // the orphaned-definition alert itself: since 2026-10-22 the nested
+        // alert names "[^b]" too, as the footnote inside "[^a]", which does
+        // not answer the question
+        expect(messages().some((m) => m.includes("nothing references") && m.includes("[^b]"))).toBe(true);
     });
 
     it("the alert does name the head of the chain", () => {

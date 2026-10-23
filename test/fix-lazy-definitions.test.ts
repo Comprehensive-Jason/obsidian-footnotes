@@ -220,7 +220,7 @@ describe("the lint pipeline with the toggle", () => {
 describe("the lazy-definition alert and the toggle", () => {
     beforeEach(resetNotices);
     const doc = "Alpha[^1] here.\n[^1]: def\n\nTail.";
-    const lazyAlert = () => messages().some((m) => m.includes("reads as plain text"));
+    const lazyAlert = () => messages().some((m) => m.includes("as plain text, not as a footnote definition"));
 
     it("stays quiet once the lint has fixed the line", () => {
         const plugin = fakePlugin({});

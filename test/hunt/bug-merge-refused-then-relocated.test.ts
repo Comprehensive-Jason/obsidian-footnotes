@@ -64,7 +64,8 @@ describe("merge refused between two lists, then reindex moves the copies", () =>
         noticeLintAlerts(fakePlugin({ lintMergeDuplicateDefinitions: true }), once);
         // When the first lint did merge the copies, there is nothing to say.
         if (duplicateFootnoteDefinitionNames(once).length === 0) return;
-        expect(messages().some((m) => m.includes("more than once") && m.includes('"[^a]"'))).toBe(true);
+        // the held-back alert names it since 2026-10-22 (Jason's shared vocabulary)
+        expect(messages().some((m) => m.startsWith("The lint left") && m.includes('"[^a]:"'))).toBe(true);
     });
 
     // The same shape with named footnotes only, so reindex swaps the slots

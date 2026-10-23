@@ -187,9 +187,9 @@ describe("invalid names", () => {
 });
 
 describe("nesting", () => {
-    it("an alert names the nesting definition and says nested footnotes don't survive export", () => {
+    it("an alert names the nested footnote and the definition it sits in, and says nested footnotes don't survive export", () => {
         expect(alertsAfterLint()).toContain(
-            'This note has a footnote nested inside another footnote\'s definition ("[^nest]"). Nested footnotes don\'t survive export and most tools can\'t read them. Move it into the text.',
+            '"[^used]" sits inside the definition of "[^nest]". Nested footnotes don\'t survive export and most tools can\'t read them. Move "[^used]" into the text.',
         );
     });
 

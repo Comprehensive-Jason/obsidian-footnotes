@@ -32,21 +32,21 @@ describe("the punctuation rule names a reference it could not move", () => {
         const { linted, alerts } = alertsAfterLint("It was free[^1]!(sic) here.\n\n[^1]: one", { footnotePlacement: "after" });
         expect(linted).toBe("It was free[^1]!(sic) here.\n\n[^1]: one");
         expect(alerts).toEqual([
-            'This note has a footnote reference the lint could not move to the other side of its punctuation ("[^1]"), and the lint left it in place, because moving it would change how Obsidian reads the lines around it.',
+            'The lint left "[^1]" as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.',
         ]);
     });
 
     it("Before: a move that would make an inline footnote out of the reference", () => {
         const { alerts } = alertsAfterLint("mc^.[^1] x\n\n[^1]: one", { footnotePlacement: "before" });
         expect(alerts).toEqual([
-            'This note has a footnote reference the lint could not move to the other side of its punctuation ("[^1]"), and the lint left it in place, because moving it would change how Obsidian reads the lines around it.',
+            'The lint left "[^1]" as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.',
         ]);
     });
 
     it("two of them in one alert", () => {
         const { alerts } = alertsAfterLint("It was free[^1]!(sic) and free[^2]!(sic) here.\n\n[^1]: one\n[^2]: two", { footnotePlacement: "after" });
         expect(alerts).toEqual([
-            'This note has 2 footnote references the lint could not move to the other side of their punctuation ("[^1]", "[^2]"), and the lint left them in place, because moving them would change how Obsidian reads the lines around them.',
+            'The lint left "[^1]" and "[^2]" as they are, because changing them would change how Obsidian reads the text around them. Fix them by hand.',
         ]);
     });
 
@@ -67,7 +67,7 @@ describe("apply prefix names a footnote it could not rename", () => {
         const { linted, alerts } = alertsAfterLint(text, { enableFootnotePrefix: true, lintApplyPrefix: true });
         expect(linted).toBe(text);
         expect(alerts).toEqual([
-            'This note has a footnote the lint could not give the note\'s prefix ("[^note]"), and the lint left it as it is, because renaming it would change how Obsidian reads the lines around it.',
+            'The lint left "[^note]" as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.',
         ]);
     });
 });
@@ -79,7 +79,7 @@ describe("reindex names a footnote it could not rename", () => {
         // "[^a$apple]" after "$5" reads as math, "$5 [^a$"
         expect(linted).toBe(text);
         expect(alerts).toEqual([
-            'This note has a footnote the lint could not rename ("[^a$1]"), and the lint left it as it is, because renaming it would change how Obsidian reads the lines around it.',
+            'The lint left "[^a$1]" as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.',
         ]);
     });
 });
@@ -90,7 +90,7 @@ describe("reindex names the definitions it could not put in order", () => {
         const { linted, alerts } = alertsAfterLint(text, {});
         expect(linted).toBe(text);
         expect(alerts).toEqual([
-            'This note has 2 footnote definitions the lint could not put in order ("[^2]", "[^1]"), and the lint left them in place, because moving them would change how Obsidian reads the lines around them.',
+            'The lint left "[^2]:" and "[^1]:" as they are, because changing them would change how Obsidian reads the text around them. Fix them by hand.',
         ]);
     });
 });

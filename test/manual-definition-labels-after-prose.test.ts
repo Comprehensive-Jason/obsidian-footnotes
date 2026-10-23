@@ -379,7 +379,7 @@ function countInsertedAbove(name: string): number {
 }
 
 const ALERT =
-    'This note has 7 footnote definitions that Obsidian reads as plain text because there is no blank line above them ("[^p1]:", "[^p2]:", "[^l1]:", "[^q1]:", "[^cb]:", "[^d2]:", "[^d1]:"). Add a blank line above each.';
+    'Obsidian reads "[^p1]:", "[^p2]:", "[^l1]:", "[^q1]:", "[^cb]:", "[^d2]:", and "[^d1]:" as plain text, not as footnote definitions. Put a blank line above each.';
 
 describe("Lint footnotes with the fix toggle off", () => {
     const off = () => lintFootnotes(SHEET, { fixLazyDefinitions: false });
@@ -440,7 +440,7 @@ describe("Lint footnotes with the fix toggle off", () => {
         ]);
         noticeLintAlerts(fakePlugin({ lintFixLazyDefinitions: false }), linted);
         expect(messages()).toEqual([
-            'This note has 6 footnote definitions that Obsidian reads as plain text because there is no blank line above them ("[^p2]:", "[^l1]:", "[^q1]:", "[^cb]:", "[^d2]:", "[^d1]:"). Add a blank line above each.',
+            'Obsidian reads "[^p2]:", "[^l1]:", "[^q1]:", "[^cb]:", "[^d2]:", and "[^d1]:" as plain text, not as footnote definitions. Put a blank line above each.',
         ]);
     });
 });

@@ -22,7 +22,7 @@ const alerts = (lines: string[]) => {
     noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS }), lines.join("\n"));
     return messages();
 };
-const One = (label: string) => `This note has a footnote definition that Obsidian reads as plain text ("${label}:"). Put a blank line above it and another below it.`;
+const One = (label: string) => `Obsidian reads "${label}:" as plain text, not as a footnote definition. Put a blank line above it and another below it.`;
 
 describe("a label right under paragraph text, with a line of '-' or '=' right under it", () => {
     it("over '---' at the margin", () => {
@@ -43,25 +43,25 @@ describe("a label right under paragraph text, with a line of '-' or '=' right un
 
     it("two of them, in one alert", () => {
         expect(alerts(["Para[^a] and[^b]", "[^a]: one", "---", "", "More text", "[^b]: two", "==="])).toEqual([
-            'This note has 2 footnote definitions that Obsidian reads as plain text ("[^a]:", "[^b]:"). Put a blank line above and below each.',
+            'Obsidian reads "[^a]:" and "[^b]:" as plain text, not as footnote definitions. Put a blank line above and below each.',
         ]);
     });
 
     it("control: with a blank line above, the label is a heading, and the underline's alert speaks", () => {
         const said = alerts(["Text[^b].", "", "[^b]: lazy", "---"]);
-        expect(said.some((m) => m.includes("reads as a heading"))).toBe(true);
-        expect(said.some((m) => m.includes("reads as plain text (\""))).toBe(false);
+        expect(said.some((m) => m.includes("as a heading, not as a footnote definition"))).toBe(true);
+        expect(said.some((m) => m.includes("as plain text, not as"))).toBe(false);
     });
 
     it("control: a lazy label with nothing under it gets the lazy-label alert", () => {
         expect(alerts(["Para text[^b]", "[^b]: lazy"])).toEqual([
-            'This note has a footnote definition that Obsidian reads as plain text because there is no blank line above it ("[^b]:"). Add a blank line above it.',
+            'Obsidian reads "[^b]:" as plain text, not as a footnote definition. Put a blank line above it.',
         ]);
     });
 
     it("control: an indented '  ---' under it is no underline (a blank line above makes a definition), so the lazy-label alert speaks", () => {
         expect(alerts(["Para text[^b]", "[^b]: lazy", "  ---"])).toEqual([
-            'This note has a footnote definition that Obsidian reads as plain text because there is no blank line above it ("[^b]:"). Add a blank line above it.',
+            'Obsidian reads "[^b]:" as plain text, not as a footnote definition. Put a blank line above it.',
         ]);
     });
 });

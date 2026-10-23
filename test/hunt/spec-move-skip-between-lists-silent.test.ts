@@ -38,13 +38,13 @@ describe("move to bottom skipped because a definition sits between two lists", (
         expect(out).toBe(NOTE);
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS }), out);
         expect(messages()).toContain(
-            'This note has a footnote definition the lint could not move to the bottom ("[^2]"), and the lint left it in place, because moving it would change how Obsidian reads the lines around it. Move it by hand, and the next lint gathers the rest.',
+            'The lint left "[^2]:" as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.',
         );
     });
 
     it("no move alert while Move footnotes to the bottom is off", () => {
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS, lintMoveToBottom: false }), NOTE);
-        expect(messages().some((m) => m.includes("could not move"))).toBe(false);
+        expect(messages().some((m) => m.startsWith("The lint left"))).toBe(false);
     });
 
     it("control: once the definition is moved by hand, the lint gathers the rest and the alert is quiet", () => {
@@ -52,6 +52,6 @@ describe("move to bottom skipped because a definition sits between two lists", (
         const out = lintFootnotes(byHand, { sectionHeading: "", fixPunctuation: false });
         expect(out).toBe(["Text[^1] and[^2].", "", "- item", "- item2", "", "[^1]: one", "[^2]: two"].join("\n"));
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS }), out);
-        expect(messages().some((m) => m.includes("could not move"))).toBe(false);
+        expect(messages().some((m) => m.startsWith("The lint left"))).toBe(false);
     });
 });

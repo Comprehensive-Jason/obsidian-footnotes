@@ -44,6 +44,7 @@ describe("an unmergeable duplicate (one copy on a %% closer line) with the merge
 
     it("the duplicate alert still fires, because the fix cannot apply", () => {
         noticeLintAlerts(fakePlugin({ lintMergeDuplicateDefinitions: true }), doc);
-        expect(messages().some((m) => m.includes("more than once"))).toBe(true);
+        // the held-back alert since 2026-10-22 (Jason's shared vocabulary)
+        expect(messages().some((m) => m.startsWith("The lint left") && m.includes('"[^d]:"'))).toBe(true);
     });
 });

@@ -80,6 +80,7 @@ describe("orphan deletion unblocks a merge the same lint does not make", () => {
         const once = lintFootnotes(NOTE, OPTIONS);
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS, lintDeleteOrphanedDefinitions: true, lintMergeDuplicateDefinitions: true }), once);
         // Today: no alert names [^a].
-        expect(messages().some((m) => m.includes('defines "[^a]" more than once') || m.includes('"[^a]", ') || m.includes(', "[^a]"'))).toBe(true);
+        // the held-back alert names it since 2026-10-22 (Jason's shared vocabulary)
+        expect(messages().some((m) => m.startsWith("The lint left") && m.includes('"[^a]:"'))).toBe(true);
     });
 });

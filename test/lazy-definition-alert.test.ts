@@ -57,15 +57,15 @@ describe("the lazy-definition alert", () => {
     it("singular: names the label line and says to add the blank line", () => {
         noticeLintAlerts(fakePlugin({}), "a[^1]\npara\n[^1]: mid");
         expect(messages()).toEqual([
-            'This note has a footnote definition that Obsidian reads as plain text because there is no blank line above it ("[^1]:"). Add a blank line above it.',
+            'Obsidian reads "[^1]:" as plain text, not as a footnote definition. Put a blank line above it.',
         ]);
     });
 
-    it("plural: counts, lists every label, and keeps them out of the missing-definition alert", () => {
+    it("plural: lists every label, and keeps them out of the missing-definition alert", () => {
         noticeLintAlerts(fakePlugin({}), SHEET);
         const all = messages();
         expect(all).toContain(
-            'This note has 3 footnote definitions that Obsidian reads as plain text because there is no blank line above them ("[^p1]:", "[^l1]:", "[^cb]:"). Add a blank line above each.',
+            'Obsidian reads "[^p1]:", "[^l1]:", and "[^cb]:" as plain text, not as footnote definitions. Put a blank line above each.',
         );
         expect(all.some((m) => m.includes("with no definition"))).toBe(false);
     });
@@ -74,7 +74,7 @@ describe("the lazy-definition alert", () => {
         noticeLintAlerts(fakePlugin({}), "a[^1] b[^9]\npara\n[^1]: mid");
         const all = messages();
         expect(all.some((m) => m.includes('no definition ("[^9]")'))).toBe(true);
-        expect(all.some((m) => m.includes('("[^1]:")'))).toBe(true);
+        expect(all.some((m) => m.includes('reads "[^1]:" as plain text'))).toBe(true);
     });
 
     it("the quoted label stays on one line in the toast", () => {
