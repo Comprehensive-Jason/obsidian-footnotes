@@ -125,7 +125,10 @@ export function undoOrphanMessage(orphaned: string[], refs: string, textAfterUnd
             : "";
     // "the footnote reference" spelled out, so the toast says what is left
     // behind rather than leaving it to the quoted name (Jason, 2026-09-11)
-    return `The undo removed the footnote definition, but the footnote ${one ? "reference" : "references"} ${refs} ${one ? "is" : "are"} still in the note.${promise}`;
+    // the plural can name references of several footnotes, so it speaks
+    // of definitions and their references (Jason, 2026-10-22)
+    if (!one) return `The undo removed footnote definitions, but their references ${refs} are still in the note.${promise}`;
+    return `The undo removed the footnote definition, but the footnote reference ${refs} is still in the note.${promise}`;
 }
 
 // Stryker disable all: CodeMirror update-listener plumbing driven by the

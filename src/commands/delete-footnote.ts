@@ -240,13 +240,12 @@ export async function deleteFootnote(plugin: FootnotePlugin) {
                 }
                 const before = doc.getValue();
                 const plan = deleteFootnoteEverywhere(before, target);
+                // The target came from this very note, so a plan with
+                // nothing to delete cannot happen here; it changes nothing
+                // and says nothing. Its toast was dropped as unreachable
+                // (Jason, 2026-10-22; item 13 of the toast inventory's odd
+                // things).
                 switch (plan.kind) {
-                    case "nothing":
-                        // the target came from this very document, so this
-                        // is unreachable in practice; say something honest
-                        // rather than nothing if it ever happens
-                        showNotice(`Nothing was deleted: ${quotedReference(target)} was not found in this note.`, 8000);
-                        return;
                     case "refused":
                         showNotice(plan.reason, 8000);
                         return;

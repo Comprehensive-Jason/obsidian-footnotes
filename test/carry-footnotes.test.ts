@@ -158,7 +158,9 @@ describe("planCarriedPaste", () => {
         expect(planCarriedPaste("x[^1] y[^3]\n\n[^1]: one\n[^3]: three", "a[^1]", [one("1", "[^1]: uno")])).toEqual({
             body: "a[^2]",
             definitions: [one("2", "[^2]: uno")],
-            added: 1,
+            // a renamed block is counted in `renamed`, not also in `added`
+            // (Jason, 2026-10-22)
+            added: 0,
             reused: 0,
             repointed: 0,
             renamed: 1,

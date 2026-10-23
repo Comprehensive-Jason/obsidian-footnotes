@@ -16,7 +16,7 @@ describe("the partial-undo notice", () => {
             'The undo removed the footnote definition, but the footnote reference "[^typed]" is still in the note.',
         );
         expect(undoOrphanMessage(["a", "b"], '"[^a]", "[^b]"')).toBe(
-            'The undo removed the footnote definition, but the footnote references "[^a]", "[^b]" are still in the note.',
+            'The undo removed footnote definitions, but their references "[^a]", "[^b]" are still in the note.',
         );
     });
 
@@ -31,7 +31,7 @@ describe("the partial-undo notice", () => {
         );
         // one stranded name that was not staged keeps the promise out
         expect(undoOrphanMessage(["cell", "typed"], '"[^cell]", "[^typed]"', textBefore)).toBe(
-            'The undo removed the footnote definition, but the footnote references "[^cell]", "[^typed]" are still in the note.',
+            'The undo removed footnote definitions, but their references "[^cell]", "[^typed]" are still in the note.',
         );
     });
 

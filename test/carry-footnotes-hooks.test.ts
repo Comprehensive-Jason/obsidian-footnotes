@@ -111,7 +111,9 @@ describe("paste", () => {
         expect(destination.lines).toEqual(["x[^1]a[^2] b", "", "[^1]: uno", "[^2]: one"]);
         expect(destination.transactions).toBe(1);
         // zero counts are left out of the toast (Jason's pick A, 2026-09-25)
-        expect(messages()).toContain("Pasted with 1 footnote definition: 1 added, 1 renamed.");
+        // a renamed definition is counted as renamed and not also as added
+        // since 2026-10-22 (Jason's ruling), so the parts add up
+        expect(messages()).toContain("Pasted with 1 footnote definition: 1 renamed.");
     });
 
     it("reads definition lines off a clipboard from anywhere when the register does not match", () => {

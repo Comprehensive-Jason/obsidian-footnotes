@@ -281,6 +281,7 @@ export interface CarriedPastePlan {
     body: string;
     /** the blocks to append, renamed, in carried order; a merged one is not among them */
     definitions: CarriedDefinition[];
+    /** the blocks appended under their own names; a renamed one is counted in `renamed` instead, so each definition is counted once (Jason, 2026-10-22) */
     added: number;
     /** incoming definitions whose body an existing definition already holds, so the existing one serves */
     reused: number;
@@ -551,10 +552,11 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
         return `${incoming}-${k}`;
     };
     // an incoming name keeps its spelling when the destination and the
-    // names given so far leave it free, and is renamed otherwise
-    const settle = (incoming: string) => {
+    // names given so far leave it free, and is renamed otherwise; true
+    // when it was renamed
+    const settle = (incoming: string): boolean => {
         const folded = incoming.toLowerCase();
-        if (finalName.has(folded)) return;
+        if (finalName.has(folded)) return false;
         let name = incoming;
         if (occupied(folded)) {
             name = newName(incoming);
@@ -562,12 +564,16 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
         }
         finalName.set(folded, name);
         assigned.add(name.toLowerCase());
+        return name !== incoming;
     };
     bodyDefines.forEach(settle);
     const definitions: CarriedDefinition[] = [];
+    // the carried blocks renamed, which the toast counts as renamed and
+    // not also as added
+    let renamedBlocks = 0;
     carried.forEach((definition, i) => {
         if (merged.has(definition.name.toLowerCase())) return;
-        settle(definition.name);
+        if (settle(definition.name)) renamedBlocks++;
         heldIn(i).forEach(settle);
     });
     // then the names the paste cites that the destination defines
@@ -589,7 +595,7 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     return {
         body: renamedLines(bodyLines, (line) => [...landed[line].labels, ...landed[line].references], finalName).join("\n"),
         definitions,
-        added: definitions.length,
+        added: definitions.length - renamedBlocks,
         reused: merged.size,
         repointed,
         renamed,

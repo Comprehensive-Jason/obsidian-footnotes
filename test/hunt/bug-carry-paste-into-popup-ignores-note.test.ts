@@ -334,7 +334,9 @@ describe("a carried paste into the footnote popup", () => {
         expect({ took, popup: popup.getValue() }).toEqual({ took: true, popup: "see x" });
         await closePopup();
         expect(editor.getValue()).toBe("Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: see x\n[^3]: their source");
-        expect(messages()).toContain("Pasted with 1 footnote definition: 1 added, 1 renamed.");
+        // a renamed definition is counted as renamed and not also as added
+        // since 2026-10-22 (Jason's ruling), so the parts add up
+        expect(messages()).toContain("Pasted with 1 footnote definition: 1 renamed.");
     });
 
     it("puts the definitions after the note's last definition when the popup's footnote is not the last", async () => {

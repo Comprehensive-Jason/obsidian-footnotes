@@ -16,6 +16,8 @@ import { showNotice } from "../editor/notice";
 export class SetFootnotePrefixModal extends ValidatedTextModal {
     private plugin: FootnotePlugin;
     private file: TFile;
+    /** whether the note had a prefix when the dialog opened */
+    private hadPrefix: boolean;
 
     constructor(plugin: FootnotePlugin, file: TFile, currentPrefix: string) {
         super(plugin.app, {
@@ -29,6 +31,7 @@ export class SetFootnotePrefixModal extends ValidatedTextModal {
         });
         this.plugin = plugin;
         this.file = file;
+        this.hadPrefix = currentPrefix !== "";
     }
 
     protected async submit() {
@@ -85,12 +88,13 @@ export class SetFootnotePrefixModal extends ValidatedTextModal {
                 `Footnote prefix set to "${prefix}", but the "Per-note footnote prefix" setting is turned off, so it won't be used until you enable it.`,
                 8000,
             );
-        } else {
-            showNotice(
-                prefix
-                    ? `Footnote prefix set to "${prefix}".`
-                    : "Footnote prefix removed.",
-            );
+        } else if (prefix) {
+            showNotice(`Footnote prefix set to "${prefix}".`);
+        } else if (this.hadPrefix) {
+            // an empty box saved over no prefix removed nothing, so it
+            // says nothing (Jason, 2026-10-22; item 12 of the toast
+            // inventory's odd things)
+            showNotice("Footnote prefix removed.");
         }
     }
 }

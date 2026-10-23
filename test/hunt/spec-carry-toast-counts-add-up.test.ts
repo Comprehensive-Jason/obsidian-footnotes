@@ -58,7 +58,8 @@ beforeEach(() => {
 });
 
 describe("spec question: the paste toast's counts", () => {
-    it.fails("sheet 18 rename check: the counts add up to the total", () => {
+    // Jason ruled for parts that add up on 2026-10-22 (run toast-consolidate)
+    it("sheet 18 rename check: the counts add up to the total", () => {
         const sentence = "shared[^shared] and[^shared] own[^own] chain[^chain]";
         const source = editor(
             [sentence, "", "[^shared]: s", "[^own]: used once", "[^chain]: cites[^inner]", "[^inner]: in"],
@@ -75,7 +76,8 @@ describe("spec question: the paste toast's counts", () => {
         const toast = messages().find((m) => m.startsWith("Pasted with")) as string;
         const total = Number(/Pasted with (\d+)/.exec(toast)?.[1]);
         const parts = [...toast.matchAll(/(\d+) (added|reused|renamed|matched)/g)].reduce((n, m) => n + Number(m[1]), 0);
-        // Today: "Pasted with 4 footnote definitions: 4 added, 1 renamed." (parts 5).
+        // Before: "Pasted with 4 footnote definitions: 4 added, 1 renamed." (parts 5).
+        expect(toast).toBe("Pasted with 4 footnote definitions: 3 added, 1 renamed.");
         expect({ toast, parts }).toEqual({ toast, parts: total });
     });
 });

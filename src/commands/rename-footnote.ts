@@ -2,7 +2,7 @@ import { Editor, EditorChange, EditorPosition, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { ValidatedTextModal } from "./validated-text-modal";
-import { footnoteNameProblem, quotedReference } from "../parsing/footnote-grammar";
+import { footnoteNameProblem } from "../parsing/footnote-grammar";
 import { DocContext, docContext } from "../editor/doc-context";
 import { footnotePrefixFromEditor, footnotePrefixProblem } from "../parsing/footnote-prefix";
 import { simulateChanges } from "../editor/insertion-liveness";
@@ -380,9 +380,11 @@ class RenameFootnoteModal extends ValidatedTextModal {
                 );
                 return;
             case "dead":
-                this.showProblem(
-                    `${quotedReference(newName)} wouldn't survive as a footnote where it's used. Try a different name.`,
-                );
+                // the check behind it also refuses when the new name changes
+                // how the text around a copy reads, so the line says that
+                // (Jason, 2026-10-22; item 14 of the toast inventory's odd
+                // things)
+                this.showProblem("This name would change how Obsidian reads the text around one of its references. Try a different name.");
                 return;
             case "renamed":
                 this.doc.transaction({ changes: plan.changes });

@@ -710,10 +710,12 @@ function landCarriedText(
     // A, 2026-09-25). "Matched" is a carried definition whose text the
     // note already had under another name, so the reference took that
     // name and nothing was added.
-    // A text that carries nothing brings only the definitions in its own
-    // text, and is landed only when some of them were renamed: those are
-    // the ones it counts.
-    const total = carried.length > 0 ? plan.added + plan.reused : plan.renamed;
+    // Each definition is counted once, so the parts add up to the total: a
+    // renamed one is counted as renamed and not also as added (Jason,
+    // 2026-10-22). A text that carries nothing brings only the definitions
+    // in its own text, and is landed only when some of them were renamed:
+    // those are the ones it counts.
+    const total = plan.added + plan.reused + plan.renamed;
     const matched = plan.repointed;
     const counts: [number, string][] = [
         [plan.added, "added"],
