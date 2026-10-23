@@ -413,14 +413,23 @@ function noticeHeldChanges(plugin: FootnotePlugin, markdown: string, afterLint: 
 // they are never passed over in silence (Jason's policy, 2026-08-12).
 // Duplicates matter because Obsidian renders only the LAST definition of a
 // name, so the earlier ones simply do not appear.
+//
+// `afterLint` works as for orphaned references (noticeOrphanedReferences).
+// After a command that runs no lint at all (Delete footnote everywhere, a
+// conversion, a carried paste with Lint on footnote creation off), nothing
+// has merged the duplicates, so the alert speaks as it does with the toggle
+// off, less its advice to turn the toggle on (run toast-bugs, 2026-10-22,
+// pin bug-duplicate-alert-silent-without-lint).
 function noticeDuplicateDefinitions(
     plugin: FootnotePlugin,
     markdown: string,
     precomputed: { lines: string[] },
+    afterLint: boolean,
 ) {
     const names = duplicateFootnoteDefinitionNames(markdown, precomputed);
     if (names.length === 0) return;
-    if (plugin.settings.lintMergeDuplicateDefinitions) {
+    const merging = plugin.settings.lintMergeDuplicateDefinitions;
+    if (merging && afterLint) {
         // With the toggle on, a duplicate the merge rule can still not
         // touch is one with a copy the merge never moves: on the line of a
         // "%%" comment's closer, holding a table, or inside a list item or a
@@ -429,8 +438,8 @@ function noticeDuplicateDefinitions(
         // never makes the text wrong (Jason, 2026-10-05, after the reason
         // named a closer or a table for a copy in a list item; hunt
         // 2026-10-05, pin bug-duplicate-alert-container-reason).
-        // A duplicate the merge WOULD fix, left behind by a single-rule
-        // command, waits for the next lint as before.
+        // A duplicate the merge would still fix is left to the next lint,
+        // which merges it.
         if (mergeDuplicateFootnoteDefinitions(markdown) !== markdown) return;
         showNotice(
             names.length === 1
@@ -440,10 +449,11 @@ function noticeDuplicateDefinitions(
         );
         return;
     }
+    const advice = merging ? "Merge them." : `Merge them, or turn on "Merge duplicate definitions".`;
     showNotice(
         names.length === 1
-            ? `This note defines ${referenceList(names)} more than once. Obsidian renders only the last definition. Merge them, or turn on "Merge duplicate definitions".`
-            : `This note defines ${names.length} footnotes more than once (${referenceList(names)}). Obsidian renders only each one's last definition. Merge them, or turn on "Merge duplicate definitions".`,
+            ? `This note defines ${referenceList(names)} more than once. Obsidian renders only the last definition. ${advice}`
+            : `This note defines ${names.length} footnotes more than once (${referenceList(names)}). Obsidian renders only each one's last definition. ${advice}`,
         8000,
     );
 }
@@ -725,7 +735,7 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string, after
     noticeOrphanedDefinitions(plugin, markdown, { lines }, afterLint);
     noticeUngatheredDefinitions(plugin, markdown);
     noticeHeldChanges(plugin, markdown, afterLint);
-    noticeDuplicateDefinitions(plugin, markdown, { lines });
+    noticeDuplicateDefinitions(plugin, markdown, { lines }, afterLint);
     noticeNestedFootnotes(lines);
     noticeInvalidNames(lines);
 }
