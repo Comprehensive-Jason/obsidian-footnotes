@@ -35,12 +35,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { BlockSyntaxNotice } from "../../src/editor/notice";
-import { ProtectedCreationNotice } from "../../src/editor/insertion-liveness";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
+import { BlockSyntaxNotice, ProtectedCreationNotice } from "../helpers/toasts";
 
 const settings = { ...DEFAULT_SETTINGS, enablePopupEditor: false };
 

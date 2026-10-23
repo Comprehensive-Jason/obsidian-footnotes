@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import FootnotePlugin from "../../src/main";
 import { insertAutonumFootnote, insertInlineFootnote, insertNamedFootnote, pasteInlineFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { MultiCaretInFootnotesNotice, MultiCaretNestedNotice } from "../../src/editor/notice";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
+import { MultiCaretInFootnotesNotice, MultiCaretNestedNotice } from "../helpers/toasts";
 
 // A press with several carets, every one of them inside a footnote, that
 // the plugin refuses. It refused with "No footnotes were created: footnotes
@@ -85,7 +85,7 @@ describe("every caret inside a footnote, the press refused: the notice says wher
     });
 
     it("the notice reads as drafted", () => {
-        expect(MultiCaretInFootnotesNotice).toBe("No footnotes were created: the carets are inside existing footnotes. Move them into the text.");
+        expect(MultiCaretInFootnotesNotice).toBe("No footnotes were created: the cursors are inside existing footnotes. Move them into the text.");
     });
 });
 

@@ -27,13 +27,7 @@ import {
     refusedCreation,
     replaceInTableCell,
 } from "./create-footnote";
-import {
-    nameAlreadyUsed,
-    NestedFootnoteNotice,
-    NoFootnoteCreated,
-    ReadsDifferentlyNotice,
-    showNotice,
-} from "../editor/notice";
+import { Advice, nameAlreadyUsed, Reason, refusal, showNotice } from "../editor/notice";
 import { cellSelection, isTableDelimiterRow, TableCellEditor, tableRowCellSpans } from "../editor/table-cursor";
 
 // Conversion: turning selected text into a footnote (issue #35).
@@ -96,17 +90,16 @@ export const InlineSelectionNotice =
 // holds a live reference, a placeholder, or a live inline footnote
 // refuses: it would nest it in the new footnote's body. Reference-shaped
 // text inside a code span is not a live footnote, so it travels along like
-// ordinary text. (The refusal message is NestedFootnoteNotice, shared with
-// the caret guards, so the one rule always speaks with one sentence.)
+// ordinary text. (The refusal gives the nesting reason, shared with the
+// caret guards, so the one rule always speaks with one sentence.)
 //
-// This message is deliberately not ProtectedCreationNotice (Jason's
-// manual pass, 2026-08-13). That one means the caret sits inside
-// protected text. This one means a selection EDGE cuts through protected
-// text. Protected text held whole inside the selection is fine
-// (2026-08-19); it is cutting one apart that would corrupt what is left
-// behind.
-export const ProtectedSelectionNotice =
-    NoFootnoteCreated + "the selection cuts through code, math, or other protected text. Select all of it or none of it.";
+// A selection EDGE that cuts through protected text gives the shared
+// protected-text reason too, with advice of its own: protected text held
+// whole inside the selection is fine (2026-08-19); it is cutting one apart
+// that would corrupt what is left behind. Until 2026-10-22 it had a
+// sentence of its own, kept apart from the caret's (Jason's manual pass,
+// 2026-08-13); the shared vocabulary replaced it (Jason, 2026-10-22).
+export const ProtectedSelectionNotice = refusal("footnote", Reason.protected, Advice.allOrNone);
 
 // A selection that takes only PART of a table refuses (Jason's ruling
 // 2026-09-04, from his manual pass). Moving a cell, a few cells, or a whole
@@ -115,17 +108,20 @@ export const ProtectedSelectionNotice =
 // Two cases still work: text inside a single cell converts, because the
 // cell keeps its shape, and a whole table selected together with the
 // prose around it travels like any other block.
-export const TableSelectionNotice =
-    NoFootnoteCreated + "the selection cuts through a table. Select text inside one cell, or the whole table with the text around it.";
+export const TableSelectionNotice = refusal(
+    "footnote",
+    "the selection cuts through a table.",
+    "Select text inside one cell, or the whole table with the text around it.",
+);
 
 // A selection that takes a line's "> ", "- ", or "# " and leaves the rest
 // of the line behind is refused, since the rest would stop being a quote,
 // a list item, or a heading (Jason's ruling B3, 2026-10-08). The press's
-// notice for that says to move the caret, which a selection has no use
-// for, so a selection gets its own (Jason's pick, 2026-10-08, decision 3
-// of the stage 3 report). A whole "# Heading here" still converts.
-export const SelectionFormattingNotice =
-    NoFootnoteCreated + "the selection takes part of the line's formatting. Select the whole line, or only its text.";
+// advice for that says to move the cursor, which a selection has no use
+// for, so a selection gets its own advice after the same reason (Jason's
+// pick, 2026-10-08, decision 3 of the stage 3 report). A whole
+// "# Heading here" still converts.
+export const SelectionFormattingNotice = refusal("footnote", Reason.formatting, Advice.wholeLine);
 
 // A selection of some but not all of a list's items, each whole, is
 // refused. One item's line selected whole converts its text (ruling Q27),
@@ -135,7 +131,7 @@ export const SelectionFormattingNotice =
 // ruling Q31, 2026-10-08; hunt 2026-10-08 cycle 7, cluster Y12). Part of
 // one item with the whole items after it is part of the list too, and is
 // refused the same way (Jason's ruling, 2026-10-09; run q31-partial).
-export const PartOfListNotice = NoFootnoteCreated + "select one item's text, or the whole list.";
+export const PartOfListNotice = refusal("footnote", Reason.formatting, Advice.oneItem);
 
 // A selection of some but not all of a quote's lines, each whole, is
 // refused the same way. One quote line selected whole converts its text
@@ -145,7 +141,7 @@ export const PartOfListNotice = NoFootnoteCreated + "select one item's text, or 
 // footnote with their "> " markers, leaving "[^1]" as lazy text of the
 // quote (Jason's ruling Q33, 2026-10-09; hunt 2026-10-09 cycle 8, cluster
 // V5). A callout's body lines count as a quote's lines.
-export const PartOfQuoteNotice = NoFootnoteCreated + "select one line's text, or the whole quote.";
+export const PartOfQuoteNotice = refusal("footnote", Reason.formatting, Advice.oneQuoteLine);
 
 /**
  * The notices a selection conversion the result gate refused is told
@@ -183,7 +179,7 @@ function selectionNotices(selected: string | null): Partial<Record<GateReason, s
  */
 function refusedSelection(verdict: GateVerdict, notices: Partial<Record<GateReason, string>>): boolean {
     const madeFrontmatter = !verdict.pass && verdict.reason === "formatting" && verdict.check === 3;
-    return refusedCreation(verdict, madeFrontmatter && notices.formatting === SelectionFormattingNotice ? { ...notices, formatting: ReadsDifferentlyNotice } : notices);
+    return refusedCreation(verdict, madeFrontmatter && notices.formatting === SelectionFormattingNotice ? { ...notices, formatting: refusal("footnote", Reason.other) } : notices);
 }
 
 /**
@@ -197,7 +193,7 @@ function refusedSelection(verdict: GateVerdict, notices: Partial<Record<GateReas
 function selectedNotice(ctx: DocContext, from: EditorPosition, to: EditorPosition): string | null {
     if (tableVerdict(ctx, from, to) === "cuts") return TableSelectionNotice;
     const lapsDefinition = ctx.reading().definitions.some((definition) => from.line <= definition.end && to.line >= definition.start);
-    return lapsDefinition || selectionTouchesFootnote(ctx, from, to) ? NestedFootnoteNotice : null;
+    return lapsDefinition || selectionTouchesFootnote(ctx, from, to) ? refusal("footnote", Reason.nested) : null;
 }
 
 export type FootnoteCommandKind = "autonum" | "named" | "inline" | "paste";
@@ -296,7 +292,7 @@ export function selectionPressHandled(
         // text is read as the one cell of a one-row table, where a
         // label-shaped "[^x]:" is a reference, as it is in the note.
         const cellRead = readCell(cellText);
-        const notices = selectionNotices(spanTouchesFootnote(cellRead.reading, 0, cellRead.column(from), cellRead.column(to)) ? NestedFootnoteNotice : null);
+        const notices = selectionNotices(spanTouchesFootnote(cellRead.reading, 0, cellRead.column(from), cellRead.column(to)) ? refusal("footnote", Reason.nested) : null);
         const text = cellText.slice(from, to);
         // The new reference sits snug against the text in front of the
         // selection, with no space between (see absorbLeadingSpace). A

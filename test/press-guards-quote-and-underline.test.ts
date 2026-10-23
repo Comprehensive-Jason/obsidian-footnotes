@@ -4,8 +4,8 @@ import { fakeEditor } from "./helpers/fake-editor";
 import { fakePlugin } from "./helpers/fake-plugin";
 import { messages, noticed, resetNotices } from "./helpers/notices";
 import { insertAutonumFootnote } from "../src/commands/insert-or-navigate-footnotes";
-import { BlockSyntaxNotice } from "../src/editor/notice";
 import { readNote } from "../src/parsing/note-reading";
+import { BlockSyntaxNotice } from "./helpers/toasts";
 
 // Jason's rulings 4 and 5 (2026-09-20): a press with the caret in front
 // of a blockquote marker, or on a setext underline line, refuses. Before,

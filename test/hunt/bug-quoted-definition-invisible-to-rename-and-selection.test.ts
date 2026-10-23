@@ -7,7 +7,7 @@ import { noticed, resetNotices } from "../helpers/notices";
 import { planFootnoteRename } from "../../src/commands/rename-footnote";
 import { selectionPressHandled } from "../../src/commands/selection-footnote";
 import { simulateChanges } from "../../src/editor/insertion-liveness";
-import { NestedFootnoteNotice } from "../../src/editor/notice";
+import { NestedFootnoteNotice } from "../helpers/toasts";
 
 // BUG (second review, 2026-09-09): a blockquoted or callout definition
 // ("> [^note]: ...") is a live definition to the scanner, the definition

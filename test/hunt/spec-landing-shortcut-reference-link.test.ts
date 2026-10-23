@@ -5,10 +5,10 @@ import { describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { endOfWordOffset } from "../../src/editor/cursor-motion";
-import { InsideLinkNotice } from "../../src/editor/notice";
 import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
+import { InsideLinkNotice } from "../helpers/toasts";
 
 // spec question: where should a press on the last word of a shortcut
 // reference link land, when every spot touching the link breaks it?

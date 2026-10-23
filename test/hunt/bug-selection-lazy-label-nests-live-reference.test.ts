@@ -9,8 +9,8 @@ import FootnotePlugin from "../../src/main";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { selectionPressHandled } from "../../src/commands/selection-footnote";
 import { docContext } from "../../src/editor/doc-context";
-import { NestedFootnoteNotice } from "../../src/editor/notice";
 import { TableCellEditor } from "../../src/editor/table-cursor";
+import { NestedFootnoteNotice } from "../helpers/toasts";
 
 // BUG: converting a selection that holds a LAZY label nests a live
 // reference inside the new footnote's body, which the plugin forbids

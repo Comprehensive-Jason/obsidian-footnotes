@@ -3,11 +3,11 @@ import { describe, expect, it } from "vitest";
 
 import FootnotePlugin from "../../src/main";
 import { selectionPressHandled } from "../../src/commands/selection-footnote";
-import { NestedFootnoteNotice } from "../../src/editor/notice";
 import { TableCellEditor } from "../../src/editor/table-cursor";
 import { noticed, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "../helpers/fake-plugin";
+import { NestedFootnoteNotice } from "../helpers/toasts";
 
 // A table cell whose text is "[^1]: x" holds a LIVE reference: a footnote
 // definition is a block construct and cannot exist inside a table cell's

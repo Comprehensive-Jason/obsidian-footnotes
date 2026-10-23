@@ -5,7 +5,7 @@ import type FootnotePlugin from "../main";
 import { contextOfLines, docLines, insideDefinition } from "../editor/doc-context";
 import { lineDiffChanges } from "../editor/document-diff";
 import { simulateChanges } from "../editor/insertion-liveness";
-import { NothingCutNotice, PasteNestedNotice, PasteProtectedNotice, PasteReadsDifferentlyNotice, showNotice } from "../editor/notice";
+import { Reason, refusal, showNotice } from "../editor/notice";
 import { CreatedFootnote, EditIntent, judgeEdit, NoteRange } from "../editor/result-gate";
 import { codeMirrorViewOf, readingViewActive, viewEditor } from "../editor/obsidian-internals";
 import { mainEditorTextHolds, nestedSubEditorOwnsFocus } from "../editor/table-cursor";
@@ -285,7 +285,7 @@ function plannedCut(plugin: FootnotePlugin, doc: Editor, from: EditorPosition, t
     const tidy = (text: string) => withEmptySectionHeadingRemoved(plugin, text);
     const plan = planCut(before, from, to, tidy);
     if (plan.refused) {
-        showNotice(NothingCutNotice, 8000);
+        showNotice(refusal("cut", Reason.other), 8000);
         return "refused";
     }
     const entry = remember(doc, from, to, plan);
@@ -680,7 +680,12 @@ function landCarriedText(
     const finalNote = noteAfter ?? simulateChanges(noteLines, noteEdits);
     const verdict = judgeEdit(noteLines, finalNote, pasteIntent(finalNote, { from: noteFrom, to: noteTo }, landed, appended, plan.definitions));
     if (!verdict.pass) {
-        showNotice(verdict.reason === "nested" ? PasteNestedNotice : verdict.reason === "protected" ? PasteProtectedNotice : PasteReadsDifferentlyNotice, 8000);
+        // nesting and protected text get their shared reasons; anything
+        // else, frontmatter made out of nothing among it, the general one,
+        // since "the line's formatting" would point at no line the paste
+        // touched (Jason's wording ruling, 2026-10-09)
+        const reason = verdict.reason === "nested" || verdict.reason === "protected" ? Reason[verdict.reason] : Reason.other;
+        showNotice(refusal("paste", reason), 8000);
         return true;
     }
     beforeWrite();

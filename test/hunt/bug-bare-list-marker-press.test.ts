@@ -4,7 +4,7 @@ import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { insertAutonumFootnote, insertInlineFootnote, insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { BlockSyntaxNotice } from "../../src/editor/notice";
+import { BlockSyntaxNotice } from "../helpers/toasts";
 
 // BUG (annoyance): a press at the end of an empty list item with no space
 // after its marker glues the footnote onto the marker, and the item stops

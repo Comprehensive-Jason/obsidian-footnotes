@@ -4,8 +4,8 @@ import { fakePlugin } from "../helpers/fake-plugin";
 import { noticed, resetNotices } from "../helpers/notices";
 
 import { insertInTableCell } from "../../src/commands/create-footnote";
-import { ProtectedCreationNotice } from "../../src/editor/insertion-liveness";
 import { TableCellEditor } from "../../src/editor/table-cursor";
+import { ProtectedCreationNotice } from "../helpers/toasts";
 
 // Jason's retest, sheet 06 (2026-09-11): in the bottom-right cell of a bare
 // table in Live Preview, the inline and paste keys SOMETIMES toasted the

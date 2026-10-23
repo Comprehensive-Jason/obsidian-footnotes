@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import FootnotePlugin from "../../src/main";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { MultiCaretNestedNotice } from "../../src/editor/notice";
 import { resetNotices, noticed } from "../helpers/notices";
 import {
     fakeEditor as sharedFakeEditor,
     FakeEditor,
 } from "../helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "../helpers/fake-plugin";
+import { MultiCaretNestedNotice } from "../helpers/toasts";
 
 // A user Alt-clicks a second caret and presses the numbered key with one
 // caret inside the "[^1]" of a LAZY label line (a label-shaped line right

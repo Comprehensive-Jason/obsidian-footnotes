@@ -4,8 +4,8 @@ import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { insertAutonumFootnote, insertInlineFootnote, insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { BlockSyntaxNotice } from "../../src/editor/notice";
 import { readNote } from "../../src/parsing/note-reading";
+import { BlockSyntaxNotice } from "../helpers/toasts";
 
 // BUG (wrong output): the plugin knows only the stock task boxes "[ ]",
 // "[x]", and "[X]", so a custom task status such as "- [/] task" is

@@ -15,7 +15,7 @@ import {
     insertNamedFootnote,
     pasteInlineFootnote,
 } from "../src/commands/insert-or-navigate-footnotes";
-import { NestedFootnoteNotice } from "../src/editor/notice";
+import { NestedFootnoteNotice } from "./helpers/toasts";
 
 // Jason's ruling (2026-08-13, from manual testing): Obsidian technically
 // renders footnotes nested inside footnote definitions, but that's wildly

@@ -108,7 +108,7 @@ describe("phantom frontmatter from a leading thematic break", () => {
         // said "footnotes can't go inside code, math, or other protected
         // text."; frontmatter appearing out of nothing is now a line's
         // formatting (pin bug-frontmatter-from-nothing-notice).
-        expect(messages()).toEqual(["No footnote was created: a footnote here would break the line's formatting. Move the caret into the text."]);
+        expect(messages()).toEqual(["No footnote was created: it would break the line's formatting. Move the cursor into the text."]);
     });
 
     it("the insert path leaves ----free headings and normal notes alone", async () => {

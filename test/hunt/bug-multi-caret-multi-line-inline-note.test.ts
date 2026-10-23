@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote, insertInlineFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { MultiCaretNestedNotice } from "../../src/editor/notice";
 import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
+import { MultiCaretNestedNotice } from "../helpers/toasts";
 
 // bug: with several carets, a caret inside an inline footnote that runs
 // over a line break is not seen as inside an inline footnote.

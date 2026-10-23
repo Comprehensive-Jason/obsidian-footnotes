@@ -4,7 +4,7 @@ import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { BlockSyntaxNotice } from "../../src/editor/notice";
+import { BlockSyntaxNotice } from "../helpers/toasts";
 
 // spec question (UI text): when a press at the start of a line that
 // begins with ":" is refused, what should the toast say?

@@ -12,7 +12,7 @@ import {
 } from "./create-footnote";
 import { DocContext, docContext, referenceOccurrenceAtCursor } from "../editor/doc-context";
 import { readInlineFootnoteFromClipboard } from "./inline-footnotes";
-import { ProtectedCreationNotice, simulateChanges } from "../editor/insertion-liveness";
+import { simulateChanges } from "../editor/insertion-liveness";
 import { judgeEdit } from "../editor/result-gate";
 import { shouldJumpFromDefinitionToReference, shouldJumpFromReferenceToDefinition } from "./navigation";
 import { propertiesWidgetOwnsFocus, readingViewActive, viewEditor } from "../editor/obsidian-internals";
@@ -21,7 +21,7 @@ import { selectionPressHandled, submitActiveNameModal } from "./selection-footno
 import { multiCaretPastePressHandled, multiCaretPressHandled } from "./multi-caret";
 import { activeTableCellEditor, resolvedCaret, runOutsideTableCell, TableCellEditor } from "../editor/table-cursor";
 
-import { showNotice } from "../editor/notice";
+import { Reason, refusal, showNotice } from "../editor/notice";
 // The command entry points. Every press walks the same decision cascade,
 // and what sits at the caret decides which step handles it:
 //   1. on a definition line ("[^x]: …"): jump back to the first reference
@@ -79,7 +79,7 @@ import { showNotice } from "../editor/notice";
 export async function withEditableEditor(
     plugin: FootnotePlugin,
     action: (doc: Editor) => void | Promise<void>,
-    propertiesFocusNotice: string = ProtectedCreationNotice,
+    propertiesFocusNotice: string = refusal("footnote", Reason.protected),
 ): Promise<void> {
     // an open Name-the-footnote modal claims the press FIRST: any footnote
     // command submits that modal, exactly like pressing Enter (Jason's ask

@@ -19,63 +19,77 @@ import { quotedReference } from "../parsing/footnote-grammar";
 // A refusal that means the same thing says the same thing wherever it
 // fires, which leaves fewer separate strings to keep in step and, later,
 // to translate.
+//
+// Every refusal is built the same way: an opener that says what did not
+// happen, one reason from the list below, and sometimes a piece of advice
+// (Jason's choice, 2026-10-22, run toast-consolidate). refusal() puts them
+// together, so no refusal is written out in full anywhere else.
 
-/** The opening words every "nothing was created" refusal starts with. */
-export const NoFootnoteCreated = "No footnote was created: ";
-/** The same opener in the plural, for a multi-caret press. */
-const NoFootnotesCreated = "No footnotes were created: ";
-/** The opener lint uses when a note cannot be linted at all. */
-export const LintingCanceled = "Linting canceled: ";
+/** The opening words of every refusal, one per kind of action. A press with
+ * several cursors always gets the plural one, "footnotes". */
+const Openers = {
+    footnote: "No footnote was created",
+    footnotes: "No footnotes were created",
+    paste: "Nothing was pasted",
+    cut: "Nothing was cut",
+    delete: "Nothing was deleted",
+    convert: "Nothing was converted",
+    lint: "Linting canceled",
+} as const;
+export type Opener = keyof typeof Openers;
 
-/** The one nesting rule, worded once. It covers a caret inside a definition
- * body, a selection that already holds a footnote, and a caret inside a
- * footnote among otherwise plain-text carets. */
-const NestingRule = "footnotes can't be nested inside other footnotes.";
-export const NestedFootnoteNotice = NoFootnoteCreated + NestingRule;
-export const MultiCaretNestedNotice = NoFootnotesCreated + NestingRule;
-/** A press with several carets, every one inside a footnote, that cannot go
- * on at all of them: the carets sit in different footnotes, in one that
- * already has its definition, or the key is the paste key. Nothing would be
- * nested there, so the nesting notice was not true (run toast-bugs,
- * 2026-10-22; the plainer of two drafts, for Jason's review). */
-export const MultiCaretInFootnotesNotice = NoFootnotesCreated + "the carets are inside existing footnotes. Move them into the text.";
+/** The shared reasons, each worded once. The six keys are also the reasons
+ * the result gate gives (GateReason in result-gate.ts), so a refusal the
+ * gate makes picks its sentence by the gate's reason. */
+export const Reason = {
+    protected: "footnotes can't go inside code, math, or other protected text.",
+    nested: "footnotes can't be nested inside other footnotes.",
+    link: "Obsidian would read it as part of a link.",
+    formatting: "it would break the line's formatting.",
+    dead: "Obsidian wouldn't read it as a footnote here.",
+    other: "it would change how Obsidian reads the text around it.",
+} as const;
 
-/** A press with the caret in a line's block syntax: a quote or list marker, a
- * task box, a heading's "#" marks, a thematic break, a setext underline
- * (Jason's wording, 2026-10-03). Code, math, and comments keep the
- * protected-text notice. */
-export const BlockSyntaxNotice = NoFootnoteCreated + "a footnote here would break the line's formatting. Move the caret into the text.";
+/** The advice that ends some refusals. Each is attached to the reason it
+ * helps with at the place that shows it. */
+export const Advice = {
+    cursorIntoText: "Move the cursor into the text.",
+    cursorsIntoText: "Move the cursors into the text.",
+    intoCell: "Put it inside a cell.",
+    allOrNone: "Select all of it or none of it.",
+    wholeLine: "Select the whole line, or only its text.",
+    oneItem: "Select one item's text, or the whole list.",
+    oneQuoteLine: "Select one line's text, or the whole quote.",
+    deleteByHand: "Delete it by hand.",
+    convertByHand: "Convert it by hand.",
+} as const;
 
-/** A press whose new reference Obsidian would read as part of a link, a
- * reference link, an image, or a wikilink: the caret on the last word of
- * "[sic]" writes "[sic][^1]", a reference link with no footnote in it
- * (Jason's wording, 2026-10-04). Code, math, and comments keep the
- * protected-text notice. */
-export const InsideLinkNotice = NoFootnoteCreated + "Obsidian would read it as part of a link.";
+/** A refusal: the opener, a colon, the reason, and the advice when there is
+ * any. `reason` is one of Reason's sentences, invalidPrefix's, or a
+ * sentence only one place uses. */
+export function refusal(opener: Opener, reason: string, advice?: string): string {
+    return `${Openers[opener]}: ${reason}${advice === undefined ? "" : ` ${advice}`}`;
+}
 
-/** A press whose new footnote Obsidian would not read as one, for no
- * reason a more particular notice names: not protected text, not a link
- * (the result gate's reason "dead"). It borrowed the protected-text
- * notice, which named code or math that was not there (Jason's wording,
- * ruling 7 of the cycle 6 rulings, 2026-10-08; hunt 2026-10-08 cycle 6,
- * cluster Z8). */
-export const DeadFootnoteNotice = NoFootnoteCreated + "Obsidian wouldn't read it as a footnote here.";
+/** The reason for a note whose footnote-prefix property cannot be used,
+ * worded the same way whether a press refuses, a conversion refuses, or the
+ * lint cancels. `problem` is the sentence footnotePrefixProblem gives. */
+export function invalidPrefix(prefix: string, problem: string): string {
+    return `this note's footnote-prefix ("${prefix}") is invalid. ${problem}`;
+}
 
-/** The end of every refusal for an edit that would change how Obsidian
- * reads the note somewhere it was not asked to: the result gate's general
- * reason, when no more particular one fits (Jason's wording, 2026-10-08).
- * Each action opens it with its own outcome. */
-const ReadsDifferently = "it would change how Obsidian reads the text around it.";
-export const ReadsDifferentlyNotice = NoFootnoteCreated + ReadsDifferently;
+/** The advice for a press whose caret sits in a line's block syntax: move
+ * the cursor, or the cursors when there were several. */
+export function cursorAdvice(opener: Opener): string {
+    return opener === "footnotes" ? Advice.cursorsIntoText : Advice.cursorIntoText;
+}
 
-/** A cut the result gate refused: nothing is cut or copied (Jason, 2026-10-08). */
-export const NothingCutNotice = "Nothing was cut: " + ReadsDifferently;
-
-/** A carried paste the result gate refused: nothing is pasted, and the
- * notice says why, by the gate's reason (Jason, 2026-10-08). */
-export const PasteNestedNotice = "Nothing was pasted: the pasted footnotes would land inside another footnote.";
-export const PasteProtectedNotice = "Nothing was pasted: footnotes can't go inside code, math, or other protected text.";
-export const PasteReadsDifferentlyNotice = "Nothing was pasted: " + ReadsDifferently;
+/** "a", "a and b", or "a, b, and c": a list inside a sentence, with the
+ * Oxford comma. */
+export function andList(items: readonly string[]): string {
+    if (items.length <= 2) return items.join(" and ");
+    return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
 
 /** The advice for a definition nothing references. The navigation press and
  * the lint alert give the same advice. */
@@ -87,12 +101,6 @@ export function addReferenceOrDeleteDefinition(name: string): string {
  * the Rename modal say the same thing. */
 export function nameAlreadyUsed(name: string): string {
     return `${quotedReference(name)} is already used by another footnote.`;
-}
-
-/** An invalid footnote-prefix property, worded the same way whether the
- * insert refuses or the lint cancels. */
-export function invalidPrefixMessage(opener: string, prefix: string, problem: string): string {
-    return `${opener}this note's footnote-prefix ("${prefix}") is invalid. ${problem}`;
 }
 
 /** A quoted footnote reference, exactly as the toasts spell it:

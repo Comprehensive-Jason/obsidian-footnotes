@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { messages, resetNotices } from "../helpers/notices";
-import { InsideLinkNotice } from "../../src/editor/notice";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { insertAutonumFootnote, insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { readNote } from "../../src/parsing/note-reading";
+import { InsideLinkNotice } from "../helpers/toasts";
 
 // spec question: should a press on a link reference definition's line be
 // refused?

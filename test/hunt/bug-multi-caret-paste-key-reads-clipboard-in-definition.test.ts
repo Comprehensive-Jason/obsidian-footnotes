@@ -35,11 +35,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { pasteInlineFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { NestedFootnoteNotice } from "../../src/editor/notice";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
+import { MultiCaretNestedNotice, NestedFootnoteNotice } from "../helpers/toasts";
 
 const settings = { ...DEFAULT_SETTINGS, enablePopupEditor: false };
 const NOTE = ["Text[^1].", "", "[^1]: One.", "", "More text."];
@@ -68,7 +68,7 @@ describe("the paste key's multi-caret press with a caret at the end of a definit
         const doc = fakeEditor(NOTE, { carets: [{ line: 2, ch: 10 }, { line: 4, ch: 10 }], edits: true, wholeDoc: true, words: true });
         await pasteInlineFootnote(fakePlugin(settings, doc));
         expect(doc.lines).toEqual(NOTE);
-        expect(messages()).toEqual([NestedFootnoteNotice]);
+        expect(messages()).toEqual([MultiCaretNestedNotice]);
         expect(reads).toBe(0);
     });
 
@@ -77,7 +77,7 @@ describe("the paste key's multi-caret press with a caret at the end of a definit
         const doc = fakeEditor(NOTE, { carets: [{ line: 2, ch: 10 }, { line: 4, ch: 10 }], edits: true, wholeDoc: true, words: true });
         await pasteInlineFootnote(fakePlugin(settings, doc));
         expect(doc.lines).toEqual(NOTE);
-        expect(messages()).toEqual([NestedFootnoteNotice]);
+        expect(messages()).toEqual([MultiCaretNestedNotice]);
     });
 
     it("control: the single-caret paste key on the blank line inside a definition refuses before reading the clipboard", async () => {

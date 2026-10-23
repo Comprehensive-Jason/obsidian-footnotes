@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import FootnotePlugin from "../../src/main";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { NestedFootnoteNotice } from "../../src/editor/notice";
 import { resetNotices, noticed } from "../helpers/notices";
 import {
     fakeEditor as sharedFakeEditor,
     FakeEditor,
 } from "../helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "../helpers/fake-plugin";
+import { NestedFootnoteNotice } from "../helpers/toasts";
 
 // A user selects the "[^1]" sitting on a LAZY label line (a label-shaped
 // line directly under a paragraph: "prose" then "[^1]: lazy body" with no

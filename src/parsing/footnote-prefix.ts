@@ -3,7 +3,7 @@ import { Editor } from "obsidian";
 import type FootnotePlugin from "../main";
 import { isValidFootnoteName } from "./footnote-grammar";
 
-import { invalidPrefixMessage, NoFootnoteCreated, showNotice } from "../editor/notice";
+import { invalidPrefix, Opener, refusal, showNotice } from "../editor/notice";
 // Everything about the note's `footnote-prefix` frontmatter property: how
 // it is read, what counts as valid, and the settings-aware resolver the
 // insert commands share. The reading is a small hand-written parser that
@@ -183,16 +183,20 @@ export function footnotePrefixProblem(prefix: string): string | null {
 // way to read it: footnotePrefixFromEditor on a press, footnotePrefix when
 // the full note text is already in hand (review item F1 - never build a
 // string of the whole document on a keypress).
+//
+// `opener` is how the refusal starts: "footnotes" for a press with several
+// cursors, "convert" for a conversion.
 export function activeFootnotePrefix(
     plugin: FootnotePlugin,
     prefix: string,
+    opener: Opener = "footnote",
 ): string | null {
     if (!plugin.settings.enableFootnotePrefix) return "";
     if (!prefix) return "";
     const problem = footnotePrefixProblem(prefix);
     if (problem) {
         showNotice(
-            invalidPrefixMessage(NoFootnoteCreated, prefix, problem),
+            refusal(opener, invalidPrefix(prefix, problem)),
             8000,
         );
         return null;

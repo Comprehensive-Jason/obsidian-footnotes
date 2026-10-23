@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import FootnotePlugin from "../../src/main";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { NestedFootnoteNotice } from "../../src/editor/notice";
 import { fakeEditor as sharedFakeEditor, FakeEditor } from "../helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "../helpers/fake-plugin";
 import { noticeCalls } from "../mocks/obsidian";
 import { resetNotices } from "../helpers/notices";
+import { NestedFootnoteNotice } from "../helpers/toasts";
 
 // A selection converted to a footnote refuses to nest when it sits inside
 // another footnote's definition (ADR-0001; selection-footnote.ts checks

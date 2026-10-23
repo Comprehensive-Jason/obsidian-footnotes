@@ -7,7 +7,7 @@ import { handlePaste, resetCarryRegister } from "../../src/commands/carry-footno
 import { dismissFootnotePopup, openFootnotePopup, settleFootnotePopupWithFeedback, toggleCloseFootnotePopup } from "../../src/commands/footnote-popup";
 import { fakeEditor, type FakeEditor } from "../helpers/fake-editor";
 import { messages, resetNotices } from "../helpers/notices";
-import { PasteNestedNotice } from "../../src/editor/notice";
+import { PasteNestedNotice } from "../helpers/toasts";
 
 // BUG (wrong output): a carried paste into the footnote popup lands a
 // second definition of a name the note already uses.

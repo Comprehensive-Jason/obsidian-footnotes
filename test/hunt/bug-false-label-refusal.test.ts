@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote, insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { BlockSyntaxNotice } from "../../src/editor/notice";
 import { fixLazyDefinitions } from "../../src/linting/rules/fix-lazy-definitions";
 import { readNote } from "../../src/parsing/note-reading";
 import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
+import { BlockSyntaxNotice } from "../helpers/toasts";
 
 // BUG (annoyance): a press is refused as if it would make a definition
 // label where none can form.

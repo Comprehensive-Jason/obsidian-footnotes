@@ -70,7 +70,7 @@ async function pressAt(lines: string[], line: number, ch: number, extra: Record<
 beforeEach(resetNotices);
 
 /** The block-syntax notice, which ruling B2 names for this refusal. */
-const Formatting = "No footnote was created: a footnote here would break the line's formatting. Move the caret into the text.";
+const Formatting = "No footnote was created: it would break the line's formatting. Move the cursor into the text.";
 const headingOn = { enableFootnoteSectionHeading: true };
 
 describe("ruling B2's refusal keeps its notice with the Section heading setting on", () => {

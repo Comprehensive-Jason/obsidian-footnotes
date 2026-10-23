@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { InsideLinkNotice } from "../../src/editor/notice";
 import type { FootnotePlacement } from "../../src/parsing/landing";
 import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
+import { InsideLinkNotice } from "../helpers/toasts";
 
 // bug: a press on a word inside bracketed text that is no link, such as
 // "I said [some text] here", jumps past the "]" and is refused.

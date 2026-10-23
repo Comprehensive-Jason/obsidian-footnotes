@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { BlockSyntaxNotice } from "../../src/editor/notice";
 import { readNote } from "../../src/parsing/note-reading";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { noticed, resetNotices } from "../helpers/notices";
+import { BlockSyntaxNotice } from "../helpers/toasts";
 
 // BUG (wrong output): rulings 4 and 5 refuse a press in front of a quote
 // marker and on a setext underline, but not when the quote sits inside a

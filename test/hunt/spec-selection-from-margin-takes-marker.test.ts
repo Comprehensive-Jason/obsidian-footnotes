@@ -132,7 +132,7 @@ describe("spec question: a selection from column 0 over a line's marker, ending 
     });
 
     it("the notice says what the selection takes", () => {
-        expect(SelectionFormattingNotice).toBe("No footnote was created: the selection takes part of the line's formatting. Select the whole line, or only its text.");
+        expect(SelectionFormattingNotice).toBe("No footnote was created: it would break the line's formatting. Select the whole line, or only its text.");
     });
 
     it("control: a heading line read before the press is a heading", () => {

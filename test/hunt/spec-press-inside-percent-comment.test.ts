@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { ProtectedCreationNotice } from "../../src/editor/insertion-liveness";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
+import { ProtectedCreationNotice } from "../helpers/toasts";
 
 // spec question: should a press with the caret inside a "%%" comment be
 // refused, as a press inside an HTML comment is?

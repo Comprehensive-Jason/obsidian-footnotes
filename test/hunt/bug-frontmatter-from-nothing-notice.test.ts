@@ -74,7 +74,7 @@ describe("frontmatter that an edit would make out of nothing is reported as form
         const doc = fakeEditor([...note], { wholeDoc: true, edits: true, words: true, cursor: { line: 2, ch: 5 } });
         await insertAutonumFootnote(fakePlugin(settings, doc));
         expect(doc.lines).toEqual(note);
-        expect(messages()).toEqual(["No footnote was created: a footnote here would break the line's formatting. Move the caret into the text."]);
+        expect(messages()).toEqual(["No footnote was created: it would break the line's formatting. Move the cursor into the text."]);
     });
 
     it("a carried paste is refused with the paste's formatting notice", () => {
@@ -109,7 +109,7 @@ describe("frontmatter that an edit would make out of nothing is reported as form
         const doc = fakeEditor([...note], { wholeDoc: true, edits: true, cursor: { line: 0, ch: 9 }, selection: { anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 9 } } });
         await insertAutonumFootnote(fakePlugin(settings, doc));
         expect(doc.lines).toEqual(note);
-        expect(messages()).toEqual(["No footnote was created: the selection takes part of the line's formatting. Select the whole line, or only its text."]);
+        expect(messages()).toEqual(["No footnote was created: it would break the line's formatting. Select the whole line, or only its text."]);
     });
 
     it("control: protected text an edit hides still gives the protected-text reason", () => {

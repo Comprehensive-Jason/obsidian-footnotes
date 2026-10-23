@@ -28,41 +28,30 @@ import {
     listExistingFootnoteDefinitions,
     referenceOccurrenceAtCursor,
 } from "../editor/doc-context";
-import { ProtectedCreationNotice, safeInsertionCh, simulateChanges } from "../editor/insertion-liveness";
+import { safeInsertionCh, simulateChanges } from "../editor/insertion-liveness";
 import { lintAfterFootnoteCreation } from "../linting/linter";
 import { maskInlineRegions, readCell } from "../parsing/cell-reading";
 import { warnTableEdgeCaretIfOutside, warnProtectedCaretIfInside } from "./press-guards";
 import { cellCaret, TableCellEditor } from "../editor/table-cursor";
 
-import { BlockSyntaxNotice, DeadFootnoteNotice, InsideLinkNotice, NestedFootnoteNotice, ReadsDifferentlyNotice, showNotice } from "../editor/notice";
+import { cursorAdvice, Opener, Reason, refusal, showNotice } from "../editor/notice";
 import { CreatedFootnote, GateReason, GateVerdict, judgeEdit } from "../editor/result-gate";
 
 /**
  * Shows the notice for a creation the result gate refused (judgeEdit in
  * result-gate.ts), and reports whether it refused. Each reason the gate
- * gives has its notice (the design's table; Jason, 2026-10-08): a
- * footnote inside a footnote gets the nesting notice, the one a caret
- * inside a definition gets; protected text, the protected-text notice; a
- * link, the link notice (Jason's ruling, 2026-10-04); a line's
- * formatting, the block-syntax notice (Jason, 2026-10-05); something the
- * press meant to create that would not be live for any other reason, its
- * own notice (ruling 7 of the cycle 6 rulings, 2026-10-08; it borrowed the
- * protected-text notice until then); and anything else, the general one. A selection conversion speaks in its own words for some
- * reasons, and hands them in as `notices`. Shared by every press that
- * creates a footnote. True means the press was refused.
+ * gives is one of the shared reasons in notice.ts, so the refusal says
+ * that reason (the design's table, Jason, 2026-10-08; one vocabulary,
+ * Jason, 2026-10-22). A line's formatting also gets the advice to move the
+ * cursor. A selection conversion speaks in its own words for some reasons,
+ * and hands them in as `notices`. `opener` is "footnotes" for a press with
+ * several cursors. Shared by every press that creates a footnote. True
+ * means the press was refused.
  */
-export function refusedCreation(verdict: GateVerdict, notices: Partial<Record<GateReason, string>> = {}): boolean {
+export function refusedCreation(verdict: GateVerdict, notices: Partial<Record<GateReason, string>> = {}, opener: Opener = "footnote"): boolean {
     if (verdict.pass) return false;
-    const byReason: Record<GateReason, string> = {
-        nested: NestedFootnoteNotice,
-        protected: ProtectedCreationNotice,
-        link: InsideLinkNotice,
-        formatting: BlockSyntaxNotice,
-        dead: DeadFootnoteNotice,
-        other: ReadsDifferentlyNotice,
-        ...notices,
-    };
-    showNotice(byReason[verdict.reason], 8000);
+    const advice = verdict.reason === "formatting" ? cursorAdvice(opener) : undefined;
+    showNotice(notices[verdict.reason] ?? refusal(opener, Reason[verdict.reason], advice), 8000);
     return true;
 }
 
@@ -297,8 +286,9 @@ export function autonumFootnoteId(
     plugin: FootnotePlugin,
     doc: Editor,
     ctx: DocContext = docContext(doc),
+    opener: Opener = "footnote",
 ): string | null {
-    const prefix = activeFootnotePrefix(plugin, footnotePrefixFromEditor(doc));
+    const prefix = activeFootnotePrefix(plugin, footnotePrefixFromEditor(doc), opener);
     if (prefix === null) return null;
     return `${prefix}${computeNextFootnoteNumber(ctx.reading(), prefix)}`;
 }

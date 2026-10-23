@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { InsideLinkNotice } from "../../src/editor/notice";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import type { FootnotePlacement } from "../../src/parsing/landing";
 import { readNote } from "../../src/parsing/note-reading";
 import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
+import { InsideLinkNotice } from "../helpers/toasts";
 
 // BUG (annoyance): in "![alt text]" with no matching link definition, a
 // press with the caret inside a word is refused, though a press at the

@@ -20,11 +20,11 @@ import { describe, expect, it, beforeEach } from "vitest";
 import FootnotePlugin from "../../src/main";
 import { insertAutonumFootnote, insertInlineFootnote, insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { judgeEdit } from "../../src/editor/result-gate";
-import { NestedFootnoteNotice } from "../../src/editor/notice";
 import { fakeEditor, FakeEditor } from "../helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "../helpers/fake-plugin";
 import { noticeCalls } from "../mocks/obsidian";
 import { resetNotices } from "../helpers/notices";
+import { NestedFootnoteNotice } from "../helpers/toasts";
 
 function fakePlugin(doc: FakeEditor): FootnotePlugin {
     return sharedFakePlugin(

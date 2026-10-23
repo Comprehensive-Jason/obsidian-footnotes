@@ -15,9 +15,8 @@ import {
     insertNamedFootnote,
     pasteInlineFootnote,
 } from "../src/commands/insert-or-navigate-footnotes";
-import { MultiCaretInFootnotesNotice, MultiCaretNestedNotice, NestedFootnoteNotice } from "../src/editor/notice";
 import { PrefixOnlyNotice } from "../src/commands/press-guards";
-import { ProtectedCreationNotice } from "../src/editor/insertion-liveness";
+import { MultiCaretInFootnotesNotice, MultiCaretNestedNotice, MultiCaretProtectedNotice } from "./helpers/toasts";
 
 // Multiple Alt-clicked carets get the SAME footnote at every one
 // (2026-08-22, Jason's ask - one source cited many times; always on, no
@@ -253,7 +252,7 @@ describe("atomic refusals - one bad caret refuses the whole press", () => {
         ]);
         await insertAutonumFootnote(fakePlugin(doc));
         expect(doc.lines).toEqual(before);
-        expect(noticed(ProtectedCreationNotice)).toBe(true);
+        expect(noticed(MultiCaretProtectedNotice)).toBe(true);
     });
 
     it("a caret inside an existing reference refuses with its own toast", async () => {
@@ -275,7 +274,7 @@ describe("atomic refusals - one bad caret refuses the whole press", () => {
         ]);
         await insertInlineFootnote(fakePlugin(doc));
         expect(doc.lines).toEqual(before);
-        expect(noticed(NestedFootnoteNotice)).toBe(true);
+        expect(noticed(MultiCaretNestedNotice)).toBe(true);
     });
 
     it("a caret inside an inline footnote refuses (mixed meanings, no hop)", async () => {

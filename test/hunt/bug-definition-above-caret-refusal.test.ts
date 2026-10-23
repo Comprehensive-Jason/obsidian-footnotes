@@ -11,7 +11,7 @@ import { fakePlugin as sharedFakePlugin } from "../helpers/fake-plugin";
 
 import FootnotePlugin from "../../src/main";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { ProtectedCreationNotice } from "../../src/editor/insertion-liveness";
+import { ProtectedCreationNotice } from "../helpers/toasts";
 
 // BUG (found by the entry corpus, 2026-08-12): when the note's last
 // definition block sits ABOVE the caret (definitions under a mid-document

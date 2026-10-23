@@ -5,8 +5,7 @@ import { fakeEditor } from "./helpers/fake-editor";
 import { fakePlugin } from "./helpers/fake-plugin";
 import { selectionPressHandled } from "../src/commands/selection-footnote";
 import { refusedCreation } from "../src/commands/create-footnote";
-import { DeadFootnoteNotice } from "../src/editor/notice";
-import { ProtectedCreationNotice } from "../src/editor/insertion-liveness";
+import { DeadFootnoteNotice, ProtectedCreationNotice } from "./helpers/toasts";
 
 // The result gate's reason "dead" (something the press meant to create
 // that Obsidian would not read as a footnote, for no reason a more

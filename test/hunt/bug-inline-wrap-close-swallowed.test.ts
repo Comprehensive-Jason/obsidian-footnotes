@@ -9,8 +9,8 @@ import FootnotePlugin from "../../src/main";
 import { selectionPressHandled } from "../../src/commands/selection-footnote";
 import { pasteInlineFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { ProtectedSelectionNotice } from "../../src/commands/selection-footnote";
-import { ProtectedCreationNotice } from "../../src/editor/insertion-liveness";
 import { judgeEdit } from "../../src/editor/result-gate";
+import { ProtectedCreationNotice } from "../helpers/toasts";
 
 // BUG (hunt 2026-08-25, contexts lens; skeptic-confirmed): every
 // inline-footnote liveness check verifies only the wrapper's OPEN

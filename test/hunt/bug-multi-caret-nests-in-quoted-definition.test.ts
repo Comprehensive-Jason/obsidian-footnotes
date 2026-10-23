@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import FootnotePlugin from "../../src/main";
 import { insertAutonumFootnote, insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { NestedFootnoteNotice } from "../../src/editor/notice";
 import { fakeEditor as sharedFakeEditor, FakeEditor } from "../helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "../helpers/fake-plugin";
 import { noticeCalls } from "../mocks/obsidian";
 import { resetNotices } from "../helpers/notices";
+import { MultiCaretNestedNotice } from "../helpers/toasts";
 
 // The multi-caret guards refuse a press that would land a footnote inside
 // another footnote's definition (ADR-0001: nesting is prevented
@@ -67,7 +67,7 @@ describe("the multi-caret claim inside a quoted definition", () => {
         });
         await insertAutonumFootnote(fakePlugin(doc));
         expect(doc.lines.join("\n")).toBe(QUOTED.join("\n"));
-        expect(noticeCalls.some((call) => call[0] === NestedFootnoteNotice)).toBe(true);
+        expect(noticeCalls.some((call) => call[0] === MultiCaretNestedNotice)).toBe(true);
     });
 
     it("the numbered press refuses a caret on the quoted label line's body", async () => {
@@ -98,7 +98,7 @@ describe("the multi-caret claim inside a quoted definition", () => {
         });
         await insertNamedFootnote(fakePlugin(doc));
         expect(doc.lines.join("\n")).toBe(lines.join("\n"));
-        expect(noticeCalls.some((call) => call[0] === NestedFootnoteNotice)).toBe(true);
+        expect(noticeCalls.some((call) => call[0] === MultiCaretNestedNotice)).toBe(true);
     });
 
     it("the numbered press refuses a caret at column 0 of the quoted label line (the insert destroys the label)", async () => {

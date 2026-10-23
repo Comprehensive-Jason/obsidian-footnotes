@@ -10,12 +10,12 @@ import {
     pasteInlineFootnote,
 } from "../src/commands/insert-or-navigate-footnotes";
 import { renameFootnote, RenameTargetNotice } from "../src/commands/rename-footnote";
-import { ProtectedCreationNotice } from "../src/editor/insertion-liveness";
 import { propertiesWidgetOwnsFocus } from "../src/editor/obsidian-internals";
 import {
     fakeEditor as sharedFakeEditor,
     FakeEditor,
 } from "./helpers/fake-editor";
+import { ProtectedCreationNotice } from "./helpers/toasts";
 
 // BUG (Jason's manual pass, 2026-09-04): in Live Preview the frontmatter is
 // the Properties widget, which lives OUTSIDE CodeMirror's contentDOM in

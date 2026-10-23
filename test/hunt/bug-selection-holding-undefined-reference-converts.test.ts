@@ -52,11 +52,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { insertAutonumFootnote, insertInlineFootnote, insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { selectionPressHandled } from "../../src/commands/selection-footnote";
 import type { TableCellEditor } from "../../src/editor/table-cursor";
-import { NestedFootnoteNotice } from "../../src/editor/notice";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
+import { NestedFootnoteNotice } from "../helpers/toasts";
 
 type Pos = { line: number; ch: number };
 const settings = { ...DEFAULT_SETTINGS, enablePopupEditor: false };

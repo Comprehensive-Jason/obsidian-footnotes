@@ -5,8 +5,8 @@ import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { insertAutonumFootnote, insertInlineFootnote, insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { absorbLeadingSpace } from "../../src/commands/selection-footnote";
-import { InsideLinkNotice } from "../../src/editor/notice";
 import { readNote } from "../../src/parsing/note-reading";
+import { InsideLinkNotice } from "../helpers/toasts";
 
 // spec question: when the user selects the words right after bracketed
 // text or a bare web address and presses the numbered or named key, should

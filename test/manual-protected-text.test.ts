@@ -7,13 +7,13 @@ import {
     insertNamedFootnote,
     pasteInlineFootnote,
 } from "../src/commands/insert-or-navigate-footnotes";
-import { ProtectedCreationNotice } from "../src/editor/insertion-liveness";
 import { lintFootnotes } from "../src/linting/linter";
 import { noticeLintAlerts } from "../src/linting/lint-alerts";
 import { computeNextFootnoteNumber } from "../src/parsing/footnote-grammar";
 import { fakeEditor as sharedFakeEditor, FakeEditor } from "./helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "./helpers/fake-plugin";
 import { messages, noticed, resetNotices } from "./helpers/notices";
+import { ProtectedCreationNotice } from "./helpers/toasts";
 
 // Manual sheet 11 ("Protected text and read-only views"), moved down into
 // units on 2026-09-20. The sheet's creation guards, its lint fixture, its

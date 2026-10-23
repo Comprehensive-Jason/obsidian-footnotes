@@ -32,7 +32,7 @@ import { removeOrphanedReferencesRule } from "./rules/remove-orphaned-references
 import { mergeDuplicateDefinitionsRule } from "./rules/merge-duplicate-definitions";
 import { noticeLintAlerts, orphanSafePrefixFor } from "./lint-alerts";
 
-import { invalidPrefixMessage, LintingCanceled, showNotice } from "../editor/notice";
+import { invalidPrefix, refusal, showNotice } from "../editor/notice";
 // The lint: the pass that cleans up footnotes across a whole note.
 //
 // The actual cleanups live one folder down, in src/linting/rules/. Each of
@@ -581,7 +581,7 @@ export function lintBlockedByPrefix(markdown: string, prefixFeatureOn = true): s
     if (!prefix) return null;
     const problem = footnotePrefixProblem(prefix);
     if (problem === null) return null;
-    return invalidPrefixMessage(LintingCanceled, prefix, problem);
+    return refusal("lint", invalidPrefix(prefix, problem));
 }
 
 /**
@@ -603,7 +603,11 @@ export function sectionHeadingProblem(heading: string): string | null {
     const reading = readNote(headingLines);
     const live = headingLines.flatMap((_, i) => reading.referencesOn(i));
     if (live.length === 0) return null;
-    return `${LintingCanceled}the footnote section heading setting contains a footnote reference (${quotedReference(live[0].name)}), which the lint rules would renumber. Take it out of the heading in the plugin settings.`;
+    return refusal(
+        "lint",
+        `the footnote section heading setting contains a footnote reference (${quotedReference(live[0].name)}), which the lint rules would renumber.`,
+        "Take it out of the heading in the plugin settings.",
+    );
 }
 
 /** The lint-cancelling message for the section heading in the settings, or null. */

@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { noticed, resetNotices } from "../helpers/notices";
-import { PasteReadsDifferentlyNotice } from "../../src/editor/notice";
 import { carryRegister, handleCopy, handlePaste, resetCarryRegister } from "../../src/commands/carry-footnotes-hooks";
+import { PasteReadsDifferentlyNotice } from "../helpers/toasts";
 
 // BUG (data loss in the select-all case): a paste that replaces a
 // selection holding the destination's own definitions is planned against

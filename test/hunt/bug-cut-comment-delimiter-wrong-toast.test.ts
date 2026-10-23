@@ -8,7 +8,7 @@ import { messages, noticed, resetNotices } from "../helpers/notices";
 import FootnotePlugin from "../../src/main";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { ProtectedSelectionNotice } from "../../src/commands/selection-footnote";
-import { ProtectedCreationNotice } from "../../src/editor/insertion-liveness";
+import { ProtectedCreationNotice } from "../helpers/toasts";
 
 // BUG (cosmetic): a selection that grabs one "%%" comment delimiter
 // without its partner is refused, correctly and with the note untouched,

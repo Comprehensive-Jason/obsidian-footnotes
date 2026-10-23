@@ -3,11 +3,11 @@ import { describe, expect, it, beforeEach } from "vitest";
 
 import FootnotePlugin from "../../src/main";
 import { insertNamedFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { NestedFootnoteNotice } from "../../src/editor/notice";
 import { fakeEditor as sharedFakeEditor, FakeEditor } from "../helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "../helpers/fake-plugin";
 import { noticeCalls } from "../mocks/obsidian";
 import { resetNotices } from "../helpers/notices";
+import { MultiCaretNestedNotice } from "../helpers/toasts";
 
 // The named multi-caret flow's second press: every caret sits on a
 // "[^name]" reference with no definition, so the press collapses the
@@ -73,7 +73,7 @@ describe("the named multi-caret second press with one reference inside a definit
             wholeDoc: true,
         });
         await insertNamedFootnote(fakePlugin(doc));
-        expect(noticeCalls.some((call) => call[0] === NestedFootnoteNotice)).toBe(true);
+        expect(noticeCalls.some((call) => call[0] === MultiCaretNestedNotice)).toBe(true);
     });
 
     it("control: with a blank line between, both references are in prose and the shared definition is created", async () => {

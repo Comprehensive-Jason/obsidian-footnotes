@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote, insertInlineFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { InsideLinkNotice } from "../../src/editor/notice";
 import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
+import { InsideLinkNotice } from "../helpers/toasts";
 
 // Settled 2026-10-05 (Jason's triage decision Q4): a press inside a link
 // reference definition's address or title, or right after its label when

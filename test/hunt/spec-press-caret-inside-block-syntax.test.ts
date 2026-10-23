@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { BlockSyntaxNotice } from "../../src/editor/notice";
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { noticed, resetNotices } from "../helpers/notices";
+import { BlockSyntaxNotice } from "../helpers/toasts";
 
 // Ruled (Jason, 2026-10-03): a press never writes into block syntax. With
 // the caret in front of or inside a list marker (between an ordered

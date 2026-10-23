@@ -10,10 +10,9 @@ import {
     insertInlineFootnote,
     insertNamedFootnote,
 } from "../src/commands/insert-or-navigate-footnotes";
-import { InsideLinkNotice } from "../src/editor/notice";
-import { ProtectedCreationNotice } from "../src/editor/insertion-liveness";
 import { judgeEdit } from "../src/editor/result-gate";
 import { readNote } from "../src/parsing/note-reading";
+import { InsideLinkNotice, MultiCaretLinkNotice, MultiCaretProtectedNotice, ProtectedCreationNotice } from "./helpers/toasts";
 
 // A press refused because Obsidian would read the new reference as part of
 // a link says so in its own words (Jason's ruling, 2026-10-04).
@@ -117,14 +116,14 @@ describe.each(Shapes)("a press on the last word of $shape", ({ lines, ch }) => {
         const twoCarets = [lines[0] + " and plain", ...lines.slice(1)];
         const doc = await pressAtCarets(insertAutonumFootnote, twoCarets, [ch, lines[0].length + 3]);
         expect(doc.lines).toEqual(twoCarets);
-        expect(messages()).toEqual([InsideLinkNotice]);
+        expect(messages()).toEqual([MultiCaretLinkNotice]);
     });
 
     it("the named key at two carets refuses the whole press with the link notice", async () => {
         const twoCarets = [lines[0] + " and plain", ...lines.slice(1)];
         const doc = await pressAtCarets(insertNamedFootnote, twoCarets, [ch, lines[0].length + 3]);
         expect(doc.lines).toEqual(twoCarets);
-        expect(messages()).toEqual([InsideLinkNotice]);
+        expect(messages()).toEqual([MultiCaretLinkNotice]);
     });
 
     // Characterization (behaviour pinned as it is, for Jason's review): the
@@ -151,7 +150,7 @@ describe("protected text keeps the protected-text notice", () => {
         const lines = ["see `code` now and plain"];
         const doc = await pressAtCarets(insertAutonumFootnote, lines, [7, 17]);
         expect(doc.lines).toEqual(lines);
-        expect(messages()).toEqual([ProtectedCreationNotice]);
+        expect(messages()).toEqual([MultiCaretProtectedNotice]);
     });
 
     it("the numbered key whose reference would close a math pair", async () => {

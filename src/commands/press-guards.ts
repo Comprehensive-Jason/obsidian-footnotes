@@ -10,7 +10,6 @@ import {
 import {
     caretInsideMaskedSpan,
     onLinkDefinition,
-    ProtectedCreationNotice,
 } from "../editor/insertion-liveness";
 import { DocContext, docLines, insideDefinition } from "../editor/doc-context";
 import { readNote } from "../parsing/note-reading";
@@ -23,7 +22,7 @@ import {
     tableRowCellSpans,
 } from "../editor/table-cursor";
 
-import { BlockSyntaxNotice, InsideLinkNotice, NestedFootnoteNotice, NoFootnoteCreated, showNotice } from "../editor/notice";
+import { cursorAdvice, Opener, Reason, refusal, showNotice } from "../editor/notice";
 // The press guards. A footnote key has been pressed: does anything OTHER
 // than creation own this press? An empty placeholder gets a warning, a
 // filled inline footnote hops the caret out of itself, and protected text,
@@ -82,13 +81,15 @@ export function caretGuardsHandled(
  * This only runs at the CREATION steps. Navigation never reaches protected
  * text at all, because its own checks against the masked twin (the copy of
  * the note with protected text blanked out) fall through first. True means
- * the user was warned and the press is used up.
+ * the user was warned and the press is used up. `opener` is "footnotes"
+ * for a press with several cursors, so its refusal says so.
  */
 export function warnProtectedCaretIfInside(
     doc: Editor,
     cell: TableCellEditor | null,
     cursorPosition: EditorPosition,
     ctx: DocContext,
+    opener: Opener = "footnote",
 ): boolean {
     let inside: boolean;
     if (cell) {
@@ -115,7 +116,7 @@ export function warnProtectedCaretIfInside(
         const line = cursorPosition.line;
         const lineProtected = reading.protectedLines[line] ?? false;
         if (!lineProtected && caretInBlockSyntax(ctx, cursorPosition)) {
-            showNotice(BlockSyntaxNotice, 8000);
+            showNotice(refusal(opener, Reason.formatting, cursorAdvice(opener)), 8000);
             return true;
         }
         // the same allowance for a caret inside a link on an ordinary line
@@ -154,7 +155,7 @@ export function warnProtectedCaretIfInside(
     // on the next line is inside it as well (Jason's triage decision Q4,
     // 2026-10-05; hunt 2026-10-05, round 2, pin
     // spec-link-definition-address-notice).
-    showNotice(!cell && onLinkDefinition(ctx.reading(), cursorPosition.line) ? InsideLinkNotice : ProtectedCreationNotice, 8000);
+    showNotice(refusal(opener, !cell && onLinkDefinition(ctx.reading(), cursorPosition.line) ? Reason.link : Reason.protected), 8000);
     return true;
 }
 
@@ -194,23 +195,29 @@ export const PrefixOnlyNotice =
  * A press on the label line before the end of the label never gets this
  * far: the navigation guards own those. A table cell never holds a real
  * definition. True means the user was warned and the press is used up.
+ * `opener` works as for warnProtectedCaretIfInside.
  */
 export function warnDefinitionCaretIfInside(
     doc: Editor,
     cell: TableCellEditor | null,
     cursorPosition: EditorPosition,
     ctx: DocContext,
+    opener: Opener = "footnote",
 ): boolean {
     if (cell) return false;
     if (!insideDefinition(ctx, cursorPosition.line)) return false;
-    showNotice(NestedFootnoteNotice, 8000);
+    showNotice(refusal(opener, Reason.nested), 8000);
     return true;
 }
 
-const TableEdgeNotice =
-    NoFootnoteCreated + "the caret is at the edge of a table row, outside its cells. Put it inside a cell.";
-const TableDelimiterNotice =
-    NoFootnoteCreated + "the caret is on the row of dashes under a table's header. Put it inside a cell.";
+/** The two table-edge refusals. With several cursors only one of them may
+ * be at the edge, so the plural says "a cursor". */
+function tableEdgeNotice(opener: Opener, where: "edge" | "dashes"): string {
+    const cursor = opener === "footnotes" ? "a cursor" : "the cursor";
+    const reason =
+        where === "edge" ? `${cursor} is at the edge of a table row, outside its cells.` : `${cursor} is on the row of dashes under a table's header.`;
+    return refusal(opener, reason, "Put it inside a cell.");
+}
 
 /**
  * When the caret sits on a table row but outside every cell, or anywhere on
@@ -231,6 +238,7 @@ export function warnTableEdgeCaretIfOutside(
     cell: TableCellEditor | null,
     cursorPosition: EditorPosition,
     ctx: DocContext,
+    opener: Opener = "footnote",
 ): boolean {
     if (cell) return false;
     const lineText = ctx.lines[cursorPosition.line] ?? "";
@@ -239,12 +247,12 @@ export function warnTableEdgeCaretIfOutside(
     if (!lineText.includes("|")) return false;
     if (!ctx.reading().tableRowLines[cursorPosition.line]) return false;
     if (isTableDelimiterRow(lineText)) {
-        showNotice(TableDelimiterNotice, 8000);
+        showNotice(tableEdgeNotice(opener, "dashes"), 8000);
         return true;
     }
     const ch = cursorPosition.ch;
     if (tableRowCellSpans(lineText).some((span) => span.from <= ch && ch <= span.to)) return false;
-    showNotice(TableEdgeNotice, 8000);
+    showNotice(tableEdgeNotice(opener, "edge"), 8000);
     return true;
 }
 

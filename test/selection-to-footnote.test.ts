@@ -32,9 +32,9 @@ import {
     absorbLeadingSpace,
 } from "../src/commands/selection-footnote";
 import { commandHotkeys } from "../src/editor/obsidian-internals";
-import { NestedFootnoteNotice } from "../src/editor/notice";
 import { TableCellEditor } from "../src/editor/table-cursor";
 import { readNote } from "../src/parsing/note-reading";
+import { NestedFootnoteNotice } from "./helpers/toasts";
 
 // Turning a selection into a footnote (issue #35, Jason's calls 2026-08-12:
 // overload the existing hotkeys, always on; single-line selections only;

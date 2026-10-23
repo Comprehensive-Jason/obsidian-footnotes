@@ -6,9 +6,9 @@ import type FootnotePlugin from "../../src/main";
 import { fakeEditor, type FakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { noticed, resetNotices } from "../helpers/notices";
-import { PasteNestedNotice } from "../../src/editor/notice";
 import { handlePaste, resetCarryRegister } from "../../src/commands/carry-footnotes-hooks";
 import { dismissFootnotePopup, openFootnotePopup, settleFootnotePopupWithFeedback, toggleCloseFootnotePopup } from "../../src/commands/footnote-popup";
+import { PasteNestedNotice } from "../helpers/toasts";
 
 // spec question: should a paste that carries footnotes be allowed to land
 // inside another footnote, with the caret in a definition's body or

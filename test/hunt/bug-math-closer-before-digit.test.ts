@@ -5,8 +5,8 @@ import { fakePlugin } from "../helpers/fake-plugin";
 import { resetNotices, noticed } from "../helpers/notices";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { ProtectedCreationNotice } from "../../src/editor/insertion-liveness";
 import { readNote } from "../../src/parsing/note-reading";
+import { ProtectedCreationNotice } from "../helpers/toasts";
 
 // Jason's manual pass, sheet 11 (2026-09-11): with the caret at "$5 or |$6",
 // the numbered key refused with the protected-text toast, claiming the

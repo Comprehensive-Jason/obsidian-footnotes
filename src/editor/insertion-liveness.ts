@@ -1,5 +1,4 @@
 import { EditorChange, EditorPosition } from "obsidian";
-import { NoFootnoteCreated } from "./notice";
 
 import { escapedAt } from "../parsing/footnote-grammar";
 import { NoteReading } from "../parsing/note-reading";
@@ -16,9 +15,6 @@ import { NoteReading } from "../parsing/note-reading";
 //
 // Split out of the all-in-one commands file 2026-08-12: one subject, and
 // mutation-testable on its own.
-
-export const ProtectedCreationNotice =
-    NoFootnoteCreated + "footnotes can't go inside code, math, or other protected text.";
 
 /**
  * The furthest right column, at or left of `ch`, where an insertion still

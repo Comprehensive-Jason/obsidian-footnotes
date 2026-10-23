@@ -28,7 +28,7 @@ import {
     warnTableEdgeCaretIfOutside,
 } from "./press-guards";
 
-import { MultiCaretInFootnotesNotice, MultiCaretNestedNotice, showNotice } from "../editor/notice";
+import { Reason, refusal, showNotice } from "../editor/notice";
 // The multi-caret press: several Alt-clicked carets all get the SAME
 // footnote (Jason's ask 2026-08-22, for one source cited in many places;
 // always on, no toggle, his call). What each key does:
@@ -49,13 +49,15 @@ import { MultiCaretInFootnotesNotice, MultiCaretNestedNotice, showNotice } from 
 // back. Before this, extra carets were quietly ignored, which served
 // nobody.
 
-// Two messages refuse such a press (editor/notice.ts). A caret inside a
-// footnote beside carets on plain text gets MultiCaretNestedNotice, the
-// sentence about nesting the single-caret guards use with a plural opening,
-// since the new footnote would go inside that one. Carets that are all
-// inside footnotes but cannot carry on together get
-// MultiCaretInFootnotesNotice, since nothing would be nested there (run
-// toast-bugs, 2026-10-22).
+// Every refusal of such a press opens "No footnotes were created", in the
+// plural, whichever guard refuses it (Jason, 2026-10-22). A caret inside a
+// footnote beside carets on plain text gets the nesting reason, since the
+// new footnote would go inside that one. Carets that are all inside
+// footnotes but cannot carry on together get InFootnotesNotice, since
+// nothing would be nested there (run toast-bugs, 2026-10-22).
+
+/** The refusal for carets that are all inside footnotes but cannot carry on together. */
+const InFootnotesNotice = refusal("footnotes", "the cursors are inside existing footnotes.", "Move them into the text.");
 
 /** What a caret is sitting inside, used by the continuation check. These are the same three tests the guard sweep refuses on. An inline footnote is reported ahead of a reference on purpose, because an inline footnote's body can contain reference-shaped text; the single-caret guards order them the same way. */
 type CaretArtifact =
@@ -120,7 +122,7 @@ function multiCaretContinuation(
     allowDefinitionContinuation: boolean,
 ): "handled" {
     const refuse = (): "handled" => {
-        showNotice(MultiCaretInFootnotesNotice, 8000);
+        showNotice(InFootnotesNotice, 8000);
         return "handled";
     };
     // The one that comes first in the note (Jason's consistency ruling,
@@ -172,7 +174,7 @@ function multiCaretContinuation(
     // named-flow property's 1500-run soak after Kimi hunt cycle 2
     // (2026-09-16).
     for (const caret of carets) {
-        if (warnDefinitionCaretIfInside(doc, null, caret, ctx)) return "handled";
+        if (warnDefinitionCaretIfInside(doc, null, caret, ctx, "footnotes")) return "handled";
     }
     const name = names[0];
     if (idListIncludes(listExistingFootnoteDefinitions(doc, ctx), name)) {
@@ -247,15 +249,15 @@ function multiCaretTargets(
         // When every caret is inside one, the press carries on instead;
         // see multiCaretContinuation above.
         if (artifacts[index] !== null) {
-            showNotice(MultiCaretNestedNotice, 8000);
+            showNotice(refusal("footnotes", Reason.nested), 8000);
             return "handled";
         }
         // A caret in protected text refuses with its own message, exactly
         // as the single-caret creation guard does.
-        if (warnProtectedCaretIfInside(doc, null, pos, ctx)) return "handled";
+        if (warnProtectedCaretIfInside(doc, null, pos, ctx, "footnotes")) return "handled";
         // and a caret at a table row's edge or on its delimiter row, where
         // the single-caret press refuses too (Kimi hunt cycle 1, 2026-09-16)
-        if (warnTableEdgeCaretIfOutside(null, pos, ctx)) return "handled";
+        if (warnTableEdgeCaretIfOutside(null, pos, ctx, "footnotes")) return "handled";
     }
     const adjusted = ranges.map((range) =>
         adjustFootnotePosition(
@@ -306,7 +308,7 @@ export function multiCaretPressHandled(
     }
     if (command === "named") {
         const prefix = plugin.settings.enableFootnotePrefix
-            ? activeFootnotePrefix(plugin, footnotePrefixFromEditor(doc))
+            ? activeFootnotePrefix(plugin, footnotePrefixFromEditor(doc), "footnotes")
             : "";
         // An invalid prefix has already shown a message explaining why.
         if (prefix === null) return true;
@@ -344,7 +346,7 @@ export async function multiCaretPastePressHandled(
     // gate, and the single-caret paste key keeps the same guard (hunt
     // 2026-10-09 cycle 8, bug-multi-caret-paste-key-reads-clipboard-in-definition).
     for (const range of doc.listSelections()) {
-        if (warnDefinitionCaretIfInside(doc, null, range.head, ctx)) return true;
+        if (warnDefinitionCaretIfInside(doc, null, range.head, ctx, "footnotes")) return true;
     }
 
     const text = await readInlineFootnoteFromClipboard(plugin);
@@ -372,7 +374,7 @@ function insertReferenceAtEveryCaret(
     ctx: DocContext,
     targets: EditorPosition[],
 ): void {
-    const footnoteId = autonumFootnoteId(plugin, doc, ctx);
+    const footnoteId = autonumFootnoteId(plugin, doc, ctx, "footnotes");
     if (footnoteId === null) return;
     const footnoteReference = referenceText(footnoteId);
     const plan = planDefinitionAppend({
@@ -387,7 +389,7 @@ function insertReferenceAtEveryCaret(
         { created: [{ kind: "footnote", name: footnoteId, references: plan.edits.map((edit) => edit.start), definition: { line: plan.labelLine, lines: 1 } }], insertedText: plan.heading },
         ctx.reading(),
     );
-    if (refusedCreation(verdict)) return;
+    if (refusedCreation(verdict, {}, "footnotes")) return;
 
     landDefinitionBackedInsertion({
         plugin,
@@ -438,7 +440,7 @@ function insertSkeletonAtEveryCaret(
         { created: [text.startsWith("^[") ? { kind: "inline", text, at: anchors, fromOutside: text !== "^[]" } : { kind: "placeholder", text, at: anchors }] },
         ctx.reading(),
     );
-    if (refusedCreation(verdict)) return;
+    if (refusedCreation(verdict, {}, "footnotes")) return;
     // The targets arrive in the order they appear in the note, so
     // anchors[0] is the first footnote.
     const landed = land === "first" ? anchors.slice(0, 1) : anchors;

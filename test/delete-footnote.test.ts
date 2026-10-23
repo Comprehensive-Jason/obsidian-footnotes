@@ -182,7 +182,9 @@ describe("deleteFootnoteEverywhere", () => {
         const plan = del(["-[^9] tail", "", "[^9]: nine"], "9");
         expect(plan.kind).toBe("refused");
         if (plan.kind !== "refused") throw new Error("unreachable");
-        expect(plan.reason).toContain('"[^9]"');
+        // one shared refusal for either half since 2026-10-22 (Jason's
+        // shared vocabulary); it used to name "[^9]"
+        expect(plan.reason).toBe("Nothing was deleted: it would change how Obsidian reads the text around it. Delete it by hand.");
     });
 });
 

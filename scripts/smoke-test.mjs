@@ -742,7 +742,7 @@ async function main() {
             await pollUntil(
                 "the refused paste's notice",
                 `[...document.querySelectorAll('.notice')].map(n => n.textContent).join('|')`,
-                (v) => typeof v === "string" && v.includes("Nothing was pasted: the pasted footnotes would land inside another footnote."),
+                (v) => typeof v === "string" && v.includes("Nothing was pasted: footnotes can't be nested inside other footnotes."),
             );
             const expected = "Mine[^1] and more[^2].\n\n[^1]: my own source\n[^2]: ";
             await expectEditorText(expected);

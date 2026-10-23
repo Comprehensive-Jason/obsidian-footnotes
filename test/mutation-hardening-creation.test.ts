@@ -26,9 +26,8 @@ import {
 } from "../src/commands/selection-footnote";
 import {
 } from "../src/commands/rename-footnote";
-import { ProtectedCreationNotice } from "../src/editor/insertion-liveness";
-import { DeadFootnoteNotice } from "../src/editor/notice";
 import { TableCellEditor } from "../src/editor/table-cursor";
+import { DeadFootnoteNotice, ProtectedCreationNotice } from "./helpers/toasts";
 
 // Mutation hardening for the creation trio (Stryker re-baseline 2026-08-12:
 // create-footnote 50%, rename-footnote 58%, selection-footnote 72%). The

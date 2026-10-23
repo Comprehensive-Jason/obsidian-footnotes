@@ -32,7 +32,7 @@ import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
 import type FootnotePlugin from "../../src/main";
 import { handleCut, resetCarryRegister } from "../../src/commands/carry-footnotes-hooks";
-import { NothingCutNotice } from "../../src/editor/notice";
+import { NothingCutNotice } from "../helpers/toasts";
 
 // probe: cutting a list item that has a sub-item, when the item
 // cites a footnote. A harder variant of cluster Z19 (pin

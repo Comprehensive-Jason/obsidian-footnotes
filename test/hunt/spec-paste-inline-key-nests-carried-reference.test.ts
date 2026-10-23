@@ -3,9 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { noticed, resetNotices } from "../helpers/notices";
-import { NestedFootnoteNotice } from "../../src/editor/notice";
 import { pasteInlineFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { readNote } from "../../src/parsing/note-reading";
+import { MultiCaretNestedNotice, NestedFootnoteNotice } from "../helpers/toasts";
 
 // spec question: should "Paste as inline footnote" refuse, or strip the
 // references, when the clipboard text holds a reference?
@@ -83,6 +83,6 @@ describe("spec question: the paste-as-inline key with a reference in the clipboa
         await pasteInlineFootnote(fakePlugin({ ...base }, doc));
         expect(nestedReferences(doc.lines)).toEqual([]);
         expect(doc.lines).toEqual(["x y"]);
-        expect(noticed(NestedFootnoteNotice)).toBe(true);
+        expect(noticed(MultiCaretNestedNotice)).toBe(true);
     });
 });

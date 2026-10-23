@@ -16,7 +16,7 @@ import {
     insertNamedFootnote,
     pasteInlineFootnote,
 } from "../../src/commands/insert-or-navigate-footnotes";
-import { NestedFootnoteNotice } from "../../src/editor/notice";
+import { NestedFootnoteNotice } from "../helpers/toasts";
 
 // WHAT A USER SEES. The caret rests on the blank line INSIDE a footnote
 // definition - the empty gap between two indented continuation lines, or

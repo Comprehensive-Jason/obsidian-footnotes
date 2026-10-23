@@ -8,7 +8,7 @@ Switch this note to Source mode for this section, so the `>` and `-` markers sho
 
 > The sky is blue today.
 
-- [ ] Select from the very start of the quote line above through the word `sky`, so the selection takes the `> ` with it, and press the numbered key: nothing changes, and the notice reads "No footnote was created: the selection takes part of the line's formatting. Select the whole line, or only its text."
+- [ ] Select from the very start of the quote line above through the word `sky`, so the selection takes the `> ` with it, and press the numbered key: nothing changes, and the notice reads "No footnote was created: it would break the line's formatting. Select the whole line, or only its text."
 
 Quote fixture:
 
@@ -18,7 +18,7 @@ Quote fixture:
 
 End of the quote fixture.
 
-- [ ] Select the first two lines of the Quote fixture whole, from the start of `> One.` to the end of `> Two.`, and press the numbered key: nothing changes, and the notice reads "No footnote was created: select one line's text, or the whole quote."
+- [ ] Select the first two lines of the Quote fixture whole, from the start of `> One.` to the end of `> Two.`, and press the numbered key: nothing changes, and the notice reads "No footnote was created: it would break the line's formatting. Select one line's text, or the whole quote."
 
 Escape fixture: the file sits in C:\notes today.
 
@@ -34,7 +34,7 @@ A host sentence whose footnote is the paste target[^host].
 
 Code fixture: run `make notes` to build.
 
-- [ ] Select `a phrase with its own footnote[^src]` in the Carry source line and press Ctrl+C. Click at the very end of the `[^host]:` definition at the bottom of this note and press Ctrl+V: nothing is pasted, and the notice reads "Nothing was pasted: the pasted footnotes would land inside another footnote."
+- [ ] Select `a phrase with its own footnote[^src]` in the Carry source line and press Ctrl+C. Click at the very end of the `[^host]:` definition at the bottom of this note and press Ctrl+V: nothing is pasted, and the notice reads "Nothing was pasted: footnotes can't be nested inside other footnotes."
 - [ ] With the same clipboard, click between `make` and `notes` inside the Code fixture's code span and press Ctrl+V: nothing is pasted, and the notice reads "Nothing was pasted: footnotes can't go inside code, math, or other protected text."
 
 Cut fixture:

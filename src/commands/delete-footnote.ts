@@ -7,7 +7,7 @@ import { cutOne } from "../linting/rules/remove-orphaned-references";
 import { MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
-import { showNotice } from "../editor/notice";
+import { Advice, andList, Reason, refusal, showNotice } from "../editor/notice";
 import { judgeEdit } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { replaceMinimal } from "../editor/write-back";
@@ -90,14 +90,14 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
         }
         if (inner.length > 0) {
             // the held labels as one list: "a", "a and b", or "a, b, and c"
-            const labels = inner.map(quotedDefinitionLabel);
-            const them = labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")}${labels.length > 2 ? "," : ""} and ${labels[labels.length - 1]}`;
+            const them = andList(inner.map(quotedDefinitionLabel));
+            const outer = quotedDefinitionLabel(definition.name);
             return {
                 kind: "refused",
                 reason:
                     inner.length === 1
-                        ? `Nothing was deleted: the ${them} definition sits inside the ${quotedDefinitionLabel(definition.name)} definition, which cutting it would take too. Move it out, or delete it by hand.`
-                        : `Nothing was deleted: the ${them} definitions sit inside the ${quotedDefinitionLabel(definition.name)} definition, which cutting it would take too. Move them out, or delete them by hand.`,
+                        ? refusal("delete", `the ${them} definition sits inside the ${outer} definition, which cutting it would take too.`, "Move it out, or delete it by hand.")
+                        : refusal("delete", `the ${them} definitions sit inside the ${outer} definition, which cutting it would take too.`, "Move them out, or delete them by hand."),
             };
         }
     }
@@ -181,24 +181,13 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     // line and so promote a lazy label there into a definition, or empty a
     // numbered item so it folds into the paragraph above (Jason's ruling
     // B11, 2026-10-08).
-    const byHand = " would change how Obsidian reads the text around it. Delete it by hand.";
-    // The reference cuts are judged on their own first, so the toast can
-    // say which half was refused; then the whole deletion, against the
-    // note as it was.
-    const referencesCut = removeLineRanges(
-        cutLines.map((line, i) => (definitionCut.lines[i] === lines[i] ? line : lines[i])),
-        emptied,
-    );
-    const intent = { removed: [name] };
-    if (references > 0 && !judgeEdit(lines, referencesCut, intent, reading).pass) {
-        return { kind: "refused", reason: `Nothing was deleted: removing ${quotedReference(name)}${byHand}` };
-    }
+    // The whole deletion is judged once, against the note as it was. The
+    // reference cuts used to be judged on their own first, so the toast
+    // could say which half was refused; both halves now give the same
+    // shared reason (Jason, 2026-10-22), so the one judgement is enough.
     const out = removeLineRanges(cutLines, [...blocks, ...emptied].sort((a, b) => a.start - b.start));
-    if (!judgeEdit(lines, out, intent, reading).pass) {
-        return {
-            kind: "refused",
-            reason: `Nothing was deleted: removing the ${quotedDefinitionLabel(name)} definition${byHand}`,
-        };
+    if (!judgeEdit(lines, out, { removed: [name] }, reading).pass) {
+        return { kind: "refused", reason: refusal("delete", Reason.other, Advice.deleteByHand) };
     }
     return {
         kind: "deleted",

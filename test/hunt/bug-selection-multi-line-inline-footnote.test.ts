@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote, insertInlineFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { NestedFootnoteNotice } from "../../src/editor/notice";
 import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
+import { NestedFootnoteNotice } from "../helpers/toasts";
 
 // BUG (wrong output): turning a selection into a footnote tears an inline
 // footnote that runs over a line break, or nests a new one inside it.

@@ -12,11 +12,11 @@ import {
     warnProtectedCaretIfInside,
 } from "../src/commands/press-guards";
 import { docContext } from "../src/editor/doc-context";
-import { ProtectedCreationNotice } from "../src/editor/insertion-liveness";
 import { TableCellEditor } from "../src/editor/table-cursor";
 
 import { fakeEditor as sharedFakeEditor, FakeEditor } from "./helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "./helpers/fake-plugin";
+import { ProtectedCreationNotice } from "./helpers/toasts";
 
 // Mutation hardening for the press guards (Stryker re-baseline 2026-08-12:
 // press-guards scored 60%). The guards are driven DIRECTLY here, not through
