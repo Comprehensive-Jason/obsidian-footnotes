@@ -22,7 +22,7 @@ import {
     tableRowCellSpans,
 } from "../editor/table-cursor";
 
-import { cursorAdvice, Opener, Reason, refusal, showNotice } from "../editor/notice";
+import { Advice, cursorAdvice, Opener, Reason, refusal, showNotice } from "../editor/notice";
 // The press guards. A footnote key has been pressed: does anything OTHER
 // than creation own this press? An empty placeholder gets a warning, a
 // filled inline footnote hops the caret out of itself, and protected text,
@@ -216,7 +216,7 @@ function tableEdgeNotice(opener: Opener, where: "edge" | "dashes"): string {
     const cursor = opener === "footnotes" ? "a cursor" : "the cursor";
     const reason =
         where === "edge" ? `${cursor} is at the edge of a table row, outside its cells.` : `${cursor} is on the row of dashes under a table's header.`;
-    return refusal(opener, reason, "Put it inside a cell.");
+    return refusal(opener, reason, Advice.intoCell);
 }
 
 /**
