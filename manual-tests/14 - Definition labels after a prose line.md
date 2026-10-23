@@ -1,10 +1,6 @@
-# 14: definition labels directly after a prose line (2026-09-09)
+# 14: definition labels directly after a prose line
 
-Automated coverage: 10 former checks now live in test/manual-definition-labels-after-prose.test.ts and the smoke suite; run `npm test` and `npm run test:smoke` before this sheet.
-
-Settings: defaults. Nothing left on this sheet writes to the note, so there is nothing to undo; both checks only look at Reading view. Every fixture is already in this note.
-
-The rule (Obsidian's, matched by the plugin since 2026-09-09): a footnote definition cannot interrupt a paragraph. A `[^x]:` line directly under a prose line (paragraph text, a list item, a quote or callout body line, a table row) is lazy paragraph text and renders as plain `[^x]: ...` with no footnote. A label starts a definition only after a blank line (a bare `>` inside a quote counts), the note start, a heading, a closed fence, a callout's title line, or another definition. Ground truth: ten shapes in Reading view plus the callout/quote variants; micromark disagrees (its footnote definitions may interrupt a paragraph), so this is Obsidian's behavior on purpose. Everything the plugin does about it (the presses, the rename, the lint with the fix toggle on and off, and the seven-label alert) is pinned in the unit tests; what is left here is what Obsidian itself paints, because that is what the rule copies.
+Settings: defaults. Both checks only look at Reading view.
 
 ## Fixtures (label directly under prose, no blank line: prose to Obsidian)
 
@@ -59,8 +55,6 @@ Inside a quote after a blank quote line, kilo[^c5] here:
 > quote body
 >
 > [^c5]: after the quote's blank line
-
-Comment lines live on sheet 11: a comment-only `%% c %%` line is a paragraph line (a label under it is lazy), while an HTML comment line is a block (a label under it is a definition).
 
 ## Reading view
 

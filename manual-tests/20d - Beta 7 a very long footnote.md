@@ -1,6 +1,6 @@
-# 20d: beta 7, a very long footnote (2026-10-09)
+# 20d: beta 7, a very long footnote
 
-Claude: a companion to sheet 20, added 2026-10-09. Footnote 1 below runs to about 1,250 characters, past the 1,024 characters Obsidian looks ahead for the next definition, and 100 more footnotes are packed under it one per line, as the plugin writes them. So Obsidian reads every label under footnote 1 as more of its text, until a blank line comes between them (rule E4 in docs/obsidian-reading-rules.md). Beta 6 left such a note as it was and said nothing, so Obsidian showed one footnote holding all the others (hunt cycle 7, Y7). Beta 7 gives footnote 1 the blank line under it. The first fix for that, made during beta 7, had the lint read the note once per footnote for every footnote, about 3 seconds at 100 footnotes and 28 seconds at 200 on the test machine; it was put right before the release (hunt cycle 8, V14), and this sheet checks that the lint stays quick. Automated coverage: the number of readings is pinned in test/hunt/bug-lint-cost-square-under-long-footnote.test.ts, and the blank line the lint puts under the long footnote in test/hunt/bug-label-past-lookahead-not-lazy.test.ts; run `npm test` before this sheet. What is left is how the lint feels on a note this size, and what Reading view shows after it.
+Footnote 1 below is very long, and 100 more footnotes are packed under it, one per line.
 
 Settings: defaults. Undo after the check.
 

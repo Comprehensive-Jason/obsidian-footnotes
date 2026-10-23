@@ -1,20 +1,14 @@
 # 11: protected text and read-only views
 
-Automated coverage: 26 former checks now live in test/manual-protected-text.test.ts and the smoke suite; run `npm test` and `npm run test:smoke` before this sheet.
+Settings: defaults, all lint rules ON.
 
-Settings: defaults; the lint half needs all lint rules ON. Undo between checks. Every fixture is already in this note.
-
-Pinned by units and smoke, not repeated here: creation refused in code, math, and frontmatter by all four insert hotkeys, and in an HTML comment (corrected 2026-10-09: a press inside a `%%` comment is no refusal, since Obsidian reads a reference there as live; the footnote is created there and hidden in Reading view, as Jason ruled on 2026-10-07, Q18); creation working again just outside a code span, at `$5 or [^n]$6`, and in front of a lone backslash; navigation unaffected by the guards; the Properties-widget refusal and its Rename message; the lint leaving every protected region byte-for-byte while the live references swap; the numbered command reserving nothing from a protected shape; the presses and the lint over the `%%` fixture below, orphan deletion included; the wrapped code span's numbering and alerts; and the refusals in block syntax (since 2026-10-03 a caret in front of or inside a quote or list marker, a task box, or heading marks, or on a thematic break or a setext underline, gets its own notice, "No footnote was created: a footnote here would break the line's formatting. Move the caret into the text.") and next to a link (since 2026-10-04 a press that would write `[text][^1]` after a shortcut link the note defines gets "No footnote was created: Obsidian would read it as part of a link."; the protected-text notice is now only for code, math, comments, and other protected text). Corrected 2026-10-09: since beta 7 a press on the last word of bracketed text that is no link, such as `[sic]`, writes the footnote inside the brackets, `[sic[^1]]`, under After and Before punctuation (Jason's ruling Q2, 2026-10-07; sheet 20 checks how it renders).
-
-## Reading view (fixed 2026-08-08)
+## Reading view
 
 Switch this note to Reading view:
 
-- [ ] The footnote commands are missing from the command palette while in Reading view; **Set footnote prefix** stays available (a frontmatter edit is fine there)
+- [ ] The footnote commands are missing from the command palette in Reading view; **Set footnote prefix** stays available
 
-## Obsidian `%%` comments (2026-09-09)
-
-Obsidian hides a `%%` comment but still parses it: a reference inside a comment is a real reference (it binds its definition and takes a number, though its own superscript is hidden), while a definition inside a `%%` block comment is dead. A `%%` at the start of a line with no second `%%` on that line opens a block comment through the next `%%` anywhere; a mid-line `%%` pairs only within its own line. The plugin matches this. This rendering is the ground truth the units are written against, so it is worth re-checking by eye.
+## Obsidian `%%` comments
 
 Hidden reference, live definition: november[^n1] here.
 %%
