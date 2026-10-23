@@ -43,22 +43,22 @@ describe("multi-line inline footnotes, Convert inline to normal and the punctuat
         const lines = ["text ^[an inline", "note here] after."];
         const { result, after } = convert(lines);
         expect(result.converted).toBe(0);
-        expect(result.skipped).toEqual([{ reason: "on more than one line", count: 1 }]);
+        expect(result.skipped).toEqual([{ reason: "more than one line", count: 1 }]);
         expect(after).toBe(lines.join("\n"));
-        expect(messages()).toContain("No inline footnotes converted: skipped 1 on more than one line.");
+        expect(messages()).toContain("Nothing was converted: every footnote was skipped (more than one line (1)).");
     });
 
     it("beside a one-line inline footnote, the one-line one is converted and the multi-line one is counted", () => {
         const { result, after } = convert(["One^[short].", "", "text ^[an inline", "note here] after."]);
         expect(result.converted).toBe(1);
-        expect(result.skipped).toEqual([{ reason: "on more than one line", count: 1 }]);
+        expect(result.skipped).toEqual([{ reason: "more than one line", count: 1 }]);
         expect(after).toContain("text ^[an inline\nnote here] after.");
-        expect(messages().some((m) => m.startsWith("Converted 1 inline footnote") && m.endsWith(" Skipped 1 on more than one line."))).toBe(true);
+        expect(messages().some((m) => m.startsWith("Converted 1 inline footnote") && m.endsWith(" Skipped more than one line (1)."))).toBe(true);
     });
 
     it("an inline footnote held inside a multi-line one is not counted on its own", () => {
         const { result } = convert(["text ^[an ^[inner] inline", "note here] after."]);
-        expect(result.skipped.find((s) => s.reason === "on more than one line")?.count).toBe(1);
+        expect(result.skipped.find((s) => s.reason === "more than one line")?.count).toBe(1);
     });
 
     it("the punctuation rule leaves a multi-line inline footnote before its full stop and moves a one-line one", () => {

@@ -26,7 +26,8 @@ import { messages, resetNotices } from "../helpers/notices";
 beforeEach(resetNotices);
 
 describe("spec question: the normal-to-inline toast's grammar", () => {
-    it.fails("one definition at one reference reads in the singular", async () => {
+    // Jason ruled for the singular on 2026-10-22 (run toast-consolidate)
+    it("one definition at one reference reads in the singular", async () => {
         const d = fakeEditor(["a[^1] b", "", "[^1]: one"], {
             wholeDoc: true,
             edits: true,
@@ -35,7 +36,7 @@ describe("spec question: the normal-to-inline toast's grammar", () => {
         });
         await convertNormalToInlineCommand(fakePlugin({}, d));
         const toast = messages().find((m) => m.startsWith("Converted")) as string;
-        // Today: "Converted 1 footnote into inline footnotes at 1 reference."
-        expect(toast).not.toMatch(/1 footnote into inline footnotes/);
+        // Before: "Converted 1 footnote into inline footnotes at 1 reference."
+        expect(toast).toBe("Converted 1 footnote into an inline footnote at 1 reference.");
     });
 });

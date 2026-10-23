@@ -5,7 +5,7 @@ import { Editor, EditorChange, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
-import { showNotice } from "../editor/notice";
+import { Advice, refusal, showNotice } from "../editor/notice";
 import { CreatedFootnote, judgeEdit } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { replaceMinimal, writeChanges } from "../editor/write-back";
@@ -33,7 +33,26 @@ import { withEditableEditor } from "./insert-or-navigate-footnotes";
 // decision tree (this file's second half).
 
 /** The refusal both conversions give when the result gate refuses them. */
-const ConvertByHand = "Converting would change how Obsidian reads the text around a footnote. Convert it by hand.";
+const ConvertByHand = refusal("convert", "it would change how Obsidian reads the text around a footnote.", Advice.convertByHand);
+
+// The reasons a conversion skips a footnote, worded once for both
+// directions (Jason's shared vocabulary, 2026-10-22). Each reads after a
+// footnote's name, `"[^a]" (empty)`, and before a count, `empty (2)`.
+const Skip = {
+    empty: "empty",
+    nested: "inside another footnote",
+    holdsFootnote: "its text holds a footnote",
+    multiLine: "more than one line",
+    duplicate: "defined more than once",
+    listItem: "in a list item",
+    quote: "in a quote",
+    sharesLine: "shares its line with other text",
+    unreferenced: "not referenced",
+    referencedFromFootnote: "referenced from inside another footnote",
+} as const;
+
+/** The refusal of a conversion that skipped every footnote, `list` naming them. */
+const everySkipped = (list: string) => refusal("convert", `every footnote was skipped (${list}).`);
 
 /** What converting a note's normal footnotes to inline did, or would do. */
 export interface ConversionToInline {
@@ -70,12 +89,12 @@ export interface ConversionToInline {
  * level of the note, alone on its lines, is cut.
  */
 function whyLeftInPlace(definition: Definition): string | undefined {
-    if (definition.container.footnotes > 0) return "inside another footnote";
-    if (definition.container.listItems > 0) return "inside a list item";
-    if (definition.container.quotes > 0) return "inside a blockquote";
+    if (definition.container.footnotes > 0) return Skip.nested;
+    if (definition.container.listItems > 0) return Skip.listItem;
+    if (definition.container.quotes > 0) return Skip.quote;
     // at the top level, but after other text on its line: the "%%" that
     // closes a comment, or the "---" that closes the frontmatter
-    if (!definition.movable) return "shares its line with other text";
+    if (!definition.movable) return Skip.sharesLine;
     return undefined;
 }
 
@@ -132,7 +151,7 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
         const block = entries[0].definition;
         const skip = (reason: string) => skipped.push({ line: block.start, name: block.name, reason });
         if (entries.length > 1) {
-            skip("defined more than once");
+            skip(Skip.duplicate);
             continue;
         }
         const reason = entries[0].reason;
@@ -141,29 +160,29 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
             continue;
         }
         if (block.end !== block.start) {
-            skip("more than one line");
+            skip(Skip.multiLine);
             continue;
         }
         const bodyStart = block.labelEnd;
         const body = lines[block.start].slice(bodyStart);
         if (body.trim() === "") {
-            skip("empty");
+            skip(Skip.empty);
             continue;
         }
         const bodyHoldsFootnote =
             reading.references.some((reference) => reference.line === block.start && reference.start >= bodyStart) ||
             reading.inlineNotesOn(block.start).some((note) => note.open >= bodyStart);
         if (bodyHoldsFootnote) {
-            skip("its body holds a footnote");
+            skip(Skip.holdsFootnote);
             continue;
         }
         const its = refs.get(folded) ?? [];
         if (its.length === 0) {
-            skip("nothing references it");
+            skip(Skip.unreferenced);
             continue;
         }
         if (its.some((ref) => ref.nested)) {
-            skip("referenced from inside another footnote");
+            skip(Skip.referencedFromFootnote);
             continue;
         }
         eligible.push({ block, body: sanitizeInlineFootnoteContent(body), refs: its });
@@ -293,15 +312,15 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         for (const span of ctx.reading().inlineNotesOn(i)) {
             const body = lines[i].slice(span.open + 2, span.close).trim();
             if (body === "") {
-                skip("empty");
+                skip(Skip.empty);
                 continue;
             }
             if (insideDefinition[i]) {
-                skip("inside a footnote definition");
+                skip(Skip.nested);
                 continue;
             }
             if (bodyHoldsFootnote(body)) {
-                skip("whose body holds a footnote");
+                skip(Skip.holdsFootnote);
                 continue;
             }
             spans.push({ line: i, open: span.open, close: span.close, body });
@@ -317,15 +336,11 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
             const note = ctx.reading().inlineNoteHolding(i, at + 1);
             if (note === null || note.line !== i || note.open !== at || note.closeLine === i) continue;
             if (ctx.reading().inlineNoteHolding(i, at) !== null) continue;
-            skip("on more than one line");
+            skip(Skip.multiLine);
         }
     }
     if (spans.length === 0) {
-        showNotice(
-            skipped.length === 0
-                ? "No inline footnotes to convert."
-                : `No inline footnotes converted: skipped ${skippedList(skipped)}.`,
-        );
+        showNotice(skipped.length === 0 ? "This note has no inline footnotes to convert." : everySkipped(skippedList(skipped)));
         return { ...nothingToConvert, skipped };
     }
 
@@ -334,7 +349,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
     // after the first meaningful word of the body (Jason, 2026-09-22),
     // with a number for a body that offers no word; an invalid prefix has
     // already been toasted by activeFootnotePrefix
-    const prefix = activeFootnotePrefix(plugin, footnotePrefixFromEditor(doc));
+    const prefix = activeFootnotePrefix(plugin, footnotePrefixFromEditor(doc), "convert");
     if (prefix === null) return { ...nothingToConvert, skipped };
     let nextNumber = computeNextFootnoteNumber(ctx.reading(), prefix);
     const named = plugin.settings.footnoteNaming === "named";
@@ -395,7 +410,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         ctx.reading(),
     );
     if (!verdict.pass) {
-        showNotice(`Nothing was converted. ${ConvertByHand}`, 8000);
+        showNotice(ConvertByHand, 8000);
         return { ...nothingToConvert, skipped, refused: true };
     }
     // through the shared write-back, so a folded section the conversion
@@ -444,9 +459,9 @@ function bodyHoldsFootnote(body: string): boolean {
     return reading.references.some((reference) => reference.live) || reading.inlineNotesOn(0).length > 0;
 }
 
-/** "1 empty, 2 inside a footnote definition" */
+/** "empty (1), inside another footnote (2)": each reason with how many it skipped */
 function skippedList(skipped: { reason: string; count: number }[]): string {
-    return skipped.map((s) => `${s.count} ${s.reason}`).join(", ");
+    return skipped.map((s) => `${s.reason} (${s.count})`).join(", ");
 }
 
 /** The "Convert inline footnotes to normal footnotes" command: the whole note, one transaction. */
@@ -469,16 +484,14 @@ export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
         runOutsideTableCell(doc, () => {
             const before = doc.getValue();
             const result = convertNormalFootnotesToInline(before);
-            const skippedText =
-                result.skipped.length > 0
-                    ? ` Skipped ${result.skipped.map((s) => `${quotedReference(s.name)} (${s.reason})`).join(", ")}.`
-                    : "";
+            const list = result.skipped.map((s) => `${quotedReference(s.name)} (${s.reason})`).join(", ");
+            const skippedText = result.skipped.length > 0 ? ` Skipped ${list}.` : "";
             if (result.refused) {
-                showNotice(`Nothing was converted. ${result.refused}${skippedText}`, 8000);
+                showNotice(`${result.refused}${skippedText}`, 8000);
                 return;
             }
             if (result.converted === 0) {
-                showNotice(result.skipped.length === 0 ? "No footnotes to convert." : `No footnotes converted.${skippedText}`, 8000);
+                showNotice(result.skipped.length === 0 ? "This note has no footnotes to convert." : everySkipped(list), 8000);
                 return;
             }
             const mdView = plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined;
@@ -488,7 +501,7 @@ export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
             replaceMinimal(doc, before, markdown, mdView);
             const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
             showNotice(
-                `Converted ${plural(result.converted, "footnote")} into inline footnotes at ${plural(result.references, "reference")}` +
+                `Converted ${plural(result.converted, "footnote")} into ${result.converted === 1 ? "an inline footnote" : "inline footnotes"} at ${plural(result.references, "reference")}` +
                     (result.duplicated > 0
                         ? ` (${plural(result.duplicated, "definition")} used more than once became copies)`
                         : "") +

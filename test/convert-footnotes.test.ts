@@ -60,7 +60,7 @@ describe("convertNormalFootnotesToInline", () => {
             markdown: lines.join("\n"),
             converted: 0,
             skipped: [
-                { name: "1", reason: "its body holds a footnote" },
+                { name: "1", reason: "its text holds a footnote" },
                 { name: "2", reason: "referenced from inside another footnote" },
             ],
         });
@@ -68,9 +68,9 @@ describe("convertNormalFootnotesToInline", () => {
 
     it("skips an empty body, a quoted definition, one inside a list item, an orphan and a name defined twice", () => {
         expect(convert(["a[^e]", "", "[^e]:"]).skipped).toEqual([{ name: "e", reason: "empty" }]);
-        expect(convert(["a[^q]", "", "> [^q]: quoted"]).skipped).toEqual([{ name: "q", reason: "inside a blockquote" }]);
-        expect(convert(["- a[^i]", "- [^i]: in the item"]).skipped).toEqual([{ name: "i", reason: "inside a list item" }]);
-        expect(convert(["text", "", "[^o]: orphan"]).skipped).toEqual([{ name: "o", reason: "nothing references it" }]);
+        expect(convert(["a[^q]", "", "> [^q]: quoted"]).skipped).toEqual([{ name: "q", reason: "in a quote" }]);
+        expect(convert(["- a[^i]", "- [^i]: in the item"]).skipped).toEqual([{ name: "i", reason: "in a list item" }]);
+        expect(convert(["text", "", "[^o]: orphan"]).skipped).toEqual([{ name: "o", reason: "not referenced" }]);
         expect(convert(["a[^d]", "", "[^d]: one", "", "[^d]: two"]).skipped).toEqual([{ name: "d", reason: "defined more than once" }]);
     });
 
@@ -144,7 +144,7 @@ describe("convertInlineFootnotesToNormal", () => {
             converted: 1,
             skipped: [
                 { reason: "empty", count: 1 },
-                { reason: "inside a footnote definition", count: 1 },
+                { reason: "inside another footnote", count: 1 },
             ],
         });
     });
@@ -154,7 +154,7 @@ describe("convertInlineFootnotesToNormal", () => {
         expect(doc.lines).toEqual(["plain `^[code]` here"]);
         expect(doc.transactions).toBe(0);
         expect(result).toMatchObject({ converted: 0 });
-        expect(messages()).toContain("No inline footnotes to convert.");
+        expect(messages()).toContain("This note has no inline footnotes to convert.");
     });
 
     it("tells the user what happened, merges included", () => {
@@ -219,7 +219,7 @@ describe("the two command entries", () => {
             selection: { anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 0 } },
         });
         await convertNormalToInlineCommand(fakePlugin({}, doc));
-        expect(messages()).toContain('No footnotes converted. Skipped "[^m]" (more than one line).');
+        expect(messages()).toContain('Nothing was converted: every footnote was skipped ("[^m]" (more than one line)).');
     });
 
     it("inline to normal runs through the command entry", async () => {
