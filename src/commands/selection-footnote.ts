@@ -312,6 +312,12 @@ export function selectionPressHandled(
             replaceInTableCell(cell, wrapped, replaceFrom, to, wrapped.length, docContext(doc).reading().linkLabels, { notices });
             return true;
         }
+        // Working out the next free number checks the note's prefix. A
+        // null number means the prefix is invalid and its notice is shown,
+        // so neither key creates anything, and the named key opens no
+        // dialog (run toast-bugs, 2026-10-22).
+        const footnoteId = autonumFootnoteId(plugin, doc);
+        if (footnoteId === null) return true;
         if (command === "named") {
             new NameSelectionModal(plugin, doc, {
                 kind: "cell",
@@ -321,14 +327,7 @@ export function selectionPressHandled(
             }).open();
             return true;
         }
-        convertCellSelection(
-            plugin,
-            doc,
-            cell,
-            { from: replaceFrom, to, text, lead, notices },
-            cursorPosition,
-            autonumFootnoteId(plugin, doc),
-        );
+        convertCellSelection(plugin, doc, cell, { from: replaceFrom, to, text, lead, notices }, cursorPosition, footnoteId);
         return true;
     }
 
@@ -512,16 +511,21 @@ export function selectionPressHandled(
  * key, or through the modal that asks for its name, for the named key.
  */
 function convertIntoDefinition(plugin: FootnotePlugin, doc: Editor, ctx: DocContext, command: FootnoteCommandKind, selection: ConvertedSelection) {
+    // Working out the next free number checks the note's prefix. A null
+    // number means the prefix is invalid and its notice is shown, so
+    // neither key creates anything, and the named key opens no dialog
+    // (run toast-bugs, 2026-10-22).
+    const footnoteId = autonumFootnoteId(plugin, doc, ctx);
+    if (footnoteId === null) return;
     if (command === "named") {
         // The modal asks for a name, so the gate is asked first under the
         // next free number, and a selection it refuses is refused before
         // any modal opens; it is asked again under the typed name.
-        const probe = autonumFootnoteId(plugin, doc, ctx);
-        if (probe !== null && refusedSelection(conversion(plugin, ctx, selection, probe).verdict, selection.notices ?? selectionNotices(null))) return;
+        if (refusedSelection(conversion(plugin, ctx, selection, footnoteId).verdict, selection.notices ?? selectionNotices(null))) return;
         new NameSelectionModal(plugin, doc, { kind: "main", selection }).open();
         return;
     }
-    convertMainSelection(plugin, doc, selection, ctx, autonumFootnoteId(plugin, doc, ctx));
+    convertMainSelection(plugin, doc, selection, ctx, footnoteId);
 }
 
 /**
@@ -1192,17 +1196,13 @@ function convertMainSelectionToInline(
 // open, when its closing delimiter was part of what you selected. And the
 // body carries whatever text you selected onto the definition line, which
 // could be anything.
-//
-// A null name means the note's prefix is invalid; the notice explaining
-// that has already been shown. The press still counts as handled.
 function convertMainSelection(
     plugin: FootnotePlugin,
     doc: Editor,
     selection: ConvertedSelection,
     ctx: DocContext,
-    footnoteId: string | null,
+    footnoteId: string,
 ): void {
-    if (footnoteId === null) return;
     const { body, plan, verdict } = conversion(plugin, ctx, selection, footnoteId);
     if (refusedSelection(verdict, selection.notices ?? selectionNotices(null))) return;
 
@@ -1315,9 +1315,8 @@ function convertCellSelection(
     cell: TableCellEditor,
     selection: CellSelection,
     cursorPosition: EditorPosition | undefined,
-    footnoteId: string | null,
+    footnoteId: string,
 ): void {
-    if (footnoteId === null) return;
     const footnoteReference = referenceText(footnoteId);
     const notices = selection.notices ?? selectionNotices(null);
     if (refusedSelection(definitionAppendVerdict(plugin, doc, footnoteId, selection.text.split("\n").length, selection.text), notices)) return;
