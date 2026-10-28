@@ -15,7 +15,7 @@ import { countEmptyFootnoteReferences } from "../../src/linting/lint-alerts";
 // Hunt 2026-10-02, round 4, lens alerts. Cluster A5.
 //
 // Source of truth: countEmptyFootnoteReferences' docstring ("How many
-// unnamed footnote references the note has"); CONTEXT.md (a label is part
+// unnamed footnote references the note has"); GLOSSARY.md (a label is part
 // of a definition, not a reference).
 //
 // Severity: low. A wrong count and a contradictory alert; nothing in the

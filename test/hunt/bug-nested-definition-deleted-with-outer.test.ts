@@ -25,7 +25,7 @@ import { messages, resetNotices } from "../helpers/notices";
 //
 // Source of truth: Obsidian's answers probe:e2-blank-sp4label and
 // probe:e2-cont-label-blank in test/obsidian-answers probes.json ([^b]
-// is defined, inside [^a]'s range); ADR 0001 and CONTEXT.md, and ruling
+// is defined, inside [^a]'s range); ADR 0001 and GLOSSARY.md, and ruling
 // 1, option a, 2026-10-03 (a definition nested in another counts like
 // any other definition). Merging [^a]'s duplicate and converting to
 // inline already keep [^b].

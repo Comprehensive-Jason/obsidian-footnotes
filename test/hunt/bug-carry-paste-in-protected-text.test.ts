@@ -21,7 +21,7 @@ import { carriedInputHandler, handlePaste, resetCarryRegister } from "../../src/
 //
 // Hunt 2026-10-02, round 1, lens carry-clip. Cluster C19.
 //
-// Source of truth: CONTEXT.md and the plugin-wide rule that a reference
+// Source of truth: GLOSSARY.md and the plugin-wide rule that a reference
 // inside protected text (code, math, frontmatter, comments) is dead, so
 // there is no footnote there to carry a definition for. Every other
 // command refuses to create a footnote in protected text

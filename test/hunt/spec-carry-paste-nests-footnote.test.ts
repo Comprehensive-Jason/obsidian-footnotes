@@ -36,7 +36,7 @@ import { PasteNestedNotice } from "../helpers/toasts";
 // footnote." They were it.fails until then.
 //
 // Source of truth: docs/adr/0001-no-nested-footnotes.md ("We refuse to
-// create nesting anywhere") and CONTEXT.md's Nested footnote entry
+// create nesting anywhere") and GLOSSARY.md's Nested footnote entry
 // ("Prevented plugin-wide").
 //
 // Added 2026-10-06 (hunt 2026-10-06, cycle 3, lens carry, cluster K7):

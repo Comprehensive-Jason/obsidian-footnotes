@@ -21,7 +21,7 @@ import { simulateChanges } from "../../src/editor/insertion-liveness";
 // Hunt: 2026-09-13. Lens: the rename command under a prefix.
 //
 // Source of truth:
-//  - CONTEXT.md, "Placeholder": an empty reference ("[^]", or bare-prefix
+//  - GLOSSARY.md, "Placeholder": an empty reference ("[^]", or bare-prefix
 //    "[^2.]") mid-naming is "an in-progress footnote owned by the user's
 //    typing", not a footnote.
 //  - manual sheet 08: a press inside an untouched "[^P-]" refuses with

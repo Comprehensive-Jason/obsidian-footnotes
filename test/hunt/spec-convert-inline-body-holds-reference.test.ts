@@ -21,7 +21,7 @@ import { convertInlineFootnotesToNormal } from "../../src/commands/convert-footn
 //
 // Hunt 2026-10-02, round 2, lens convert. Cluster V8.
 //
-// Source of truth: docs/adr/0001-no-nested-footnotes.md and CONTEXT.md's
+// Source of truth: docs/adr/0001-no-nested-footnotes.md and GLOSSARY.md's
 // Nested footnote entry ("hand-typed nesting is surfaced by lint, never
 // destroyed").
 //

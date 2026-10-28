@@ -30,7 +30,7 @@ import { MultiCaretNestedNotice, NestedFootnoteNotice } from "../helpers/toasts"
 // half).
 //
 // Source of truth: docs/adr/0001-no-nested-footnotes.md ("We refuse to
-// create nesting anywhere") and CONTEXT.md's Nested footnote entry.
+// create nesting anywhere") and GLOSSARY.md's Nested footnote entry.
 //
 // Answered (Jason's ruling B4, 2026-10-08, stage 3 of the result gate
 // design): the press is refused with the nesting notice and nothing is

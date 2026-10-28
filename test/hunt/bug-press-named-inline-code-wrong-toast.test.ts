@@ -24,7 +24,7 @@ import { messages, resetNotices } from "../helpers/notices";
 // maskedInlineFootnoteSpan.
 //
 // Source of truth: the protected-text guard's toast, which every other
-// press inside code gets; CONTEXT.md (protected text: regions where
+// press inside code gets; GLOSSARY.md (protected text: regions where
 // footnote syntax is plain text, not footnotes, such as code).
 //
 // Severity: low. Wording only; the note is safe.

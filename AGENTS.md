@@ -4,7 +4,7 @@
 
 Jason's standing rulings for this repo. Each one was made after the thing went wrong once; the date is when he ruled. The commit history is the style guide for commit messages.
 
-- **Vocabulary lives in `CONTEXT.md`.** A `[^1]` in the text is a reference; the `[^1]: …` line is a definition, in code identifiers, tests, UI strings, commits, and manual sheets alike (2026-08-10). Where "references" would collide with the verb, write "nothing references this footnote". "Marker" stays only for list, blockquote, and callout markers.
+- **Vocabulary lives in `GLOSSARY.md`.** A `[^1]` in the text is a reference; the `[^1]: …` line is a definition, in code identifiers, tests, UI strings, commits, and manual sheets alike (2026-08-10). Where "references" would collide with the verb, write "nothing references this footnote". "Marker" stays only for list, blockquote, and callout markers.
 - **Comments are written for Jason as a non-programmer** (2026-09-09). Plain sentences, one idea each: what the code does, then why, then the provenance in parentheses (a ruling date, an issue number, a test name, an ADR). Define a term of art on its first use in a file. Prove a comment-only edit by stripping comments with TypeScript's `transpileModule` (`removeComments: true`) on both versions and diffing; esbuild keeps comments inside expressions and before class members, so it reports them as code. Stryker directive comments keep their exact prefix.
 - **Punctuation** (2026-08-29). Comments use " - " where an em dash would go. Settings text, notices, and alerts get a real rewrite with commas, colons, semicolons, or a sentence break.
 - **Every bug Jason reports is pinned by a failing test before the fix** (2026-07-14): a unit test when the logic is pure, a smoke test when it needs the live editor. AI writes the tests and Jason reviews them, so flag characterization tests (behaviour pinned as it is) so his review means something.
@@ -41,4 +41,4 @@ Stock GitHub labels reused where they carry the meaning (`question`, `help wante
 
 ### Domain docs
 
-Single-context: one `CONTEXT.md` at the repo root plus `docs/adr/`, both created lazily by `/domain-modeling` when terms or decisions actually get resolved. See `docs/agents/domain.md`.
+Single-context: one `GLOSSARY.md` at the repo root plus `docs/adr/`, both created lazily by `/domain-modeling` when terms or decisions actually get resolved. See `docs/agents/domain.md`.

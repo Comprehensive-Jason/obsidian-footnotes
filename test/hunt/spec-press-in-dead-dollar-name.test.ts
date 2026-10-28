@@ -56,7 +56,7 @@ import { messages, resetNotices } from "../helpers/notices";
 //
 // Source of truth: referenceOccurrenceAtCursor in src/parsing/doc-context.ts
 // ("the user plainly meant one, and the cascade says why the name cannot
-// work rather than writing a new footnote into its brackets"); CONTEXT.md,
+// work rather than writing a new footnote into its brackets"); GLOSSARY.md,
 // "Nested footnote: prevented plugin-wide".
 
 const Settings = {

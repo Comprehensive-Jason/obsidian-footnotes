@@ -23,7 +23,7 @@ import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after
 // Hunt: 2026-09-13. Lens: the landing convention.
 //
 // Source of truth:
-//  - CONTEXT.md, "End-of-word adjustment": moving an insertion point to
+//  - GLOSSARY.md, "End-of-word adjustment": moving an insertion point to
 //    the end of the word "(and past trailing punctuation) under the
 //    caret, so mid-word presses don't split words".
 //  - README, line ~166: the setting "places the reference at the end of

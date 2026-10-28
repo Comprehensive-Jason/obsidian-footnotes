@@ -27,7 +27,7 @@ import {
 // not jump back. That is what the plugin does today.
 //
 // Reading two, "a quoted definition is a definition block like any other":
-// CONTEXT.md defines a definition block as a label line plus its continuation
+// GLOSSARY.md defines a definition block as a label line plus its continuation
 // lines, "the unit that moves, merges, and is jumped to as one thing", with
 // no exception for quoting. Manual sheet 03 then says a multi-line definition
 // lands the caret at the end of its LAST continuation line, and that a caret

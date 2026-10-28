@@ -40,7 +40,7 @@ import { readNote } from "../../src/parsing/note-reading";
 // create a footnote after a long one at all (it puts a blank line in
 // front of the new label).
 //
-// Source of truth: the README and CONTEXT.md (Reindex renumbers and
+// Source of truth: the README and GLOSSARY.md (Reindex renumbers and
 // reorders by appearance); docs/obsidian-reading-rules.md E4 (what may
 // end a definition is looked for only within its first 1,024 characters,
 // counted from the start of its label line, and a blank line ends a

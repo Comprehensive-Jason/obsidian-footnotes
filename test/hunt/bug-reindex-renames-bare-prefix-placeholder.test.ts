@@ -6,7 +6,7 @@ import { countEmptyFootnoteReferences } from "../../src/linting/lint-alerts";
 
 // A bare-prefix placeholder ("[^3.]" in a note whose prefix is "3.") is a
 // footnote the user is still naming - "an in-progress footnote owned by
-// the user's typing, never deleted out from under them" (CONTEXT.md), and
+// the user's typing, never deleted out from under them" (GLOSSARY.md), and
 // the unnamed-reference alert counts it as unfilled exactly like "[^]"
 // (the manual lint-alerts tests). Orphan deletion already leaves it alone (orphanSafePrefix).
 // Reindex does not: with `Renumber named footnotes` ON, "3." is a NAME
@@ -20,7 +20,7 @@ import { countEmptyFootnoteReferences } from "../../src/linting/lint-alerts";
 // fires again. When they come back and type "smith" they get "[^3.1smith]"
 // - a footnote, but not the one they meant, and nobody told them.
 //
-// Source of truth: CONTEXT.md's placeholder contract + the manual lint-alerts tests'
+// Source of truth: GLOSSARY.md's placeholder contract + the manual lint-alerts tests'
 // "counts as unfilled exactly like [^]" (the alert must keep speaking,
 // which it cannot once the placeholder is renamed away) + the
 // orphanSafePrefix precedent (deletion already exempts it; renumbering

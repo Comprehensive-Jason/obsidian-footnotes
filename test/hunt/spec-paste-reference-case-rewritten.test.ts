@@ -22,7 +22,7 @@ import { handleCopy, handlePaste, resetCarryRegister } from "../../src/commands/
 //
 // Hunt 2026-10-02, round 3, lens carry-model. Cluster M4.
 //
-// Source of truth: CONTEXT.md and the README's Rename paragraph, "Names
+// Source of truth: GLOSSARY.md and the README's Rename paragraph, "Names
 // are case-insensitive, so [^Note] and [^note] count as the same
 // footnote", and a paste inserts the copied text as it was.
 

@@ -436,7 +436,7 @@
   <p class="eyebrow">Footnote Shortcut · plugin structure</p>
   <h1>What the plugin is made of, one layer at a time</h1>
   <p class="lede">Four layers of source code stacked so that each one only leans on the layer below it, wrapped in a testing scaffold that is bigger than the plugin itself. This page walks the stack from the bottom up.</p>
-  <p class="stamp">Claude: drafted 2026-09-09 from a read of the code and kept current through 2026-10-03 (version 0.3.0-beta.2, the September 2026 feature round, and the runtime swap that moved the plugin onto Obsidian's own parser; the counts are from the tree on that day). Terms follow CONTEXT.md: a <em>reference</em> is the <code>[^1]</code> in your text, a <em>definition</em> is the <code>[^1]: …</code> line that holds the note.</p>
+  <p class="stamp">Claude: drafted 2026-09-09 from a read of the code and kept current through 2026-10-03 (version 0.3.0-beta.2, the September 2026 feature round, and the runtime swap that moved the plugin onto Obsidian's own parser; the counts are from the tree on that day). Terms follow GLOSSARY.md: a <em>reference</em> is the <code>[^1]</code> in your text, a <em>definition</em> is the <code>[^1]: …</code> line that holds the note.</p>
   <div class="legend">
     <span>Colour key, used on every figure and heading:</span>
     <span class="chip l-parsing">parsing</span>
@@ -830,7 +830,7 @@
   <tr><td>A dialog looks or behaves wrong, especially on the phone</td><td class="open"><span class="mono"><span class="dot l-commands"></span>commands/validated-text-modal.ts</span></td><td>Smoke tests; the phone by hand (sheet P)</td></tr>
   <tr><td>Anything inside a table cell</td><td class="open"><span class="mono"><span class="dot l-editor"></span>editor/table-cursor.ts</span></td><td>Smoke tests</td></tr>
   <tr><td>A setting is missing, mis-migrated, or the tab looks wrong</td><td class="open"><span class="mono"><span class="dot l-plumbing"></span>settings.ts</span> for the tab<span class="mono"><span class="dot l-plumbing"></span>main.ts</span> for migrations</td><td>Unit tests for the migrations</td></tr>
-  <tr><td>A word or a term is being used inconsistently</td><td class="open"><span class="mono"><span class="dot l-scaffold"></span>CONTEXT.md</span></td><td>It is the enforced vocabulary</td></tr>
+  <tr><td>A word or a term is being used inconsistently</td><td class="open"><span class="mono"><span class="dot l-scaffold"></span>GLOSSARY.md</span></td><td>It is the enforced vocabulary</td></tr>
 </table>
 </div>
 <div class="prose">
@@ -875,7 +875,7 @@
 scripts/smoke-test.mjs    drives the real app
 manual-tests/             19 sheets   ·   compat-tests/   2 sheets
 docs/adr/                 the two standing decisions
-CONTEXT.md                the vocabulary</span></code></pre>
+GLOSSARY.md               the vocabulary</span></code></pre>
 </div>
 </section>
 

@@ -16,7 +16,7 @@
 // Hunt 2026-10-09, cycle 8. Cluster V1, lens presses and selections.
 // Source of truth: ADR 0001 ("A selection that contains or cuts through any
 // live reference, placeholder, or inline footnote refuses to convert");
-// CONTEXT.md "Live" (an undefined reference outside code is live); the
+// GLOSSARY.md "Live" (an undefined reference outside code is live); the
 // plugin's own lint alert names the nesting the conversion makes.
 // Origin: regression from 8ee7ca8 (Jason's ruling 1 of 2026-10-09: the
 // gate's check 2 now counts a reference only when its name has a
@@ -36,7 +36,7 @@
 //
 // ADR 0001's consequence: "A selection that contains or cuts through any
 // live reference, placeholder, or inline footnote refuses to convert, with a
-// toast." A "[^smith]" outside code is live in CONTEXT.md's sense (it parses
+// toast." A "[^smith]" outside code is live in GLOSSARY.md's sense (it parses
 // as a footnote reference; only a fake inside protected text is not live).
 // At 34d5377 and at 3a47f7a the press was refused with the nesting notice.
 // Since 8ee7ca8 (Jason's ruling 1) gate check 2 counts a reference only when

@@ -630,7 +630,7 @@ const ProtectedKinds = new Set(["code", "math", "html", "htmlComment", "percentC
 /**
  * The text of every protected span on `side` the action does not own,
  * each as its kind and its text, for check 3. The kinds are the protected
- * text of CONTEXT.md: code, math, comments, frontmatter, and HTML. Blank
+ * text of GLOSSARY.md: code, math, comments, frontmatter, and HTML. Blank
  * lines inside a span do not count, and nor do the spaces at either end of
  * a line, which a definition's continuation indent adds when a merge folds
  * a copy into indented lines:
@@ -918,7 +918,7 @@ function definedNames(side: Side): Set<string> {
  * out).
  *
  * A reference with no definition counts as a footnote already: it is
- * live (CONTEXT.md), and a selection that carries one into a new footnote
+ * live (GLOSSARY.md), and a selection that carries one into a new footnote
  * makes a footnote inside a footnote (ADR 0001; hunt 2026-10-09 cycle 8,
  * cluster V1, pin bug-selection-holding-undefined-reference-converts).
  * The one exception is a name in `cameAlive`, a name the edit gives a

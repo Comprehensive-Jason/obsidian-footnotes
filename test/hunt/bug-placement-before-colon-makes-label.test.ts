@@ -14,7 +14,7 @@ import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after
 //
 // Hunt 2026-10-02, round 2, lens properties. Cluster P3.
 //
-// Source of truth: CONTEXT.md (a label is the "[^name]:" head of a
+// Source of truth: GLOSSARY.md (a label is the "[^name]:" head of a
 // definition, and a label never counts as a reference) and the punctuation
 // rule's docstring (a move, never a change of what the text is).
 //

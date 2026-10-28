@@ -31,7 +31,7 @@ import { resetNotices } from "../helpers/notices";
 // definition is orphaned on arrival; one written before the opening pipe
 // pushes the last cell out of the table; one written into the dashes
 // ends the table") plus the multi-caret atomicity contract
-// (CONTEXT.md: "Atomic: one bad caret refuses the lot, one undo reverts
+// (GLOSSARY.md: "Atomic: one bad caret refuses the lot, one undo reverts
 // the lot") and the manual multiple-cursors tests.
 //
 // Settings involved: none (multi-caret is always on).
