@@ -17,9 +17,9 @@ Create, navigate, and edit Obsidian footnotes all from the keyboard:
 
 ## Support the plugin
 
-If this plugin has made your writing a little smoother, you can [buy me a coffee](https://ko-fi.com/comprehensivejason). Tips go toward the hours I spend on bug-hunting, feature requests, and keeping up with Obsidian releases.
+If this plugin has made your writing a little smoother, you can [buy me a coffee](https://ko-fi.com/comprehensivejason). Tips go toward the hours I spend on bug-hunting, feature requests, and keeping up with Obsidian releases. If Ko-fi doesn't work for you, you can also tip through [GitHub Sponsors](https://github.com/sponsors/Comprehensive-Jason).
 
-[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/comprehensivejason)
+[![Support me on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/comprehensivejason) [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Comprehensive-Jason)
 
 Bug reports and feature ideas on the [issue tracker](https://github.com/Comprehensive-Jason/obsidian-footnotes/issues) are just as welcome.
 
