@@ -11,6 +11,7 @@ import { runOutsideTableCell } from "../editor/table-cursor";
 import { replaceMinimal, writeChanges } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
 import { lintAfterFootnoteCreation, lintBlockedByPrefix, lintRulesAllDisabled, withEmptySectionHeadingRemoved } from "../linting/linter";
+import { commentedDefinitionNames } from "../linting/rules/remove-orphaned-references";
 import { computeNextFootnoteNumber, definitionLabel, nameForBody, quotedReference } from "../parsing/footnote-grammar";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
 import { plainOnLabelLine, planDefinitionAppend } from "./definition-append";
@@ -41,6 +42,11 @@ const Skip = {
     holdsFootnote: "its text holds a footnote",
     multiLine: "more than one line",
     duplicate: "defined more than once",
+    // A commented label's "[^x]" counts as a reference, so it would turn into
+    // "^[text]: hidden". The comment holds a second definition the user wrote, so
+    // the footnote is left for them to sort out (hunt 2026-11-06, cycle 9, finding
+    // H30, the triage's choice by analogy with Jason's ruling of 2026-11-05).
+    definedInComment: "also defined inside a %% comment",
     listItem: "in a list item",
     quote: "in a quote",
     sharesLine: "shares its line with other text",
@@ -120,7 +126,8 @@ export interface ConversionToInline {
  * footnote, or a reference sitting inside another definition's body or an
  * inline footnote, would nest footnotes (ADR 1); a quoted, in-item or
  * closer-line definition is one the plugin does not cut; an orphan has
- * nowhere to go; a name defined twice is ambiguous; and one whose conversion
+ * nowhere to go; a name defined twice, or also defined in a "%%" comment, is
+ * ambiguous; and one whose conversion
  * the result gate refuses would change how Obsidian reads the text around it.
  * Protected text is untouched, and a bracket or pipe that would break the
  * inline footnote or a table row is escaped.
@@ -187,6 +194,7 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
 
     // decide each name, in the order its definitions appear
     const skipped: { line: number; name: string; reason: string }[] = [];
+    const definedInComment = new Set(commentedDefinitionNames(markdown).map((name) => name.toLowerCase()));
     type Eligible = { block: Definition; body: string; refs: Ref[] };
     const eligible: Eligible[] = [];
     for (const [folded, entries] of found) {
@@ -199,6 +207,10 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
         const reason = entries[0].reason;
         if (reason !== undefined) {
             skip(reason);
+            continue;
+        }
+        if (definedInComment.has(folded)) {
+            skip(Skip.definedInComment);
             continue;
         }
         if (block.end !== block.start) {
