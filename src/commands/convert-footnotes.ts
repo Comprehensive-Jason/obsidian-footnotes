@@ -1,6 +1,6 @@
 import { normalizeEol, removeLineRanges, removeLineRangesKeeping, restoreEol } from "../parsing/line-edits";
 import { Definition, readNote } from "../parsing/note-reading";
-import { sanitizeInlineFootnoteContent } from "./inline-footnotes";
+import { sanitizeInlineFootnoteContent, trimmedPlainly } from "./inline-footnotes";
 import { Editor, EditorChange, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
@@ -8,9 +8,11 @@ import { docContext, listExistingFootnoteDefinitions } from "../editor/doc-conte
 import { everyFootnoteSkipped, showNotice } from "../editor/notice";
 import { CreatedFootnote, judgeEdit } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
-import { replaceMinimal, writeChanges } from "../editor/write-back";
+import { lineKey } from "../editor/document-diff";
+import { replaceMinimal } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
-import { lintAfterFootnoteCreation, lintBlockedByPrefix, lintRulesAllDisabled, withEmptySectionHeadingRemoved } from "../linting/linter";
+import { creationLintOf, lintBlockedByPrefix, lintRulesAllDisabled, withEmptySectionHeadingRemoved } from "../linting/linter";
+import { commentedLabelLines } from "../linting/rules/remove-orphaned-references";
 import { computeNextFootnoteNumber, definitionLabel, nameForBody, quotedReference } from "../parsing/footnote-grammar";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
 import { plainOnLabelLine, planDefinitionAppend } from "./definition-append";
@@ -41,6 +43,11 @@ const Skip = {
     holdsFootnote: "its text holds a footnote",
     multiLine: "more than one line",
     duplicate: "defined more than once",
+    // A commented label's "[^x]" counts as a reference, so it would turn into
+    // "^[text]: hidden". The comment holds a second definition the user wrote, so
+    // the footnote is left for them to sort out (hunt 2026-11-06, cycle 9, finding
+    // H30, the triage's choice by analogy with Jason's ruling of 2026-11-05).
+    definedInComment: "also defined inside a %% comment",
     listItem: "in a list item",
     quote: "in a quote",
     sharesLine: "shares its line with other text",
@@ -120,7 +127,8 @@ export interface ConversionToInline {
  * footnote, or a reference sitting inside another definition's body or an
  * inline footnote, would nest footnotes (ADR 1); a quoted, in-item or
  * closer-line definition is one the plugin does not cut; an orphan has
- * nowhere to go; a name defined twice is ambiguous; and one whose conversion
+ * nowhere to go; a name defined twice, or also defined in a "%%" comment, is
+ * ambiguous; and one whose conversion
  * the result gate refuses would change how Obsidian reads the text around it.
  * Protected text is untouched, and a bracket or pipe that would break the
  * inline footnote or a table row is escaped.
@@ -187,6 +195,7 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
 
     // decide each name, in the order its definitions appear
     const skipped: { line: number; name: string; reason: string }[] = [];
+    const definedInComment = new Set(commentedLabelLines(lines).map(({ name }) => name.toLowerCase()));
     type Eligible = { block: Definition; body: string; refs: Ref[] };
     const eligible: Eligible[] = [];
     for (const [folded, entries] of found) {
@@ -199,6 +208,10 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
         const reason = entries[0].reason;
         if (reason !== undefined) {
             skip(reason);
+            continue;
+        }
+        if (definedInComment.has(folded)) {
+            skip(Skip.definedInComment);
             continue;
         }
         if (block.end !== block.start) {
@@ -313,8 +326,8 @@ const nothingToConvert: ConversionToNormal = { converted: 0, definitions: 0, mer
 
 /**
  * Turn every "^[body]" in the editor's note into a "[^N]" reference with
- * its definition appended, in ONE transaction. Identical bodies (after
- * trimming) share one definition. Numbering continues past the note's
+ * its definition appended, in ONE transaction. Inline footnotes whose
+ * definitions would read the same share one (definitionTextOf). Numbering continues past the note's
  * numbered footnotes and carries the note's prefix when that feature is
  * on, exactly as a creation press would. Where the definitions land is
  * the creation press's own decision (buildDefinitionAppend): after the
@@ -333,8 +346,9 @@ const nothingToConvert: ConversionToNormal = { converted: 0, definitions: 0, mer
  * result gate refuses is counted too, and stays inline while the others
  * convert (Jason's ruling, 2026-11-06). Protected text is never read.
  *
- * Then the lint-on-creation trigger runs when that setting is on, as it
- * does after every press that creates a footnote.
+ * The lint-on-creation trigger runs when that setting is on, as it does after
+ * every press that creates a footnote, and goes in with the conversion in that
+ * one transaction.
  */
 export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Editor): ConversionToNormal {
     const ctx = docContext(doc);
@@ -351,14 +365,15 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         if (entry) entry.count++;
         else skipped.push({ reason, count: 1 });
     };
-    // every convertible inline footnote, in document order, with its
-    // body's key for merging (the body as written, trimmed)
-    type Span = { line: number; open: number; close: number; body: string };
+    // every convertible inline footnote, in document order, with its body as
+    // written, and the text its definition would hold, which is what decides
+    // that two of them share a definition
+    type Span = { line: number; open: number; close: number; body: string; definitionText: string };
     const spans: Span[] = [];
     for (let i = 0; i < lines.length; i++) {
         for (const span of ctx.reading().inlineNotesOn(i)) {
-            const body = lines[i].slice(span.open + 2, span.close).trim();
-            if (body === "") {
+            const body = trimmedPlainly(lines[i].slice(span.open + 2, span.close));
+            if (body.trim() === "") {
                 skip(Skip.empty);
                 continue;
             }
@@ -370,7 +385,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
                 skip(Skip.holdsFootnote);
                 continue;
             }
-            spans.push({ line: i, open: span.open, close: span.close, body });
+            spans.push({ line: i, open: span.open, close: span.close, body, definitionText: definitionTextOf(body, ctx.reading().tableRowLines[i]) });
         }
         // An inline footnote that opens on this line and closes on a later
         // one. The lookup above lists only the ones wholly on one line, so
@@ -409,22 +424,21 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
     // result gate refuses it. It is worked out afresh for each choice, so a
     // skipped footnote takes no number and no name from the ones converted.
     const planFor = (chosen: readonly Span[]) => {
-        // one id per distinct body, in order of first appearance: numbered the
-        // way a creation press numbers, or, when the setting says so, named
-        // after the first meaningful word of the body (Jason, 2026-09-22),
-        // with a number for a body that offers no word
+        // one id per distinct definition text, in order of first appearance:
+        // numbered the way a creation press numbers, or, when the setting says
+        // so, named after the first meaningful word of the body (Jason,
+        // 2026-09-22), with a number for a body that offers no word
         let nextNumber = firstNumber;
         const used = new Set(taken);
         const idOf = new Map<string, string>();
-        const bodies: string[] = [];
         for (const span of chosen) {
-            if (idOf.has(span.body)) continue;
+            if (idOf.has(span.definitionText)) continue;
             const name = (named ? nameForBody(span.body, used, prefix) : null) ?? `${prefix}${nextNumber++}`;
             used.add(name.toLowerCase());
-            idOf.set(span.body, name);
-            bodies.push(span.body);
+            idOf.set(span.definitionText, name);
         }
-        const ids = bodies.map((body) => idOf.get(body) as string);
+        const texts = [...idOf.keys()];
+        const ids = [...idOf.values()];
 
         // the reference replacements, plus the definitions as ONE append: the
         // creation press's own append for the first id, seeded with its body,
@@ -433,15 +447,15 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         const edits: EditorChange[] = chosen.map((span) => ({
             from: { line: span.line, ch: span.open },
             to: { line: span.line, ch: span.close + 1 },
-            text: `[^${idOf.get(span.body) as string}]`,
+            text: `[^${idOf.get(span.definitionText) as string}]`,
         }));
         const plan = planDefinitionAppend({
             lines,
             edits,
             footnoteId: ids[0],
             plugin,
-            body: plainOnLabelLine(bodies[0]),
-            moreDefinitionLines: ids.slice(1).map((id, k) => `${definitionLabel(id)} ${plainOnLabelLine(bodies[k + 1])}`),
+            body: texts[0],
+            moreDefinitionLines: ids.slice(1).map((id, k) => `${definitionLabel(id)} ${texts[k + 1]}`),
         });
         // The result gate judges the conversion: each name's definition is one
         // line, the first at the label line the append planned, the others
@@ -454,7 +468,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
                     (id, k): CreatedFootnote => ({
                         kind: "footnote",
                         name: id,
-                        references: chosen.flatMap((span, s) => (idOf.get(span.body) === id ? [plan.edits[s].start] : [])),
+                        references: chosen.flatMap((span, s) => (idOf.get(span.definitionText) === id ? [plan.edits[s].start] : [])),
                         definition: { line: plan.labelLine + k, lines: 1 },
                     }),
                 ),
@@ -473,13 +487,15 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         showNotice(everyFootnoteSkipped(skippedList(skipped)), 8000);
         return { ...nothingToConvert, skipped };
     }
+    // Anything that creates a footnote lints, when that setting is on. The lint
+    // reads the converted text first and both go in as one transaction, so one
+    // undo takes back the conversion and the lint together (hunt 2026-11-06,
+    // cycle 9, finding H31, the triage's ruling).
+    const lint = creationLintOf(plugin, doc, planned.plan.final.join("\n"));
     // through the shared write-back, so a folded section the conversion
     // edits stays folded and a second pane on the note stays where it was
     // (hunt 2026-10-02, round 4, cluster U2)
-    const offsetChanges = planned.plan.changes
-        .map((change) => ({ from: doc.posToOffset(change.from), to: doc.posToOffset(change.to ?? change.from), text: change.text }))
-        .sort((a, b) => a.from - b.from);
-    writeChanges(doc, doc.getValue(), offsetChanges, plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined);
+    replaceMinimal(doc, doc.getValue(), lint.after, plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined);
 
     const result: ConversionToNormal = {
         converted: kept.length,
@@ -497,12 +513,32 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
             (skipped.length > 0 ? someSkipped(skippedList(skipped)) : ""),
         skipped.length > 0 ? 8000 : undefined,
     );
-    // anything that creates a footnote lints, when that setting is on;
-    // otherwise the alerts alone speak (ADR 2)
-    if (lintAfterFootnoteCreation(plugin, doc, false) === null && !plugin.settings.lintOnFootnoteCreation) {
-        noticeLintAlerts(plugin, doc.getValue(), false);
-    }
+    lint.speak();
+    // with no creation lint, the alerts alone speak (ADR 2)
+    if (!plugin.settings.lintOnFootnoteCreation) noticeLintAlerts(plugin, lint.after, false);
     return result;
+}
+
+/**
+ * The text a definition made from an inline footnote's `body` would hold. Two
+ * inline footnotes with the same answer share one definition, since two
+ * identical definitions serve no one (hunt 2026-11-06, cycle 9, findings H28 and
+ * H33).
+ *
+ * Two things change on the way. A number and its dot at the start of the text
+ * get a backslash, so the definition is not read as a list (plainOnLabelLine).
+ * And in a table row, "\|" loses its backslash, which was there only so the
+ * pipe would not end the cell. In protected text it stays. Obsidian draws it in
+ * a code span, in the cell and in the definition alike (live answers H24a and
+ * H24c), in math "\|" is a double bar, and a wikilink reads the same with it or
+ * without it (H24b), while the result gate holds that text to be unchanged. A
+ * backslash that a backslash escapes is passed over whole, so "\\|" is no escaped
+ * pipe.
+ */
+function definitionTextOf(body: string, onTableRow: boolean): string {
+    if (!onTableRow) return plainOnLabelLine(body);
+    const masked = readNote([body]).maskedLine(0);
+    return plainOnLabelLine(body.replace(/\\[\s\S]/g, (escape: string, at: number) => (escape === "\\|" && masked[at] === "\\" ? "|" : escape)));
 }
 
 /**
@@ -525,6 +561,34 @@ function skippedList(skipped: { reason: string; count: number }[]): string {
     return skipped.map((s) => `${s.reason} (${s.count})`).join(", ");
 }
 
+/**
+ * `skipped`, the footnotes a conversion left in the text `before`, as the text
+ * `after` the lint holds them: one the lint renamed goes by its new name, and one
+ * it deleted is left out, so the toast names what the note holds (hunt 2026-11-06,
+ * cycle 9, finding H26).
+ *
+ * Each definition is found again by its text without its name (lineKey), since the
+ * lint renames and moves definitions but does not edit what they say. Two with the
+ * same text pair up in order; both were skipped, so either way the toast names a
+ * footnote the note holds. The line-up the folds use (alignLines) was no help here:
+ * it finds again only the definitions the lint can move, and loses one in a quote
+ * when the definitions around it move.
+ */
+function skippedAfterLint(skipped: ConversionToInline["skipped"], before: string, after: string): ConversionToInline["skipped"] {
+    if (after === before) return skipped;
+    const blockText = (lines: string[], { start, end }: Definition) => lines.slice(start, end + 1).map(lineKey).join("\n");
+    const beforeLines = before.split("\n");
+    const afterLines = after.split("\n");
+    const defined = readNote(beforeLines).definitions;
+    const left = readNote(afterLines).definitions.map((definition) => ({ name: definition.name, text: blockText(afterLines, definition) }));
+    return skipped.flatMap(({ name, reason }) => {
+        const was = defined.find((definition) => definition.name.toLowerCase() === name.toLowerCase());
+        const text = was === undefined ? null : blockText(beforeLines, was);
+        const now = left.findIndex((definition) => definition.text === text);
+        return now === -1 ? [] : [{ name: left.splice(now, 1)[0].name, reason }];
+    });
+}
+
 /** The "Convert inline footnotes to normal footnotes" command: the whole note, one transaction. */
 export async function convertInlineToNormalCommand(plugin: FootnotePlugin) {
     await withEditableEditor(plugin, (doc) => {
@@ -538,26 +602,28 @@ export async function convertInlineToNormalCommand(plugin: FootnotePlugin) {
  * The "Convert normal footnotes to inline footnotes" command: the pure
  * transform above, written back as one transaction that keeps folds and
  * the caret, then a toast with the counts and every skipped definition's
- * name and reason. Then the lint runs when Lint on footnote creation is on,
- * because that setting names the convert commands (Jason's ruling,
- * 2026-11-05); with it off, the lint alerts alone speak.
+ * name and reason. The lint runs when Lint on footnote creation is on, because
+ * that setting names the convert commands (Jason's ruling, 2026-11-05), and
+ * goes in with the conversion in that one transaction (finding H31); with it
+ * off, the lint alerts alone speak.
  */
 export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
     await withEditableEditor(plugin, (doc) => {
         runOutsideTableCell(doc, () => {
             const before = doc.getValue();
             const result = convertNormalFootnotesToInline(before);
-            const list = result.skipped.map((s) => `${quotedReference(s.name)} (${s.reason})`).join(", ");
-            const skippedText = result.skipped.length > 0 ? someSkipped(list) : "";
+            const named = (skipped: ConversionToInline["skipped"]) => skipped.map((s) => `${quotedReference(s.name)} (${s.reason})`).join(", ");
             if (result.converted === 0) {
-                showNotice(result.skipped.length === 0 ? "This note has no footnotes to convert." : everyFootnoteSkipped(list), 8000);
+                showNotice(result.skipped.length === 0 ? "This note has no footnotes to convert." : everyFootnoteSkipped(named(result.skipped)), 8000);
                 return;
             }
             const mdView = plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined;
             // the section heading goes when every definition became inline
             // and the setting says so (Jason, 2026-09-25)
             const markdown = withEmptySectionHeadingRemoved(plugin, result.markdown);
-            replaceMinimal(doc, before, markdown, mdView);
+            const lint = creationLintOf(plugin, doc, markdown);
+            replaceMinimal(doc, before, lint.after, mdView);
+            const skipped = skippedAfterLint(result.skipped, markdown, lint.after);
             const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
             showNotice(
                 `Converted ${plural(result.converted, "footnote")} into ${result.converted === 1 ? "an inline footnote" : "inline footnotes"} at ${plural(result.references, "reference")}` +
@@ -565,10 +631,10 @@ export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
                         ? ` (${plural(result.duplicated, "definition")} used more than once became copies)`
                         : "") +
                     "." +
-                    skippedText,
-                result.skipped.length > 0 ? 8000 : undefined,
+                    (skipped.length > 0 ? someSkipped(named(skipped)) : ""),
+                skipped.length > 0 ? 8000 : undefined,
             );
-            if (lintAfterFootnoteCreation(plugin, doc, false) !== null) return;
+            lint.speak();
             if (!plugin.settings.lintOnFootnoteCreation) {
                 noticeLintAlerts(plugin, markdown, false);
                 return;

@@ -30,6 +30,8 @@ const CMD_NAMED = "obsidian-footnotes:insert-named-footnote";
 const CMD_INLINE = "obsidian-footnotes:insert-inline-footnote";
 const CMD_PASTE_INLINE = "obsidian-footnotes:paste-inline-footnote";
 const CMD_LINT = "obsidian-footnotes:lint-footnotes";
+const CMD_CONVERT_TO_NORMAL = "obsidian-footnotes:convert-inline-to-normal";
+const CMD_CONVERT_TO_INLINE = "obsidian-footnotes:convert-normal-to-inline";
 
 // ---------- CLI plumbing ----------
 
@@ -2284,6 +2286,43 @@ async function main() {
             `(${EDITOR}).editor.getCursor()`,
             (c) => c && c.line === 3 && c.ch === "    cont one".length,
         );
+    });
+
+    // Hunt 2026-11-06, cycle 9, finding H31: the live check that found this ran
+    // the same notes, and Convert normal to inline took two undos.
+    await test("Convert normal to inline with the creation lint: one undo brings the whole note back", async () => {
+        resetSettings({ lintOnFootnoteCreation: true });
+        const before = "a[^1] b[^2]\n\n[^1]: one\n[^2]: two\n    more";
+        await setupNote(before);
+        setCursorAndRun(0, "a[^1] b".length, CMD_CONVERT_TO_INLINE);
+        await expectEditorText("a^[one] b[^1]\n\n[^1]: two\n    more");
+        await pollUntil(
+            "caret still after the b",
+            `(${EDITOR}).editor.getCursor()`,
+            (c) => c && c.line === 0 && c.ch === "a^[one] b".length,
+        );
+        action(`(${EDITOR}).editor.undo();`);
+        await expectEditorText(before);
+        await pollUntil(
+            "caret back where it was",
+            `(${EDITOR}).editor.getCursor()`,
+            (c) => c && c.line === 0 && c.ch === "a[^1] b".length,
+        );
+    });
+
+    await test("Convert inline to normal with the creation lint: one undo brings the whole note back", async () => {
+        resetSettings({ lintOnFootnoteCreation: true });
+        const before = "a^[x] b[^5]\n\n[^5]: five";
+        await setupNote(before);
+        setCursorAndRun(0, "a^[x] b".length, CMD_CONVERT_TO_NORMAL);
+        await expectEditorText("a[^1] b[^2]\n\n[^1]: x\n[^2]: five");
+        await pollUntil(
+            "caret still after the b",
+            `(${EDITOR}).editor.getCursor()`,
+            (c) => c && c.line === 0 && c.ch === "a[^1] b".length,
+        );
+        action(`(${EDITOR}).editor.undo();`);
+        await expectEditorText(before);
     });
 
     await test("a caret that follows its definition far down the note is scrolled into view", async () => {

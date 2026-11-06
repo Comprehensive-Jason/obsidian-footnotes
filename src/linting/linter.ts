@@ -837,6 +837,57 @@ function uniqueSeededDefinitionName(doc: Editor, body: string): string | null {
 }
 
 /**
+ * What the "Lint on footnote creation" trigger makes of `markdown`, the text
+ * the editor `edited` is about to hold or holds, with nothing written yet.
+ * `after` is the linted text, or `markdown` itself when no lint runs, and
+ * `speak` says what the lint has to say, for the caller to call once the text
+ * is in. A command that writes the whole note in one go, such as a conversion,
+ * calls this first and writes `after`, so the lint is part of its one undo step
+ * (hunt 2026-11-06, cycle 9, finding H31).
+ */
+export function creationLintOf(plugin: FootnotePlugin, edited: Editor, markdown: string): { after: string; speak: () => void } {
+    const noLint = (speak: () => void = () => undefined) => ({ after: markdown, speak });
+    if (!plugin.settings.lintOnFootnoteCreation) return noLint();
+    // with every rule off, lint is off and its alerts stay silent, as the
+    // command and the save trigger already hold (Kimi hunt cycle 2,
+    // 2026-09-16)
+    if (lintRulesAllDisabled(plugin)) return noLint();
+    // The shared safety check covers Reading view as well. That is belt and
+    // braces: the creation commands already refuse it, but this also stops
+    // code calling in directly from editing the hidden buffer.
+    const target = safeLintTarget(plugin);
+    if (!target) return noLint();
+    if (target.doc !== edited) {
+        return noLint(() => {
+            noticeLintAlerts(plugin, markdown, false);
+        });
+    }
+    // Say nothing when a bad prefix blocks the lint. The insert that just
+    // happened has already told the user about it (a paste, which needs no
+    // prefix, says it itself: lintAfterPaste).
+    if (lintBlockedByPrefix(markdown, plugin.settings.enableFootnotePrefix)) return noLint();
+    // Nothing a press or a paste does reads the section heading setting,
+    // so nothing has said that the lint cannot use it: the reason is
+    // shown, as a save shows it, rather than leaving the lint silent (ADR
+    // 0002; hunt 2026-10-02, round 2, cluster I4, pin
+    // bug-creation-lint-heading-blocked-silent).
+    const headingProblem = lintBlockedBySectionHeading(plugin);
+    if (headingProblem) {
+        return noLint(() => {
+            showNotice(headingProblem, 8000);
+        });
+    }
+    const after = lintNote(plugin, markdown, configuredSectionHeading(plugin));
+    return {
+        after,
+        speak: () => {
+            if (after !== markdown) showNotice("Footnotes linted.");
+            noticeLintAlerts(plugin, after);
+        },
+    };
+}
+
+/**
  * The "Lint on footnote creation" trigger: lint the note the user is in,
  * right after a new footnote definition was made there. It replaced the old
  * lint-on-focused-file-change trigger (2026-08-05).
@@ -895,51 +946,23 @@ export function lintAfterFootnoteCreation(
     seededBody?: string,
     createdName?: string,
 ): string | null {
+    // Off, the usual case, the note's whole text is not even read.
     if (!plugin.settings.lintOnFootnoteCreation) return null;
-    // with every rule off, lint is off and its alerts stay silent, as the
-    // command and the save trigger already hold (Kimi hunt cycle 2,
-    // 2026-09-16)
-    if (lintRulesAllDisabled(plugin)) return null;
-    // The shared safety check covers Reading view as well. That is belt and
-    // braces: the creation commands already refuse it, but this also stops
-    // code calling in directly from editing the hidden buffer.
-    const target = safeLintTarget(plugin);
-    if (!target) return null;
-    if (target.doc !== edited) {
-        noticeLintAlerts(plugin, edited.getValue(), false);
-        return null;
-    }
-    const doc = target.doc;
-    const before = doc.getValue();
-    // Say nothing when a bad prefix blocks the lint. The insert that just
-    // happened has already told the user about it (a paste, which needs no
-    // prefix, says it itself: lintAfterPaste).
-    if (lintBlockedByPrefix(before, plugin.settings.enableFootnotePrefix)) return null;
-    // Nothing a press or a paste does reads the section heading setting,
-    // so nothing has said that the lint cannot use it: the reason is
-    // shown, as a save shows it, rather than leaving the lint silent (ADR
-    // 0002; hunt 2026-10-02, round 2, cluster I4, pin
-    // bug-creation-lint-heading-blocked-silent).
-    const headingProblem = lintBlockedBySectionHeading(plugin);
-    if (headingProblem) {
-        showNotice(headingProblem, 8000);
-        return null;
-    }
-    const after = lintNote(plugin, before, configuredSectionHeading(plugin));
+    const before = edited.getValue();
+    const { after, speak } = creationLintOf(plugin, edited, before);
     if (after === before) {
-        noticeLintAlerts(plugin, after);
+        speak();
         return null;
     }
-    replaceMinimal(doc, before, after, target.mdView);
-    showNotice("Footnotes linted.");
-    noticeLintAlerts(plugin, after);
+    replaceMinimal(edited, before, after, plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined);
+    speak();
     const unique =
         seededBody === undefined
-            ? uniqueEmptyDefinitionName(doc)
-            : uniqueSeededDefinitionName(doc, seededBody);
+            ? uniqueEmptyDefinitionName(edited)
+            : uniqueSeededDefinitionName(edited, seededBody);
     const relocated = unique ?? (createdName === undefined ? null : definitionNameAfter(before, after, createdName));
     if (relandCursor && relocated !== null) {
-        jumpToFootnoteDefinition(relocated, doc.getCursor(), plugin, doc);
+        jumpToFootnoteDefinition(relocated, edited.getCursor(), plugin, edited);
     }
     return relocated;
 }

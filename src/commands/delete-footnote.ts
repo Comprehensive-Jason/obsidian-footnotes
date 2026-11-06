@@ -3,7 +3,7 @@ import { labelShapedLines } from "../parsing/label-shapes";
 import { definitionCuts, normalizeEol, removeLineRanges, restoreEol } from "../parsing/line-edits";
 import { readNote } from "../parsing/note-reading";
 import { definitionsHeldBy } from "../linting/rules/remove-orphaned-definitions";
-import { cutOne } from "../linting/rules/remove-orphaned-references";
+import { commentedLabelLines, cutOne } from "../linting/rules/remove-orphaned-references";
 import { MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
@@ -49,8 +49,9 @@ export type DeleteFootnotePlan =
  * `markdown` with the footnote called `name` gone: every live reference to
  * it cut out of the text with the gap closed, and every definition block
  * of that name removed. Names match without regard to case, as Obsidian
- * matches them. Copies inside code, math, comments, or frontmatter are
- * plain text and stay.
+ * matches them. Copies inside code, math, HTML comments, or frontmatter are
+ * plain text and stay. In a "%%" comment a reference is live and is cut, and
+ * a label goes with its line.
  */
 export function deleteFootnoteEverywhere(markdown: string, name: string): DeleteFootnotePlan {
     const folded = name.toLowerCase();
@@ -129,6 +130,20 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
         blocks.push({ start: label.line, end: underlineIsText ? label.line + 1 : label.line });
         definitions++;
     }
+    // A label inside a "%%" comment is a definition the user wrote too, so its
+    // line goes whole. Cut as a reference, it left ": hidden" with the name gone,
+    // which Jason called wrong for the orphan rule (hunt 2026-11-06, cycle 9,
+    // finding H25; his ruling of 2026-11-05, by analogy). A line that also holds
+    // the comment's "%%" cannot go whole without opening the comment up, so the
+    // deletion is refused, as the one-line comment "%% [^x]: hidden %%" is.
+    const commentedCuts = commentedLabelLines(lines)
+        .filter((label) => label.name.toLowerCase() === folded)
+        .map(({ line }) => ({ start: line, end: line }));
+    if (commentedCuts.some(({ start }) => lines[start].includes("%%"))) {
+        return { kind: "refused", reason: refusal("delete", Reason.other, Advice.deleteByHand) };
+    }
+    blocks.push(...commentedCuts);
+    definitions += commentedCuts.length;
     blocks.sort((a, b) => a.start - b.start);
     // the lines a block cut takes with it: a reference on one of them
     // goes with the block and is not cut, or counted, on its own
@@ -186,7 +201,11 @@ export function deleteFootnoteEverywhere(markdown: string, name: string): Delete
     // could say which half was refused; both halves now give the same
     // shared reason (Jason, 2026-10-22), so the one judgement is enough.
     const out = removeLineRanges(cutLines, [...blocks, ...emptied].sort((a, b) => a.start - b.start));
-    if (!judgeEdit(lines, out, { removed: [name] }, reading).pass) {
+    // The gate holds a comment's text to be unchanged, and these lines are the
+    // deletion the user asked for. So it judges the rest of the deletion, against
+    // the note with them already gone.
+    const judged = commentedCuts.length === 0 ? lines : removeLineRanges(lines, commentedCuts);
+    if (!judgeEdit(judged, out, { removed: [name] }).pass) {
         return { kind: "refused", reason: refusal("delete", Reason.other, Advice.deleteByHand) };
     }
     return {

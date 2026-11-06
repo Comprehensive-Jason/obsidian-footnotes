@@ -1,7 +1,7 @@
 import { rulePasses } from "../rule-gate";
 import { readNote } from "../../parsing/note-reading";
 import { definitionLabelWithName, labelShapedLines } from "../../parsing/label-shapes";
-import { punctuationAt, wordEndBefore } from "../../parsing/landing";
+import { spacesGoWithFootnoteBefore, wordEndBefore } from "../../parsing/landing";
 import { normalizeEol, restoreEol } from "../../parsing/line-edits";
 import { FootnoteRule } from "../rule";
 
@@ -121,15 +121,45 @@ export function commentedDefinitionNames(markdown: string): string[] {
 
 /** The names commentedDefinitionNames gives, for a note already split into lines, or only those in HTML comments. */
 function commentedLabelNames(lines: string[], htmlOnly = false): string[] {
+    const names: string[] = [];
+    const seen = new Set<string>();
+    for (const { name } of labelsInBlockComments(lines, htmlOnly ? "html" : "both")) {
+        const folded = name.toLowerCase();
+        if (seen.has(folded)) continue;
+        seen.add(folded);
+        names.push(name);
+    }
+    return names;
+}
+
+/**
+ * Every definition label inside a "%%" block comment, in order: its line and its
+ * name as written. Only a "%%" comment belongs here, since its "[^x]" still counts
+ * as a reference, so commands that cut or convert references must treat the label
+ * itself. A label in an HTML comment is plain text to them.
+ */
+export function commentedLabelLines(lines: string[]): { line: number; name: string }[] {
+    return labelsInBlockComments(lines, "percent");
+}
+
+/**
+ * Every definition label inside a comment on its own block, of the kind asked
+ * for, in order: its line and its name as written. The lint's alert and its
+ * orphan rule read both kinds, and the commands that cut or convert references
+ * read only "%%" (hunt 2026-11-06, cycle 9, H14, H25, and H30).
+ */
+function labelsInBlockComments(lines: string[], kinds: "percent" | "html" | "both"): { line: number; name: string }[] {
     const reading = readNote(lines);
     const note = lines.join("\n");
     // Only an HTML block that is a comment hides what it holds as a comment
     // does: a "<div>" block is something else.
     const comments = reading.protectedSpans.filter(
-        (span) => span.block && ((span.kind === "percentComment" && !htmlOnly) || (span.kind === "html" && note.slice(span.from, span.to).trimStart().startsWith("<!--"))),
+        (span) =>
+            span.block &&
+            ((span.kind === "percentComment" && kinds !== "html") ||
+                (span.kind === "html" && kinds !== "percent" && note.slice(span.from, span.to).trimStart().startsWith("<!--"))),
     );
-    const names: string[] = [];
-    const seen = new Set<string>();
+    const labels: { line: number; name: string }[] = [];
     let offset = 0;
     for (let i = 0; i < lines.length; offset += lines[i].length + 1, i++) {
         if (!lines[i].includes("[^")) continue;
@@ -150,12 +180,9 @@ function commentedLabelNames(lines: string[], htmlOnly = false): string[] {
         // interior line (Kimi hunt cycle 3, 2026-09-16)
         const at = offset + hit.start;
         if (!comments.some((span) => span.from <= at && at < span.to)) continue;
-        const folded = hit.name.toLowerCase();
-        if (seen.has(folded)) continue;
-        seen.add(folded);
-        names.push(hit.name);
+        labels.push({ line: i, name: hit.name });
     }
-    return names;
+    return labels;
 }
 
 /**
@@ -366,15 +393,17 @@ export function removeOrphanedFootnoteReferences(markdown: string, orphanSafePre
  * it too, since they belong to it: "word [^1]." becomes "word.", not
  * "word ." (Jason's ruling Q35, 2026-10-09, which settles D10; pin
  * spec-delete-stray-space-before-punctuation), and "word, [^1]." becomes
- * "word,." (the same ruling applied after punctuation). `textStart` is
- * the column where the line's text begins (NoteReading.blockSyntaxEnd),
- * so the space after "- " or "> " stays (wordEndBefore).
+ * "word,." (the same ruling applied after punctuation). The same goes for a
+ * closing bracket or quote: "(see [^1])" becomes "(see)" (hunt 2026-11-06,
+ * cycle 9, finding H32, the triage's choice extending that ruling). `textStart`
+ * is the column where the line's text begins (NoteReading.blockSyntaxEnd), so
+ * the space after "- " or "> " stays (wordEndBefore).
  *
  * Shared with the Delete footnote command, which cuts references the same
  * way (T4, 2026-09-21).
  */
 export function cutOne(line: string, start: number, end: number, textStart = 0): string {
-    const head = line.slice(0, punctuationAt(line, end) ? wordEndBefore(line, start, textStart) : start);
+    const head = line.slice(0, spacesGoWithFootnoteBefore(line, end) ? wordEndBefore(line, start, textStart) : start);
     let copied = end;
     if (line[copied] === " " && (head === "" || head.endsWith(" "))) copied++;
     const tail = line.slice(copied);
