@@ -29,7 +29,12 @@ import { resetNotices } from "../helpers/notices";
 //   (a) step over a comment that sits directly before punctuation, so the
 //       footnote lands after the period, as Reading view would show it;
 //   (b) keep the press as it is: a comment stops the walk like any text.
-// The tests below take option (a).
+//
+// Answered (2026-11-05, sorting the spec pins under Jason's scope rule of
+// 2026-10-07): the result gate design he approved (2026-10-07, ADR 0003) lists
+// Q11 under "left as they behave, no code (rare or harmless)": a hidden comment between a word and its period.
+// That is option (b). The two tests below were it.fails, taking option (a),
+// until then.
 //
 // Hunt 2026-10-06, cycle 4, lens press. Cluster P5.
 //
@@ -52,18 +57,16 @@ const After = {
     lintOnFootnoteCreation: false,
 };
 
-describe("spec question: a hidden comment between a word and its period", () => {
-    // Now: "word[^1]<!-- c -->. more".
-    it.fails("press at the end of 'word' in 'word<!-- c -->. more' lands after the period", async () => {
+describe("a hidden comment between a word and its period", () => {
+    it("press at the end of 'word' in 'word<!-- c -->. more' lands in front of the comment", async () => {
         const doc = fakeEditor(["word<!-- c -->. more"], { cursor: { line: 0, ch: 2 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(After, doc));
-        expect(doc.lines[0]).toBe("word<!-- c -->.[^1] more");
+        expect(doc.lines[0]).toBe("word[^1]<!-- c -->. more");
     });
 
-    // Now: "word[^1]%%c%%. more".
-    it.fails("press at the end of 'word' in 'word%%c%%. more' lands after the period", async () => {
+    it("press at the end of 'word' in 'word%%c%%. more' lands in front of the comment", async () => {
         const doc = fakeEditor(["word%%c%%. more"], { cursor: { line: 0, ch: 2 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(After, doc));
-        expect(doc.lines[0]).toBe("word%%c%%.[^1] more");
+        expect(doc.lines[0]).toBe("word[^1]%%c%%. more");
     });
 });
