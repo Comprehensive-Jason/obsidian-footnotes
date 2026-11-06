@@ -190,7 +190,9 @@ function findBracketedText(kids: readonly MarkdownNode[], doc: string, parentEnd
             const image = i > start && doc[i - 1] === "!" && escaped !== i - 1;
             if (inLink && !image) continue;
             const close = nextBracket(doc, i + 1, parentEnd);
-            if (close === -1 || doc[close] !== "]" || close === i + 1) continue;
+            if (close === -1 || doc[close] !== "]") continue;
+            // empty brackets are read as one only with a "[" right after them
+            if (close === i + 1 && doc[close + 1] !== "[") continue;
             // "[^" is left to the footnote readers, whatever follows it (remark-footnotes)
             if (doc[i + 1] === "^") continue;
             // what comes right after: "[]" belongs to it, and so does a "["
@@ -318,11 +320,13 @@ function restoreShapes(node: MarkdownNode, doc: string, inLink: boolean, inNote:
     if (node.type === "definition" || node.type === "linkReference" || node.type === "imageReference") node.identifier = untrimmedIdentifier(node);
     if (node.type === "comment") node.type = "percentComment";
     if (node.children === undefined) return;
+    // a bare web address, an email address, or an "<...>" link holds only its own text, never read as Markdown
+    if (node.type === "link" && doc[node.position.start.offset] !== "[") return;
     if (node.type === "callout") calloutAsQuote(node, doc);
-    restoreBracketedText(node, doc, inLink);
+    const holdsLink = inLink || node.type === "link" || node.type === "linkReference";
+    restoreBracketedText(node, doc, holdsLink);
     const holdsNote = inNote || node.type === "footnote";
     if (holdsNote) restoreDeadReferences(node, doc);
-    const holdsLink = inLink || node.type === "link" || node.type === "linkReference";
     for (const child of node.children) restoreShapes(child, doc, holdsLink, holdsNote);
 }
 
@@ -445,7 +449,12 @@ export function parseObsidianNote(
     const doc = normalizeLineBreaks(text);
     const parser = startsNote ? wholeNoteParser : laterPartParser;
     const tree = parser.parse(doc) as unknown as RootNode;
-    if (doc.charCodeAt(0) === 0xfeff) shiftPastByteOrderMark(tree);
+    const containerColumns = tree.data?.lineOffsets ?? {};
+    if (doc.charCodeAt(0) === 0xfeff) {
+        shiftPastByteOrderMark(tree);
+        // the mark stands in front of what the first line's containers took, too
+        if (1 in containerColumns) containerColumns[1]++;
+    }
     restoreShapes(tree, doc, false, false);
-    return { tree, containerColumns: tree.data?.lineOffsets ?? {}, readsPastEnd: readsPastTheEnd(tree, doc) };
+    return { tree, containerColumns, readsPastEnd: readsPastTheEnd(tree, doc) };
 }
