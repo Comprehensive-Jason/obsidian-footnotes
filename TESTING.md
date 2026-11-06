@@ -44,10 +44,11 @@ The suite has five kinds of files:
   failing test before its fix and keeps it as a regression pin. Spec
   rulings live next to them as `test/hunt/spec-*.test.ts`.
 - **The offline referee** (`test/obsidian-referee.test.ts`): the
-  remark-parse 8 reader (`src/parsing/obsidian-markdown.ts`, Obsidian's
-  own parser rebuilt from remark-parse 8 and Obsidian's rules as observed
-  with the oracle) against Obsidian's answers saved from the live oracle
-  below, about 6,000 notes in `test/obsidian-answers/`. It uses the
+  note reader (`src/parsing/obsidian-markdown.ts`, the adapter around
+  `@quartz-community/remark-obsidian`, which holds remark-parse 8 and
+  Obsidian's rules as observed with the oracle) against Obsidian's answers
+  saved from the live oracle below, about 6,900 notes in
+  `test/obsidian-answers/`. It uses the
   oracle's own comparison (`scripts/oracle/compare.mts`) and fails on any
   disagreement except a short list of known ones, each with its reason.
   `test/footnote-facts.test.ts` pins the positions the reader derives
@@ -217,8 +218,8 @@ the two always judge alike. It is TypeScript that Node runs directly, which
 needs Node 22.18 or later.
 
 With `--reader`, either command compares Obsidian with one whole-note
-parse of the remark-parse 8 reader (`reader-facts.ts`), the reader the
-note reading is built on; the two answer alike unless the reading in parts
+parse of the note reader (`reader-facts.ts`), the reader the note reading
+is built on; the two answer alike unless the reading in parts
 goes wrong (test/note-reading-parts.test.ts holds them together). The
 rules the oracle has
 found so far, which the reader's code cites by letter and number, are in

@@ -8,8 +8,10 @@ import { footnoteFacts } from "../../src/parsing/footnote-facts";
 // stretch of plain text it read, once per inline reader. Reading the
 // 5,600-line speed-test note with a "%%" open at line 101 took about 3
 // seconds (a whole-note parse is about a tenth of a second), and the
-// 22,400-line one a minute and a half. The text reader is now handed one
-// line at a time (textLineByLine in src/parsing/obsidian-markdown.ts).
+// 22,400-line one a minute and a half. This plugin's own reader was fixed by
+// handing its text reader one line at a time. Notes have been read by
+// @quartz-community/remark-obsidian since 2026-11-06, and this pin holds the
+// package to the same speed.
 //
 // Like the other timing pins, this one compares two reads made the same
 // way rather than using a fixed limit, so it holds on a slow or a fast

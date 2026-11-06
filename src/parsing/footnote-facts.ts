@@ -186,7 +186,7 @@ const BlockContainers = new Set(["root", "blockquote", "list", "listItem", "foot
  * the definition: indentation, quote markers ">", and list markers ("-",
  * "*", "+", "1.", "1)", each followed by a space or a tab) with a task box
  * after one: "[ ]", "[x]", or any other one character in the brackets, as
- * the list reader takes them (remark-parse-list.js). So "---" (a
+ * Obsidian's list reader takes them (rule B8). So "---" (a
  * frontmatter closer) and "%%" do not qualify.
  */
 const ContainerMarkersOnly = /^(?:[ \t]*(?:>|(?:[-+*]|\d{1,9}[.)])(?:[ \t]+\[.\])?(?=[ \t])))*[ \t]*$/;

@@ -436,7 +436,7 @@
   <p class="eyebrow">Footnote Shortcut · plugin structure</p>
   <h1>What the plugin is made of, one layer at a time</h1>
   <p class="lede">Four layers of source code stacked so that each one only leans on the layer below it, wrapped in a testing scaffold that is bigger than the plugin itself. This page walks the stack from the bottom up.</p>
-  <p class="stamp">Claude: drafted 2026-09-09 from a read of the code and kept current through 2026-10-03 (version 0.3.0-beta.2, the September 2026 feature round, and the runtime swap that moved the plugin onto Obsidian's own parser; the counts are from the tree on that day). Terms follow GLOSSARY.md: a <em>reference</em> is the <code>[^1]</code> in your text, a <em>definition</em> is the <code>[^1]: …</code> line that holds the note.</p>
+  <p class="stamp">Claude: drafted 2026-09-09 from a read of the code and kept current through 2026-11-06 (the parser swap that moved the plugin onto the shared remark-obsidian package; the counts are from the tree on that day). Terms follow GLOSSARY.md: a <em>reference</em> is the <code>[^1]</code> in your text, a <em>definition</em> is the <code>[^1]: …</code> line that holds the note.</p>
   <div class="legend">
     <span>Colour key, used on every figure and heading:</span>
     <span class="chip l-parsing">parsing</span>
@@ -451,8 +451,8 @@
 </header>
 
 <div class="stats">
-  <div class="stat" style="--st: var(--commands)"><div class="n">54</div><div class="l">source files, 17,097 lines (about 40% of them comments)</div></div>
-  <div class="stat" style="--st: var(--scaffold)"><div class="n">567</div><div class="l">test files (316 of them are pinned bugs)</div></div>
+  <div class="stat" style="--st: var(--commands)"><div class="n">55</div><div class="l">source files, 23,231 lines (about 40% of them comments)</div></div>
+  <div class="stat" style="--st: var(--scaffold)"><div class="n">798</div><div class="l">test files (478 of them are pinned bugs)</div></div>
   <div class="stat" style="--st: var(--commands)"><div class="n">10</div><div class="l">commands you can bind to a key</div></div>
   <div class="stat" style="--st: var(--linting)"><div class="n">8</div><div class="l">lint rules, run in a fixed order, plus one sweep</div></div>
 </div>
@@ -484,32 +484,32 @@
   </div>
   <div class="gap"><span>loads</span></div>
   <div class="band l-plumbing">
-    <div><span class="name">plumbing</span><span class="count">main.ts + settings.ts · 2 files · 942 lines</span></div>
+    <div><span class="name">plumbing</span><span class="count">main.ts + settings.ts · 2 files · 931 lines</span></div>
     <div class="what">Registers the 10 commands and 9 icons, loads and migrates settings, installs the save hook and the vim hook, and puts it all back on unload.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-commands">commands</span><span class="chip l-linting">linting</span><span class="chip l-editor">editor</span><span class="chip l-parsing">parsing</span></div>
   </div>
   <div class="gap"><span>calls</span></div>
   <div class="band l-commands">
-    <div><span class="name">commands/</span><span class="count">18 files · 7,033 lines</span></div>
+    <div><span class="name">commands/</span><span class="count">17 files · 8,993 lines</span></div>
     <div class="what">The press: claims, guards, jumps, create, the popup, rename, the prefix dialog. And the whole-note commands: delete everywhere, the two style conversions, and the copy, cut, and paste hooks that carry definitions along.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-linting">linting</span><span class="chip l-editor">editor</span><span class="chip l-parsing">parsing</span></div>
   </div>
   <div class="gap"><span>calls (one function: lint right after creating a footnote)</span></div>
   <div class="band l-linting">
-    <div><span class="name">linting/</span><span class="count">15 files · 3,492 lines</span></div>
+    <div><span class="name">linting/</span><span class="count">17 files · 4,889 lines</span></div>
     <div class="what">The 8 rules and the empty-heading sweep, the pipeline that runs them in order, the shared rewrite engine, the shared rename engine, and the alerts.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-editor">editor</span><span class="chip l-parsing">parsing</span></div>
   </div>
   <div class="gap"><span>calls</span></div>
   <div class="band l-editor">
-    <div><span class="name">editor/</span><span class="count">9 files · 2,200 lines</span></div>
+    <div><span class="name">editor/</span><span class="count">10 files · 5,042 lines</span></div>
     <div class="what">Helpers between the note and the live editor: DocContext, caret motion, table cells, the insertion rehearsal, the shared write-back (a line diff that keeps folds, the caret, and other panes in place), notices, and the quarantine for undocumented Obsidian internals.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-parsing">parsing</span></div>
   </div>
   <div class="gap"><span>calls</span></div>
   <div class="band l-parsing">
-    <div><span class="name">parsing/</span><span class="count">10 files · 3,430 lines</span></div>
-    <div class="what">The note reading (Obsidian's own parser, rebuilt from remark-parse 8, read in parts and remembered) with its masked twin, the footnote grammar, the landing walk, the label shapes, and the prefix reader. Pure text in, facts out.</div>
+    <div><span class="name">parsing/</span><span class="count">9 files · 3,376 lines</span></div>
+    <div class="what">The note reading (the shared remark-obsidian package, which holds Obsidian's parser, read in parts and remembered) with its masked twin, the footnote grammar, the landing walk, the label shapes, and the prefix reader. Pure text in, facts out.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-obsidian">nothing</span></div>
   </div>
 </div>
@@ -527,8 +527,8 @@
 <p>Everything above this layer asks it the same few questions. <em>Is this spot protected? Is this <code>[^x]</code> a live reference? Is this line a real definition, and where does it end?</em> The answers are harder than they look because Obsidian's Markdown has a lot of places where <code>[^1]</code> is just text.</p>
 
 <h3>The note reading: Obsidian's own parser, rebuilt</h3>
-<p>Every answer comes from the <strong>note reading</strong> (<code>parsing/note-reading.ts</code>): one parse of the note the way Obsidian reads it. Obsidian's Reading view, its metadata cache, and Publish share one Markdown parser, a fork of remark-parse 8, so <code>parsing/obsidian-markdown.ts</code> starts from the real remark-parse 8 with the footnote and math plugins of the same era and adds Obsidian's own rules on top, each written from Obsidian's observed answers and named by letter and number in <code>docs/obsidian-reading-rules.md</code>: callouts, wikilinks, <code>%%</code> comments, tables, frontmatter, and the rest. <code>parsing/footnote-facts.ts</code> reads what the plugin needs off the tree: every definition with its last line and its container, every reference with whether it is live, every stretch of protected text, the block syntax at the start of each line, the table rows, and the inline footnotes. Until October 2026 a hand-written scanner of about 2,800 lines answered these questions by approximating each rule; the runtime swap of 2026-10-03 replaced it in four steps (definitions, then protected text, then references, then deleting what was left).</p>
-<p>The reader is held to Obsidian by the <strong>referee</strong>: <code>scripts/oracle</code> asks the live app (its metadata cache and Reading view) about notes and saves the answers, and <code>test/obsidian-referee.test.ts</code> checks the reader against about 6,800 of them on every test run, failing on any disagreement but three known spots where Obsidian's metadata cache reports a wrong column.</p>
+<p>Every answer comes from the <strong>note reading</strong> (<code>parsing/note-reading.ts</code>): one parse of the note the way Obsidian reads it. Obsidian's Reading view, its metadata cache, and Publish share one Markdown parser, a fork of remark-parse 8, so the plugin reads notes with <code>@quartz-community/remark-obsidian</code>, a package holding remark-parse 8 with the footnote and math readers of the same era and Obsidian's own rules on top, which started from this plugin's earlier reader. <code>parsing/obsidian-markdown.ts</code> is the adapter around it. The rules are written from Obsidian's observed answers and named by letter and number in <code>docs/obsidian-reading-rules.md</code>: callouts, wikilinks, <code>%%</code> comments, tables, frontmatter, and the rest. <code>parsing/footnote-facts.ts</code> reads what the plugin needs off the tree: every definition with its last line and its container, every reference with whether it is live, every stretch of protected text, the block syntax at the start of each line, the table rows, and the inline footnotes. Until October 2026 a hand-written scanner of about 2,800 lines answered these questions by approximating each rule; the runtime swap of 2026-10-03 replaced it in four steps (definitions, then protected text, then references, then deleting what was left).</p>
+<p>The reader is held to Obsidian by the <strong>referee</strong>: <code>scripts/oracle</code> asks the live app (its metadata cache and Reading view) about notes and saves the answers, and <code>test/obsidian-referee.test.ts</code> checks the reader against about 6,900 of them on every test run, failing on any disagreement but ten known notes: nine where the metadata cache reports a different column, and one the oracle could not really ask.</p>
 
 <h3>Parts, remembered by their text</h3>
 <p>Parsing a long note takes a noticeable moment, more on a phone, and a press reads the note several times (as it is, with the new reference, with the new definition). So the reading parses a note in <strong>parts</strong> and remembers each part by its exact text: an edit changes one part, and a read after an edit parses only that part again. A part may start at a line in the first column after a blank line, or at a label line, picked by a small hash of the line's own text so that an edit never moves the part starts around it. Each part is parsed together with the first line of the next, and ends cleanly only when that borrowed line starts a block of its own; when it does not (a fence still open, a list going on, a link definition's label still open), the part is tried again with more of the note joined to it. <code>test/note-reading-parts.test.ts</code> holds the reading in parts to one parse of the whole note, over every saved Obsidian answer and thousands of generated notes edited at random. On the sandbox vault's speed-test notes (desktop, 2026-10-03), a press after an edit takes about 10, 42, and 133 ms on notes of 1,091, 5,634, and 22,386 lines, and a full lint about 24, 71, and 292 ms.</p>
@@ -558,7 +558,7 @@
 <p>The reading gives every definition its last line, so each is a <strong>definition block</strong>: the label line plus its continuation lines and the blank lines between them. Blocks are the unit that gets moved to the bottom, merged, or jumped to.</p>
 
 <h3>The note reading and definitions in containers</h3>
-<p>Which lines are definitions, and where each one ends, now comes from the <strong>note reading</strong> (<code>parsing/note-reading.ts</code>): one parse of the note with <code>parsing/obsidian-markdown.ts</code>, the remark-parse 8 reader the referee suite holds to Obsidian's own answers, remembered per exact text so a press or a lint parses each text once. Every definition counts wherever it sits, at the top level, in a quote or callout, in a list item, or inside another footnote, and each carries its <strong>container</strong> (Jason's ruling 1, option a, 2026-10-03). Only a <em>movable</em> one, at the top level with nothing but indentation before its label, is ever moved to the bottom or reordered; one in a container stays where it is, and a rule that cannot safely edit it refuses or alerts.</p>
+<p>Which lines are definitions, and where each one ends, now comes from the <strong>note reading</strong> (<code>parsing/note-reading.ts</code>): one parse of the note with <code>parsing/obsidian-markdown.ts</code>, the reader the referee suite holds to Obsidian's own answers, remembered per exact text so a press or a lint parses each text once. Every definition counts wherever it sits, at the top level, in a quote or callout, in a list item, or inside another footnote, and each carries its <strong>container</strong> (Jason's ruling 1, option a, 2026-10-03). Only a <em>movable</em> one, at the top level with nothing but indentation before its label, is ever moved to the bottom or reordered; one in a container stays where it is, and a rule that cannot safely edit it refuses or alerts.</p>
 
 <h3>DocContext: one reading per press</h3>
 <p>A hotkey press builds one <code>DocContext</code> in <code>editor/doc-context.ts</code>. It reads the note once and answers every later question from that one reading: the live references on a line, the reference at the caret, the definitions, the masked version of a line. The whole cascade of decisions in the next section shares that one object, and a check of the note as it will be after the edit is one more reading, mostly of parts already read.</p>
@@ -775,7 +775,7 @@
 <p>This is where most of the file count lives, and why the repo feels much larger than a 17,000-line plugin. Each layer catches a different kind of mistake, and each is coloured here by the part of the plugin it mostly protects.</p>
 </div>
 <div class="layers">
-  <div class="layer t1"><span class="k">1</span><span class="t">Unit and property tests</span><span class="c">npm test · 567 files</span><span class="d">100 feature specs, 23 files that pin what the retired manual sheets used to ask a human, and under <span class="mono">test/hunt/</span> 316 bug pins and 123 spec rulings. The referee holds the reader to Obsidian's saved answers, and the parts test holds the reading in parts to one parse of the whole note. Plus the properties: random documents are generated, linted, and checked for invariants like "no NUL leaks", "protected text is byte-identical", and a differential oracle that parses each document with an independent Markdown parser before and after and demands the same footnote structure. When a property finds a bug, the shrunk counterexample becomes a permanent pin in <span class="mono">test/hunt/</span>.</span></div>
+  <div class="layer t1"><span class="k">1</span><span class="t">Unit and property tests</span><span class="c">npm test · 798 files</span><span class="d">121 feature specs, 23 files that pin what the retired manual sheets used to ask a human, and under <span class="mono">test/hunt/</span> 478 bug pins and 171 spec rulings. The referee holds the reader to Obsidian's saved answers, and the parts test holds the reading in parts to one parse of the whole note. Plus the properties: random documents are generated, linted, and checked for invariants like "no NUL leaks", "protected text is byte-identical", and a differential oracle that parses each document with an independent Markdown parser before and after and demands the same footnote structure. When a property finds a bug, the shrunk counterexample becomes a permanent pin in <span class="mono">test/hunt/</span>.</span></div>
   <div class="layer t2"><span class="k">2</span><span class="t">Static analysis</span><span class="c">npm run lint · npm run knip</span><span class="d">Type-aware ESLint with the official plugin guidelines, and knip for dead exports and unused dependencies, kept at zero findings.</span></div>
   <div class="layer t3"><span class="k">3</span><span class="t">Mutation testing</span><span class="c">npm run mutation</span><span class="d">Stryker makes small deliberate breakages in the pure modules (all of parsing and linting, the non-DOM parts of the rest) and checks that some test fails. A surviving mutant is a logic change nobody would notice. Local only, before a release; it needs its own slower vitest config because per-mutant bookkeeping breaks under shared workers.</span></div>
   <div class="layer t4"><span class="k">4</span><span class="t">Smoke tests</span><span class="c">npm run test:smoke · 2,780-line script</span><span class="d">Drives the real plugin inside the real app through the Obsidian CLI: deploys the build, makes a scratch note, moves the caret, fires commands, reads the editor back. The only layer that can catch Obsidian changing under the plugin, so the popup and table cells live here.</span></div>
@@ -784,7 +784,7 @@
 <div class="prose">
 <p>Continuous integration on GitHub runs only layers 1 and 2 plus the build. The rest is a pre-release ritual you run by hand.</p>
 
-<h3>Why there are 316 bug files</h3>
+<h3>Why there are 478 bug files</h3>
 <p>The standing rule is that every bug found gets a failing test before it is fixed, and the test stays forever as a regression pin. That many pins means that many bugs were found and fixed that way, most of them by the adversarial hunts (in mid-September 2026 alone, five Kimi cycles, ten GLM cycles, and one Opus cycle found and fixed about a hundred) and the property suite. The spec rulings next to them pin behaviour Jason ruled on after a hunt asked whether it was a bug. They are not clutter you need to read; they are a ratchet. Delete one and the bug it pins can come back unnoticed.</p>
 
 <h3>Things that look like duplicates but are not</h3>
@@ -840,7 +840,7 @@
   settings.ts             settings tab and defaults</span>
 <span class="l-parsing">  parsing/                reads the note, knows nothing about Obsidian
     note-reading.ts         the note reading, in parts: definitions, references, protected text, the masked twin
-    obsidian-markdown.ts    Obsidian's parser, rebuilt from remark-parse 8
+    obsidian-markdown.ts    the adapter around the remark-obsidian package, which holds Obsidian's parser
     footnote-facts.ts       the facts read off its tree
     footnote-grammar.ts     how a name is spelled, which names may be new, the next number
     landing.ts              where a reference lands after a word
@@ -871,7 +871,7 @@
     lint-alerts.ts          the notices
     rewrite-document.ts     the shared rewrite engine
     rewrite-footnote-names.ts   the shared rename engine</span>
-<span class="l-scaffold">test/                     567 files: specs, manual-* pins, hunt/ pins, properties, the referee, helpers
+<span class="l-scaffold">test/                     798 files: specs, manual-* pins, hunt/ pins, properties, the referee, helpers
 scripts/smoke-test.mjs    drives the real app
 manual-tests/             19 sheets   ·   compat-tests/   2 sheets
 docs/adr/                 the two standing decisions
