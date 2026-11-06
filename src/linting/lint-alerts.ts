@@ -86,6 +86,12 @@ export function countEmptyFootnoteReferences(markdown: string, prefix = ""): num
             // syntax, not an abandoned placeholder (Kimi hunt cycle 1,
             // 2026-09-16; renders literally in Reading view)
             if (escapedAt(masked, at)) continue;
+            // "- [^] task" is a task box whose character is a caret, as any
+            // one character may be, and Obsidian draws a checked box. The
+            // reading already counts a task box as the line's block syntax,
+            // so a "[^]" in front of where the text starts is no placeholder
+            // (live answer on Obsidian 1.15.0, hunt 2026-11-06, cycle 9, H12).
+            if (at < reading.blockSyntaxEnd(i)) continue;
             // "[^](https://x.y)" is a link whose text is a caret, and
             // Obsidian renders it as a link; a "[^]" that any link takes in
             // is that link's text, not a placeholder (hunt 2026-10-02, pin
