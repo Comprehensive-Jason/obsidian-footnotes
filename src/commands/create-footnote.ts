@@ -128,10 +128,7 @@ export function insertInTableCell(
  * (`body`, none for an inline footnote, whose text stays in the cell) and
  * the notices it refuses with in its own words. The range being replaced
  * is the cell's own selection, so the end-of-word adjustment does not
- * apply here. `keep` is text of the cell that the range takes in and that is
- * written back right after `text`: under Before, the punctuation a selection
- * follows, which the reference hops in front of (selection-footnote.ts,
- * cellReferenceStart).
+ * apply here.
  */
 export function replaceInTableCell(
     cell: TableCellEditor,
@@ -140,7 +137,7 @@ export function replaceInTableCell(
     to: number,
     caretOffsetInText: number,
     linkLabels: ReadonlySet<string> = new Set(),
-    conversion: { body?: string; keep?: string; notices: Partial<Record<GateReason, string>> } = { notices: {} },
+    conversion: { body?: string; notices: Partial<Record<GateReason, string>> } = { notices: {} },
 ): boolean {
     return dispatchCellEditIfLive(cell, text, from, to, caretOffsetInText, linkLabels, conversion);
 }
@@ -157,16 +154,15 @@ function dispatchCellEditIfLive(
     to: number,
     caretOffsetInText: number,
     linkLabels: ReadonlySet<string>,
-    conversion: { body?: string; keep?: string; notices: Partial<Record<GateReason, string>> } = { notices: {} },
+    conversion: { body?: string; notices: Partial<Record<GateReason, string>> } = { notices: {} },
 ): boolean {
     const cellText = cell.state.doc.toString();
     // a range from a stale selection is clamped the same way the caret is
     from = Math.max(0, Math.min(from, cellText.length));
     to = Math.max(from, Math.min(to, cellText.length));
-    const keep = conversion.keep ?? "";
-    if (refusedCreation(cellVerdict(cellText, text, from, to, caretOffsetInText, linkLabels, conversion.body, keep), conversion.notices)) return false;
+    if (refusedCreation(cellVerdict(cellText, text, from, to, caretOffsetInText, linkLabels, conversion.body), conversion.notices)) return false;
     cell.dispatch({
-        changes: { from, to, insert: text + keep },
+        changes: { from, to, insert: text },
         selection: { anchor: from + caretOffsetInText },
     });
     return true;
@@ -189,11 +185,10 @@ function dispatchCellEditIfLive(
  * judged in its written form. What `text` is comes from its shape and the
  * caret: an inline footnote ("^[...]", its text the clipboard's when it is
  * written at the caret and holds some), an empty placeholder (the caret
- * left inside it), or a reference. `keep` is written back after `text`
- * (replaceInTableCell), and is no part of the footnote.
+ * left inside it), or a reference.
  */
-function cellVerdict(cellText: string, text: string, from: number, to: number, caretOffsetInText: number, linkLabels: ReadonlySet<string>, body?: string, keep = ""): GateVerdict {
-    const after = readCell(cellText.slice(0, from) + text + keep + cellText.slice(to));
+function cellVerdict(cellText: string, text: string, from: number, to: number, caretOffsetInText: number, linkLabels: ReadonlySet<string>, body?: string): GateVerdict {
+    const after = readCell(cellText.slice(0, from) + text + cellText.slice(to));
     const start = after.column(from);
     const written = after.line.slice(start, after.column(from + text.length));
     const at = [{ line: 0, ch: start }];

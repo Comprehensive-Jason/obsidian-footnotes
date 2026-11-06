@@ -4,10 +4,8 @@ import type FootnotePlugin from "../main";
 import { ValidatedTextModal } from "./validated-text-modal";
 import { escapedAt, footnoteNameProblem, idListIncludes, referenceText } from "../parsing/footnote-grammar";
 import {
-    cellInFrontOfPunctuationBehindCaret,
     comparePositions,
     endOfWordForSelection,
-    inFrontOfPunctuationBehindCaret,
     moveCursorAndSetJumpPoint,
     startOfWordOffset,
     TrailingBlockId,
@@ -305,12 +303,9 @@ export function selectionPressHandled(
         const lead = cellText.slice(replaceFrom, from);
         if (command === "inline") {
             const wrapped = `^[${sanitizeInlineFootnoteContent(text)}]`;
-            // Under Before, the footnote goes in front of the punctuation
-            // the selection follows, which is written back after it
-            // (cellReferenceStart). If the result gate refuses the result,
-            // the refusal and its notice happen inside replaceInTableCell.
-            const at = cellReferenceStart(plugin, cellText, replaceFrom);
-            replaceInTableCell(cell, wrapped, at, to, wrapped.length, docContext(doc).reading().linkLabels, { keep: cellText.slice(at, replaceFrom), notices });
+            // If the result gate refuses the result, the refusal and its
+            // notice happen inside replaceInTableCell.
+            replaceInTableCell(cell, wrapped, replaceFrom, to, wrapped.length, docContext(doc).reading().linkLabels, { notices });
             return true;
         }
         // Working out the next free number checks the note's prefix. A
@@ -1177,16 +1172,13 @@ function convertMainSelectionToInline(
     notices: Partial<Record<GateReason, string>>,
 ): void {
     const text = `^[${sanitizeInlineFootnoteContent(selection.text)}]`;
-    // Under Before, the footnote goes in front of the punctuation the
-    // selection follows, and that punctuation is written back after it
-    // (referenceStart): "A word. |More|" gives "A word^[More].".
-    const at = referenceStart(plugin, ctx, selection.from);
-    const change = { from: at, to: selection.to, text: text + ctx.lines[at.line].slice(at.ch, selection.from.ch) };
-    const simulated = simulateChanges(ctx.lines, [change]);
-    const verdict = judgeEdit(ctx.lines, simulated, { created: [{ kind: "inline", text, at: [at] }] }, ctx.reading());
+    const simulated = simulateChanges(ctx.lines, [{ from: selection.from, to: selection.to, text }]);
+    const verdict = judgeEdit(ctx.lines, simulated, { created: [{ kind: "inline", text, at: [selection.from] }] }, ctx.reading());
     if (refusedSelection(verdict, notices)) return;
-    const after = { line: at.line, ch: at.ch + text.length };
-    moveCursorAndSetJumpPoint(doc, selection.from, after, plugin, [change]);
+    const after = { line: selection.from.line, ch: selection.from.ch + text.length };
+    moveCursorAndSetJumpPoint(doc, selection.from, after, plugin, [
+        { from: selection.from, to: selection.to, text },
+    ]);
 }
 
 // The version that puts the text in a definition. Both the numbered key
@@ -1208,7 +1200,7 @@ function convertMainSelection(
     ctx: DocContext,
     footnoteId: string,
 ): void {
-    const { body, plan, verdict, afterReference } = conversion(plugin, ctx, selection, footnoteId);
+    const { body, plan, verdict } = conversion(plugin, ctx, selection, footnoteId);
     if (refusedSelection(verdict, selection.notices ?? selectionNotices(null))) return;
 
     landDefinitionBackedInsertion({
@@ -1218,7 +1210,7 @@ function convertMainSelection(
         origin: selection.moved?.at ?? selection.from,
         footnoteId,
         definitionCursor: plan.cursor,
-        afterReference,
+        afterReference: plan.edits[0].end,
         // A conversion creates a footnote, so the landing runs the same
         // after-creation lint that every other creation press gets (Jason
         // asked for that parity on 2026-08-25). The seeded body is how the
@@ -1235,9 +1227,8 @@ function convertMainSelection(
 /**
  * The conversion of `selection` into the footnote `footnoteId`, worked
  * out: the definition's `body`, the `plan` that replaces the selection with
- * the reference and appends the definition, the result gate's `verdict` on
- * the note that leaves, and `afterReference`, the position just past the
- * new reference in that note.
+ * the reference and appends the definition, and the result gate's
+ * `verdict` on the note that leaves.
  */
 function conversion(plugin: FootnotePlugin, ctx: DocContext, selection: ConvertedSelection, footnoteId: string) {
     // A selection spanning lines becomes a body with several paragraphs:
@@ -1248,12 +1239,10 @@ function conversion(plugin: FootnotePlugin, ctx: DocContext, selection: Converte
     const startsInText = selection.moved === undefined && ctx.reading().blockSyntaxEnd(selection.from.line) <= selection.from.ch + selection.lead.length;
     const body = indentDefinitionBody(startsInText ? plainOnLabelLine(selection.text) : selection.text);
     // Moved list items leave their lines, and the reference goes at the end
-    // of the line above them (movedItems). Any other selection's reference
-    // goes where the selection was, or under Before in front of the
-    // punctuation the selection follows (referenceStart). When the reference
-    // goes on the line the taken-out text begins on, the two make one edit,
-    // which writes the text between them back after the reference.
-    const at = selection.moved?.at ?? referenceStart(plugin, ctx, selection.from);
+    // of the line above them (movedItems). When that is where the lines
+    // taken out begin, the two make one edit, as they do for any other
+    // selection, whose reference goes where the selection was.
+    const at = selection.moved?.at ?? selection.from;
     const reference = referenceText(footnoteId);
     const edits =
         at.line === selection.from.line
@@ -1309,31 +1298,7 @@ function conversion(plugin: FootnotePlugin, ctx: DocContext, selection: Converte
         },
         ctx.reading(),
     );
-    const afterReference = { line: plan.edits[0].start.line, ch: plan.edits[0].start.ch + reference.length };
-    return { body, plan, verdict, afterReference };
-}
-
-/**
- * Where the reference a conversion writes goes, for a selection that would
- * be replaced from `from`: under Before, in front of the punctuation the
- * selection follows, where a press right after that punctuation hops back
- * to (inFrontOfPunctuationBehindCaret; Jason's hop-back ruling of
- * 2026-11-05), so "A word. |More|" gives "A word[^1]." and a lint never
- * moves what a conversion just placed. The punctuation between the two
- * columns is written back after the reference. An abbreviation's own dot is
- * not hopped, as the press does not hop it: "the U.S. |Senate|" gives "the
- * U.S.[^1]". Under After and Don't move the reference goes at `from`, where
- * it went before (the triage choice of 2026-11-06 for a selection; hunt
- * 2026-11-06 cycle 9, finding H39).
- */
-function referenceStart(plugin: FootnotePlugin, ctx: DocContext, from: EditorPosition): EditorPosition {
-    if (plugin.settings.footnotePlacement !== "before") return from;
-    return { line: from.line, ch: inFrontOfPunctuationBehindCaret(ctx.reading(), ctx.lines, from.line, from.ch) };
-}
-
-/** referenceStart for a table cell's own text, as an offset into `cellText` (cellInFrontOfPunctuationBehindCaret). */
-function cellReferenceStart(plugin: FootnotePlugin, cellText: string, from: number): number {
-    return plugin.settings.footnotePlacement === "before" ? cellInFrontOfPunctuationBehindCaret(cellText, from) : from;
+    return { body, plan, verdict };
 }
 
 // The definition-backed version for a table cell you are actively
@@ -1357,14 +1322,9 @@ function convertCellSelection(
     // A cell's text holds no block syntax, so it is always plain text.
     const body = plainOnLabelLine(selection.text);
     if (refusedSelection(definitionAppendVerdict(plugin, doc, footnoteId, body.split("\n").length, body), notices)) return;
-    // Under Before, the reference goes in front of the punctuation the
-    // selection follows, which is written back after it (cellReferenceStart).
-    const cellText = cell.state.doc.toString();
-    const at = cellReferenceStart(plugin, cellText, selection.from);
     if (
-        !replaceInTableCell(cell, footnoteReference, at, selection.to, footnoteReference.length, docContext(doc).reading().linkLabels, {
+        !replaceInTableCell(cell, footnoteReference, selection.from, selection.to, footnoteReference.length, docContext(doc).reading().linkLabels, {
             body,
-            keep: cellText.slice(at, selection.from),
             notices,
         })
     ) {

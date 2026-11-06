@@ -317,10 +317,8 @@ function readWithReference(lines: readonly string[], line: number, at: number): 
  * or when no text stands in front of the punctuation. It stays there too when
  * a reference in front of the punctuation would not be live, as in "[see p.
  * 5].|", where "[see p. 5][^1]" reads as a link and the press would be refused.
- * A conversion asks the same of the column its selection starts at, so "A
- * word. |More|" gives "A word[^1]." (selection-footnote.ts, referenceStart).
  */
-export function inFrontOfPunctuationBehindCaret(reading: NoteReading, lines: readonly string[], line: number, ch: number): number {
+function inFrontOfPunctuationBehindCaret(reading: NoteReading, lines: readonly string[], line: number, ch: number): number {
     const text = lines[line] ?? "";
     const images = imageStartsOn(reading, line);
     const textStart = reading.blockSyntaxEnd(line);

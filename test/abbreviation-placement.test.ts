@@ -478,10 +478,7 @@ describe("a selection turned into a footnote", () => {
         ["in the |U|.S.", ["in the[^1]", "", "[^1]: U.S."]],
         ["see |Dr| Smith", ["see[^1] Smith", "", "[^1]: Dr"]],
         ["see |Dr|. Smith", ["see[^1] Smith", "", "[^1]: Dr."]],
-        // the reference hops in front of the comma the selection follows, as a
-        // press there does (hunt 2026-11-06 cycle 9, finding H39); it stayed
-        // after the comma, and the lint moved it
-        ["apples, |etc|.", ["apples[^1],", "", "[^1]: etc."]],
+        ["apples, |etc|.", ["apples,[^1]", "", "[^1]: etc."]],
         ["the |U.S|., and", ["the[^1], and", "", "[^1]: U.S."]],
         // the doubled period's second dot stays with the sentence
         ["in the |U.S|..", ["in the[^1].", "", "[^1]: U.S."]],
