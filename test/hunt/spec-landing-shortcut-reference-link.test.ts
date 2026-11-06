@@ -62,11 +62,10 @@ describe("a press on the last word of a shortcut reference link", () => {
     // answers swap34:br-sic-defined, swap34:br-sic-undefined, and
     // swap34:br-defined-label in test/obsidian-answers/swap34-probes.json;
     // Reading view agrees). So the press is born dead and writes nothing,
-    // and the link stays. That refusal is the answer to the question above:
-    // the result gate does not decide where a footnote lands (ADR 0003), and
-    // the user can type the footnote after a space. The refusal says why in its own words (Jason's
-    // ruling, 2026-10-04; before it, the press showed the protected-text
-    // notice).
+    // and the link stays. That refusal is the answer to the question above,
+    // since the result gate does not decide where a footnote lands (ADR
+    // 0003). The refusal says why in its own words (Jason's ruling,
+    // 2026-10-04; before it, the press showed the protected-text notice).
     it("the whole numbered press (insert at end of word on) keeps the link", async () => {
         resetNotices();
         const lines = ["see [text] now", "", LinkAddress];
