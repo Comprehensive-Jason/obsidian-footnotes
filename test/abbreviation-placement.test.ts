@@ -701,10 +701,47 @@ describe("what the hillclimb's rule adds", () => {
         ["Brr.", "word"],
         ["viz.", "sentence"],
         ["Smith, J.", "doubt"],
-        // Greek has capitals and no vowel the rule knows, so every Greek word answers as if it had none. Not measured by the hillclimb.
-        ["λόγος. Μετά", "word"],
+        // a real word with no vowel, which the rule cannot tell from an abbreviation
+        ["trg. Zatim", "word"],
     ] as const)("wrong on purpose: %s answers %s", (text, owner) => {
         expect(finalDotOwner(text, text.indexOf("."))).toBe(owner);
+    });
+
+    // Only a word wholly in Latin or Cyrillic script can count as having no
+    // vowel, and accents are set aside first. These all ended a sentence, and
+    // the vowel test took each for an abbreviation.
+    it.each([
+        ["să. Apoi"],
+        ["tűz. Aztán"],
+        ["Він. Потім"],
+        ["λόγος. Μετά"],
+        ["kız. Sonra"],
+        ["bērns. Tad"],
+        ["để. Rồi"],
+        ["sø. Så"],
+        ["cœur. Puis"],
+    ])("the sentence's stop: %s", (text) => {
+        expect(finalDotOwner(text, text.indexOf("."))).toBe("sentence");
+    });
+
+    it.each([
+        ["să.| Apoi", "să[^1]. Apoi"],
+        ["Він.| Потім", "Він[^1]. Потім"],
+        ["λόγος.| Μετά", "λόγος[^1]. Μετά"],
+        ["để.| Rồi", "để[^1]. Rồi"],
+    ])("press at %s gives %s, and the lint leaves it", async (marked, expected) => {
+        const placed = await press(marked, "before");
+        expect(placed).toBe(expected);
+        expect(lint(placed)).toBe(placed);
+    });
+
+    it.each([
+        ["Dr. Smith"],
+        ["bzw. das"],
+        ["г. Москва"],
+        ["trg. Zatim"],
+    ])("still the word's: %s", (text) => {
+        expect(finalDotOwner(text, text.indexOf("."))).toBe("word");
     });
 
     it("only the whole phrase et al counts", () => {

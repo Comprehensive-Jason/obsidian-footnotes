@@ -18,7 +18,7 @@
 // 2. A lone capital, "No", "Fig", or "Art" is otherwise in doubt, except a
 //    capital in a spaced pair such as "z. B.", which is the word's.
 // 3. A word that could not stand alone is the word's: dotted pieces, a listed
-//    spelling, one letter, or no vowel.
+//    spelling, one letter, or a Latin or Cyrillic word with no vowel.
 // 4. Except that a lower-case word with no vowel is the sentence's stop when no
 //    lower-case word follows and either a number stands in front ("5 km.") or
 //    it has three letters or more and the line ends ("open the pdf."). "Hmm"
@@ -194,8 +194,18 @@ const DottedPieces = /^(?:\p{Lu}?\S\.)+\p{Lu}?\p{L}$/u;
 const ListedAbbreviation = /^(?:etc|ibid|cit|ed|eds|trans|inc|prof|usw|itd|itp|ecc|aufl|uu|ul|proc|mevr|pct|тыс)$/i;
 /** "al" alone is an ordinary word in several languages, so only the whole phrase counts: "et al", and not "wet al". A no-break space counts as a space. */
 const EtAl = /\bet\sal$/;
-/** The vowels of the Latin and Cyrillic alphabets, with the accented forms the hillclimb's languages use. */
-const Vowel = /[aeiouyà-ÿąęěůаеёиоуыэюя]/i;
+/** A word wholly in the Latin or Cyrillic alphabet. Only such a word can count as having no vowel, since the vowels below say nothing about Greek or any other script. */
+const LatinOrCyrillicWord = /^[\p{Script=Latin}\p{Script=Cyrillic}]+$/u;
+/** The vowels of the Latin and Cyrillic alphabets, asked of a word with its accents set aside. */
+const Vowel = /[aeiouyıøæœаеёиоуыэюяіїє]/i;
+/**
+ * Whether `word` has no vowel. Accents are set aside first (NFD, which writes a
+ * letter and its accent as two characters), so "să", "tűz", and "bērns" have one
+ * without a list of accented forms. On the hillclimb's bench, with the same splits,
+ * this form took the held-out languages from 5.19 to 4.96, with lower better
+ * (2026-11-06).
+ */
+const hasNoVowel = (word: string) => LatinOrCyrillicWord.test(word) && !Vowel.test(word.normalize("NFD"));
 /** A letter other than h and m, so that "Hmm", "Mhm", and "Mm" count as words of a sentence and not as abbreviations. */
 const OtherThanHAndM = /[^hm]/i;
 /** A number and one space in front of the last word, as in "5 km". */
@@ -239,7 +249,7 @@ export function finalDotOwner(text: string, dot: number, footnotes: LineFootnote
     if (DottedPieces.test(word) || ListedAbbreviation.test(word) || EtAl.test(behind) || (standsAlone && isCased && word.length === 1)) return "word";
 
     // Sentences 3 and 4, no vowel. "Dr", "bzw", and "г" are the word's. A lower-case one may be a unit or a file type, and then the dot is the sentence's.
-    if (standsAlone && isCased && !Vowel.test(word) && OtherThanHAndM.test(word)) {
+    if (standsAlone && isCased && hasNoVowel(word) && OtherThanHAndM.test(word)) {
         const unitOrFileType = /^\p{Ll}/u.test(word) && !nextIsLowerCase && (NumberInFront.test(behind) || (word.length >= 3 && next === ""));
         return unitOrFileType ? "sentence" : "word";
     }
