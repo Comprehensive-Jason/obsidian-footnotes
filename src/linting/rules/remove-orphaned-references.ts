@@ -116,9 +116,21 @@ export function commentedDefinitionNames(markdown: string): string[] {
 
 /** The names commentedDefinitionNames gives, for a note already split into lines. */
 function commentedLabelNames(lines: string[]): string[] {
-    const reading = readNote(lines);
     const names: string[] = [];
     const seen = new Set<string>();
+    for (const { name } of commentedLabelLines(lines)) {
+        const folded = name.toLowerCase();
+        if (seen.has(folded)) continue;
+        seen.add(folded);
+        names.push(name);
+    }
+    return names;
+}
+
+/** Every definition label inside a "%%" block comment, in order: its line and its name as written. */
+export function commentedLabelLines(lines: string[]): { line: number; name: string }[] {
+    const reading = readNote(lines);
+    const labels: { line: number; name: string }[] = [];
     let offset = 0;
     for (let i = 0; i < lines.length; offset += lines[i].length + 1, i++) {
         if (!reading.commentLines[i] || reading.protectedLines[i]) continue;
@@ -131,12 +143,9 @@ function commentedLabelNames(lines: string[]): string[] {
         // interior line (Kimi hunt cycle 3, 2026-09-16)
         const at = offset + hit.start;
         if (!reading.comments.some((comment) => comment.block && comment.from <= at && at < comment.to)) continue;
-        const folded = hit.name.toLowerCase();
-        if (seen.has(folded)) continue;
-        seen.add(folded);
-        names.push(hit.name);
+        labels.push({ line: i, name: hit.name });
     }
-    return names;
+    return labels;
 }
 
 /**
