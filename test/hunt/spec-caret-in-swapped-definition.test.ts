@@ -94,11 +94,16 @@ describe("reindex's slot swap", () => {
         expect([2, 3, 4, 5].map(map)).toEqual([4, 5, 2, 3]);
     });
 
-    // Now: the caret at the end of "    cont one" lands at column 0 of
-    // "[^1]: two" (line 2).
-    it.fails("spec question: the editor's caret at the end of 'cont one' follows that text to the [^2] slot", () => {
+    // Answered (2026-11-05, sorting the spec pins under Jason's scope rule of
+    // 2026-10-07): the result gate design he approved (2026-10-07, ADR 0003)
+    // lists Q21 under "left as they behave, no code (rare or harmless)": the
+    // caret after reindex swaps two long definitions.
+    // The caret at the end of "    cont one" lands at column 0 of "[^1]: two"
+    // (line 2). This was it.fails until then. The everyday case below, a
+    // definition gathered at the bottom, came later and is still open.
+    it("the editor's caret at the end of 'cont one' lands at the start of the first definition", () => {
         const after = lintFootnotes(before, {});
-        expect(mapCaret(before, after, 3, "    cont one".length)).toEqual({ line: 5, ch: "    cont one".length });
+        expect(mapCaret(before, after, 3, "    cont one".length)).toEqual({ line: 2, ch: 0 });
     });
 });
 

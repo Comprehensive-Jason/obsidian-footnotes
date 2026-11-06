@@ -30,7 +30,12 @@ import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after
 //       its comment says, and the lint settles in one run);
 //   (b) raise the cap or drop it, so the loop runs until nothing changes;
 //   (c) keep the cap: notes this shape settle over two saves.
-// The tests below take option (a) or (b).
+//
+// Characterization tests (behaviour pinned as they are, 2026-11-05, when the
+// spec pins were sorted under Jason's scope rule of 2026-10-07): eleven
+// references in a row, alternating with punctuation, is a rare shape, and
+// nothing is lost, so option (c) stands. The two tests below were it.fails,
+// taking option (a) or (b), until then.
 //
 // Hunt 2026-10-06, cycle 4, lens lint. Cluster L1.
 //
@@ -44,22 +49,24 @@ import { footnoteAfterPunctuation } from "../../src/linting/rules/footnote-after
 /** "Is it true?" and `n` references, each followed by "!" or "?" in turn, then " Yes.". */
 const chain = (n: number) => "Is it true?" + Array.from({ length: n }, (_, i) => `[^${String(i + 1)}]${i % 2 ? "?" : "!"}`).join("") + " Yes.";
 
-describe("spec question: an alternating run of references longer than the cap", () => {
+describe("an alternating run of references longer than the cap", () => {
     it("control: ten references settle in one run", () => {
         const once = footnoteAfterPunctuation(chain(10), "before");
         expect(footnoteAfterPunctuation(once, "before")).toBe(once);
     });
 
-    // Now: a second run of the rule still moves references.
-    it.fails("eleven references alternating with ! and ? settle in one run under 'before'", () => {
+    it("characterization: eleven references alternating with ! and ? settle over two runs under 'before'", () => {
         const once = footnoteAfterPunctuation(chain(11), "before");
-        expect(footnoteAfterPunctuation(once, "before")).toBe(once);
+        const twice = footnoteAfterPunctuation(once, "before");
+        expect(twice).not.toBe(once);
+        expect(footnoteAfterPunctuation(twice, "before")).toBe(twice);
     });
 
-    // Now: a second lint still moves references.
-    it.fails("the lint with placement 'before' is idempotent on that line", () => {
+    it("characterization: the lint with placement 'before' settles that line over two runs", () => {
         const doc = chain(11) + "\n\n" + Array.from({ length: 11 }, (_, i) => `[^${String(i + 1)}]: note ${String(i + 1)}`).join("\n");
         const once = lintFootnotes(doc, { placement: "before" });
-        expect(lintFootnotes(once, { placement: "before" })).toBe(once);
+        const twice = lintFootnotes(once, { placement: "before" });
+        expect(twice).not.toBe(once);
+        expect(lintFootnotes(twice, { placement: "before" })).toBe(twice);
     });
 });

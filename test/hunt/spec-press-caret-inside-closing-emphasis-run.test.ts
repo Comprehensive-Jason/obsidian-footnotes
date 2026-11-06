@@ -31,6 +31,11 @@ import { readNote } from "../../src/parsing/note-reading";
 // after the word" is a product decision for Jason. One representative case
 // is pinned; the others listed above behave the same.
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): a caret between the two
+// characters of a closing "**" is rare, and no text is lost.
+// It was it.fails until then.
+//
 // Hunt 2026-10-02, round 3, lens reg. Cluster E8.
 //
 // Source of truth: bug-reference-before-closing-delimiter's convention ("a
@@ -45,10 +50,9 @@ function pressAt(line: string, ch: number, placement: FootnotePlacement): string
     return line.slice(0, at) + "[^1]" + line.slice(at);
 }
 
-describe("spec question: a caret between the two characters of a closing emphasis run", () => {
-    it.fails("after: a press in '**bold*|* next' keeps the ** run whole", () => {
-        // Today: "**bold*[^1]* next".
-        expect(pressAt("**bold** next", 7, "after")).toBe("**bold**[^1] next");
+describe("a caret between the two characters of a closing emphasis run", () => {
+    it("characterization: after: a press in '**bold*|* next' writes where the caret is, splitting the run", () => {
+        expect(pressAt("**bold** next", 7, "after")).toBe("**bold*[^1]* next");
     });
 
     it("control: the underscore spelling already lands after the run", () => {

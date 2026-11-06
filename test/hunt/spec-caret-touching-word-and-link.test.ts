@@ -34,7 +34,12 @@ import { resetNotices } from "../helpers/notices";
 //       word, in front of a glued link, as a caret inside the word does;
 //   (b) keep it as it is: a caret at a link's first character is inside
 //       the link and lands after it.
-// The tests below take option (a).
+//
+// Answered (2026-11-05, sorting the spec pins under Jason's scope rule of
+// 2026-10-07): the result gate design he approved (2026-10-07, ADR 0003) lists
+// Q19 under "left as they behave, no code (rare or harmless)": a caret touching a glued link.
+// That is option (b). The two tests below were it.fails, taking option (a),
+// until then.
 //
 // Hunt 2026-10-06, cycle 5, lens press. Cluster X5.
 //
@@ -76,15 +81,13 @@ describe("the caret at the boundary between a word and a glued link", () => {
         expect(doc.lines[0]).toBe("chart[^1]![[f.png]] more");
     });
 
-    // Now: "chart![[f.png]][^1] more".
-    it.fails("just after the word, touching the embed: lands where the caret inside the word lands", async () => {
+    it("just after the word, touching the embed: lands after the embed", async () => {
         const doc = await numbered(["chart![[f.png]] more"], 5);
-        expect(doc.lines[0]).toBe("chart[^1]![[f.png]] more");
+        expect(doc.lines[0]).toBe("chart![[f.png]][^1] more");
     });
 
-    // Now: "see[x](u)[^1] more".
-    it.fails("just after the word, touching an inline link: lands at the end of the word", async () => {
+    it("just after the word, touching an inline link: lands after the link", async () => {
         const doc = await numbered(["see[x](u) more"], 3);
-        expect(doc.lines[0]).toBe("see[^1][x](u) more");
+        expect(doc.lines[0]).toBe("see[x](u)[^1] more");
     });
 });

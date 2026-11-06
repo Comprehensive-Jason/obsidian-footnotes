@@ -4,6 +4,7 @@ import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { resetNotices } from "../helpers/notices";
 import { handleCut, resetCarryRegister } from "../../src/commands/carry-footnotes-hooks";
+import { lintFootnotes } from "../../src/linting/linter";
 
 // spec question: with Remove empty section heading on, should a cut whose
 // selection IS the section's last definition remove the emptied heading
@@ -31,6 +32,12 @@ import { handleCut, resetCarryRegister } from "../../src/commands/carry-footnote
 // src/settings.ts: "When ... a cut, or linting leaves no footnotes under
 // the section heading, and nothing else below it, the heading goes too."
 // Against it, README: "a cut that carries the last definition away".
+//
+// Answered (2026-11-05, sorting the spec pins under Jason's scope rule of
+// 2026-10-07): when unsure, the plugin does what the editor would do without
+// it (ADR 0003), so this cut stays the editor's. The next lint takes the empty
+// heading out. The test was it.fails until then. The setting's description
+// still says "a cut", which is a wording question in the report.
 
 /** A stand-in for the browser's clipboard event: it records what the hook writes and whether the hook took the event over. */
 function clipboardEvent() {
@@ -62,8 +69,8 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
-describe("spec question: a cut whose selection is the section's last definition", () => {
-    it.fails("removes the heading when the cut selection holds the section's last definition", () => {
+describe("a cut whose selection is the section's last definition", () => {
+    it("is left to the editor, so the heading stays until the next lint takes it out", () => {
         const doc = editor(["Body [^1] here", "", "# Footnotes", "", "[^1]: one"], { line: 4, ch: 0 }, { line: 4, ch: 9 });
         const settings = {
             carryFootnotesOnCopy: true,
@@ -73,11 +80,12 @@ describe("spec question: a cut whose selection is the section's last definition"
         };
         const event = clipboardEvent();
         handleCut(fakePlugin(settings, doc), event as never);
-        if (!event.defaultPrevented) {
-            // The hook left the cut alone, so do what the editor's own cut
-            // does: delete the selected text.
-            doc.transaction({ changes: [{ from: { line: 4, ch: 0 }, to: { line: 4, ch: 9 }, text: "" }] });
-        }
-        expect(doc.lines).not.toContain("# Footnotes");
+        expect(event.defaultPrevented).toBe(false);
+        // The hook left the cut alone, so do what the editor's own cut does:
+        // delete the selected text.
+        doc.transaction({ changes: [{ from: { line: 4, ch: 0 }, to: { line: 4, ch: 9 }, text: "" }] });
+        expect(doc.lines).toContain("# Footnotes");
+        const linted = lintFootnotes(doc.lines.join("\n"), { removeEmptySectionHeading: true, sectionHeading: "# Footnotes" });
+        expect(linted).not.toContain("# Footnotes");
     });
 });

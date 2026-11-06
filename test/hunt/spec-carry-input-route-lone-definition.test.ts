@@ -22,6 +22,11 @@ import { carriedInputHandler, handlePaste, resetCarryRegister } from "../../src/
 // to widen that check, at the risk of grabbing typed text, is Jason's
 // call.
 //
+// Answered (2026-11-05, sorting the spec pins under Jason's scope rule of
+// 2026-10-07): the plugin cannot tell this text from typing, and when it
+// cannot tell what the user meant it does what the editor would do without it
+// (ADR 0003). The test was it.fails until then.
+//
 // Hunt 2026-10-02, round 1, lens carry-reg. Cluster C33.
 //
 // Source of truth: the README, "On a phone, text pasted from the
@@ -63,8 +68,8 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
-describe("spec question: a lone definition line through the paste route and the phone keyboard route", () => {
-    it.fails("the input method route lands a lone definition line the way the paste route does", () => {
+describe("a lone definition line through the paste route and the phone keyboard route", () => {
+    it("the paste route lands it as a footnote, and the input method route leaves it to the editor as typed text", () => {
         const viaPaste = editor(["a[^x]", "", "[^x]: x", "", "tail"], { line: 4, ch: 4 });
         handlePaste(fakePlugin(on, viaPaste), clipboardEvent("[^n]: n") as never, viaPaste);
         // The phone route: a keyboard's clipboard history commits the text
@@ -73,11 +78,9 @@ describe("spec question: a lone definition line through the paste route and the 
         const viaInput = editor(["a[^x]", "", "[^x]: x", "", "tail"], { line: 4, ch: 4 });
         const handle = carriedInputHandler(fakePlugin(on, viaInput), () => viaInput);
         const at = viaInput.posToOffset({ line: 4, ch: 4 });
-        if (!handle({} as never, at, at, "[^n]: n")) {
-            // What CodeMirror does when the handler declines: insert the
-            // text at the caret as typed.
-            viaInput.transaction({ changes: [{ from: { line: 4, ch: 4 }, to: { line: 4, ch: 4 }, text: "[^n]: n" }] });
-        }
-        expect(viaInput.lines).toEqual(viaPaste.lines);
+        expect(handle({} as never, at, at, "[^n]: n")).toBe(false);
+        // The paste route adds the definition after the note's last one.
+        expect(viaPaste.lines.at(-1)).toBe("tail");
+        expect(viaPaste.lines).toContain("[^n]: n");
     });
 });

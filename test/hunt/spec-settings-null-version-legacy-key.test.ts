@@ -21,6 +21,11 @@ import FootnotePlugin from "../../src/main";
 // reruns-migration). Letting a legacy key overrule that rule is a design
 // choice for Jason.
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): a settings file damaged
+// this way is rare, no note changes, and the user can pick Numbered again.
+// It was it.fails until then.
+//
 // Hunt 2026-10-02, round 4, lens settings. Cluster S4.
 //
 // Source of truth: the 0.3.0-beta.1 release notes, quoted above, and
@@ -35,11 +40,10 @@ function withSaved(data: unknown): FootnotePlugin {
     return plugin;
 }
 
-describe("spec question: a damaged version beside a legacy key", () => {
-    it.fails("null settingsVersion + renumberNamedFootnotes: true still lands on Numbered", async () => {
+describe("a damaged version beside a legacy key", () => {
+    it("characterization: null settingsVersion + renumberNamedFootnotes: true lands on Keep as written", async () => {
         const plugin = withSaved({ settingsVersion: null, renumberNamedFootnotes: true });
         await plugin.loadSettings();
-        // Today: "keep".
-        expect(plugin.settings.footnoteNaming).toBe("numbered");
+        expect(plugin.settings.footnoteNaming).toBe("keep");
     });
 });

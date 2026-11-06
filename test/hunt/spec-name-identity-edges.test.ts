@@ -55,11 +55,16 @@ describe("spec question: Unicode spellings of one visible name", () => {
 // spellings counting as the same footnote, so the two readings disagree on
 // purpose. Harmless either way.
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): a number with a
+// leading zero is rare, and skipping a number loses nothing, so reading two
+// stands. It was it.fails until then.
+//
 // Source of truth: the documented "highest number in use" contract of
 // computeNextFootnoteNumber in src/parsing/footnote-grammar.ts.
 
-describe("spec question: a number name with a leading zero", () => {
-    it.fails("[^01] leaves the number 1 free", () => {
-        expect(computeNextFootnoteNumber("a[^01]b")).toBe(1);
+describe("a number name with a leading zero", () => {
+    it("characterization: [^01] counts as the number 1, so the next free number is 2", () => {
+        expect(computeNextFootnoteNumber("a[^01]b")).toBe(2);
     });
 });

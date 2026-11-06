@@ -13,6 +13,11 @@ import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 // lines around a removed definition, but not around an emptied reference
 // line. Whether it should is Jason's call.
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): a reference alone as a
+// paragraph is rare, and Reading view shows the same thing either way.
+// It was it.fails until then.
+//
 // Hunt 2026-10-02, round 2, lens delete. Cluster D11.
 //
 // Source of truth: none written down; the delete's own blank-line merge
@@ -24,8 +29,8 @@ function md(lines: string[], name: string): string {
     return plan.kind === "deleted" ? plan.markdown : `<<${plan.kind}>>`;
 }
 
-describe("spec question: a reference that was a whole paragraph", () => {
-    it.fails("leaves one blank line, not three", () => {
-        expect(md(["a", "", "[^1]", "", "b", "", "[^1]: x"], "1")).toBe("a\n\nb");
+describe("a reference that was a whole paragraph", () => {
+    it("characterization: leaves three blank lines", () => {
+        expect(md(["a", "", "[^1]", "", "b", "", "[^1]: x"], "1")).toBe("a\n\n\n\nb");
     });
 });

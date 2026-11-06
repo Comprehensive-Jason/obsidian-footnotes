@@ -35,6 +35,12 @@ import FootnotePlugin from "../../src/main";
 // rules that the migration runs exactly once, so whichever way this is
 // settled it happens at most one time.
 
+// Characterization tests (behaviour pinned as they are, 2026-11-05, when the
+// spec pins were sorted under Jason's scope rule of 2026-10-07): the plugin's
+// pre-0.2 settings could not hold a two-line value, so this takes a hand edit
+// of its settings file, it happens once, and no note changes. Reading two
+// stands. They were it.fails until then.
+
 // the real Plugin constructor wants (app, manifest); these tests only
 // exercise loadSettings, so construct without them
 function withSaved(data: Record<string, unknown>): FootnotePlugin {
@@ -44,18 +50,18 @@ function withSaved(data: Record<string, unknown>): FootnotePlugin {
     return plugin;
 }
 
-describe("spec question: a pre-flag setext heading", () => {
-    it.fails("is recognised as a heading and left alone", () => {
+describe("a pre-flag setext heading", () => {
+    it("characterization: is migrated like plain text, gaining a '# '", () => {
         const plugin = withSaved({ footnoteSectionHeading: "Footnotes\n---" });
         return plugin.loadSettings().then(() => {
-            expect(plugin.settings.footnoteSectionHeading).toBe("Footnotes\n---");
+            expect(plugin.settings.footnoteSectionHeading).toBe("# Footnotes\n---");
         });
     });
 
-    it.fails("the same with an '===' underline, which is a setext H1", () => {
+    it("characterization: the same with an '===' underline, which is a setext H1", () => {
         const plugin = withSaved({ footnoteSectionHeading: "Footnotes\n===" });
         return plugin.loadSettings().then(() => {
-            expect(plugin.settings.footnoteSectionHeading).toBe("Footnotes\n===");
+            expect(plugin.settings.footnoteSectionHeading).toBe("# Footnotes\n===");
         });
     });
 

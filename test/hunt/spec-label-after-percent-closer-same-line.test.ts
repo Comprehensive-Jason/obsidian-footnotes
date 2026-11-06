@@ -20,20 +20,23 @@ import { readNote } from "../../src/parsing/note-reading";
 // definition block and no lazy label on that line, because a definition
 // has to start at the beginning of its line and the "%%" is in the way.
 //
-// Only live Obsidian can settle it. "%%" is Obsidian's own comment syntax,
-// not CommonMark, so there is no written spec to read and no reference
-// parser to run. It needs a Reading view check on the real editor.
+// Answered: Obsidian's parser reads it as a definition on line 4, which is
+// reading one (the saved answer
+// pin:spec-label-after-percent-closer-same-line#1 in
+// test/obsidian-answers/pins.json). The note reading agrees. It is not
+// "movable", though, because the closer sits in front of its label, so it is
+// not among the blocks the lint may move (GLOSSARY.md, "Container"). The first
+// test below was it.fails until 2026-11-05: it looked for the definition among
+// those blocks.
 //
 // Hunt: 2026-09-13. Lens: regressions.
-//
-// Worth knowing before anyone spends time on it: under either reading
-// Obsidian renders the line as the literal text "[^1]: freed label", not as
-// a rendered footnote, so settling this question does not change the
-// verdicts pinned in bug-label-after-comment-closer-mangled. The
-// punctuation rule must not rewrite that label and orphan deletion must not
-// cut its brackets either way.
 
 const DOC = "x[^1]\n\n%%\nhidden\n%% [^1]: freed label";
+
+const definitionsOf = (doc: string) => {
+    const lines = doc.split("\n");
+    return readNote(lines).definitions.map((d) => `${d.name}@${String(d.start)}:${d.movable ? "movable" : "stays"}`);
+};
 
 const blocksOf = (doc: string) => {
     const lines = doc.split("\n");
@@ -48,19 +51,16 @@ const lazyOf = (doc: string) => {
 };
 
 describe("a definition label after a %% closer on the same line", () => {
-    it.fails("reading one: it is a definition block on line 4", () => {
-        expect(blocksOf(DOC)).toEqual(["1@4"]);
+    it("it is a definition on line 4, one the lint does not move", () => {
+        expect(definitionsOf(DOC)).toEqual(["1@4:stays"]);
     });
 
-    it("reading two, what the code does today: no definition, no lazy label", () => {
+    it("so it is no block the lint may move, and no lazy label", () => {
         expect(blocksOf(DOC)).toEqual([]);
         expect(lazyOf(DOC)).toEqual([]);
     });
 
-    it("the rename command already reads it as a footnote, so the two halves disagree", () => {
-        // rename offers "1" on that line while every definition reader
-        // sees nothing there. Whichever reading wins, the plugin should
-        // not hold both at once
+    it("the rename command reads it as a footnote too", () => {
         const doc = fakeEditor(DOC.split("\n"), { wholeDoc: true });
         expect(renameTargetAtCursor(doc, { line: 4, ch: 6 })).toBe("1");
     });

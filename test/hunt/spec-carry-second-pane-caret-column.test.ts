@@ -23,6 +23,12 @@ import { replaceMinimal } from "../../src/editor/write-back";
 // same line alignment the folds use; carrying the column too is a step
 // further that Jason has not asked for.
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): it takes the same note
+// in two panes and a rewrite left of the other pane's caret on its own line,
+// nothing is lost, and only a few columns are off.
+// It was it.fails until then.
+//
 // Hunt 2026-10-02, round 1, lens carry-reg. Cluster C35.
 //
 // Source of truth: commit fb05027, "A second pane on the same note stays
@@ -63,8 +69,8 @@ afterEach(() => {
     vi.useRealTimers();
 });
 
-describe("spec question: the other pane's caret column after a rewrite on its own line", () => {
-    it.fails("a cut left of the other pane's caret moves that caret left with its text", () => {
+describe("the other pane's caret column after a rewrite on its own line", () => {
+    it("characterization: a cut left of the other pane's caret keeps that caret's old column", () => {
         // The restore waits on timers, so the test runs a fake clock
         // and needs a global `window` for them to hang off.
         vi.useFakeTimers();
@@ -85,8 +91,6 @@ describe("spec question: the other pane's caret column after a rewrite on its ow
         // Obsidian copies the rewrite into the other pane a moment later.
         shared.value = after;
         vi.advanceTimersByTime(500);
-        // -1 when the restore never placed the caret, which fails too.
-        const ch = other.placed.head?.ch ?? -1;
-        expect(after.slice(ch, ch + 5)).toBe("gamma");
+        expect(other.placed.head).toEqual({ line: 0, ch: 16 });
     });
 });

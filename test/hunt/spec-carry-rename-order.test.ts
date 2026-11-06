@@ -18,6 +18,12 @@ import { planCarriedPaste } from "../../src/commands/carry-footnotes";
 // time. Whether fewer renames is worth numbers that run out of order in
 // the pasted text is a product decision for Jason.
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): every pasted footnote
+// comes out unique and keeps its text, and the numbers run in order in the
+// pasted text.
+// It was it.fails until then.
+//
 // Hunt 2026-10-02, round 1, lens carry-reg. Cluster C23.
 //
 // Source of truth: the README's Paste paragraph, "a name the destination
@@ -28,10 +34,10 @@ import { planCarriedPaste } from "../../src/commands/carry-footnotes";
 // hands them over.
 const one = (name: string, ...lines: string[]) => ({ name, lines });
 
-describe("spec question: a rename takes the number a later carried footnote would keep", () => {
-    it.fails("renames only the carried number that collides with the destination", () => {
+describe("a rename takes the number a later carried footnote would keep", () => {
+    it("characterization: the later footnote moves on, and two renames are counted", () => {
         const plan = planCarriedPaste("a[^1]\n\n[^1]: dest one", "b[^1] c[^2]", [one("1", "[^1]: one"), one("2", "[^2]: two")]);
-        expect(plan.renamed).toBe(1);
-        expect(plan.body).toBe("b[^3] c[^2]");
+        expect(plan.renamed).toBe(2);
+        expect(plan.body).toBe("b[^2] c[^3]");
     });
 });

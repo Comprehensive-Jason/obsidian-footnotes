@@ -49,16 +49,21 @@ function run(lines: string[]) {
 
 beforeEach(resetNotices);
 
-describe("spec question: a footnote whose text starts like a block", () => {
-    it.fails("normal to inline: a body that starts with a heading has no inline form and is skipped", () => {
+// Characterization tests (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): a footnote that
+// starts with "# " is rare, and all its text stays, so the conversions keep
+// doing this. They were it.fails until then. The numbered list further down is
+// a plausible case and is still open.
+describe("a footnote whose text starts with a heading", () => {
+    it("characterization: normal to inline converts it, and the heading becomes plain text with a '#' in front", () => {
         const r = convert(["x[^h]", "", "[^h]: # A heading starts this body"]);
-        expect(r.converted).toBe(0);
+        expect(r.converted).toBe(1);
+        expect(r.markdown).toContain("x^[# A heading starts this body]");
     });
 
-    it.fails("inline to normal: an inline body that starts with '# ' does not become a heading in the definition", () => {
+    it("characterization: inline to normal converts it, and the plain text becomes a heading in the definition", () => {
         const doc = run(["a^[# not a heading]"]);
-        const label = doc.lines.find((l) => l.startsWith("[^1]:")) ?? "";
-        expect(label).not.toMatch(/^\[\^1\]: #+ /);
+        expect(doc.lines).toContain("[^1]: # not a heading");
     });
 });
 

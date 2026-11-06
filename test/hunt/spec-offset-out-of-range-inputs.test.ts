@@ -30,6 +30,12 @@ import { simulateChanges } from "../../src/editor/insertion-liveness";
 //
 // Hunt: 2026-09-13. Lens: offsets.
 //
+// Sorted 2026-11-05 under Jason's scope rule of 2026-10-07: reading two
+// stands. Both it.fails tests were deleted, not turned into plain tests, since
+// pinning a throw or nonsense text would only pin noise. Every caller hands
+// these helpers a caret inside its text and a range the right way round, so no
+// press reaches either shape. The controls stay.
+//
 // Source of truth: startOfWordOffset's own behaviour on the same input (it
 // returns the offset unchanged) as the sibling contract endOfWordOffset is
 // measured against; and @codemirror/state's ChangeSet, which throws on a
@@ -37,14 +43,7 @@ import { simulateChanges } from "../../src/editor/insertion-liveness";
 // written to match (test/simulate-changes-differential.test.ts uses the very
 // same referee).
 
-describe("spec question: an offset past the end of the text", () => {
-    it.fails("endOfWordOffset answers instead of throwing", () => {
-        // the walk reads the code point AT the offset, and past the end
-        // there is none, so String.fromCodePoint is handed NaN and throws
-        // "RangeError: Invalid code point NaN"
-        expect(() => endOfWordOffset("word", 10)).not.toThrow();
-    });
-
+describe("an offset past the end of the text", () => {
     it("control: its twin startOfWordOffset gives the offset straight back", () => {
         expect(startOfWordOffset("word", 10)).toBe(10);
     });
@@ -60,20 +59,8 @@ describe("spec question: an offset past the end of the text", () => {
     });
 });
 
-describe("spec question: a change whose range runs backwards", () => {
+describe("a change whose range runs the right way round", () => {
     const DOC = ["alpha", "bravo", "charlie"];
-
-    it.fails("simulateChanges does not invent text for a reversed range", () => {
-        // a range from column 4 back to column 1 of "alpha". CodeMirror
-        // throws on this outright; the simulation instead slices the line
-        // twice and comes out with "alphXlpha", four characters of the
-        // user's own line copied back into it
-        const changes: EditorChange[] = [
-            { from: { line: 0, ch: 4 }, to: { line: 0, ch: 1 }, text: "X" },
-        ];
-        const out = simulateChanges(DOC, changes).join("\n");
-        expect(out.length).toBeLessThanOrEqual(DOC.join("\n").length + 1);
-    });
 
     it("control: the same range the right way round replaces what it covers", () => {
         const changes: EditorChange[] = [

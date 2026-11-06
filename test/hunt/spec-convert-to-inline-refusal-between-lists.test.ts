@@ -25,7 +25,12 @@ import { convertNormalFootnotesToInline } from "../../src/commands/convert-footn
 //   (b) keep refusing the whole conversion, but name the footnote in the
 //       toast;
 //   (c) leave it as it is.
-// The test below takes option (a).
+//
+// Answered (2026-11-05, sorting the spec pins under Jason's scope rule of
+// 2026-10-07): the result gate refusing is the answer to a rare shape (ADR
+// 0003), and a refused command changes nothing. The test was it.fails, taking
+// option (a), until then. The gate's design expected convert to skip just this
+// footnote and name it; what was built refuses the whole conversion.
 //
 // Hunt 2026-10-06, cycle 3, lens lint. Cluster L6.
 //
@@ -35,13 +40,12 @@ import { convertNormalFootnotesToInline } from "../../src/commands/convert-footn
 // src/commands/convert-footnotes.ts ("refused whole rather than half
 // done"); Jason's decision Q2 (2026-10-05) for the cut and the orphan rule.
 
-describe("spec question: normal to inline with one definition between two lists", () => {
-    // Now: refused, 0 converted.
-    it.fails("converts the harmless footnote and skips the one between the lists, by name", () => {
+describe("normal to inline with one definition between two lists", () => {
+    it("refuses the whole conversion, and the note stays as it was", () => {
         const doc = "Intro[^2].\n\n- a[^1]\n\n[^1]: one\n\n- b\n\n[^2]: two";
         const result = convertNormalFootnotesToInline(doc);
-        expect(result.refused).toBeUndefined();
-        expect(result.converted).toBe(1);
-        expect(result.skipped.map((s) => s.name)).toEqual(["1"]);
+        expect(result.refused).toBeDefined();
+        expect(result.converted).toBe(0);
+        expect(result.markdown).toBe(doc);
     });
 });

@@ -45,18 +45,11 @@ import { readNote } from "../../src/parsing/note-reading";
 // Settings involved: `Move definitions to the bottom` (default ON).
 
 describe("spec: a non-1 ordered item line under a definition", () => {
-    it.fails("the block walker owns the item line the reading's own state calls definition content", () => {
-        const doc = "text[^1] here\n\n[^1]: body\n2. item text";
-        const lines = doc.split("\n");
-        const reading = readNote(lines);
-        // the reading's own definition state stays open through the item line,
-        // so an indented chunk after the next blank is live definition
-        // content, not code...
-        expect(reading.protectedLines[5]).toBe(false);
-        // ...and the block walker must own the line it lives in
-        expect(readNote(lines).blocks.map((b) => [b.start, b.end])).toEqual([[2, 3]]);
-    });
-
+    // A pin sat here until 2026-11-05, when the spec pins were sorted. It
+    // asked about line 5 of a note with four lines, so it failed whatever the
+    // plugin did. The question is answered (the RESOLVED line at the top of
+    // this file, and the saved answer pin:spec-ordered-item-under-definition#1
+    // in test/obsidian-answers/pins.json), and the next test holds that answer.
     it("both walks agree now: the block runs through the item line and the chunk after the blank", () => {
         const doc = "text[^1] here\n\n[^1]: body\n2. item text\n\n    chunk";
         const lines = doc.split("\n");
