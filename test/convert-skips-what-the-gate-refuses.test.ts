@@ -135,6 +135,8 @@ describe("normal to inline, the command", () => {
 // refuses (Jason's ruling, 2026-11-06). These notes are put together from lines
 // the gate often refuses, between lines it passes.
 const RunOptions = { numRuns: Number(process.env.FC_NUM_RUNS ?? 200) };
+// How long each property below may run, in milliseconds. The default limit of 5 seconds fails at 4,000 runs.
+const PropertyTimeLimit = 120_000;
 const noteArb = fc
     .array(
         fc.constantFrom(
@@ -195,7 +197,7 @@ describe("never a half-applied footnote", () => {
             }),
             RunOptions,
         );
-    });
+    }, PropertyTimeLimit);
 
     it("inline to normal: a footnote converted has its reference and definition, the others stay inline, and it is one transaction", () => {
         fc.assert(
@@ -214,5 +216,5 @@ describe("never a half-applied footnote", () => {
             }),
             RunOptions,
         );
-    });
+    }, PropertyTimeLimit);
 });
