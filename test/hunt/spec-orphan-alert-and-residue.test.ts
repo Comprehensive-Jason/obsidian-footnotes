@@ -7,40 +7,32 @@ import { noticeLintAlerts } from "../../src/linting/lint-alerts";
 import { mergeDuplicateFootnoteDefinitions } from "../../src/linting/rules/merge-duplicate-definitions";
 import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remove-orphaned-definitions";
 
-// Two spec questions about the orphaned-definition rule, one about what the
-// alert promises and one about what the deletion leaves behind. Both
-// assertions are written for the reading that is red today.
+// Two questions about the orphaned-definition rule, one about what the alert
+// promises and one about what the deletion leaves behind.
 //
 // Hunt: 2026-09-13
 // Lens: the two orphan rules (the alert half, and the text they hand back).
 //
 // -------------------------------------------------------------------
-// Question one: should the orphaned-definition alert name the definitions
-// that would go down with the one it names?
+// Question one, settled by Jason's ruling of 2026-11-05: the
+// orphaned-definition alert names the definitions that would go down with the
+// one it names.
 //
 // The shape: "[^a]: uses[^b]" and "[^b]: chained". Nothing in the note
 // references "a", so "[^a]" is an orphaned definition. The only thing
 // referencing "b" is the body of "[^a]", so once "[^a]" goes, "[^b]" is an
-// orphan too, and the rule deletes chains in one pass: turning the toggle
-// on removes both. The alert the user reads before deciding names only "a".
+// orphan too, and the rule deletes chains in one pass: turning the setting on
+// removes both. The alert used to name only "a", so the user lost "[^b]"
+// without being told.
 //
-// Reading one (leave the alert as it is): the alert answers the question
-// "which definitions does nothing reference?", and the honest answer is
-// "a". Listing "b" would make its own sentence false, because something
-// does reference "b": the body of "[^a]". The doc comment on
-// orphanedFootnoteDefinitionNames calls the chain-blind list deliberate
-// for that reason.
+// "[^b]" does not join the list of definitions nothing references, because
+// the body of "[^a]" does reference it. It gets its own clause instead, which
+// keeps the first half of the sentence true.
 //
-// Reading two (name the whole chain): ADR-0002 promises "Every alert names
-// the footnotes involved and the reason, so the user can fix by hand or
-// opt into the destructive rule". A user weighing the toggle is deciding
-// what they are about to lose, and "[^b]: chained" is part of that. The
-// open question is wording, not principle: a clause like "and any
-// definitions only it references" would say the true thing without making
-// the first half false.
+// Entry 3 of the spec sort of 2026-11-05.
 //
-// Source of truth: ADR-0002 and the rule's own one-pass chain deletion,
-// shown in the control below.
+// Source of truth: Jason's ruling above, ADR-0002, and the rule's own one-pass
+// chain deletion, shown in the control below.
 //
 // -------------------------------------------------------------------
 // Question two: should deleting the last block of a note leave the blank
@@ -66,24 +58,64 @@ import { removeOrphanedFootnoteDefinitions } from "../../src/linting/rules/remov
 // Source of truth: the merge rule's stated contract, pinned as a control
 // below.
 
-const alertPlugin = () =>
+const alertPlugin = (settings: Record<string, unknown> = {}) =>
     fakePlugin({
         lintDeleteOrphanedReferences: false,
         lintDeleteOrphanedDefinitions: false,
         lintMergeDuplicateDefinitions: false,
         enableFootnotePrefix: false,
+        ...settings,
     });
 
 const CHAIN = "text\n\n[^a]: uses[^b]\n[^b]: chained";
 
-describe("the orphaned-definition alert and the chain it stands in for", () => {
-    it.fails("names the second definition the deletion would take as well", () => {
+/** The alert about definitions nothing references, for `doc`. */
+function orphanAlert(doc: string, settings: Record<string, unknown> = {}): string | undefined {
+    resetNotices();
+    noticeLintAlerts(alertPlugin(settings), doc, false);
+    return messages().find((m) => m.includes("nothing references"));
+}
+
+describe("the orphaned-definition alert and the chain it stands in for (Jason's ruling, 2026-11-05)", () => {
+    it("names the second definition the deletion would take as well", () => {
+        expect(orphanAlert(CHAIN)).toBe(
+            'This note has a footnote definition nothing references ("[^a]"), and deleting it also takes "[^b]", which only it cites. Add a "[^a]" reference in the text, or delete the definition.',
+        );
+    });
+
+    it("lists every definition one orphan takes, however long the chain", () => {
+        expect(orphanAlert("text\n\n[^a]: uses[^b]\n[^b]: uses[^c]\n[^c]: last")).toBe(
+            'This note has a footnote definition nothing references ("[^a]"), and deleting it also takes "[^b]" and "[^c]", which only it cites. Add a "[^a]" reference in the text, or delete the definition.',
+        );
+    });
+
+    it("speaks in the plural when several orphans take something", () => {
+        expect(orphanAlert("text\n\n[^a]: uses[^b]\n[^b]: chained\n[^x]: uses[^y]\n[^y]: chained\n[^z]: alone")).toBe(
+            'This note has 3 footnote definitions nothing references ("[^a]", "[^x]", "[^z]"), and deleting them also takes "[^b]" and "[^y]", which only they cite. Add their references in the text, or delete the definitions.',
+        );
+    });
+
+    it("control: a definition something else cites is not named as taken", () => {
+        expect(orphanAlert("text[^b]\n\n[^a]: uses[^b]\n[^b]: cited")).toBe(
+            'This note has a footnote definition nothing references ("[^a]"). Add a "[^a]" reference in the text, or delete the definition.',
+        );
+    });
+
+    it("control: two definitions that cite each other are not orphans, and something citing them takes neither", () => {
+        expect(orphanAlert("text\n\n[^h]: uses[^a]\n[^a]: uses[^b]\n[^b]: uses[^a]")).toBe(
+            'This note has a footnote definition nothing references ("[^h]"). Add a "[^h]" reference in the text, or delete the definition.',
+        );
+    });
+
+    it("control: with the setting on, an orphan the lint could not cut takes nothing, so the alert names no chain", () => {
+        // the definition keeps two lists apart, so the rule leaves it, and "[^b]" stays with it
+        const doc = "text\n\n1. one\n\n[^a]: uses[^b]\n\n2. two\n\n[^b]: chained";
+        expect(removeOrphanedFootnoteDefinitions(doc)).toBe(doc);
         resetNotices();
-        noticeLintAlerts(alertPlugin(), CHAIN);
-        // the orphaned-definition alert itself: since 2026-10-22 the nested
-        // alert names "[^b]" too, as the footnote inside "[^a]", which does
-        // not answer the question
-        expect(messages().some((m) => m.includes("nothing references") && m.includes("[^b]"))).toBe(true);
+        noticeLintAlerts(alertPlugin({ lintDeleteOrphanedDefinitions: true }), doc);
+        expect(messages().find((m) => m.includes("nothing references"))).toBe(
+            'This note has a footnote definition nothing references ("[^a]"). The lint left it as it is, because deleting it would change how Obsidian reads the text around it. Add a "[^a]" reference in the text, or delete the definition by hand.',
+        );
     });
 
     it("the alert does name the head of the chain", () => {

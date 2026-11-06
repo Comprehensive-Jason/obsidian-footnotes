@@ -18,6 +18,7 @@ import { duplicateFootnoteDefinitionNames, mergeDuplicateFootnoteDefinitions } f
 import { definitionsHoldingTheMoveBack, sectionHeadingHeldBack } from "./rules/move-footnotes-to-the-bottom";
 import {
     definitionsHeldBy,
+    definitionsTakenAlong,
     orphanedFootnoteDefinitionNames,
     removeOrphanedFootnoteDefinitions,
 } from "./rules/remove-orphaned-definitions";
@@ -302,11 +303,19 @@ function noticeOrphanedReferences(
     return [];
 }
 
-/** What is wrong with definitions nothing references, whichever alert says it. */
-function orphanedDefinitionsProblem(names: string[]): string {
-    return names.length === 1
-        ? `This note has a footnote definition nothing references (${referenceList(names)}).`
-        : `This note has ${names.length} footnote definitions nothing references (${referenceList(names)}).`;
+/**
+ * What is wrong with definitions nothing references, whichever alert says it.
+ * `takes` lists the definitions that deleting them would also delete, because
+ * only they cite those. The user weighing the setting needs to know what they
+ * would lose (Jason's ruling, 2026-11-05; pin spec-orphan-alert-and-residue).
+ */
+function orphanedDefinitionsProblem(names: string[], takes: readonly string[] = []): string {
+    const one = names.length === 1;
+    const problem = one
+        ? `This note has a footnote definition nothing references (${referenceList(names)})`
+        : `This note has ${names.length} footnote definitions nothing references (${referenceList(names)})`;
+    if (takes.length === 0) return `${problem}.`;
+    return `${problem}, and deleting ${one ? "it" : "them"} also takes ${andList(takes.map(quotedName))}, which only ${one ? "it cites" : "they cite"}.`;
 }
 
 // Orphaned definitions that were kept get an alert as well (ruling: Jason,
@@ -347,7 +356,7 @@ function noticeOrphanedDefinitions(
         return toldLabels(names);
     }
     showNotice(
-        `${orphanedDefinitionsProblem(names)} ${names.length === 1 ? addReferenceOrDeleteDefinition(names[0]) : addReferencesOrDeleteDefinitions()}`,
+        `${orphanedDefinitionsProblem(names, definitionsTakenAlong(precomputed.lines, names))} ${names.length === 1 ? addReferenceOrDeleteDefinition(names[0]) : addReferencesOrDeleteDefinitions()}`,
         8000,
     );
     return [];
