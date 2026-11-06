@@ -1,6 +1,6 @@
 import { normalizeEol, removeLineRanges, removeLineRangesKeeping, restoreEol } from "../parsing/line-edits";
 import { Definition, readNote } from "../parsing/note-reading";
-import { sanitizeInlineFootnoteContent } from "./inline-footnotes";
+import { sanitizeInlineFootnoteContent, trimmedPlainly } from "./inline-footnotes";
 import { Editor, EditorChange, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
@@ -357,8 +357,8 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
     const spans: Span[] = [];
     for (let i = 0; i < lines.length; i++) {
         for (const span of ctx.reading().inlineNotesOn(i)) {
-            const body = lines[i].slice(span.open + 2, span.close).trim();
-            if (body === "") {
+            const body = trimmedPlainly(lines[i].slice(span.open + 2, span.close));
+            if (body.trim() === "") {
                 skip(Skip.empty);
                 continue;
             }

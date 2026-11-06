@@ -60,11 +60,25 @@ export async function readInlineFootnoteFromClipboard(
     return `^[${content}]`;
 }
 
+// A run of the whitespace a line of text can lose without anyone seeing it:
+// spaces, tabs, and line breaks. JavaScript's "\s" also matches no-break, narrow
+// no-break, and ideographic spaces, but those are the writer's own typography:
+// French puts one before a colon, and Japanese spaces with the wide one. So
+// they are left out (hunt 2026-11-06, cycle 9, finding H23).
+const PlainWhitespaceRun = /[ \t\n\r\f\v\u2028\u2029]+/g;
+const PlainWhitespaceAtEnds = /^[ \t\n\r\f\v\u2028\u2029]+|[ \t\n\r\f\v\u2028\u2029]+$/g;
+
+/** `text` without plain whitespace at its two ends. JavaScript's `trim` would take the special spaces too (see PlainWhitespaceRun). */
+export function trimmedPlainly(text: string): string {
+    return text.replace(PlainWhitespaceAtEnds, "");
+}
+
 /**
  * Clipboard text made safe to use as the body of an inline footnote.
  *
- * An inline footnote lives on one line, so any run of whitespace, newlines
- * included, becomes a single space, and the result is trimmed.
+ * An inline footnote lives on one line, so any run of plain whitespace,
+ * newlines included, becomes a single space, and the result is trimmed. A
+ * no-break, narrow no-break, or ideographic space stays (PlainWhitespaceRun).
  *
  * When "^[text]" already reads as one whole inline footnote, the text is
  * left as it is: brackets that balance, so a pasted markdown link still
@@ -87,7 +101,8 @@ export async function readInlineFootnoteFromClipboard(
  * only whitespace, comes back as "".
  */
 export function sanitizeInlineFootnoteContent(raw: string): string {
-    let text = raw.replace(/\s+/g, " ").trim();
+    if (raw.trim() === "") return "";
+    let text = trimmedPlainly(raw.replace(PlainWhitespaceRun, " "));
     // an odd number of backslashes at the end leaves one of them escaping
     // the wrapper's own closing "]". Double it, so it renders as a plain
     // backslash instead.
