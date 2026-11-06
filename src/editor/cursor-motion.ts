@@ -111,6 +111,19 @@ const cpBefore = (text: string, i: number): number | undefined => {
     return prev;
 };
 
+/**
+ * Whether the character right in front of `at` joins the word characters on
+ * both sides of it into one word: an apostrophe (straight or curly) or a dot
+ * between two word characters ("don't", "Marx's", "U.S.", "example.com";
+ * Jason's landing rulings, 2026-09-15). The word walks cross such a
+ * character instead of stopping at it, and a selection's end sitting right
+ * after one, "U.|S.", is inside the word.
+ */
+const joinsWordAt = (text: string, at: number): boolean => {
+    const c = text[at - 1];
+    return (c === "'" || c === "\u2019" || c === ".") && isWordCp(cpBefore(text, at - 1)) && isWordCp(text.codePointAt(at));
+};
+
 /** Which of two positions comes first in the document. Negative, zero, or
  * positive, like any sort comparator. The one copy of it; it used to live
  * in two files. */
@@ -177,12 +190,7 @@ function wordEndOffset(text: string, offset: number): number {
     for (;;) {
         const cp = text.codePointAt(end);
         if (!isWordCp(cp)) {
-            const c = text[end];
-            if (
-                (c === "'" || c === "\u2019" || c === ".") &&
-                isWordCp(cpBefore(text, end)) &&
-                isWordCp(text.codePointAt(end + 1))
-            ) {
+            if (joinsWordAt(text, end + 1)) {
                 end++;
                 continue;
             }
@@ -203,8 +211,18 @@ function wordEndOffset(text: string, offset: number): number {
  * mark"). `images` are the columns where the line draws an image or an
  * embed, and `footnotes` the footnotes on the line, as endOfWordOffset takes
  * them.
+ *
+ * Only a selection that ends strictly inside a word grows, as its start does
+ * (startOfWordOffset): an end that sits between two words stays where it is,
+ * even when the next word touches it. Chinese and Japanese put no space
+ * between sentences, so a whole sentence selected with its full stop,
+ * "英文。" in "中文，英文。第三句。", grew over the next sentence and moved it into
+ * the footnote too (hunt 2026-11-06, cycle 9, finding H36). An end right
+ * after a dot or an apostrophe inside a word, "U.|S." or "don'|t", is inside
+ * the word and still grows (joinsWordAt).
  */
 export function endOfWordForSelection(text: string, offset: number, placement: FootnotePlacement = "after", images?: ReadonlySet<number>, footnotes: LineFootnotes = NoFootnotes): number {
+    if (!isWordCp(cpBefore(text, offset)) && !joinsWordAt(text, offset)) return offset;
     const end = wordEndOffset(text, offset);
     if (end === -1) return offset;
     // Under "before", a final dot that belongs to the word goes with the word,
@@ -248,25 +266,17 @@ export function startOfWordOffset(text: string, offset: number): number {
     // an apostrophe (straight or curly) or a dot between two word
     // characters belongs to the word, the same rule the end walk applies
     // ("don't", "example.com"): the walk back crosses it instead of
-    // stopping behind it (Kimi hunt cycle 5, 2026-09-16)
-    const joinsWord = (at: number): boolean => {
-        const c = text[at - 1];
-        return (
-            (c === "'" || c === "\u2019" || c === ".") &&
-            isWordCp(cpBefore(text, at - 1)) &&
-            isWordCp(text.codePointAt(at))
-        );
-    };
+    // stopping behind it (Kimi hunt cycle 5, 2026-09-16; joinsWordAt)
     if (
         !isWordCp(text.codePointAt(start)) ||
-        (!isWordCp(cpBefore(text, start)) && !joinsWord(start))
+        (!isWordCp(cpBefore(text, start)) && !joinsWordAt(text, start))
     ) {
         return start;
     }
     for (;;) {
         const cp = cpBefore(text, start);
         if (!isWordCp(cp)) {
-            if (joinsWord(start)) {
+            if (joinsWordAt(text, start)) {
                 start--;
                 continue;
             }
@@ -307,8 +317,10 @@ function readWithReference(lines: readonly string[], line: number, at: number): 
  * or when no text stands in front of the punctuation. It stays there too when
  * a reference in front of the punctuation would not be live, as in "[see p.
  * 5].|", where "[see p. 5][^1]" reads as a link and the press would be refused.
+ * A conversion asks the same of the column its selection starts at, so "A
+ * word. |More|" gives "A word[^1]." (selection-footnote.ts, referenceStart).
  */
-function inFrontOfPunctuationBehindCaret(reading: NoteReading, lines: readonly string[], line: number, ch: number): number {
+export function inFrontOfPunctuationBehindCaret(reading: NoteReading, lines: readonly string[], line: number, ch: number): number {
     const text = lines[line] ?? "";
     const images = imageStartsOn(reading, line);
     const textStart = reading.blockSyntaxEnd(line);
@@ -382,6 +394,22 @@ export function adjustFootnotePosition(
     plugin: FootnotePlugin,
     lines: readonly string[],
 ) {
+    // A block id is the " ^water1" at the end of a line that lets other
+    // notes link to its paragraph. Obsidian counts it only at the very end,
+    // so a reference written after it hid the block, and every link to the
+    // paragraph stopped working (docs/obsidian-reading-rules.md D4). A
+    // press at the id, or after it, lands in front of it, under every
+    // placement (hunt 2026-10-08 cycle 6, cluster Z12, pin
+    // bug-press-after-block-id). The caret moves there first, so the walks
+    // below start from the text's end: under Before, a press at the very
+    // end of "Oysters filter water. ^water1" hops back over the stop, as a
+    // press in front of the id does, where it used to land after the stop
+    // (hunt 2026-11-06 cycle 9, finding H19). The walks never cross the
+    // space in front of the id, so nothing lands past it.
+    const blockId = lineText.search(TrailingBlockId);
+    if (blockId !== -1 && cursorPosition.ch > blockId) {
+        cursorPosition = { line: cursorPosition.line, ch: blockId };
+    }
     if (plugin.settings.insertAtEndOfWord) {
         // A link whose text runs on past a line break ends on a later line,
         // and the reference lands after it there, as it does after a link
@@ -435,17 +463,6 @@ export function adjustFootnotePosition(
         if (plugin.settings.footnotePlacement !== "none") {
             cursorPosition = { line: cursorPosition.line, ch: inFrontOfTakenPunctuation(reading, lines, cursorPosition.line, cursorPosition.ch) };
         }
-    }
-    // A block id is the " ^water1" at the end of a line that lets other
-    // notes link to its paragraph. Obsidian counts it only at the very end,
-    // so a reference written after it hid the block, and every link to the
-    // paragraph stopped working (docs/obsidian-reading-rules.md D4). A
-    // press at the id, or after it, lands in front of it, under every
-    // placement (hunt 2026-10-08 cycle 6, cluster Z12, pin
-    // bug-press-after-block-id).
-    const blockId = lineText.search(TrailingBlockId);
-    if (blockId !== -1 && cursorPosition.ch > blockId) {
-        cursorPosition = { line: cursorPosition.line, ch: blockId };
     }
     const ch = safeInsertionCh(lineText, cursorPosition.ch);
     if (ch !== cursorPosition.ch) {
