@@ -160,19 +160,23 @@ describe("what the caret-following leaves as the editor carries it", () => {
         expect(range.head.ch).toBe(0);
     });
 
-    // Characterization test (behaviour pinned as it is, 2026-11-05): the edits
-    // merged two carets into one, so the selections no longer pair up one for
-    // one, and every caret stays where the editor carried it. That includes the
-    // caret that could have followed its definition. It takes several carets
-    // and a deleted definition at once, which is rare, and no text is lost.
-    it("two carets merged by a deletion: a third caret in a moved definition is not followed", () => {
+    // The two carets on the deleted definition's text have nothing to follow
+    // and stay where the editor carried them, merged into one; the caret in
+    // the moved definition follows it all the same. (Until 2026-11-06 the
+    // merge left every caret as the editor put it, since the editor's
+    // selections no longer paired up with the old ones: hunt 2026-11-06,
+    // cycle 9, finding H35, pin spec-two-carets-in-moved-definition.)
+    it("two carets merged by a deletion: a third caret in a moved definition still follows it", () => {
         const before = "Para one.[^1]\n\n[^9]: no reference\n\nPara two.\n\n[^1]: my note\n\nPara three.";
         const options = { removeOrphanedDefinitions: true };
         const ranges = afterLint(before, [caret(2, "[^9]".length), caret(2, "[^9]: no".length), caret(6, "[^1]: my".length)], options);
-        expect(ranges).toHaveLength(2);
         const lines = lintFootnotes(before, options).split("\n");
         expect(lines).toContain("[^1]: my note");
-        for (const range of ranges) expect(lines[range.head.line]).not.toBe("[^1]: my note");
+        expect(ranges.map((range) => [lines[range.head.line], range.head.ch])).toEqual([
+            [lines[ranges[0].head.line], 0],
+            ["[^1]: my note", "[^1]: my".length],
+        ]);
+        expect(lines[ranges[0].head.line]).not.toBe("[^1]: my note");
     });
 
     it("a caret at the very start of the note stays on its own line when a heading goes in above", () => {
