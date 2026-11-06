@@ -93,7 +93,8 @@ the edit.
 The one check every edit passes after it is worked out and before it is
 written: the note after must read the same as the note before, except
 for what the action meant to change. A refused command changes nothing;
-the lint holds that change back and names it.
+the lint holds that change back and names it, and a whole-note conversion
+skips the footnote it refuses and names it.
 _Avoid_: verdict, liveness check, reads-differently check
 
 **Paste back**:

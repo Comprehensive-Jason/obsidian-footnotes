@@ -28,6 +28,8 @@ included.
 - A refusal reports a reason (nesting, protected text, a link, a line's
   formatting, or anything else), and each reason has one notice.
 - A refused carried paste pastes nothing (Jason, 2026-10-07).
+- A whole-note conversion skips just the footnote the gate refuses, names
+  it, and converts the rest (Jason, 2026-11-06).
 - When the plugin cannot tell what the user meant, it does what the
   editor would do without it.
 - Bug hunts report only data loss and plausible actions; a deliberately

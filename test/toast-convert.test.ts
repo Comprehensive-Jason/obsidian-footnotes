@@ -58,15 +58,18 @@ describe("the shared skip reasons", () => {
 });
 
 describe("the refusals", () => {
-    it("a conversion the result gate refuses", async () => {
-        expect(await toInline(["Intro[^2].", "", "- a[^1]", "", "[^1]: one", "", "- b", "", "[^2]: two"])).toEqual([
-            "Nothing was converted: it would change how Obsidian reads the text around a footnote. Convert it by hand.",
+    it("every footnote the result gate refuses", async () => {
+        expect(await toInline(["- a[^1]", "", "[^1]: one", "", "- b"])).toEqual([
+            'Nothing was converted. Every footnote was skipped: "[^1]" (would change how Obsidian reads the text around it).',
         ]);
     });
-    it("a refused conversion still ends with what it skipped", async () => {
-        expect(await toInline(["Intro[^2].", "", "- a[^1]", "", "[^1]: one", "", "- b", "", "[^2]: two", "", "[^o]: orphan"])).toEqual([
-            'Nothing was converted: it would change how Obsidian reads the text around a footnote. Convert it by hand. Skipped: "[^o]" (not referenced).',
-        ]);
+    it("one footnote the result gate refuses: the rest convert", async () => {
+        const said = await toInline(["Intro[^2].", "", "- a[^1]", "", "[^1]: one", "", "- b", "", "[^2]: two", "", "[^o]: orphan"]);
+        expect(said[0]).toBe(
+            'Converted 1 footnote into an inline footnote at 1 reference. Skipped: "[^1]" (would change how Obsidian reads the text around it), "[^o]" (not referenced).',
+        );
+        // the lint alerts still speak after it, as after any conversion
+        expect(said[1]).toBe('This note has a footnote definition nothing references ("[^o]"). Add a "[^o]" reference in the text, or delete the definition.');
     });
     it("inline to normal under an invalid footnote-prefix", async () => {
         expect(await toNormal(["---", "footnote-prefix: 10", "---", "a^[one]"], { enableFootnotePrefix: true })).toEqual([

@@ -111,7 +111,7 @@ describe("the other commands that write the section heading", () => {
         const lines = ["Text^[a note] here", "", "Last paragraph."];
         const doc = fakeEditor(lines, { cursor: { line: 0, ch: 0 }, edits: true, wholeDoc: true });
         const result = convertInlineFootnotesToNormal(fakePlugin({ ...settings("%% footnotes %%"), footnoteNaming: "keep" }, doc), doc);
-        expect(result.refused).toBeFalsy();
+        expect(result.skipped).toEqual([]);
         expect(doc.lines).toEqual(["Text[^1] here", "", "Last paragraph.", "", "%% footnotes %%", "", "[^1]: a note"]);
     });
 });

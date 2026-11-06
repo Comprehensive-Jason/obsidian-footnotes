@@ -19,9 +19,9 @@
 // for both conversions), missed by cycles 6 and 7: green at 728d226's
 // parent, red at 728d226, 34d5377, and 3a47f7a. The gate counts the second
 // copy's link or code as new, since the conversion does not say it copies
-// the footnote's text. Whether a refusal should take the whole note or skip
-// one footnote is the open spec question L6
-// (spec-convert-to-inline-refusal-between-lists).
+// the footnote's text. A refusal now skips just the one footnote (Jason's
+// ruling, 2026-11-06, spec-convert-to-inline-refusal-between-lists), which
+// would still have left this footnote out, so the fix here is still needed.
 // The "result gate" is the one check every edit passes before it is
 // written: the note after must read the same as the note before, except
 // for what the edit meant to change (ADR 0003).
@@ -41,11 +41,11 @@ const convert = (lines: string[]) => convertNormalFootnotesToInline(lines.join("
 describe("Convert normal footnotes to inline: a footnote cited twice whose text holds a link or code", () => {
     it("control: plain text cited twice converts to two copies", () => {
         const result = convert(["See this[^1] and that[^1].", "", "[^1]: Smith 2020, p. 4."]);
-        expect(result.refused).toBeUndefined();
+        expect(result.skipped).toEqual([]);
         expect(result.markdown).toBe("See this^[Smith 2020, p. 4.] and that^[Smith 2020, p. 4.].");
     });
     it("control: a link cited once converts", () => {
-        expect(convert(["See this[^1].", "", "[^1]: [Smith 2020](https://doi.org/10.1/x), p. 4."]).refused).toBeUndefined();
+        expect(convert(["See this[^1].", "", "[^1]: [Smith 2020](https://doi.org/10.1/x), p. 4."]).skipped).toEqual([]);
     });
     const bodies: [string, string][] = [
         ["a markdown link", "[Smith 2020](https://doi.org/10.1/x), p. 4."],
@@ -57,7 +57,7 @@ describe("Convert normal footnotes to inline: a footnote cited twice whose text 
     for (const [what, body] of bodies) {
         it(`a footnote cited twice whose text holds ${what} converts to two copies`, () => {
             const result = convert(["See this[^1] and that[^1].", "", `[^1]: ${body}`]);
-            expect(result.refused).toBeUndefined();
+            expect(result.skipped).toEqual([]);
             expect(result.markdown).toBe(`See this^[${body}] and that^[${body}].`);
         });
     }

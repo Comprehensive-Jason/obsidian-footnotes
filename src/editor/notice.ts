@@ -62,7 +62,6 @@ export const Advice = {
     oneItem: "Select one item's text, or the whole list.",
     oneQuoteLine: "Select one line's text, or the whole quote.",
     deleteByHand: "Delete it by hand.",
-    convertByHand: "Convert it by hand.",
 } as const;
 
 /** A refusal: the opener, a colon, the reason, and the advice when there is

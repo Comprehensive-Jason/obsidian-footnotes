@@ -5,7 +5,7 @@ import { Editor, EditorChange, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
-import { Advice, everyFootnoteSkipped, refusal, showNotice } from "../editor/notice";
+import { everyFootnoteSkipped, showNotice } from "../editor/notice";
 import { CreatedFootnote, judgeEdit } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { replaceMinimal, writeChanges } from "../editor/write-back";
@@ -32,9 +32,6 @@ import { withEditableEditor } from "./insert-or-navigate-footnotes";
 // to normal is built editor-side so it can reuse the definition-append
 // decision tree (this file's second half).
 
-/** The refusal both conversions give when the result gate refuses them. */
-const ConvertByHand = refusal("convert", "it would change how Obsidian reads the text around a footnote.", Advice.convertByHand);
-
 // The reasons a conversion skips a footnote, worded once for both
 // directions (Jason's shared vocabulary, 2026-10-22). Each reads after a
 // footnote's name, `"[^a]" (empty)`, and before a count, `empty (2)`.
@@ -49,6 +46,8 @@ const Skip = {
     sharesLine: "shares its line with other text",
     unreferenced: "not referenced",
     referencedFromFootnote: "referenced from inside another footnote",
+    // the result gate refused this one footnote (Jason's ruling, 2026-11-06)
+    readsDifferently: "would change how Obsidian reads the text around it",
 } as const;
 
 // A colon introduces the skip list in the sentence below and in the refusal
@@ -59,6 +58,44 @@ const Skip = {
 
 /** The sentence that ends a toast when some footnotes were skipped, `list` naming them. */
 const someSkipped = (list: string) => ` Skipped: ${list}.`;
+
+/**
+ * Which of `footnotes` a conversion can take, when the result gate has the say
+ * and one footnote it refuses must not stop the rest (Jason's ruling,
+ * 2026-11-06). The result gate is the one check every edit passes before it is
+ * written (ADR 0003). `attempt` works out the conversion of the footnotes it is
+ * given, and gives back null when the gate refuses that.
+ *
+ * It tries them all together first, so a note the gate passes costs one try,
+ * as it did before skipping existed. When the gate refuses, it splits the group
+ * in two and tries each half on top of what it has kept so far, down to single
+ * footnotes, so one refused footnote in a long note costs a few tries rather
+ * than one per footnote.
+ *
+ * Each try includes what is already kept, because footnotes can pass alone and
+ * not together: two definitions between two lists can each go, as long as the
+ * other stays (test spec-convert-to-inline-refusal-between-lists). So `result`
+ * is always a conversion the gate passed, whole, and null when it passed none.
+ */
+function whatTheGatePasses<Footnote, Result>(footnotes: readonly Footnote[], attempt: (chosen: readonly Footnote[]) => Result | null) {
+    const passed = { kept: [] as Footnote[], refused: [] as Footnote[], result: null as Result | null };
+    const tryAdding = (group: readonly Footnote[]) => {
+        if (group.length === 0) return;
+        const tried = attempt([...passed.kept, ...group]);
+        if (tried !== null) {
+            passed.kept.push(...group);
+            passed.result = tried;
+        } else if (group.length === 1) {
+            passed.refused.push(group[0]);
+        } else {
+            const half = Math.ceil(group.length / 2);
+            tryAdding(group.slice(0, half));
+            tryAdding(group.slice(half));
+        }
+    };
+    tryAdding(footnotes);
+    return passed;
+}
 
 /** What converting a note's normal footnotes to inline did, or would do. */
 export interface ConversionToInline {
@@ -71,8 +108,6 @@ export interface ConversionToInline {
     duplicated: number;
     /** the definitions left alone, each with the reason the toast gives */
     skipped: { name: string; reason: string }[];
-    /** set when the whole conversion was refused because it would change how Obsidian reads a line it was not asked to touch; `markdown` is then the input */
-    refused?: string;
 }
 
 /**
@@ -85,9 +120,10 @@ export interface ConversionToInline {
  * footnote, or a reference sitting inside another definition's body or an
  * inline footnote, would nest footnotes (ADR 1); a quoted, in-item or
  * closer-line definition is one the plugin does not cut; an orphan has
- * nowhere to go; a name defined twice is ambiguous. Protected text is
- * untouched, and a bracket or pipe that would break the inline footnote or
- * a table row is escaped.
+ * nowhere to go; a name defined twice is ambiguous; and one whose conversion
+ * the result gate refuses would change how Obsidian reads the text around it.
+ * Protected text is untouched, and a bracket or pipe that would break the
+ * inline footnote or a table row is escaped.
  */
 /**
  * Why the conversion leaves `definition` where it is, in the toast's
@@ -108,13 +144,12 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
     const { text, eol } = normalizeEol(markdown);
     const lines = text.split("\n");
     const reading = readNote(lines);
-    const unchanged = (skipped: ConversionToInline["skipped"], refused?: string): ConversionToInline => ({
+    const unchanged = (skipped: ConversionToInline["skipped"]): ConversionToInline => ({
         markdown,
         converted: 0,
         references: 0,
         duplicated: 0,
         skipped,
-        ...(refused ? { refused } : {}),
     });
 
     // Every definition the note has, by lower-cased name, wherever it sits.
@@ -152,7 +187,8 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
 
     // decide each name, in the order its definitions appear
     const skipped: { line: number; name: string; reason: string }[] = [];
-    const eligible: { block: Definition; body: string; refs: Ref[] }[] = [];
+    type Eligible = { block: Definition; body: string; refs: Ref[] };
+    const eligible: Eligible[] = [];
     for (const [folded, entries] of found) {
         const block = entries[0].definition;
         const skip = (reason: string) => skipped.push({ line: block.start, name: block.name, reason });
@@ -193,65 +229,70 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
         }
         eligible.push({ block, body: sanitizeInlineFootnoteContent(body), refs: its });
     }
+    // The note with just the footnotes `chosen` converted, or null when the
+    // result gate refuses that. A footnote is converted whole or not at all,
+    // so a note never ends up with half of one.
+    const convertOnly = (chosen: readonly Eligible[]): string[] | null => {
+        // the replacements, rightmost first on each line so that one keeps the
+        // offsets of the ones before it
+        // `again` marks every copy after a footnote's first: its text is the
+        // footnote's text written again
+        const replacements = new Map<number, { start: number; end: number; text: string; again: boolean }[]>();
+        for (const { body, refs: its } of chosen) {
+            for (const [index, ref] of its.entries()) {
+                // a pipe inside a table row's cell ends the cell, so it is
+                // escaped there, the way Obsidian itself writes one
+                const inline = `^[${tableRows[ref.line] ? body.replace(/\\[\s\S]|\|/g, (m) => (m === "|" ? "\\|" : m)) : body}]`;
+                replacements.set(ref.line, [...(replacements.get(ref.line) ?? []), { start: ref.start, end: ref.end, text: inline, again: index > 0 }]);
+            }
+        }
+        // where the text of each copy written again sits on its rewritten line,
+        // between the copy's "^[" and its "]"
+        const again: { line: number; from: number; to: number }[] = [];
+        const replaced = lines.map((line, i) => {
+            const edits = replacements.get(i);
+            if (!edits) return line;
+            let shift = 0;
+            for (const edit of [...edits].sort((a, b) => a.start - b.start)) {
+                if (edit.again) again.push({ line: i, from: edit.start + shift + 2, to: edit.start + shift + edit.text.length - 1 });
+                shift += edit.text.length - (edit.end - edit.start);
+            }
+            return edits
+                .sort((a, b) => b.start - a.start)
+                .reduce((kept, edit) => kept.slice(0, edit.start) + edit.text + kept.slice(edit.end), line);
+        });
+        const dead = chosen.map(({ block }) => block).sort((a, b) => a.start - b.start);
+        const out = removeLineRanges(replaced, dead);
+        // The text of every copy after a footnote's first is told to the gate
+        // as text the conversion writes in. The first copy is where the
+        // definition's text moves to; the others hold the same links, code,
+        // and math again, which the gate counted as new and refused the whole
+        // note for (hunt 2026-10-09 cycle 8, pin
+        // bug-convert-to-inline-twice-cited-link-refused). A reference never
+        // sits on a definition's line here (that footnote is skipped as
+        // nested), so its line is one the removal keeps, and
+        // removeLineRangesKeeping says where it went.
+        const insertedText = again.map(({ line, from, to }) => {
+            const at = removeLineRangesKeeping(replaced, dead, line).keep;
+            return { from: { line: at, ch: from }, to: { line: at, ch: to } };
+        });
+        const intent = { inlined: chosen.map(({ block }) => block.name), inlineCreated: chosen.reduce((n, { refs: its }) => n + its.length, 0), insertedText };
+        return judgeEdit(lines, out, intent, reading).pass ? out : null;
+    };
+    // The promise the orphan rules and the delete command make: the result gate
+    // judges the conversion, and one footnote that would change how Obsidian
+    // reads a line it was not asked to touch is skipped by name.
+    const { kept, refused, result: out } = whatTheGatePasses(eligible, convertOnly);
+    for (const { block } of refused) skipped.push({ line: block.start, name: block.name, reason: Skip.readsDifferently });
     skipped.sort((a, b) => a.line - b.line);
     const named = skipped.map(({ name, reason }) => ({ name, reason }));
-    if (eligible.length === 0) return unchanged(named);
-
-    // the replacements, rightmost first on each line so that one keeps the
-    // offsets of the ones before it
-    // `again` marks every copy after a footnote's first: its text is the
-    // footnote's text written again
-    const replacements = new Map<number, { start: number; end: number; text: string; again: boolean }[]>();
-    for (const { body, refs: its } of eligible) {
-        for (const [index, ref] of its.entries()) {
-            // a pipe inside a table row's cell ends the cell, so it is
-            // escaped there, the way Obsidian itself writes one
-            const inline = `^[${tableRows[ref.line] ? body.replace(/\\[\s\S]|\|/g, (m) => (m === "|" ? "\\|" : m)) : body}]`;
-            replacements.set(ref.line, [...(replacements.get(ref.line) ?? []), { start: ref.start, end: ref.end, text: inline, again: index > 0 }]);
-        }
-    }
-    // where the text of each copy written again sits on its rewritten line,
-    // between the copy's "^[" and its "]"
-    const again: { line: number; from: number; to: number }[] = [];
-    const replaced = lines.map((line, i) => {
-        const edits = replacements.get(i);
-        if (!edits) return line;
-        let shift = 0;
-        for (const edit of [...edits].sort((a, b) => a.start - b.start)) {
-            if (edit.again) again.push({ line: i, from: edit.start + shift + 2, to: edit.start + shift + edit.text.length - 1 });
-            shift += edit.text.length - (edit.end - edit.start);
-        }
-        return edits
-            .sort((a, b) => b.start - a.start)
-            .reduce((kept, edit) => kept.slice(0, edit.start) + edit.text + kept.slice(edit.end), line);
-    });
-    // The promise the orphan rules and the delete command make: the result
-    // gate judges the conversion, and one that changes how Obsidian reads
-    // a line it was not asked to touch is refused whole rather than half
-    // done.
-    const dead = eligible.map(({ block }) => block).sort((a, b) => a.start - b.start);
-    const out = removeLineRanges(replaced, dead);
-    // The text of every copy after a footnote's first is told to the gate
-    // as text the conversion writes in. The first copy is where the
-    // definition's text moves to; the others hold the same links, code,
-    // and math again, which the gate counted as new and refused the whole
-    // note for (hunt 2026-10-09 cycle 8, pin
-    // bug-convert-to-inline-twice-cited-link-refused). A reference never
-    // sits on a definition's line here (that footnote is skipped as
-    // nested), so its line is one the removal keeps, and
-    // removeLineRangesKeeping says where it went.
-    const insertedText = again.map(({ line, from, to }) => {
-        const at = removeLineRangesKeeping(replaced, dead, line).keep;
-        return { from: { line: at, ch: from }, to: { line: at, ch: to } };
-    });
-    const intent = { inlined: eligible.map(({ block }) => block.name), inlineCreated: eligible.reduce((n, { refs: its }) => n + its.length, 0), insertedText };
-    if (!judgeEdit(lines, out, intent, reading).pass) return unchanged(named, ConvertByHand);
+    if (out === null) return unchanged(named);
 
     return {
         markdown: restoreEol(out.join("\n"), eol),
-        converted: eligible.length,
-        references: eligible.reduce((n, { refs: its }) => n + its.length, 0),
-        duplicated: eligible.filter(({ refs: its }) => its.length > 1).length,
+        converted: kept.length,
+        references: kept.reduce((n, { refs: its }) => n + its.length, 0),
+        duplicated: kept.filter(({ refs: its }) => its.length > 1).length,
         skipped: named,
     };
 }
@@ -266,8 +307,6 @@ export interface ConversionToNormal {
     merged: number;
     /** the inline footnotes left alone, by reason, in the order first met */
     skipped: { reason: string; count: number }[];
-    /** set when the whole conversion was refused because the result gate refused it; nothing was changed */
-    refused?: boolean;
 }
 
 const nothingToConvert: ConversionToNormal = { converted: 0, definitions: 0, merged: 0, skipped: [] };
@@ -290,8 +329,9 @@ const nothingToConvert: ConversionToNormal = { converted: 0, definitions: 0, mer
  * ^[an inline" / "note here] after") is left as it is too and counted
  * among the skipped ones "on more than one line": a definition's text over
  * two lines needs indented continuation lines, which nothing has ruled on
- * yet (Jason's triage decision Q8, 2026-10-05). Protected text is never
- * read.
+ * yet (Jason's triage decision Q8, 2026-10-05). One whose conversion the
+ * result gate refuses is counted too, and stays inline while the others
+ * convert (Jason's ruling, 2026-11-06). Protected text is never read.
  *
  * Then the lint-on-creation trigger runs when that setting is on, as it
  * does after every press that creates a footnote.
@@ -313,7 +353,8 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
     };
     // every convertible inline footnote, in document order, with its
     // body's key for merging (the body as written, trimmed)
-    const spans: { line: number; open: number; close: number; body: string }[] = [];
+    type Span = { line: number; open: number; close: number; body: string };
+    const spans: Span[] = [];
     for (let i = 0; i < lines.length; i++) {
         for (const span of ctx.reading().inlineNotesOn(i)) {
             const body = lines[i].slice(span.open + 2, span.close).trim();
@@ -346,18 +387,13 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         }
     }
     if (spans.length === 0) {
-        showNotice(skipped.length === 0 ? "This note has no inline footnotes to convert." : everyFootnoteSkipped(skippedList(skipped)));
+        showNotice(skipped.length === 0 ? "This note has no inline footnotes to convert." : everyFootnoteSkipped(skippedList(skipped)), skipped.length === 0 ? undefined : 8000);
         return { ...nothingToConvert, skipped };
     }
 
-    // one id per distinct body, in order of first appearance: numbered the
-    // way a creation press numbers, or, when the setting says so, named
-    // after the first meaningful word of the body (Jason, 2026-09-22),
-    // with a number for a body that offers no word; an invalid prefix has
-    // already been toasted by activeFootnotePrefix
+    // an invalid prefix has already been toasted by activeFootnotePrefix
     const prefix = activeFootnotePrefix(plugin, footnotePrefixFromEditor(doc), "convert");
     if (prefix === null) return { ...nothingToConvert, skipped };
-    let nextNumber = computeNextFootnoteNumber(ctx.reading(), prefix);
     const named = plugin.settings.footnoteNaming === "named";
     // every name the note uses, folded, so a generated name never collides
     const taken = new Set<string>();
@@ -367,70 +403,88 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
             for (const occurrence of ctx.reading().referencesOn(i)) taken.add(occurrence.name.toLowerCase());
         }
     }
-    const idOf = new Map<string, string>();
-    const bodies: string[] = [];
-    for (const span of spans) {
-        if (idOf.has(span.body)) continue;
-        const name = (named ? nameForBody(span.body, taken, prefix) : null) ?? `${prefix}${nextNumber++}`;
-        taken.add(name.toLowerCase());
-        idOf.set(span.body, name);
-        bodies.push(span.body);
-    }
-    const ids = bodies.map((body) => idOf.get(body) as string);
+    const firstNumber = computeNextFootnoteNumber(ctx.reading(), prefix);
 
-    // the reference replacements, plus the definitions as ONE append: the
-    // creation press's own append for the first id, seeded with its body,
-    // then the other labels on the lines after it, planned against the
-    // note with the references already in (see planDefinitionAppend)
-    const edits: EditorChange[] = spans.map((span) => ({
-        from: { line: span.line, ch: span.open },
-        to: { line: span.line, ch: span.close + 1 },
-        text: `[^${idOf.get(span.body) as string}]`,
-    }));
-    const plan = planDefinitionAppend({
-        lines,
-        edits,
-        footnoteId: ids[0],
-        plugin,
-        body: plainOnLabelLine(bodies[0]),
-        moreDefinitionLines: ids.slice(1).map((id, k) => `${definitionLabel(id)} ${plainOnLabelLine(bodies[k + 1])}`),
+    // The conversion of just the inline footnotes `chosen`, or null when the
+    // result gate refuses it. It is worked out afresh for each choice, so a
+    // skipped footnote takes no number and no name from the ones converted.
+    const planFor = (chosen: readonly Span[]) => {
+        // one id per distinct body, in order of first appearance: numbered the
+        // way a creation press numbers, or, when the setting says so, named
+        // after the first meaningful word of the body (Jason, 2026-09-22),
+        // with a number for a body that offers no word
+        let nextNumber = firstNumber;
+        const used = new Set(taken);
+        const idOf = new Map<string, string>();
+        const bodies: string[] = [];
+        for (const span of chosen) {
+            if (idOf.has(span.body)) continue;
+            const name = (named ? nameForBody(span.body, used, prefix) : null) ?? `${prefix}${nextNumber++}`;
+            used.add(name.toLowerCase());
+            idOf.set(span.body, name);
+            bodies.push(span.body);
+        }
+        const ids = bodies.map((body) => idOf.get(body) as string);
+
+        // the reference replacements, plus the definitions as ONE append: the
+        // creation press's own append for the first id, seeded with its body,
+        // then the other labels on the lines after it, planned against the
+        // note with the references already in (see planDefinitionAppend)
+        const edits: EditorChange[] = chosen.map((span) => ({
+            from: { line: span.line, ch: span.open },
+            to: { line: span.line, ch: span.close + 1 },
+            text: `[^${idOf.get(span.body) as string}]`,
+        }));
+        const plan = planDefinitionAppend({
+            lines,
+            edits,
+            footnoteId: ids[0],
+            plugin,
+            body: plainOnLabelLine(bodies[0]),
+            moreDefinitionLines: ids.slice(1).map((id, k) => `${definitionLabel(id)} ${plainOnLabelLine(bodies[k + 1])}`),
+        });
+        // The result gate judges the conversion: each name's definition is one
+        // line, the first at the label line the append planned, the others
+        // under it.
+        const verdict = judgeEdit(
+            lines,
+            plan.final,
+            {
+                created: ids.map(
+                    (id, k): CreatedFootnote => ({
+                        kind: "footnote",
+                        name: id,
+                        references: chosen.flatMap((span, s) => (idOf.get(span.body) === id ? [plan.edits[s].start] : [])),
+                        definition: { line: plan.labelLine + k, lines: 1 },
+                    }),
+                ),
+                inlineRemoved: chosen.length,
+                insertedText: plan.heading,
+            },
+            ctx.reading(),
+        );
+        return verdict.pass ? { plan, definitions: ids.length } : null;
+    };
+    const { kept, refused, result: planned } = whatTheGatePasses(spans, planFor);
+    refused.forEach(() => {
+        skip(Skip.readsDifferently);
     });
-    // The result gate judges the conversion: each name's definition is one
-    // line, the first at the label line the append planned, the others
-    // under it. A refused one changes nothing.
-    const verdict = judgeEdit(
-        lines,
-        plan.final,
-        {
-            created: ids.map(
-                (id, k): CreatedFootnote => ({
-                    kind: "footnote",
-                    name: id,
-                    references: spans.flatMap((span, s) => (idOf.get(span.body) === id ? [plan.edits[s].start] : [])),
-                    definition: { line: plan.labelLine + k, lines: 1 },
-                }),
-            ),
-            inlineRemoved: spans.length,
-            insertedText: plan.heading,
-        },
-        ctx.reading(),
-    );
-    if (!verdict.pass) {
-        showNotice(ConvertByHand, 8000);
-        return { ...nothingToConvert, skipped, refused: true };
+    if (planned === null) {
+        showNotice(everyFootnoteSkipped(skippedList(skipped)), 8000);
+        return { ...nothingToConvert, skipped };
     }
     // through the shared write-back, so a folded section the conversion
     // edits stays folded and a second pane on the note stays where it was
     // (hunt 2026-10-02, round 4, cluster U2)
-    const offsetChanges = plan.changes
+    const offsetChanges = planned.plan.changes
         .map((change) => ({ from: doc.posToOffset(change.from), to: doc.posToOffset(change.to ?? change.from), text: change.text }))
         .sort((a, b) => a.from - b.from);
     writeChanges(doc, doc.getValue(), offsetChanges, plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined);
 
     const result: ConversionToNormal = {
-        converted: spans.length,
-        definitions: ids.length,
-        merged: spans.length - ids.length,
+        converted: kept.length,
+        definitions: planned.definitions,
+        merged: kept.length - planned.definitions,
         skipped,
     };
     // `words` is the plural form, for a word that does not just add an "s"
@@ -441,6 +495,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
             (result.merged > 0 ? ` (${plural(result.merged, "identical body", "identical bodies")} merged)` : "") +
             "." +
             (skipped.length > 0 ? someSkipped(skippedList(skipped)) : ""),
+        skipped.length > 0 ? 8000 : undefined,
     );
     // anything that creates a footnote lints, when that setting is on;
     // otherwise the alerts alone speak (ADR 2)
@@ -494,10 +549,6 @@ export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
             const result = convertNormalFootnotesToInline(before);
             const list = result.skipped.map((s) => `${quotedReference(s.name)} (${s.reason})`).join(", ");
             const skippedText = result.skipped.length > 0 ? someSkipped(list) : "";
-            if (result.refused) {
-                showNotice(`${result.refused}${skippedText}`, 8000);
-                return;
-            }
             if (result.converted === 0) {
                 showNotice(result.skipped.length === 0 ? "This note has no footnotes to convert." : everyFootnoteSkipped(list), 8000);
                 return;

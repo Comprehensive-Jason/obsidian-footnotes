@@ -44,7 +44,6 @@ describe("spec question: an inline footnote whose text holds a reference", () =>
         const doc = fakeEditor([...lines], { wholeDoc: true, edits: true, cursor: { line: 0, ch: 0 } });
         const result = convertInlineFootnotesToNormal(fakePlugin({}, doc), doc);
         expect(result.converted).toBe(1);
-        expect(result.refused).toBeUndefined();
         expect(result.skipped).toEqual([{ reason: "its text holds a footnote", count: 1 }]);
         expect(doc.lines).toEqual(["x[^1] a^[see [^1]] b[^2]", "", "[^1]: one", "[^2]: plain"]);
         expect(messages()).toEqual(["Converted 1 inline footnote into 1 normal footnote. Skipped: its text holds a footnote (1)."]);
