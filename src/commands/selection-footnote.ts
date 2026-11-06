@@ -93,13 +93,13 @@ export const InlineSelectionNotice =
 // ordinary text. (The refusal gives the nesting reason, shared with the
 // caret guards, so the one rule always speaks with one sentence.)
 //
-// A selection EDGE that cuts through protected text gives the shared
-// protected-text reason too, with advice of its own: protected text held
-// whole inside the selection is fine (2026-08-19); it is cutting one apart
-// that would corrupt what is left behind. Until 2026-10-22 it had a
-// sentence of its own, kept apart from the caret's (Jason's manual pass,
-// 2026-08-13); the shared vocabulary replaced it (Jason, 2026-10-22).
-export const ProtectedSelectionNotice = refusal("footnote", Reason.protected, Advice.allOrNone);
+// A selection EDGE that cuts through protected text has a reason of its own,
+// apart from the caret's, with advice of its own: protected text held whole
+// inside the selection is fine (2026-08-19); it is cutting one apart that
+// would corrupt what is left behind (Jason's manual pass, 2026-08-13). The
+// shared vocabulary merged it with the caret's reason on 2026-10-22, and
+// Jason parted them again on 2026-11-05.
+export const ProtectedSelectionNotice = refusal("footnote", Reason.cutsProtected, Advice.allOrNone);
 
 // A selection that takes only PART of a table refuses (Jason's ruling
 // 2026-09-04, from his manual pass). Moving a cell, a few cells, or a whole

@@ -38,9 +38,9 @@ const Openers = {
 } as const;
 export type Opener = keyof typeof Openers;
 
-/** The shared reasons, each worded once. The six keys are also the reasons
- * the result gate gives (GateReason in result-gate.ts), so a refusal the
- * gate makes picks its sentence by the gate's reason. */
+/** The shared reasons, each worded once. All but the last are also the
+ * reasons the result gate gives (GateReason in result-gate.ts), so a refusal
+ * the gate makes picks its sentence by the gate's reason. */
 export const Reason = {
     protected: "footnotes can't go inside code, math, or other protected text.",
     nested: "footnotes can't be nested inside other footnotes.",
@@ -48,6 +48,7 @@ export const Reason = {
     formatting: "it would break the line's formatting.",
     dead: "Obsidian wouldn't read it as a footnote here.",
     other: "it would change how Obsidian reads the text around it.",
+    cutsProtected: "the selection cuts through code, math, or other protected text.",
 } as const;
 
 /** The advice that ends some refusals. Each is attached to the reason it

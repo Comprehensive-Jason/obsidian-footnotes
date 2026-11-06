@@ -52,10 +52,22 @@ beforeEach(() => {
 });
 
 describe("the selection refusals", () => {
-    it("protected text: the shared reason, then the selection's advice", () => {
+    it("protected text: its own reason, then the selection's advice", () => {
         expect(ProtectedSelectionNotice).toBe(
-            "No footnote was created: footnotes can't go inside code, math, or other protected text. Select all of it or none of it.",
+            "No footnote was created: the selection cuts through code, math, or other protected text. Select all of it or none of it.",
         );
+    });
+    it("a selection running partway into a code span shows it", async () => {
+        const lines = ["some `code span` here"];
+        const selection = { anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 8 } };
+        const doc = fakeEditor(lines, { cursor: selection.head, selection, edits: true, wholeDoc: true, words: true });
+        await insertAutonumFootnote(plugin(doc));
+        expect(messages()).toEqual(["No footnote was created: the selection cuts through code, math, or other protected text. Select all of it or none of it."]);
+    });
+    it("control: a press with no selection inside the code span keeps the caret's text", async () => {
+        expect(await press(["some `code span` here"], [{ line: 0, ch: 8 }])).toEqual([
+            "No footnote was created: footnotes can't go inside code, math, or other protected text.",
+        ]);
     });
     it("a table cut in pieces keeps its own reason", () => {
         expect(TableSelectionNotice).toBe(
