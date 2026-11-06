@@ -436,16 +436,8 @@ export function frontmatterEnd(doc: string): number {
  * `readsPastEnd` says whether a link definition at the top level would
  * read differently with more text after the end, which matters only to a
  * part of a note.
- *
- * `_speedUps` does nothing now: it chose between the vendored parser's fast
- * and plain loops, and the package has only one. It stays for
- * test/tokenizer-differential.test.ts until that test is retired.
  */
-export function parseObsidianNote(
-    text: string,
-    startsNote = true,
-    _speedUps = true,
-): { tree: MarkdownNode; containerColumns: Readonly<Record<number, number>>; readsPastEnd: boolean } {
+export function parseObsidianNote(text: string, startsNote = true): { tree: MarkdownNode; containerColumns: Readonly<Record<number, number>>; readsPastEnd: boolean } {
     const doc = normalizeLineBreaks(text);
     const parser = startsNote ? wholeNoteParser : laterPartParser;
     const tree = parser.parse(doc) as unknown as RootNode;
