@@ -146,7 +146,7 @@ interface LinkFact {
 }
 
 /** The node types read as a LinkFact. */
-const LinkNodes = new Set(["link", "linkReference", "image", "imageReference", "wikiLink"]);
+const LinkNodes = new Set(["link", "linkReference", "image", "imageReference", "wikilink"]);
 
 export interface FootnoteFacts {
     definitions: DefinitionFact[];
@@ -337,8 +337,9 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
                 else if (node.value?.startsWith("<!--")) protect("htmlComment", false, from, to);
                 break;
             case "percentComment":
-                // protected, though a reference inside still counts as live (Jason's ruling, 2026-10-03)
-                protect("percentComment", node.block === true, from, to);
+                // protected, though a reference inside still counts as live (Jason's ruling, 2026-10-03);
+                // a comment that is a block of its own sits directly under a block holder
+                protect("percentComment", block, from, to);
                 break;
             case "inlineCode":
                 protect("inlineCode", false, from, to);
@@ -381,7 +382,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
             case "thematicBreak":
                 blockSyntax.push({ line: node.position.start.line - 1, end: Infinity, container: false });
                 break;
-            case "wikiLink": {
+            case "wikilink": {
                 const open = doc[from] === "!" ? 3 : 2;
                 protect("wikilink", false, from + open, to - 2);
                 break;

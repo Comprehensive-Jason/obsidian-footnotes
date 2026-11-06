@@ -87,10 +87,14 @@ describe("the reader's speed-ups read every note exactly as the stock remark-par
     }, 120_000);
 
     it("the entity variants do reach the decoder (a check on the test itself)", () => {
-        // a decoded reference is a text node of its own, one character long
-        // and five columns wide, so a slip in the speed-up would show
+        // Changed 2026-11-05 (run rmk-vet, the swap to remark-obsidian): this
+        // used to pin a decoded reference as a text node of its own, which was
+        // how the vendored parser built it. The package joins neighbouring
+        // text into one node, so the check is now on the decoded text alone.
+        // Every other test in this file now compares the parser with itself,
+        // since the package has no plain loop to compare with, so the file
+        // can go when the swap lands.
         const tree = JSON.stringify(parseObsidianNote("Fish &amp; chips &copy; AT&T.").tree);
-        expect(tree).toContain('"value":"&","position":{"start":{"line":1,"column":6,"offset":5},"end":{"line":1,"column":11,"offset":10}');
-        expect(tree).toContain('"value":"©"');
+        expect(tree).toContain('"value":"Fish & chips © AT&T."');
     });
 });
