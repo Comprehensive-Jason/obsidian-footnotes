@@ -13,7 +13,7 @@ import { FootnoteRule } from "../rule";
 // what it does by default, or, with the "Orphaned references" setting on
 // Delete, takes them out of the text.
 //
-// Four kinds of reference are left alone either way:
+// Five kinds of reference are left alone either way:
 //
 //  - Names are compared without regard to case, so a definition written
 //    with different capitals still counts as that reference's definition.
@@ -34,6 +34,11 @@ import { FootnoteRule } from "../rule";
 //    so deleting the reference would throw that work away. The label's own
 //    "[^x]" counts as a reference too, and cutting it would leave ": text"
 //    behind. Each of these has an alert saying how to fix it.
+//  - A name ending in a backslash, as the note reading finds in "[^a\]b]".
+//    The backslash escapes the "]", so the live check on Obsidian 1.15.0
+//    (2026-11-05) reads that as plain text and no footnote, while the note
+//    reading stops the name at the "]". Cutting it would cut prose apart, and
+//    leave "b]" behind (pin spec-escaped-bracket-in-label).
 
 /**
  * Every name the note defines, lower-cased, wherever the definition sits:
@@ -185,6 +190,7 @@ function isOrphan(
     orphanSafeFolded: string,
 ): boolean {
     const folded = name.toLowerCase();
+    if (name.endsWith("\\")) return false;
     if (definitions.has(folded)) return false;
     if (misplacedLabels.has(folded)) return false;
     if (orphanSafeFolded !== "" && folded === orphanSafeFolded) return false;
