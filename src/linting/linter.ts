@@ -948,22 +948,21 @@ export function lintAfterFootnoteCreation(
 ): string | null {
     // Off, the usual case, the note's whole text is not even read.
     if (!plugin.settings.lintOnFootnoteCreation) return null;
-    const doc = edited;
-    const before = doc.getValue();
-    const { after, speak } = creationLintOf(plugin, doc, before);
+    const before = edited.getValue();
+    const { after, speak } = creationLintOf(plugin, edited, before);
     if (after === before) {
         speak();
         return null;
     }
-    replaceMinimal(doc, before, after, plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined);
+    replaceMinimal(edited, before, after, plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined);
     speak();
     const unique =
         seededBody === undefined
-            ? uniqueEmptyDefinitionName(doc)
-            : uniqueSeededDefinitionName(doc, seededBody);
+            ? uniqueEmptyDefinitionName(edited)
+            : uniqueSeededDefinitionName(edited, seededBody);
     const relocated = unique ?? (createdName === undefined ? null : definitionNameAfter(before, after, createdName));
     if (relandCursor && relocated !== null) {
-        jumpToFootnoteDefinition(relocated, doc.getCursor(), plugin, doc);
+        jumpToFootnoteDefinition(relocated, edited.getCursor(), plugin, edited);
     }
     return relocated;
 }

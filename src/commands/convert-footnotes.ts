@@ -8,6 +8,7 @@ import { docContext, listExistingFootnoteDefinitions } from "../editor/doc-conte
 import { everyFootnoteSkipped, showNotice } from "../editor/notice";
 import { CreatedFootnote, judgeEdit } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
+import { lineKey } from "../editor/document-diff";
 import { replaceMinimal } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
 import { creationLintOf, lintBlockedByPrefix, lintRulesAllDisabled, withEmptySectionHeadingRemoved } from "../linting/linter";
@@ -560,6 +561,34 @@ function skippedList(skipped: { reason: string; count: number }[]): string {
     return skipped.map((s) => `${s.reason} (${s.count})`).join(", ");
 }
 
+/**
+ * `skipped`, the footnotes a conversion left in the text `before`, as the text
+ * `after` the lint holds them: one the lint renamed goes by its new name, and one
+ * it deleted is left out, so the toast names what the note holds (hunt 2026-11-06,
+ * cycle 9, finding H26).
+ *
+ * Each definition is found again by its text without its name (lineKey), since the
+ * lint renames and moves definitions but does not edit what they say. Two with the
+ * same text pair up in order; both were skipped, so either way the toast names a
+ * footnote the note holds. The line-up the folds use (alignLines) was no help here:
+ * it finds again only the definitions the lint can move, and loses one in a quote
+ * when the definitions around it move.
+ */
+function skippedAfterLint(skipped: ConversionToInline["skipped"], before: string, after: string): ConversionToInline["skipped"] {
+    if (after === before) return skipped;
+    const blockText = (lines: string[], { start, end }: Definition) => lines.slice(start, end + 1).map(lineKey).join("\n");
+    const beforeLines = before.split("\n");
+    const afterLines = after.split("\n");
+    const defined = readNote(beforeLines).definitions;
+    const left = readNote(afterLines).definitions.map((definition) => ({ name: definition.name, text: blockText(afterLines, definition) }));
+    return skipped.flatMap(({ name, reason }) => {
+        const was = defined.find((definition) => definition.name.toLowerCase() === name.toLowerCase());
+        const text = was === undefined ? null : blockText(beforeLines, was);
+        const now = left.findIndex((definition) => definition.text === text);
+        return now === -1 ? [] : [{ name: left.splice(now, 1)[0].name, reason }];
+    });
+}
+
 /** The "Convert inline footnotes to normal footnotes" command: the whole note, one transaction. */
 export async function convertInlineToNormalCommand(plugin: FootnotePlugin) {
     await withEditableEditor(plugin, (doc) => {
@@ -583,10 +612,9 @@ export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
         runOutsideTableCell(doc, () => {
             const before = doc.getValue();
             const result = convertNormalFootnotesToInline(before);
-            const list = result.skipped.map((s) => `${quotedReference(s.name)} (${s.reason})`).join(", ");
-            const skippedText = result.skipped.length > 0 ? someSkipped(list) : "";
+            const named = (skipped: ConversionToInline["skipped"]) => skipped.map((s) => `${quotedReference(s.name)} (${s.reason})`).join(", ");
             if (result.converted === 0) {
-                showNotice(result.skipped.length === 0 ? "This note has no footnotes to convert." : everyFootnoteSkipped(list), 8000);
+                showNotice(result.skipped.length === 0 ? "This note has no footnotes to convert." : everyFootnoteSkipped(named(result.skipped)), 8000);
                 return;
             }
             const mdView = plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined;
@@ -595,6 +623,7 @@ export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
             const markdown = withEmptySectionHeadingRemoved(plugin, result.markdown);
             const lint = creationLintOf(plugin, doc, markdown);
             replaceMinimal(doc, before, lint.after, mdView);
+            const skipped = skippedAfterLint(result.skipped, markdown, lint.after);
             const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
             showNotice(
                 `Converted ${plural(result.converted, "footnote")} into ${result.converted === 1 ? "an inline footnote" : "inline footnotes"} at ${plural(result.references, "reference")}` +
@@ -602,8 +631,8 @@ export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
                         ? ` (${plural(result.duplicated, "definition")} used more than once became copies)`
                         : "") +
                     "." +
-                    skippedText,
-                result.skipped.length > 0 ? 8000 : undefined,
+                    (skipped.length > 0 ? someSkipped(named(skipped)) : ""),
+                skipped.length > 0 ? 8000 : undefined,
             );
             lint.speak();
             if (!plugin.settings.lintOnFootnoteCreation) {
