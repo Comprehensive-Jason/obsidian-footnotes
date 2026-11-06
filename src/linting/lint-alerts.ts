@@ -86,6 +86,12 @@ export function countEmptyFootnoteReferences(markdown: string, prefix = ""): num
             // syntax, not an abandoned placeholder (Kimi hunt cycle 1,
             // 2026-09-16; renders literally in Reading view)
             if (escapedAt(masked, at)) continue;
+            // "- [^] task" is a task box whose character is a caret, as any
+            // one character may be, and Obsidian draws a checked box. The
+            // reading already counts a task box as the line's block syntax,
+            // so a "[^]" in front of where the text starts is no placeholder
+            // (live answer on Obsidian 1.15.0, hunt 2026-11-06, cycle 9, H12).
+            if (at < reading.blockSyntaxEnd(i)) continue;
             // "[^](https://x.y)" is a link whose text is a caret, and
             // Obsidian renders it as a link; a "[^]" that any link takes in
             // is that link's text, not a placeholder (hunt 2026-10-02, pin
@@ -166,7 +172,7 @@ function labelList(names: string[]): string {
 
 // A label line Obsidian does not read as a definition gets one alert, in
 // one shape: what Obsidian reads it as, then the fix that applies (Jason's
-// shared vocabulary, 2026-10-22). Three shapes need it:
+// shared vocabulary, 2026-10-22). Four shapes need it:
 //
 // - A "[^x]:" line directly under a line of prose is plain text to
 //   Obsidian, more of the paragraph (the prose-label rule, 2026-09-09):
@@ -184,6 +190,10 @@ function labelList(names: string[]): string {
 //   heading: it needs one above and one below (underlinedLazyLabelNames;
 //   Jason's ruling Q9, 2026-10-07; pin bug-underlined-label-wide-item).
 //   The other two leave its names to this one (`both`).
+// - A label between two items of a list, with the next item right under it.
+//   A blank line above alone would take that item, and the ones after it,
+//   into the footnote's text, so this label gets the same advice (hunt
+//   2026-11-06, cycle 9, H16; pin spec-lazy-alert-advice-next-list-item).
 //
 // Like every alert, these are never silent.
 
@@ -197,6 +207,20 @@ function noticeNotDefinitions(names: readonly string[], readsAs: "plain text" | 
         `Obsidian reads ${andList(names.map(quotedDefinitionLabel))} as ${as}, not as ${one ? "a footnote definition" : "footnote definitions"}. ${one ? fix[0] : fix[1]}`,
         8000,
     );
+}
+
+/** Whether a line's blocks say it starts another item of a list already running. */
+const NextItemOfItsList = /(?:^| )list(?:\.ordered)? \^listItem/;
+
+/** The names of the labels a blank line above alone would not fix (the third and fourth shapes above), each once. */
+function labelsNeedingBlankBelow(lines: string[]): string[] {
+    const reading = readNote(lines);
+    const names = underlinedLazyLabelNames(lines);
+    for (const label of labelShapedLines(lines, undefined, reading)) {
+        if (!NextItemOfItsList.test(reading.lineBlocks[label.line + 1] ?? "")) continue;
+        if (!names.some((name) => name.toLowerCase() === label.name.toLowerCase())) names.push(label.name);
+    }
+    return names;
 }
 
 function noticeLazyDefinitions(lines: string[], both: ReadonlySet<string>) {
@@ -342,7 +366,12 @@ function noticeOrphanedDefinitions(
     precomputed: { lines: string[] },
     afterLint: boolean,
 ): string[] {
-    let names = orphanedFootnoteDefinitionNames(markdown, precomputed);
+    const orphans = orphanedFootnoteDefinitionNames(markdown, precomputed);
+    // A definition whose name is invalid (a "#", a backtick) is the
+    // invalid-name alert's to report, as a reference with one is: asking for a
+    // reference that name could never have gives two alerts with opposite
+    // advice (hunt 2026-11-06, cycle 9, H17).
+    let names = orphans.filter((name) => footnoteNameProblem(name) === null);
     if (names.length === 0) return [];
     if (afterLint && plugin.settings.lintDeleteOrphanedDefinitions) {
         // With the toggle ON, an orphaned definition still in the note is
@@ -368,7 +397,7 @@ function noticeOrphanedDefinitions(
         return toldLabels(names);
     }
     showNotice(
-        `${orphanedDefinitionsProblem(names, definitionsTakenAlong(precomputed.lines, names))} ${names.length === 1 ? addReferenceOrDeleteDefinition(names[0]) : addReferencesOrDeleteDefinitions()}`,
+        `${orphanedDefinitionsProblem(names, definitionsTakenAlong(precomputed.lines, orphans))} ${names.length === 1 ? addReferenceOrDeleteDefinition(names[0]) : addReferencesOrDeleteDefinitions()}`,
         8000,
     );
     return [];
@@ -416,8 +445,8 @@ function noticeSectionHeadingNotAdded(plugin: FootnotePlugin, markdown: string) 
 // references and renamed footnotes as "[^a]", definitions left out of
 // order as "[^a]:". Only after a lint that held something back
 // (lastLintHeldBack), since a lint the gate passed whole held nothing.
-function heldChanges(plugin: FootnotePlugin, markdown: string, afterLint: boolean): string[] {
-    if (!afterLint || !lastLintHeldBack(markdown)) return [];
+function heldChanges(plugin: FootnotePlugin, markdown: string): string[] {
+    if (!lastLintHeldBack(markdown)) return [];
     const heading = configuredSectionHeading(plugin);
     const held = heldByTheLint(markdown, lintOptionsFromSettings(plugin, sectionHeadingProblem(heading) === null ? heading : "", markdown));
     return [
@@ -678,8 +707,8 @@ function noticeCommentedDefinitions(markdown: string) {
     if (names.length === 0) return;
     showNotice(
         names.length === 1
-            ? `This note has a footnote definition inside a %% comment (${labelList(names)}), where Obsidian never shows it. Move it out of the comment.`
-            : `This note has ${names.length} footnote definitions inside %% comments (${labelList(names)}), where Obsidian never shows them. Move them out of the comments.`,
+            ? `This note has a footnote definition inside a comment (${labelList(names)}), where Obsidian never shows it. Move it out of the comment.`
+            : `This note has ${names.length} footnote definitions inside comments (${labelList(names)}), where Obsidian never shows them. Move them out of the comments.`,
         8000,
     );
 }
@@ -741,7 +770,7 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string, after
     noticeEmptyReferences(markdown, prefix);
     noticeOrphanedReferences(plugin, markdown, prefix, { lines }, afterLint);
     // the labels the two alerts below leave to the one after them
-    const both = underlinedLazyLabelNames(lines);
+    const both = labelsNeedingBlankBelow(lines);
     const bothFolded = new Set(both.map((name) => name.toLowerCase()));
     noticeLazyDefinitions(lines, bothFolded);
     noticeUnderlinedDefinitions(lines, bothFolded);
@@ -749,8 +778,11 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string, after
     noticeCommentedDefinitions(markdown);
     noticeDefinitionsInsideTables(markdown);
     const told = noticeOrphanedDefinitions(plugin, markdown, { lines }, afterLint);
-    noticeSectionHeadingNotAdded(plugin, markdown);
-    const left = [...ungatheredDefinitions(plugin, markdown), ...heldChanges(plugin, markdown, afterLint)];
+    // These two say what the lint did not do. After a command that ran no
+    // lint they would be false, and the next lint says them truly (hunt
+    // 2026-11-06, cycle 9, H18, pin bug-alerts-say-lint-when-no-lint-ran).
+    if (afterLint) noticeSectionHeadingNotAdded(plugin, markdown);
+    const left = afterLint ? [...ungatheredDefinitions(plugin, markdown), ...heldChanges(plugin, markdown)] : [];
     told.push(...noticeDuplicateDefinitions(plugin, markdown, { lines }, afterLint));
     noticeHeldBack(left, new Set(told));
     noticeNestedFootnotes(lines);

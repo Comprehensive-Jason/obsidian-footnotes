@@ -5,6 +5,7 @@ import { definitionLabelIn } from "../../parsing/label-shapes";
 import { Definition, NoteReading } from "../../parsing/note-reading";
 import { endsInLazyLine, movedDefinitions, rewriteDocument } from "../rewrite-document";
 import { labelOutrunsLookahead } from "./move-footnotes-to-the-bottom";
+import { namesOnlyInHtmlComments } from "./remove-orphaned-references";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
 import { FootnoteRule } from "../rule";
 
@@ -262,11 +263,21 @@ function reindexOnce(
             if (generated !== null) taken.add(generated.toLowerCase());
             return generated;
         };
+        // A footnote whose only definition is hidden in an HTML comment keeps
+        // its name, and no other footnote is numbered onto that name.
+        const keptNames = namesOnlyInHtmlComments(lines);
         let nextNumber = 1;
         let nextPrefixed = 1;
-        const takePlain = (): string => String(nextNumber++);
-        const takePrefixed = (): string => `${prefixOut}${nextPrefixed++}`;
+        const takePlain = (): string => {
+            while (keptNames.has(String(nextNumber))) nextNumber++;
+            return String(nextNumber++);
+        };
+        const takePrefixed = (): string => {
+            while (keptNames.has(`${prefixFolded}${nextPrefixed}`)) nextPrefixed++;
+            return `${prefixOut}${nextPrefixed++}`;
+        };
         for (const name of order) {
+            if (keptNames.has(name)) continue;
             if (isPrefixedNumbered(name)) {
                 renames.set(name, (nameNumbered ? nameFromBody(name, prefixOut) : null) ?? takePrefixed());
             } else if (/^\d+$/.test(name)) {

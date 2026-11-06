@@ -29,16 +29,20 @@ import { FootnoteRule } from "../rule";
 //    user's caret would be losing their work.
 //  - A reference whose definition the user wrote where Obsidian does not
 //    read it as one, as a lazy label, an underlined label, or a label hidden
-//    in a "%%" comment (Jason's ruling on the comment, 2026-11-05; pin
-//    spec-lint-orphan-cut-commented-label). The user wrote the definition,
+//    in a "%%" or HTML comment (Jason's ruling on the "%%" comment, 2026-11-05,
+//    pin spec-lint-orphan-cut-commented-label; extended to the HTML comment by
+//    the triage of hunt 2026-11-06, cycle 9, H14, pin
+//    spec-lint-orphan-html-commented-label). The user wrote the definition,
 //    so deleting the reference would throw that work away. The label's own
 //    "[^x]" counts as a reference too, and cutting it would leave ": text"
 //    behind. Each of these has an alert saying how to fix it.
-//  - A name ending in a backslash, as the note reading finds in "[^a\]b]".
-//    The backslash escapes the "]", so the live check on Obsidian 1.15.0
-//    (2026-11-05) reads that as plain text and no footnote, while the note
-//    reading stops the name at the "]". Cutting it would cut prose apart, and
-//    leave "b]" behind (pin spec-escaped-bracket-in-label).
+//  - A name ending in a backslash, as in "[^a\]b]". Reading view draws "[^a\]"
+//    as a reference with no definition, shown bare as "a\", and then the text
+//    "b]" (live Obsidian 1.15.0, 2026-11-06; the metadata cache lists no
+//    reference there only because it lists defined ones). This one is left
+//    alone because it protects prose, such as a regex written outside code:
+//    cutting "[^\]" out of "[^\]]+" would leave "]+" behind (Jason's ruling,
+//    2026-11-05; pin spec-escaped-bracket-in-label).
 
 /**
  * Every name the note defines, lower-cased, wherever the definition sits:
@@ -104,25 +108,40 @@ function labelNames(lines: string[], underlined: boolean): string[] {
 }
 
 /**
- * The names of definitions written inside a "%%" block comment, in order,
- * each once. Obsidian never shows a definition there (its reference half
- * still counts, so the footnote may render from a real definition
- * elsewhere, or not at all), and the user almost certainly meant it to be
- * seen, so the lint names it (Jason's ruling A1, 2026-09-15).
+ * The names of definitions written inside a comment on its own block, a "%%"
+ * block comment or an HTML comment, in order, each once. Obsidian never shows
+ * a definition there, and the user almost certainly meant it to be seen, so
+ * the lint names it (Jason's ruling A1, 2026-09-15; the HTML comment from hunt
+ * 2026-11-06, cycle 9, H14). A reference elsewhere to that name draws as a
+ * reference with no definition, or from a real definition if there is one.
  */
 export function commentedDefinitionNames(markdown: string): string[] {
     return commentedLabelNames(normalizeEol(markdown).text.split("\n"));
 }
 
-/** The names commentedDefinitionNames gives, for a note already split into lines. */
-function commentedLabelNames(lines: string[]): string[] {
+/** The names commentedDefinitionNames gives, for a note already split into lines, or only those in HTML comments. */
+function commentedLabelNames(lines: string[], htmlOnly = false): string[] {
     const reading = readNote(lines);
+    const note = lines.join("\n");
+    // Only an HTML block that is a comment hides what it holds as a comment
+    // does: a "<div>" block is something else.
+    const comments = reading.protectedSpans.filter(
+        (span) => span.block && ((span.kind === "percentComment" && !htmlOnly) || (span.kind === "html" && note.slice(span.from, span.to).trimStart().startsWith("<!--"))),
+    );
     const names: string[] = [];
     const seen = new Set<string>();
     let offset = 0;
     for (let i = 0; i < lines.length; offset += lines[i].length + 1, i++) {
-        if (!reading.commentLines[i] || reading.protectedLines[i]) continue;
-        const hit = commentedLabel(lines[i], reading.maskedLine(i), reading.containerEnd(i));
+        if (!lines[i].includes("[^")) continue;
+        const comment = comments.find((span) => span.startLine <= i && i <= span.endLine);
+        if (comment === undefined) continue;
+        // The masked twin keeps the text of a "%%" comment and blots out an
+        // HTML comment whole, so an HTML comment's line is read as written. A
+        // line of a "%%" comment that is protected for another reason, such as
+        // code, holds no label.
+        const html = comment.kind === "html";
+        if (!html && reading.protectedLines[i]) continue;
+        const hit = commentedLabel(lines[i], html ? lines[i] : reading.maskedLine(i), reading.containerEnd(i));
         if (!hit) continue;
         // Only a label inside the comment is hidden: on the closer line the
         // text after the "%%" is outside it ("%%[^1]: def" renders a
@@ -130,7 +149,7 @@ function commentedLabelNames(lines: string[]): string[] {
         // and a label BEFORE the closer ("[^1]: dead %%") is hidden like any
         // interior line (Kimi hunt cycle 3, 2026-09-16)
         const at = offset + hit.start;
-        if (!reading.comments.some((comment) => comment.block && comment.from <= at && at < comment.to)) continue;
+        if (!comments.some((span) => span.from <= at && at < span.to)) continue;
         const folded = hit.name.toLowerCase();
         if (seen.has(folded)) continue;
         seen.add(folded);
@@ -140,9 +159,26 @@ function commentedLabelNames(lines: string[]): string[] {
 }
 
 /**
- * The definition label on a line of a "%%" comment, as the line would read
- * with the comment taken away: its name as written and the column of its
- * "[". `textStart` is where the containers around the comment end
+ * The names, lower-cased, of the footnotes whose only definition is hidden in
+ * an HTML comment, with a reference to them in the note. Reindex and the prefix
+ * rule leave these names as they are. A rule may not rewrite an HTML comment's
+ * text, so renaming the reference would part it from its label, and the next
+ * lint with Delete orphaned references on would cut it (hunt 2026-11-06, cycle
+ * 9, H14; pin spec-lint-orphan-html-commented-label). A label in a "%%" comment
+ * needs none of this: its "[^x]" is a live reference, so it is renamed with the
+ * others (pin spec-commented-label-is-a-reference).
+ */
+export function namesOnlyInHtmlComments(lines: string[]): Set<string> {
+    const referenced = new Set(readNote(lines).references.filter(({ live }) => live).map(({ name }) => name.toLowerCase()));
+    const defined = definitionNamesFolded(lines);
+    return new Set(commentedLabelNames(lines, true).map((name) => name.toLowerCase()).filter((name) => referenced.has(name) && !defined.has(name)));
+}
+
+/**
+ * The definition label on a line of a comment, as the line would read with
+ * the comment taken away: its name as written and the column of its "[". An
+ * HTML comment's opener on the line is passed over, as a "%%" is by
+ * definitionLabelIn. `textStart` is where the containers around the comment end
  * (containerEnd): a quote's marker, a list item's indentation, or the four
  * columns of a definition the comment is written in. The label is read
  * from there, as labelShapedLines reads a lazy label. Read from the
@@ -161,16 +197,17 @@ function commentedLabelNames(lines: string[]): string[] {
  * never need it.
  */
 function commentedLabel(line: string, masked: string, textStart: number): { name: string; start: number } | null {
-    const hit = definitionLabelWithName(line.slice(textStart), masked.slice(textStart));
-    if (hit) return { name: hit.name, start: textStart + hit.label.nameStart - 2 };
-    if (!/\[\^[^[\]\s]+\]:/.test(masked.slice(textStart))) return null;
-    const own = readNote([line.slice(textStart)]).labelsOn(0).at(0);
-    return own === undefined ? null : { name: own.name, start: textStart + own.start };
+    const from = textStart + (/^ {0,3}<!--/.exec(line.slice(textStart))?.[0].length ?? 0);
+    const hit = definitionLabelWithName(line.slice(from), masked.slice(from));
+    if (hit) return { name: hit.name, start: from + hit.label.nameStart - 2 };
+    if (!/\[\^[^[\]\s]+\]:/.test(masked.slice(from))) return null;
+    const own = readNote([line.slice(from)]).labelsOn(0).at(0);
+    return own === undefined ? null : { name: own.name, start: from + own.start };
 }
 
 /**
  * Every name, lower-cased, of a label the user wrote where Obsidian does not
- * read it as a definition: lazy, underlined, or inside a "%%" comment. A
+ * read it as a definition: lazy, underlined, or inside a comment. A
  * reference to one of these is not an orphan to delete.
  */
 function misplacedLabelNamesFolded(lines: string[]): Set<string> {
