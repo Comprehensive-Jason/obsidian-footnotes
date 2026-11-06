@@ -92,10 +92,32 @@ export function andList(items: readonly string[]): string {
 }
 
 /** The advice for a definition nothing references. The navigation press and
- * the lint alert give the same advice. */
-export function addReferenceOrDeleteDefinition(name: string): string {
-    return `Add a ${quotedReference(name)} reference in the text, or delete the definition.`;
+ * the lint alert give the same advice. `byHand` is for a definition the lint
+ * tried to delete and could not, so the user knows the next lint won't do it. */
+export function addReferenceOrDeleteDefinition(name: string, byHand = false): string {
+    return `Add a ${quotedReference(name)} reference in the text, or delete the definition${byHand ? " by hand" : ""}.`;
 }
+
+/** The same advice for several definitions nothing references. */
+export function addReferencesOrDeleteDefinitions(byHand = false): string {
+    return `Add their references in the text, or delete the definitions${byHand ? " by hand" : ""}.`;
+}
+
+/** The sentence for something the lint could have changed and did not. `what`
+ * is what it left, `one` says whether that is one thing or several, and
+ * `doing` is the change it held back: "changing", "deleting", or "merging".
+ * It names no cause, so a new reason for leaving something never makes the
+ * text wrong (Jason, 2026-10-05). */
+export function lintLeft(what: string, one: boolean, doing: string): string {
+    return one
+        ? `The lint left ${what} as it is, because ${doing} it would change how Obsidian reads the text around it.`
+        : `The lint left ${what} as they are, because ${doing} them would change how Obsidian reads the text around them.`;
+}
+
+/** The alert for a section heading the lint could not add. It has its own
+ * sentence, because the heading was never in the note to be "left as it is"
+ * (Jason's choice, 2026-11-05). */
+export const SectionHeadingNotAdded = `The lint did not add the footnote section heading, because ${Reason.other}`;
 
 /** A name another footnote already carries. The named-selection modal and
  * the Rename modal say the same thing. */

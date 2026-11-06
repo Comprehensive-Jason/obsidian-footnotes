@@ -25,9 +25,9 @@ import { lintNote } from "../../src/linting/linter";
 import { noticeLintAlerts } from "../../src/linting/lint-alerts";
 import type { FootnotePluginSettings } from "../../src/settings";
 
-// the held-back alert since 2026-10-22 (Jason's shared vocabulary): the
-// heading alone, or the heading with the definitions the move left
-const HeadingHeld = "The lint left the footnote section heading as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.";
+// the heading's own alert since 2026-11-05, because it was never in the note
+// to be left as it is (Jason); the definitions the move left get the held-back alert
+const HeadingHeld = "The lint did not add the footnote section heading, because it would change how Obsidian reads the text around it.";
 const namesHeading = (alert: string) => alert.includes("the footnote section heading");
 
 /** Lints `text` with the move on and the Section heading setting set to `heading`, shows the alerts for the result, and returns both. */
@@ -61,7 +61,8 @@ describe("the move alert names a section heading the lint could not add", () => 
         const doc = "---\n\n[^Note]: alpha\n\nalpha[^1]. alpha";
         const { linted, alerts } = alertsAfterLint(doc, "---\n## Footnotes");
         expect(linted).toBe(doc);
-        expect(alerts).toContain('The lint left the footnote section heading and "[^Note]:" as they are, because changing them would change how Obsidian reads the text around them. Fix them by hand.');
+        expect(alerts).toContain(HeadingHeld);
+        expect(alerts).toContain('The lint left "[^Note]:" as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.');
     });
 
     it("a heading that would turn text into a link: nothing added, and the heading named", () => {

@@ -28,7 +28,14 @@ import {
     removeOrphanedFootnoteReferences,
 } from "./rules/remove-orphaned-references";
 
-import { addReferenceOrDeleteDefinition, andList, showNotice } from "../editor/notice";
+import {
+    addReferenceOrDeleteDefinition,
+    addReferencesOrDeleteDefinitions,
+    andList,
+    lintLeft,
+    SectionHeadingNotAdded,
+    showNotice,
+} from "../editor/notice";
 // The lint alerts, shown after a lint has run. Every way of starting a lint
 // ends here, reporting what the rules could not fix, or were not allowed
 // to: empty "[^]" placeholders, orphans while their delete toggles are off,
@@ -205,30 +212,33 @@ function noticeUnderlinedLazyDefinitions(names: readonly string[]) {
     noticeNotDefinitions(names, "plain text", ["Put a blank line above it and another below it.", "Put a blank line above and below each."]);
 }
 
-// Everything the lint left undone because doing it would change how
-// Obsidian reads the note gets one alert, after every other check has had
-// its say (Jason's shared vocabulary, 2026-10-22). It names what was left,
-// with one general sentence that names no cause, so a new reason for
-// leaving something never makes the text wrong (Jason, 2026-10-05; hunt
-// 2026-10-05, pin spec-callout-title-orphan-alert-wording). Until
-// 2026-10-22 each rule had an alert of its own: an orphaned reference or
-// definition its delete toggle left, definitions the move to the bottom
-// left, the section heading it could not add, a reference left on the
-// wrong side of its punctuation, a footnote left without the prefix or
-// unrenamed, definitions left out of order, and a duplicate the merge
-// could not touch. `left` holds what was left, quoted, in the order the
-// checks found it: footnotes as "[^a]", definitions as "[^a]:", and the
-// heading as "the footnote section heading".
-function noticeHeldBack(left: readonly string[]) {
-    const items = [...new Set(left)];
+// The references, renames, and moves the lint left undone, because doing
+// them would change how Obsidian reads the note, get one alert, after every
+// other check has had its say (Jason's shared vocabulary, 2026-10-22). It
+// names what was left, with one general sentence that names no cause (hunt
+// 2026-10-05, pin spec-callout-title-orphan-alert-wording).
+//
+// Three things that were in this alert for a while have left it (Jason's
+// choice, 2026-11-05). An orphaned definition and a duplicate need to say
+// what is wrong with them, because "Fix it by hand" gives no clue otherwise.
+// The section heading was never in the note, so it was not "left as it is".
+// Those speak in their own alerts below.
+//
+// `left` holds what was left, quoted, in the order the checks found it:
+// footnotes as "[^a]" and definitions as "[^a]:". `told` holds the labels an
+// orphan or duplicate alert has already named, in lower case. A definition
+// can also hold the move back, and it is not named a second time here, where
+// its problem would go missing.
+function noticeHeldBack(left: readonly string[], told: ReadonlySet<string>) {
+    const items = [...new Set(left)].filter((item) => !told.has(item.toLowerCase()));
     if (items.length === 0) return;
     const one = items.length === 1;
-    showNotice(
-        one
-            ? `The lint left ${items[0]} as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.`
-            : `The lint left ${andList(items)} as they are, because changing them would change how Obsidian reads the text around them. Fix them by hand.`,
-        8000,
-    );
+    showNotice(`${lintLeft(andList(items), one, "changing")} ${one ? "Fix it by hand." : "Fix them by hand."}`, 8000);
+}
+
+/** The labels of the definitions an alert has just named, in lower case, for noticeHeldBack. */
+function toldLabels(names: readonly string[]): string[] {
+    return names.map((name) => quotedDefinitionLabel(name).toLowerCase());
 }
 
 // The alert half of "Delete orphaned references". While that toggle is off,
@@ -289,11 +299,19 @@ function noticeOrphanedReferences(
     return [];
 }
 
+/** What is wrong with definitions nothing references, whichever alert says it. */
+function orphanedDefinitionsProblem(names: string[]): string {
+    return names.length === 1
+        ? `This note has a footnote definition nothing references (${referenceList(names)}).`
+        : `This note has ${names.length} footnote definitions nothing references (${referenceList(names)}).`;
+}
+
 // Orphaned definitions that were kept get an alert as well (ruling: Jason,
 // 2026-08-10). Every kind of orphan is either deleted or reported; none is
 // quietly left in place. `afterLint` works as for orphaned references
 // above: after Delete footnote everywhere, a definition only the deleted
-// footnote's text cited is named even with the toggle on.
+// footnote's text cited is named even with the toggle on. It returns the
+// labels of the ones the lint tried to delete, for noticeHeldBack.
 function noticeOrphanedDefinitions(
     plugin: FootnotePlugin,
     markdown: string,
@@ -306,9 +324,9 @@ function noticeOrphanedDefinitions(
         // With the toggle ON, an orphaned definition still in the note is
         // one the rule refused to cut (the cut would change how a nearby
         // line is read, take a callout's title or a comment's closer with
-        // it, or take a definition nested inside it); it goes to the
-        // held-back alert rather than being passed over (ADR 2; Kimi hunt
-        // cycle 2, 2026-09-16).
+        // it, or take a definition nested inside it). The alert says so
+        // rather than passing over it (ADR 2; Kimi hunt cycle 2,
+        // 2026-09-16), and says what is wrong with it (Jason, 2026-11-05).
         // Each orphan is judged on its own by the rule now (cycle 4), so
         // the ones it would still leave are the refused ones: those are
         // named, and one the next lint deletes is not.
@@ -317,12 +335,16 @@ function noticeOrphanedDefinitions(
             const left = new Set(orphanedFootnoteDefinitionNames(after).map((n) => n.toLowerCase()));
             names = names.filter((name) => left.has(name.toLowerCase()));
         }
-        return names.map(quotedDefinitionLabel);
+        if (names.length === 0) return [];
+        const one = names.length === 1;
+        showNotice(
+            `${orphanedDefinitionsProblem(names)} ${lintLeft(one ? "it" : "them", one, "deleting")} ${one ? addReferenceOrDeleteDefinition(names[0], true) : addReferencesOrDeleteDefinitions(true)}`,
+            8000,
+        );
+        return toldLabels(names);
     }
     showNotice(
-        names.length === 1
-            ? `This note has a footnote definition nothing references (${referenceList(names)}). ${addReferenceOrDeleteDefinition(names[0])}`
-            : `This note has ${names.length} footnote definitions nothing references (${referenceList(names)}). Add their references in the text, or delete the definitions.`,
+        `${orphanedDefinitionsProblem(names)} ${names.length === 1 ? addReferenceOrDeleteDefinition(names[0]) : addReferencesOrDeleteDefinitions()}`,
         8000,
     );
     return [];
@@ -339,16 +361,25 @@ function noticeOrphanedDefinitions(
 // 2026-10-05). Only while the rule is on. The gathering is
 // worked out under the section heading the lint uses, which it drops when
 // the heading holds a reference (hunt 2026-10-06, cycle 5, pin
-// bug-move-alert-ignores-heading). A section heading the move could not
-// add is named too, since the heading is the one thing the user cannot
-// move by hand: it comes from the settings (Jason's ruling 2, 2026-10-09;
-// pin bug-held-section-heading-silent).
+// bug-move-alert-ignores-heading).
 function ungatheredDefinitions(plugin: FootnotePlugin, markdown: string): string[] {
     if (!plugin.settings.lintMoveToBottom) return [];
+    return definitionsHoldingTheMoveBack(markdown, headingTheMoveUses(plugin)).map(quotedDefinitionLabel);
+}
+
+/** The section heading the move to the bottom works with: the one in the settings, or none when that one cannot be used. */
+function headingTheMoveUses(plugin: FootnotePlugin): string {
     const configured = configuredSectionHeading(plugin);
-    const heading = sectionHeadingProblem(configured) === null ? configured : "";
-    const left = sectionHeadingHeldBack(markdown, heading) ? ["the footnote section heading"] : [];
-    return [...left, ...definitionsHoldingTheMoveBack(markdown, heading).map(quotedDefinitionLabel)];
+    return sectionHeadingProblem(configured) === null ? configured : "";
+}
+
+// A section heading the move could not add gets an alert of its own, since
+// the heading is the one thing the user cannot add by hand: it comes from the
+// settings (Jason's ruling 2, 2026-10-09; pin bug-held-section-heading-silent).
+function noticeSectionHeadingNotAdded(plugin: FootnotePlugin, markdown: string) {
+    if (plugin.settings.lintMoveToBottom && sectionHeadingHeldBack(markdown, headingTheMoveUses(plugin))) {
+        showNotice(SectionHeadingNotAdded, 8000);
+    }
 }
 
 // The changes the result gate held back inside the punctuation rule, apply
@@ -373,6 +404,13 @@ function heldChanges(plugin: FootnotePlugin, markdown: string, afterLint: boolea
     ];
 }
 
+/** What is wrong with definitions of one name written several times, whichever alert says it. */
+function duplicateDefinitionsProblem(names: string[]): string {
+    return names.length === 1
+        ? `This note defines ${referenceList(names)} more than once. Obsidian renders only the last definition.`
+        : `This note defines ${names.length} footnotes more than once (${referenceList(names)}). Obsidian renders only each one's last definition.`;
+}
+
 // The alert half of "Merge duplicate definitions". While that toggle is
 // off, the lint reports duplicates instead of merging them; like orphans,
 // they are never passed over in silence (Jason's policy, 2026-08-12).
@@ -384,7 +422,8 @@ function heldChanges(plugin: FootnotePlugin, markdown: string, afterLint: boolea
 // conversion, a carried paste with Lint on footnote creation off), nothing
 // has merged the duplicates, so the alert speaks as it does with the toggle
 // off, less its advice to turn the toggle on (run toast-bugs, 2026-10-22,
-// pin bug-duplicate-alert-silent-without-lint).
+// pin bug-duplicate-alert-silent-without-lint). It returns the labels of the
+// ones the lint could not merge, for noticeHeldBack.
 function noticeDuplicateDefinitions(
     plugin: FootnotePlugin,
     markdown: string,
@@ -398,24 +437,20 @@ function noticeDuplicateDefinitions(
         // With the toggle on, a duplicate the merge rule can still not
         // touch is one with a copy the merge never moves: on the line of a
         // "%%" comment's closer, holding a table, or inside a list item or a
-        // quote. It goes to the held-back alert rather than being passed
-        // over (ADR 2; Kimi hunt
-        // cycle 4, 2026-09-16), with one general reason, so a new case
+        // quote. The alert says so rather than passing over it (ADR 2; Kimi
+        // hunt cycle 4, 2026-09-16), and says what is wrong with it (Jason,
+        // 2026-11-05), with one general reason, so a new case
         // never makes the text wrong (Jason, 2026-10-05, after the reason
         // named a closer or a table for a copy in a list item; hunt
         // 2026-10-05, pin bug-duplicate-alert-container-reason).
         // A duplicate the merge would still fix is left to the next lint,
         // which merges it.
         if (mergeDuplicateFootnoteDefinitions(markdown) !== markdown) return [];
-        return names.map(quotedDefinitionLabel);
+        showNotice(`${duplicateDefinitionsProblem(names)} ${lintLeft("them", false, "merging")} Merge them by hand.`, 8000);
+        return toldLabels(names);
     }
     const advice = merging ? "Merge them." : `Merge them, or turn on "Merge duplicate definitions".`;
-    showNotice(
-        names.length === 1
-            ? `This note defines ${referenceList(names)} more than once. Obsidian renders only the last definition. ${advice}`
-            : `This note defines ${names.length} footnotes more than once (${referenceList(names)}). Obsidian renders only each one's last definition. ${advice}`,
-        8000,
-    );
+    showNotice(`${duplicateDefinitionsProblem(names)} ${advice}`, 8000);
     return [];
 }
 
@@ -725,11 +760,12 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string, after
     noticeUnderlinedLazyDefinitions(both);
     noticeCommentedDefinitions(markdown);
     noticeDefinitionsInsideTables(markdown);
-    left.push(...noticeOrphanedDefinitions(plugin, markdown, { lines }, afterLint));
+    const told = noticeOrphanedDefinitions(plugin, markdown, { lines }, afterLint);
+    noticeSectionHeadingNotAdded(plugin, markdown);
     left.push(...ungatheredDefinitions(plugin, markdown));
     left.push(...heldChanges(plugin, markdown, afterLint));
-    left.push(...noticeDuplicateDefinitions(plugin, markdown, { lines }, afterLint));
-    noticeHeldBack(left);
+    told.push(...noticeDuplicateDefinitions(plugin, markdown, { lines }, afterLint));
+    noticeHeldBack(left, new Set(told));
     noticeNestedFootnotes(lines);
     noticeInvalidNames(lines);
 }

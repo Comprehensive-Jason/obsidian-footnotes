@@ -64,8 +64,8 @@ describe("merge refused between two lists, then reindex moves the copies", () =>
         noticeLintAlerts(fakePlugin({ lintMergeDuplicateDefinitions: true }), once);
         // When the first lint did merge the copies, there is nothing to say.
         if (duplicateFootnoteDefinitionNames(once).length === 0) return;
-        // the held-back alert names it since 2026-10-22 (Jason's shared vocabulary)
-        expect(messages().some((m) => m.startsWith("The lint left") && m.includes('"[^a]:"'))).toBe(true);
+        // the duplicate alert says what is wrong as well since 2026-11-05 (Jason)
+        expect(messages()).toContain('This note defines "[^a]" more than once. Obsidian renders only the last definition. The lint left them as they are, because merging them would change how Obsidian reads the text around them. Merge them by hand.');
     });
 
     // The same shape with named footnotes only, so reindex swaps the slots

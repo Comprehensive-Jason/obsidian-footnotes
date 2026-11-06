@@ -38,8 +38,8 @@ describe("the orphan alert for a definition on a callout's title line", () => {
         const note = ["a b", "", "> [!note] [^o]: on the title line", "> callout body"];
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS, lintDeleteOrphanedDefinitions: true }), note.join("\n"));
         // Before: the reason spoke of the lines around it and a comment's
-        // closer. Since 2026-10-22 the held-back alert gives the general
-        // reason for everything the lint left (Jason's shared vocabulary).
-        expect(messages()).toContain('The lint left "[^o]:" as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.');
+        // closer. The general reason stays, in the shared wording, after
+        // what is wrong with the definition (Jason, 2026-11-05).
+        expect(messages()).toContain('This note has a footnote definition nothing references ("[^o]"). The lint left it as it is, because deleting it would change how Obsidian reads the text around it. Add a "[^o]" reference in the text, or delete the definition by hand.');
     });
 });

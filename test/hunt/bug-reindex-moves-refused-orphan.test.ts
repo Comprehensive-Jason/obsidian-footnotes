@@ -51,6 +51,6 @@ describe("reindex moves an orphan the orphan rule refused", () => {
         // Before the fix, no alert named [^b].
         // the held-back alert names the definition by its label since
         // 2026-10-22 (Jason's shared vocabulary)
-        expect(messages().some((m) => m.includes('"[^b]:"'))).toBe(true);
+        expect(messages()).toContain('This note has a footnote definition nothing references ("[^b]"). The lint left it as it is, because deleting it would change how Obsidian reads the text around it. Add a "[^b]" reference in the text, or delete the definition by hand.');
     });
 });
