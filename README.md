@@ -179,7 +179,7 @@ Writing and revising can leave footnotes messy. The **Lint footnotes** command c
 Each rule can be toggled individually in **Settings → Footnote Shortcut → Linting**, along with 2 automatic triggers (both off by default):
 
 - **Lint on save**: lints the note whenever you press <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>S</kbd> (vim users: `:w` works too).
-- **Lint on footnote creation**: lints the note right after you create a new footnote.
+- **Lint on footnote creation**: lints the note right after you create a new footnote, run either **Convert** command, or paste footnotes.
 
 The linter also watches for problems it can't fix by itself and tells you about them, naming every footnote involved:
 

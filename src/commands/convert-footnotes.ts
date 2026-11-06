@@ -10,7 +10,7 @@ import { CreatedFootnote, judgeEdit } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { replaceMinimal, writeChanges } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
-import { lintAfterFootnoteCreation, withEmptySectionHeadingRemoved } from "../linting/linter";
+import { lintAfterFootnoteCreation, lintBlockedByPrefix, lintRulesAllDisabled, withEmptySectionHeadingRemoved } from "../linting/linter";
 import { computeNextFootnoteNumber, definitionLabel, nameForBody, quotedReference } from "../parsing/footnote-grammar";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
 import { planDefinitionAppend } from "./definition-append";
@@ -484,7 +484,9 @@ export async function convertInlineToNormalCommand(plugin: FootnotePlugin) {
  * The "Convert normal footnotes to inline footnotes" command: the pure
  * transform above, written back as one transaction that keeps folds and
  * the caret, then a toast with the counts and every skipped definition's
- * name and reason, then the lint alerts.
+ * name and reason. Then the lint runs when Lint on footnote creation is on,
+ * because that setting names the convert commands (Jason's ruling,
+ * 2026-11-05); with it off, the lint alerts alone speak.
  */
 export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
     await withEditableEditor(plugin, (doc) => {
@@ -516,7 +518,17 @@ export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
                     skippedText,
                 result.skipped.length > 0 ? 8000 : undefined,
             );
-            noticeLintAlerts(plugin, markdown, false);
+            if (lintAfterFootnoteCreation(plugin, doc, false) !== null) return;
+            if (!plugin.settings.lintOnFootnoteCreation) {
+                noticeLintAlerts(plugin, markdown, false);
+                return;
+            }
+            // This conversion never reads the note's prefix, so nothing has
+            // said yet that a bad prefix stopped the lint. It says so here, as
+            // a paste does (lintAfterPaste in carry-footnotes-hooks.ts).
+            if (lintRulesAllDisabled(plugin)) return;
+            const blocked = lintBlockedByPrefix(markdown, plugin.settings.enableFootnotePrefix);
+            if (blocked) showNotice(blocked, 8000);
         });
     }, "Move the cursor into the note's text to convert its footnotes.");
 }
