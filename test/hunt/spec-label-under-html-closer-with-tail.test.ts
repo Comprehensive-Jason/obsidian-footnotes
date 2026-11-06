@@ -28,8 +28,11 @@ import { readNote } from "../../src/parsing/note-reading";
 // and renumbering would all act on it, when Obsidian renders it as ordinary
 // text.
 //
-// This needs a live Reading-view check in Obsidian before anyone changes
-// anything.
+// Answered: Obsidian's parser reads the label as a definition, which is
+// reading one (the saved answer pin:spec-label-under-html-closer-with-tail#1
+// in test/obsidian-answers/pins.json). The reading-two pin was deleted on
+// 2026-11-05, when the spec pins were sorted, and the control below keeps
+// the answer.
 //
 // Hunt: 2026-09-13. Lens: contexts.
 //
@@ -42,12 +45,8 @@ const starts = (lines: string[]) => {
 
 const lines = ["<!-- open", "-->  tail text", "[^1]: under prose"];
 
-describe("spec question: a label under an HTML closer that carries a tail", () => {
-    it.fails("reading two: the label under the closer line is paragraph text", () => {
-        expect(starts(lines)).toEqual([false, false, false]);
-    });
-
-    it("control, today's behaviour: the label starts a definition", () => {
+describe("a label under an HTML closer that carries a tail", () => {
+    it("the label starts a definition, as Obsidian reads it", () => {
         expect(starts(lines)).toEqual([false, false, true]);
     });
 
