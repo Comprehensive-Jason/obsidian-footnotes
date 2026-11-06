@@ -120,9 +120,29 @@ describe("the nested alert names the footnotes inside and the definition they si
             '"[^x]" and "[^y]" sit inside the definitions of "[^a]" and "[^c]". Nested footnotes don\'t survive export and most tools can\'t read them. Move them into the text.',
         ]);
     });
-    it("a definition written in another's body is named by its label", () => {
+    it("a definition written in another's body is named by its label, and moves out of that definition", () => {
         expect(alerts(["a[^a] b[^b]", "", "[^a]: outer", "", "    [^b]: inner"])).toEqual([
-            '"[^b]:" sits inside the definition of "[^a]". Nested footnotes don\'t survive export and most tools can\'t read them. Move "[^b]:" into the text.',
+            '"[^b]:" sits inside the definition of "[^a]". Nested footnotes don\'t survive export and most tools can\'t read them. Move "[^b]:" out of the definition of "[^a]".',
+        ]);
+    });
+    it("two definitions in one definition's body", () => {
+        expect(alerts(["a[^a] x[^x] y[^y]", "", "[^a]: outer", "", "    [^x]: one", "", "    [^y]: two"])).toEqual([
+            '"[^x]:" and "[^y]:" sit inside the definition of "[^a]". Nested footnotes don\'t survive export and most tools can\'t read them. Move them out of the definition of "[^a]".',
+        ]);
+    });
+    it("definitions in the bodies of two definitions", () => {
+        expect(alerts(["a[^a] c[^c] x[^x] y[^y]", "", "[^a]: outer", "", "    [^x]: one", "", "[^c]: outer", "", "    [^y]: two"])).toEqual([
+            '"[^x]:" and "[^y]:" sit inside the definitions of "[^a]" and "[^c]". Nested footnotes don\'t survive export and most tools can\'t read them. Move them out of the definitions of "[^a]" and "[^c]".',
+        ]);
+    });
+    it("a reference and a definition inside one definition: each gets the advice that fits it", () => {
+        expect(alerts(["a[^a] b[^b] c[^c]", "", "[^a]: see [^b]", "", "    [^c]: inner", "", "[^b]: two"])).toEqual([
+            '"[^b]" and "[^c]:" sit inside the definition of "[^a]". Nested footnotes don\'t survive export and most tools can\'t read them. Move "[^b]" into the text. Move "[^c]:" out of the definition of "[^a]".',
+        ]);
+    });
+    it("a reference in one definition and a definition in another: only the one holding a definition is named in its advice", () => {
+        expect(alerts(["a[^a] c[^c] x[^x] y[^y]", "", "[^a]: see [^x]", "", "[^c]: outer", "", "    [^y]: inner", "", "[^x]: x"])).toEqual([
+            '"[^x]" and "[^y]:" sit inside the definitions of "[^a]" and "[^c]". Nested footnotes don\'t survive export and most tools can\'t read them. Move "[^x]" into the text. Move "[^y]:" out of the definition of "[^c]".',
         ]);
     });
 });

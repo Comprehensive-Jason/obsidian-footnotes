@@ -33,6 +33,8 @@ import {
     addReferencesOrDeleteDefinitions,
     andList,
     lintLeft,
+    moveIntoText,
+    moveOutOfDefinition,
     SectionHeadingNotAdded,
     showNotice,
 } from "../editor/notice";
@@ -534,14 +536,22 @@ export function nestedFootnoteDefinitionNames(lines: string[]): string[] {
     return nestedFootnotes(lines).map(({ outer }) => outer);
 }
 
+/** One definition and what is nested inside it (nestedFootnotes). */
+interface NestedFootnotes {
+    outer: string;
+    inner: string[];
+    labels: string[];
+}
+
 /**
  * The same definitions, each with what is nested inside it, so the alert
  * can name both (Jason, 2026-10-22): `outer` is the definition's name, and
  * `inner` lists what it holds, quoted the way the alert says it, in the
  * order the note reads them: a reference as "[^b]", an inline footnote by
  * its text as "^[text]", and a definition written in its body as "[^b]:".
+ * `labels` holds that last kind again, since their advice differs.
  */
-function nestedFootnotes(lines: string[]): { outer: string; inner: string[] }[] {
+function nestedFootnotes(lines: string[]): NestedFootnotes[] {
     const reading = readNote(lines);
     // The lines a lazy label starts. Finding them reads the note again, so
     // it is done only once a definition holds a reference. A lazy label
@@ -549,13 +559,13 @@ function nestedFootnotes(lines: string[]): { outer: string; inner: string[] }[] 
     let lazyLabelLines: Set<number> | undefined;
     const startsLazyLabel = (line: number, index: number) =>
         index === 0 && (lazyLabelLines ??= new Set(labelShapedLines(lines, undefined, reading).map((label) => label.line))).has(line);
-    const found: { outer: string; inner: string[] }[] = [];
+    const found: NestedFootnotes[] = [];
     // One entry per NAME, ignoring case, the same way the duplicate and
     // orphan alerts do it. A name defined twice with both copies nested
     // used to be reported twice, which made the notice's count too high
     // (bug hunt, 2026-08-25). The second copy's nested footnotes join the
     // first's.
-    const byName = new Map<string, { outer: string; inner: string[] }>();
+    const byName = new Map<string, NestedFootnotes>();
     // an inline footnote's text as the note has it, over its lines
     const inlineText = (note: { line: number; open: number; closeLine: number; close: number }) =>
         `"${lines.slice(note.line, note.closeLine + 1).map((line, k, all) => line.slice(k === 0 ? note.open : 0, k === all.length - 1 ? note.close + 1 : line.length)).join(" ")}"`;
@@ -570,7 +580,8 @@ function nestedFootnotes(lines: string[]): { outer: string; inner: string[] }[] 
         // a definition written inside this one's body is nesting too, and
         // the alert ADR 0001 promises for it used to stay silent (hunt
         // 2026-10-05, pin bug-nested-definition-deleted-with-outer)
-        for (const held of definitionsHeldBy(spans, span)) inner.push({ line: held.start, at: -1, text: quotedDefinitionLabel(held.name) });
+        const held = definitionsHeldBy(spans, span);
+        for (const { start, name } of held) inner.push({ line: start, at: -1, text: quotedDefinitionLabel(name) });
         for (let i = span.start; i <= span.end; i++) {
             const startAt = i === span.start ? span.labelEnd : 0;
             reading.referencesOn(i).forEach((occurrence, index) => {
@@ -591,12 +602,14 @@ function nestedFootnotes(lines: string[]): { outer: string; inner: string[] }[] 
         }
         if (inner.length === 0) continue;
         const texts = inner.sort((a, b) => a.line - b.line || a.at - b.at).map(({ text }) => text);
+        const labels = held.map(({ name }) => quotedDefinitionLabel(name));
         const entry = byName.get(span.name.toLowerCase());
         if (entry) {
             entry.inner.push(...texts.filter((text) => !entry.inner.includes(text)));
+            entry.labels.push(...labels.filter((label) => !entry.labels.includes(label)));
             continue;
         }
-        const added = { outer: span.name, inner: [...new Set(texts)] };
+        const added = { outer: span.name, inner: [...new Set(texts)], labels: [...new Set(labels)] };
         byName.set(span.name.toLowerCase(), added);
         found.push(added);
     }
@@ -608,15 +621,29 @@ function nestedFootnotes(lines: string[]): { outer: string; inner: string[] }[] 
 // the definition they sit in, so the advice says which one to move
 // (Jason, 2026-10-22; the singular used to name only the outer definition
 // and then say "Move it into the text", meaning the inner one).
+//
+// A reference or an inline footnote moves into the text. A definition moves
+// out of the definition that holds it, which is the only one named in that
+// advice (Jason, 2026-11-05). With both kinds nested, each kind gets its own
+// sentence, so "them" never covers two different moves.
 function noticeNestedFootnotes(lines: string[]) {
     const nested = nestedFootnotes(lines);
     if (nested.length === 0) return;
     const inner = [...new Set(nested.flatMap((entry) => entry.inner))];
     const outer = nested.map((entry) => quotedReference(entry.outer));
+    const labels = new Set(nested.flatMap((entry) => entry.labels));
+    const others = inner.filter((item) => !labels.has(item));
+    const holders = nested.filter((entry) => entry.labels.length > 0).map((entry) => quotedReference(entry.outer));
     const one = inner.length === 1;
+    // "them" only when one sentence of advice covers everything named
+    const named = (items: readonly string[]) => (items.length === 1 || items.length < inner.length ? andList(items) : "them");
+    const advice = [
+        ...(others.length > 0 ? [moveIntoText(named(others))] : []),
+        ...(labels.size > 0 ? [moveOutOfDefinition(named([...labels]), holders)] : []),
+    ];
     showNotice(
         `${andList(inner)} ${one ? "sits" : "sit"} inside the ${outer.length === 1 ? "definition" : "definitions"} of ${andList(outer)}. ` +
-            `Nested footnotes don't survive export and most tools can't read them. Move ${one ? inner[0] : "them"} into the text.`,
+            `Nested footnotes don't survive export and most tools can't read them. ${advice.join(" ")}`,
         8000,
     );
 }

@@ -103,6 +103,19 @@ export function addReferencesOrDeleteDefinitions(byHand = false): string {
     return `Add their references in the text, or delete the definitions${byHand ? " by hand" : ""}.`;
 }
 
+/** The advice for a reference or inline footnote nested in a definition. `what` is the quoted footnote, or "them". */
+export function moveIntoText(what: string): string {
+    return `Move ${what} into the text.`;
+}
+
+/** The advice for a definition written inside another definition: into the
+ * text would be the wrong place for it, since a definition belongs outside
+ * the definition that holds it (Jason's choice, 2026-11-05). `what` is the
+ * quoted label, or "them", and `holders` are the quoted definitions holding it. */
+export function moveOutOfDefinition(what: string, holders: readonly string[]): string {
+    return `Move ${what} out of the ${holders.length === 1 ? "definition" : "definitions"} of ${andList(holders)}.`;
+}
+
 /** The sentence for something the lint could have changed and did not. `what`
  * is what it left, `one` says whether that is one thing or several, and
  * `doing` is the change it held back: "changing", "deleting", or "merging".
