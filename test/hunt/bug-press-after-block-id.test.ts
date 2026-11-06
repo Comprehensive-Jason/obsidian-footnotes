@@ -87,18 +87,9 @@ describe("a press at the end of a line ending in a block id", () => {
 
     // "none" is the setting shown as "Don't move". Now: "Oysters filter
     // water. ^water1[^1]" under both placements.
-    it("the numbered key keeps the block id at the end of the line under the none placement", async () => {
-        const doc = await press(insertAutonumFootnote, line.length, "none");
+    it.each(["before", "none"] as const)("the numbered key keeps the block id at the end of the line under the %s placement", async (placement) => {
+        const doc = await press(insertAutonumFootnote, line.length, placement);
         expectIdKept(doc.lines[0], "[^1]");
-    });
-
-    // Under Before, the reference goes in front of the stop as well, as a
-    // press in front of the id puts it (Jason's hop-back ruling of
-    // 2026-11-05; hunt 2026-11-06 cycle 9, finding H19: it landed after the
-    // stop, "water.[^1] ^water1", and the lint moved it).
-    it("the numbered key keeps the block id at the end of the line under the before placement", async () => {
-        const doc = await press(insertAutonumFootnote, line.length, "before");
-        expect(doc.lines[0]).toBe("Oysters filter water[^1]. ^water1");
     });
 
     it.each(Keys)("control: the %s key with the caret on 'water' lands in front of the id", async (_name, key, reference) => {

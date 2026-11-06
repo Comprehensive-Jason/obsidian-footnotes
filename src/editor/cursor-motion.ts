@@ -392,22 +392,6 @@ export function adjustFootnotePosition(
     plugin: FootnotePlugin,
     lines: readonly string[],
 ) {
-    // A block id is the " ^water1" at the end of a line that lets other
-    // notes link to its paragraph. Obsidian counts it only at the very end,
-    // so a reference written after it hid the block, and every link to the
-    // paragraph stopped working (docs/obsidian-reading-rules.md D4). A
-    // press at the id, or after it, lands in front of it, under every
-    // placement (hunt 2026-10-08 cycle 6, cluster Z12, pin
-    // bug-press-after-block-id). The caret moves there first, so the walks
-    // below start from the text's end: under Before, a press at the very
-    // end of "Oysters filter water. ^water1" hops back over the stop, as a
-    // press in front of the id does, where it used to land after the stop
-    // (hunt 2026-11-06 cycle 9, finding H19). The walks never cross the
-    // space in front of the id, so nothing lands past it.
-    const blockId = lineText.search(TrailingBlockId);
-    if (blockId !== -1 && cursorPosition.ch > blockId) {
-        cursorPosition = { line: cursorPosition.line, ch: blockId };
-    }
     if (plugin.settings.insertAtEndOfWord) {
         // A link whose text runs on past a line break ends on a later line,
         // and the reference lands after it there, as it does after a link
@@ -461,6 +445,17 @@ export function adjustFootnotePosition(
         if (plugin.settings.footnotePlacement !== "none") {
             cursorPosition = { line: cursorPosition.line, ch: inFrontOfTakenPunctuation(reading, lines, cursorPosition.line, cursorPosition.ch) };
         }
+    }
+    // A block id is the " ^water1" at the end of a line that lets other
+    // notes link to its paragraph. Obsidian counts it only at the very end,
+    // so a reference written after it hid the block, and every link to the
+    // paragraph stopped working (docs/obsidian-reading-rules.md D4). A
+    // press at the id, or after it, lands in front of it, under every
+    // placement (hunt 2026-10-08 cycle 6, cluster Z12, pin
+    // bug-press-after-block-id).
+    const blockId = lineText.search(TrailingBlockId);
+    if (blockId !== -1 && cursorPosition.ch > blockId) {
+        cursorPosition = { line: cursorPosition.line, ch: blockId };
     }
     const ch = safeInsertionCh(lineText, cursorPosition.ch);
     if (ch !== cursorPosition.ch) {
