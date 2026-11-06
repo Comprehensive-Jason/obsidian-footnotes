@@ -1,15 +1,16 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
+import { messages, resetNotices } from "../helpers/notices";
+import { InsideLinkNotice } from "../helpers/toasts";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { readNote } from "../../src/parsing/note-reading";
 
 // spec question: in "It was free!(sic)", should a press with the caret in
 // "free" create a footnote, rather than refuse?
 //
-// What it does now: the press is refused with the protected-text toast,
-// though the caret sits in plain prose. With placement "after", the
+// What it does now: the press is refused with the link notice, though the
+// caret sits in plain prose. With placement "after", the
 // landing spot is past the "!", where "![^1](sic)" would be an image, so
 // the guard refuses.
 // What a user might expect: a footnote that works, for example landing in
@@ -23,19 +24,21 @@ import { readNote } from "../../src/parsing/note-reading";
 //
 // Source of truth: spec-image-alt-reference (resolved in Reading view
 // 2026-09-16: a reference inside an image's alt text is dead).
+//
+// Answered (2026-11-05, sorting the spec pins under Jason's scope rule of
+// 2026-10-07): a "!" glued to a "(" is a rare shape, nothing is lost, and the
+// refusal is the answer (ADR 0003, which also says the gate does not decide
+// where a footnote lands). The test was it.fails until then.
 
-// The names of the live references on `line` of `text`, as the plugin reads them.
-function liveNames(text: string, line = 0): string[] {
-    const lines = text.split("\n");
-    return readNote(lines).referencesOn(line).map((o) => o.name);
-}
+beforeEach(resetNotices);
 
-describe("spec question: a press next to '!(...)'", () => {
-    it.fails("press in 'free' of 'It was free!(sic)' creates a live footnote", async () => {
+describe("a press next to '!(...)'", () => {
+    it("press in 'free' of 'It was free!(sic)' is refused and the note stays as it was", async () => {
         const doc = fakeEditor(["It was free!(sic)"], { cursor: { line: 0, ch: 9 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(
             fakePlugin({ insertAtEndOfWord: true, enablePopupEditor: false, enableFootnotePrefix: false, enableFootnoteSectionHeading: false }, doc),
         );
-        expect(liveNames(doc.lines.join("\n"))).toEqual(["1"]);
+        expect(doc.lines).toEqual(["It was free!(sic)"]);
+        expect(messages()).toEqual([InsideLinkNotice]);
     });
 });

@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
 
-import { noticeLintAlerts, commentedDefinitionNames } from "../../src/linting/lint-alerts";
+import { noticeLintAlerts } from "../../src/linting/lint-alerts";
+import { commentedDefinitionNames } from "../../src/linting/rules/remove-orphaned-references";
 
 // A `[^x]:` label that sits BEFORE the `%%` on a block comment's closer
 // line is inside the comment: the block runs from its opener through the

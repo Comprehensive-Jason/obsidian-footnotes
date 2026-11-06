@@ -305,10 +305,11 @@ export interface CarriedPastePlan {
  * itself, and the names the body and the blocks only cite. Each pasted
  * definition is then merged, kept, or renamed:
  *
- * - Merged: a carried block whose text, whitespace collapsed and with the
- *   paste's own merges made, equals the text of a definition the
- *   destination shows. Its references are pointed at the existing name,
- *   whatever its label, and the block is not added.
+ * - Merged: a carried block whose text, whitespace collapsed outside its
+ *   code blocks and with the paste's own merges made, equals the text of a
+ *   definition the destination shows. Its references are pointed at the
+ *   existing name, whatever its label, and the block is not added. An empty
+ *   definition is never merged.
  * - Kept: a name the destination does not define, and that no name
  *   settled before it has taken. A reference the destination has with no
  *   definition does not take its name, so a definition cut and pasted
@@ -490,10 +491,15 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     // pasted elsewhere in its note left its reference with no definition
     // (Jason's ruling Q29, 2026-10-08; hunt 2026-10-08 cycle 6, cluster
     // Z14). Everywhere else same-text footnotes still merge (Q13).
+    //
+    // An empty definition is never merged either. It is a placeholder waiting
+    // for its text, not text, and merged, two unrelated references shared one
+    // definition, so typing into it filled both (Jason's ruling, 2026-11-05,
+    // pin spec-carry-empty-bodies-merge).
     const merged = new Map<string, string>();
-    const unmerged = new Set(carried.map((definition) => definition.name.toLowerCase()).filter((name) => gaps.has(name)));
+    const shapes = carried.map((definition, i) => shapeOf(definition.lines, blockReadings[i].labelOn(0)?.labelEnd ?? 0, blockSyntax(i), codeBlockLines(blockReadings[i])));
+    const unmerged = new Set(carried.filter((definition, i) => gaps.has(definition.name.toLowerCase()) || shapes[i].text === "").map((definition) => definition.name.toLowerCase()));
     const blockOf = new Map(carried.map((definition, i) => [definition.name.toLowerCase(), i]));
-    const shapes = carried.map((definition, i) => shapeOf(definition.lines, blockReadings[i].labelOn(0)?.labelEnd ?? 0, blockSyntax(i)));
     // whether carried block `i` reads as the destination's `offered` once
     // every name in it is paired up; `pairs` holds the matches assumed so
     // far, and gains the ones this match needs
@@ -1028,17 +1034,39 @@ function leftWhole(lines: string[], from: EditorPosition, to: EditorPosition, bl
  * A definition's text with its footnote names set aside, the key two
  * definitions are compared by: the text after its label, every name in a
  * label or a reference taken out ("see [^b]" reads "see [^]"), whitespace
- * collapsed; and the names taken out, in the order they come. Two
- * definitions with the same text read the same once each name in one is
- * paired with the name in the same place in the other.
+ * collapsed except on the lines of a code block; and the names taken out, in
+ * the order they come. Two definitions with the same text read the same once
+ * each name in one is paired with the name in the same place in the other.
  */
 interface Shape {
     text: string;
     names: string[];
 }
 
-/** The Shape of a definition's `lines`, its label ending at column `labelEnd` of the first line, with `syntaxOn` listing the labels and references on each line. */
-function shapeOf(lines: readonly string[], labelEnd: number, syntaxOn: (line: number) => readonly ReferenceOccurrence[]): Shape {
+/** The lines the note `reading` reads as part of a code block, fence lines included. */
+function codeBlockLines(reading: NoteReading): Set<number> {
+    const code = new Set<number>();
+    for (const span of reading.protectedSpans) {
+        if (span.kind !== "code") continue;
+        for (let line = span.startLine; line <= span.endLine; line++) code.add(line);
+    }
+    return code;
+}
+
+/**
+ * The Shape of a definition's `lines`, its label ending at column `labelEnd`
+ * of the first line, with `syntaxOn` listing the labels and references on each
+ * line and `codeLines` saying which of them are code.
+ *
+ * Whitespace is collapsed so that a re-wrapped or re-indented definition still
+ * counts as the same one. A code block's lines are kept exactly as written,
+ * because spacing is content in code: collapsed, a pasted footnote whose code
+ * differed only in its spacing was merged into the note's, and the pasted code
+ * was lost (Jason's ruling, 2026-11-05, pin
+ * spec-carry-code-block-whitespace-merge). The pieces are joined by line breaks,
+ * which collapsed text never holds, so a code line cannot match ordinary text.
+ */
+function shapeOf(lines: readonly string[], labelEnd: number, syntaxOn: (line: number) => readonly ReferenceOccurrence[], codeLines: ReadonlySet<number>): Shape {
     const names: string[] = [];
     const text = lines.map((line, i) => {
         let kept = "";
@@ -1050,7 +1078,25 @@ function shapeOf(lines: readonly string[], labelEnd: number, syntaxOn: (line: nu
         }
         return kept + line.slice(from);
     });
-    return { text: text.join("\n").replace(/\s+/g, " ").trim(), names };
+    const pieces: string[] = [];
+    let plain: string[] = [];
+    const endPlainText = () => {
+        const collapsed = plain.join("\n").replace(/\s+/g, " ").trim();
+        if (collapsed !== "") pieces.push(collapsed);
+        plain = [];
+    };
+    text.forEach((line, i) => {
+        if (!codeLines.has(i)) {
+            plain.push(line);
+            return;
+        }
+        endPlainText();
+        // a fence right after the label has the label's space before it,
+        // which is not part of the code
+        pieces.push(i === 0 ? line.trimStart() : line);
+    });
+    endPlainText();
+    return { text: pieces.join("\n"), names };
 }
 
 /**
@@ -1060,14 +1106,17 @@ function shapeOf(lines: readonly string[], labelEnd: number, syntaxOn: (line: nu
  * Compared as it stood, the second line of "> [^q]: one" / "> two" kept its
  * quote marker and read "one > two", and a paste never reused it (hunt
  * 2026-10-06 cycle 3, cluster K5, pin
- * bug-paste-reuse-multi-line-quoted-definition). Only a quote's markers are
- * text; a list item takes only indentation from the lines after its first,
- * and whitespace does not count, so only definitions in a quote that run
- * over lines are lifted, and the note is read once more only for those.
+ * bug-paste-reuse-multi-line-quoted-definition). A list item takes only
+ * indentation from the lines after its first, but that counts inside a code
+ * block, so its definitions are lifted too (Jason's ruling, 2026-11-05, pin
+ * spec-carry-code-block-whitespace-merge). Only definitions in a quote or a
+ * list item that run over lines are lifted, and the note is read once more
+ * only for those.
  */
 function destinationShapes(host: Landing, blocks: readonly Definition[]): Shape[] {
-    const quoted = blocks.filter((block) => block.container.quotes > 0 && block.end > block.start);
-    const lifted = new Map(liftedCuts(host.lines, quoted).map((cuts, k) => [quoted[k], cuts]));
+    const code = codeBlockLines(host.reading);
+    const contained = blocks.filter((block) => (block.container.quotes > 0 || block.container.listItems > 0) && block.end > block.start);
+    const lifted = new Map(liftedCuts(host.lines, contained).map((cuts, k) => [contained[k], cuts]));
     return blocks.map((block) => {
         const cuts = lifted.get(block) ?? [block.labelStart];
         const cut = (k: number) => cuts[k] ?? 0;
@@ -1076,6 +1125,7 @@ function destinationShapes(host: Landing, blocks: readonly Definition[]): Shape[
             [...host.reading.labelsOn(block.start + k), ...host.reading.referencesOn(block.start + k)]
                 .filter((occurrence) => occurrence.start >= cut(k))
                 .map((occurrence) => ({ ...occurrence, start: occurrence.start - cut(k), end: occurrence.end - cut(k) }));
-        return shapeOf(lines, block.labelEnd - block.labelStart, syntaxOn);
+        const codeLines = new Set(lines.flatMap((_, k) => (code.has(block.start + k) ? [k] : [])));
+        return shapeOf(lines, block.labelEnd - block.labelStart, syntaxOn, codeLines);
     });
 }

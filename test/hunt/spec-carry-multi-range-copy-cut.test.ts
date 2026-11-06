@@ -21,6 +21,12 @@ import { handleCut, resetCarryRegister } from "../../src/commands/carry-footnote
 // The paste side asks the same question for several carets
 // (spec-carry-multi-caret-paste-raw).
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): a cut of several
+// selections at once is rare, and nothing is lost: the definitions stay in the
+// note, and the lint's alert names them.
+// It was it.fails until then.
+//
 // Hunt 2026-10-02, round 3, lens carry-terrain. Cluster T5.
 //
 // Source of truth: README, "Copy puts the selection and the definitions
@@ -55,8 +61,8 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
-describe("spec question: several selections at copy and cut time", () => {
-    it.fails("a two-range cut whose ranges hold the only references takes their definitions along", () => {
+describe("several selections at copy and cut time", () => {
+    it("characterization: a two-range cut is left to the editor, and the definitions stay in the note", () => {
         const doc = fakeEditor(["a[^1] b", "c[^2] d", "", "[^1]: one", "[^2]: two"], { wholeDoc: true, edits: true, cursor: { line: 0, ch: 0 } });
         // two selections: each whole prose line, one reference in each
         Object.assign(doc, {
@@ -71,7 +77,8 @@ describe("spec question: several selections at copy and cut time", () => {
         } as unknown as FootnotePlugin;
         const event = clipboardEvent();
         handleCut(plugin, event as never);
-        // Today: the hook writes nothing and leaves the cut to the editor
-        expect(event.written["text/plain"] ?? "").toContain("[^1]: one");
+        expect(event.defaultPrevented).toBe(false);
+        expect(event.written["text/plain"]).toBeUndefined();
+        expect(doc.lines).toContain("[^1]: one");
     });
 });

@@ -27,7 +27,12 @@ import { lintFootnotes } from "../../src/linting/linter";
 //       it stays collapsed (recommended: the user folded that footnote,
 //       and the merge only adds its duplicate's text to it);
 //   (b) keep dropping it, as Obsidian does for any edit inside a fold.
-// The test below takes option (a).
+//
+// Answered (2026-11-05, sorting the spec pins under Jason's scope rule of
+// 2026-10-07): the result gate design he approved (2026-10-07, ADR 0003) lists
+// Q17 under "left as they behave, no code (rare or harmless)": a fold lost on a merge.
+// That is option (b). The test below was it.fails, taking option (a), until
+// then.
 //
 // Hunt 2026-10-06, cycle 4, lens diff. Cluster D3.
 //
@@ -37,12 +42,11 @@ import { lintFootnotes } from "../../src/linting/linter";
 // ("every fold is still folded"); its note that Obsidian drops a fold on
 // any edit inside it.
 
-describe("spec question: a folded definition moved and merged into", () => {
-    // Now: no fold at all (an empty list).
-    it.fails("merge on: a folded definition moved to the bottom with a duplicate merged into it keeps its fold", () => {
+describe("a folded definition moved and merged into", () => {
+    it("merge on: a folded definition moved to the bottom with a duplicate merged into it loses its fold", () => {
         const before = ["Intro[^1]", "", "[^1]: alpha", "    cont", "", "Para.", "", "[^1]: beta", "", "More."].join("\n");
         const after = lintFootnotes(before, { mergeDuplicateDefinitions: true });
         expect(after.split("\n")).toEqual(["Intro[^1]", "", "Para.", "", "More.", "", "[^1]: alpha", "    cont", "    beta"]);
-        expect(mapFoldLines([{ from: 2, to: 3 }], lineDiffChanges(before, after), before).map((f) => f.from)).toEqual([6]);
+        expect(mapFoldLines([{ from: 2, to: 3 }], lineDiffChanges(before, after), before)).toEqual([]);
     });
 });

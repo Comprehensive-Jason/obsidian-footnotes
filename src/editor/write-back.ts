@@ -1,7 +1,7 @@
 import { EditorView } from "@codemirror/view";
 import { Editor, EditorPosition, EditorRangeOrCaret, EditorSelection, MarkdownView } from "obsidian";
 
-import { applyOffsetChanges, lineDiffChanges, lineMapper, mapFoldLines, OffsetChange } from "./document-diff";
+import { applyOffsetChanges, lineDiffChanges, lineMapper, mapFoldLines, OffsetChange, selectionsFollowingDefinitions } from "./document-diff";
 import { codeMirrorViewOf } from "./obsidian-internals";
 
 // Writing a whole new text for the note back into the editor as the
@@ -39,7 +39,8 @@ export function replaceMinimal(doc: Editor, before: string, after: string, mdVie
  * carried paste puts the caret right after the pasted text this way,
  * wherever the definitions it adds pushed that text (same pin). Without
  * it the editor carries the caret through the edits, as it does for the
- * lint.
+ * lint, except for a caret in a definition the edits move
+ * (keepCaretsWithDefinitions).
  */
 export function writeChanges(doc: Editor, before: string, changes: OffsetChange[], mdView?: MarkdownView, selection?: EditorRangeOrCaret) {
     if (changes.length === 0) return;
@@ -53,6 +54,8 @@ export function writeChanges(doc: Editor, before: string, changes: OffsetChange[
     // unfolded). The fold API is undocumented, so every step is guarded.
     const mode = (mdView as { currentMode?: FoldingMode } | undefined)?.currentMode;
     const foldInfo = mode?.getFoldInfo?.() ?? null;
+    // where the carets are, read before the edits carry them
+    const selections = selection ? [] : doc.listSelections();
     doc.transaction({
         changes: changes.map((change) => ({
             from: doc.offsetToPos(change.from),
@@ -64,6 +67,7 @@ export function writeChanges(doc: Editor, before: string, changes: OffsetChange[
     // a caret the caller placed is already where it should be
     if (!selection) keepCaretBelowLinesAbove(doc, changes);
     const after = applyOffsetChanges(before, changes);
+    keepCaretsWithDefinitions(doc, before, after, selections);
     if (foldInfo && foldInfo.folds.length > 0 && mode?.applyFoldInfo) {
         mode.applyFoldInfo({
             folds: mapFoldLines(foldInfo.folds, changes, before),
@@ -104,6 +108,33 @@ function keepCaretBelowLinesAbove(doc: Editor, changes: OffsetChange[]): void {
     if (!ranges.some(atNoteStart)) return;
     const ownLine = { line: first.text.split("\n").length - 1, ch: 0 };
     doc.setSelections(ranges.map((range) => (atNoteStart(range) ? { anchor: ownLine, head: ownLine } : range)));
+}
+
+/**
+ * After the edits: a caret or selection that sat in a definition the edits
+ * moved is put back in the same place in the definition's text.
+ *
+ * It is set after the edits, so the undo that brings the old note back also
+ * brings the caret back to where it was, as with any edit. `selections` are
+ * the selections before the edits. When the edits carried two carets onto one
+ * place, the editor has fewer selections now than it had and they no longer
+ * pair up one for one, so they are left as the editor put them. (Jason's
+ * ruling, 2026-11-05, pin spec-caret-in-swapped-definition.)
+ */
+function keepCaretsWithDefinitions(doc: Editor, before: string, after: string, selections: EditorSelection[]): void {
+    const followed = selectionsFollowingDefinitions(before, after, selections);
+    if (followed.every((range) => range === null)) return;
+    const carried = doc.listSelections();
+    if (carried.length !== selections.length) return;
+    const samePlace = (a: EditorPosition, b: EditorPosition) => a.line === b.line && a.ch === b.ch;
+    const moved = carried.some((range, i) => {
+        const place = followed[i];
+        return place !== null && !(samePlace(place.anchor, range.anchor) && samePlace(place.head, range.head));
+    });
+    // Setting a selection scrolls the view to it, so it is not set when the
+    // editor already carried it to the right place (Obsidian's editor scrolls
+    // on a set selection, as restoreOtherPanes notes).
+    if (moved) doc.setSelections(carried.map((range, i) => followed[i] ?? range));
 }
 
 /**

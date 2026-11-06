@@ -15,13 +15,19 @@ import { removeEmptySectionHeading } from "../../src/linting/rules/remove-empty-
 // they go back on at the end") and merge ("Never hand back more blank
 // lines at the end than the note started with") both keep them.
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): one line break at the
+// end of a note reads the same either way, and the rule's own docstring says
+// the note ends on its last line of text.
+// It was it.fails until then.
+//
 // Hunt 2026-10-02, round 2, lens properties. Cluster P9.
 //
 // Source of truth: the docstrings of remove-empty-section-heading,
 // move-to-bottom and merge, quoted above.
 
-describe("spec question: the final newline after removing an empty section heading", () => {
-    it.fails("removing an empty section heading keeps the note's final newline", () => {
-        expect(removeEmptySectionHeading("text\n\n# Footnotes\n", "# Footnotes")).toBe("text\n");
+describe("the final newline after removing an empty section heading", () => {
+    it("characterization: removing an empty section heading leaves the note ending on its last line of text", () => {
+        expect(removeEmptySectionHeading("text\n\n# Footnotes\n", "# Footnotes")).toBe("text");
     });
 });

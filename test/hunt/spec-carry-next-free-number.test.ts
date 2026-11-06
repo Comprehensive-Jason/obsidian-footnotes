@@ -18,6 +18,12 @@ import { planCarriedPaste } from "../../src/commands/carry-footnotes";
 // lint anyway. Which reading the README means is Jason's call; the answer
 // may be a README edit.
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): filling the gap is a
+// reasonable reading of "free", every footnote keeps its text, and the reindex
+// rule puts the order right on the next lint.
+// It was it.fails until then.
+//
 // Hunt 2026-10-02, round 4, lens promise. Cluster PR6.
 //
 // Source of truth: the README's Paste paragraph ("a number to the next
@@ -25,10 +31,9 @@ import { planCarriedPaste } from "../../src/commands/carry-footnotes";
 // next free number"), which computeNextFootnoteNumber implements as one
 // past the highest.
 
-describe("spec question: the number a clashing pasted footnote takes", () => {
-    it.fails("a clashing number takes the next free number past the destination's", () => {
+describe("the number a clashing pasted footnote takes", () => {
+    it("characterization: a clashing number takes the lowest free number, the gap", () => {
         const plan = planCarriedPaste("x[^1] y[^3]\n\n[^1]: one\n[^3]: three", "a[^1]", [{ name: "1", lines: ["[^1]: mine"] }]);
-        // Today: "a[^2]".
-        expect(plan.body).toBe("a[^4]");
+        expect(plan.body).toBe("a[^2]");
     });
 });

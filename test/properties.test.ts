@@ -7,12 +7,14 @@ import { gfmFootnote } from "micromark-extension-gfm-footnote";
 import { math } from "micromark-extension-math";
 import { describe, expect, it } from "vitest";
 
+import { codeMirrorEditor } from "./helpers/codemirror-editor";
 import { PREFIXES } from "./helpers/prefixes";
 import { docArb } from "./arbitraries";
 import { sanitizeInlineFootnoteContent } from "../src/commands/inline-footnotes";
 import { endOfWordOffset } from "../src/editor/cursor-motion";
 import { definitionLabelWithName } from "../src/parsing/label-shapes";
-import { lineDiffChanges, mapFoldLines } from "../src/editor/document-diff";
+import { lineDiffChanges, lineKey, mapFoldLines, selectionsFollowingDefinitions } from "../src/editor/document-diff";
+import { replaceMinimal } from "../src/editor/write-back";
 import { lintFootnotes, LintOptions } from "../src/linting/linter";
 import { applyFootnotePrefix } from "../src/linting/rules/apply-footnote-prefix";
 import { fixLazyDefinitions } from "../src/linting/rules/fix-lazy-definitions";
@@ -515,6 +517,31 @@ describe("write-back invariants over random documents", () => {
                     expect(mapped.to).toBeGreaterThan(mapped.from);
                     expect(mapped.to).toBeLessThan(afterLines);
                 }
+            }),
+        );
+    });
+
+    // A caret anywhere in a note, written through the real write-back on a
+    // real CodeMirror state: the note comes out as the lint wrote it, and a
+    // caret that followed its definition sits on the same line of text, inside
+    // that line (Jason's ruling, 2026-11-05, pin spec-caret-in-swapped-definition).
+    soakIt("the write-back keeps the text, and a caret that follows a definition stays on its own line of text", () => {
+        fc.assert(
+            fc.property(docArb, optionsArb, fc.nat(100_000), (raw, options, pick) => {
+                // the editor holds a note with plain line breaks whatever the file has
+                const doc = normalizeEol(raw).text;
+                const after = lintFootnotes(doc, options);
+                const offset = pick % (doc.length + 1);
+                const pane = codeMirrorEditor(doc, [{ anchor: offset, head: offset }]);
+                const [range] = pane.editor.listSelections();
+                const [followed] = selectionsFollowingDefinitions(doc, after, [range]);
+                replaceMinimal(pane.editor, doc, after);
+                expect(pane.text()).toBe(after);
+                if (followed === null) return;
+                expect(pane.selections()).toEqual([followed]);
+                const line = after.split("\n")[followed.head.line];
+                expect(lineKey(line)).toBe(lineKey(doc.split("\n")[range.head.line]));
+                expect(followed.head.ch).toBeLessThanOrEqual(line.length);
             }),
         );
     });

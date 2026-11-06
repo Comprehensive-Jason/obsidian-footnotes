@@ -4,7 +4,6 @@ import { gfmFootnote } from "micromark-extension-gfm-footnote";
 import { describe, expect, it } from "vitest";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { endOfWordOffset } from "../../src/editor/cursor-motion";
 import { messages, resetNotices } from "../helpers/notices";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
@@ -51,19 +50,11 @@ function linkTexts(md: string): string[] {
 
 const LinkAddress = "[text]: http://u";
 
-/** The line after a press with the caret one character into `word`: "[^1]" written where the landing walk puts it. */
-const pressAt = (line: string, word: string) => {
-    const at = endOfWordOffset(line, line.indexOf(word) + 1);
-    return line.slice(0, at) + "[^1]" + line.slice(at);
-};
-
-describe("spec question: a press on the last word of a shortcut reference link", () => {
-    it.fails("shortcut link: the link still renders after the press", () => {
-        const out = pressAt("see [text] now", "text");
-        // Today: "see [text][^1] now", read as the text "see [text]" plus the footnote
-        expect(linkTexts(`${out}\n\n${LinkAddress}\n[^1]: n`)).toContain("text");
-    });
-
+describe("a press on the last word of a shortcut reference link", () => {
+    // A pin on the landing walk alone sat here until 2026-11-05, when the
+    // spec pins were sorted. No press writes what it built, so the test
+    // below, of the whole press, says all there is to say.
+    //
     // Passes since 2026-10-03 (the runtime swap, step 3), by refusing: the
     // press asks the note reading whether its new reference is live, and
     // Obsidian reads "[text][^1]" as a reference link whatever follows,
@@ -71,10 +62,10 @@ describe("spec question: a press on the last word of a shortcut reference link",
     // answers swap34:br-sic-defined, swap34:br-sic-undefined, and
     // swap34:br-defined-label in test/obsidian-answers/swap34-probes.json;
     // Reading view agrees). So the press is born dead and writes nothing,
-    // and the link stays. Where the footnote should go instead is still
-    // the open question above. The refusal says why in its own words (Jason's
-    // ruling, 2026-10-04; before it, the press showed the protected-text
-    // notice).
+    // and the link stays. That refusal is the answer to the question above,
+    // since the result gate does not decide where a footnote lands (ADR
+    // 0003). The refusal says why in its own words (Jason's ruling,
+    // 2026-10-04; before it, the press showed the protected-text notice).
     it("the whole numbered press (insert at end of word on) keeps the link", async () => {
         resetNotices();
         const lines = ["see [text] now", "", LinkAddress];

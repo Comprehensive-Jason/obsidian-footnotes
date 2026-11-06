@@ -18,7 +18,7 @@ import {
 import { openFootnotePopup, popupEditingAvailable } from "./footnote-popup";
 import { jumpToFootnoteDefinition } from "./navigation";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
-import { adjustFootnotePosition, cellInFrontOfTakenPunctuation, endOfWordOffset, moveCursorAndSetJumpPoint } from "../editor/cursor-motion";
+import { adjustFootnotePosition, cellInFrontOfPunctuationBehindCaret, cellInFrontOfTakenPunctuation, endOfWordOffset, moveCursorAndSetJumpPoint } from "../editor/cursor-motion";
 import { cellImageStarts, cellLinkLikeEndAt } from "../parsing/landing";
 import { planDefinitionAppend } from "./definition-append";
 import {
@@ -103,6 +103,10 @@ export function insertInTableCell(
             cellLinkLikeEndAt(cellText, head, linkLabels),
             cellImageStarts(cellText, linkLabels),
         );
+        // Under Before, a caret right after the punctuation that ends a word
+        // hops back in front of it, as it does in a paragraph (Jason's ruling,
+        // 2026-11-05).
+        if (plugin.settings.footnotePlacement === "before" && landing === head) landing = cellInFrontOfPunctuationBehindCaret(cellText, head);
         // A press after the period that ends an email address lands in
         // front of the period, as it does in a paragraph, unless the
         // placement is Don't move (Jason's ruling Q30, 2026-10-08; hunt
@@ -328,7 +332,7 @@ function openPopupForNewDefinition(
     seededBody?: string,
 ) {
     const ordinal = referenceOrdinalAtCursor(doc, footnoteId, doc.getCursor());
-    const relocated = lintAfterFootnoteCreation(plugin, doc, false, seededBody);
+    const relocated = lintAfterFootnoteCreation(plugin, doc, false, seededBody, footnoteId);
     const effectiveId = relocated ?? footnoteId;
     if (relocated !== null) {
         // The lint changed the note. It rewrites as little text as it can,

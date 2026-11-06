@@ -11,7 +11,7 @@ import {
     TrailingBlockId,
 } from "../editor/cursor-motion";
 import { commandHotkeys } from "../editor/obsidian-internals";
-import { planDefinitionAppend } from "./definition-append";
+import { plainOnLabelLine, planDefinitionAppend } from "./definition-append";
 import { DocContext, docContext, docLines, listExistingFootnoteDefinitions } from "../editor/doc-context";
 import { sanitizeInlineFootnoteContent } from "./inline-footnotes";
 import { simulateChanges } from "../editor/insertion-liveness";
@@ -93,13 +93,13 @@ export const InlineSelectionNotice =
 // ordinary text. (The refusal gives the nesting reason, shared with the
 // caret guards, so the one rule always speaks with one sentence.)
 //
-// A selection EDGE that cuts through protected text gives the shared
-// protected-text reason too, with advice of its own: protected text held
-// whole inside the selection is fine (2026-08-19); it is cutting one apart
-// that would corrupt what is left behind. Until 2026-10-22 it had a
-// sentence of its own, kept apart from the caret's (Jason's manual pass,
-// 2026-08-13); the shared vocabulary replaced it (Jason, 2026-10-22).
-export const ProtectedSelectionNotice = refusal("footnote", Reason.protected, Advice.allOrNone);
+// A selection EDGE that cuts through protected text has a reason of its own,
+// apart from the caret's, with advice of its own: protected text held whole
+// inside the selection is fine (2026-08-19); it is cutting one apart that
+// would corrupt what is left behind (Jason's manual pass, 2026-08-13). The
+// shared vocabulary merged it with the caret's reason on 2026-10-22, and
+// Jason parted them again on 2026-11-05.
+export const ProtectedSelectionNotice = refusal("footnote", Reason.cutsProtected, Advice.allOrNone);
 
 // A selection that takes only PART of a table refuses (Jason's ruling
 // 2026-09-04, from his manual pass). Moving a cell, a few cells, or a whole
@@ -1232,8 +1232,11 @@ function convertMainSelection(
 function conversion(plugin: FootnotePlugin, ctx: DocContext, selection: ConvertedSelection, footnoteId: string) {
     // A selection spanning lines becomes a body with several paragraphs:
     // continuation lines indented four spaces under the label
-    // (2026-08-19).
-    const body = indentDefinitionBody(selection.text);
+    // (2026-08-19). A selection that starts in the line's text is plain text,
+    // and stays plain on the label line (plainOnLabelLine). One that takes a
+    // list's own marker with it, or moved list items, is a list, and stays one.
+    const startsInText = selection.moved === undefined && ctx.reading().blockSyntaxEnd(selection.from.line) <= selection.from.ch + selection.lead.length;
+    const body = indentDefinitionBody(startsInText ? plainOnLabelLine(selection.text) : selection.text);
     // Moved list items leave their lines, and the reference goes at the end
     // of the line above them (movedItems). When that is where the lines
     // taken out begin, the two make one edit, as they do for any other
@@ -1315,10 +1318,12 @@ function convertCellSelection(
 ): void {
     const footnoteReference = referenceText(footnoteId);
     const notices = selection.notices ?? selectionNotices(null);
-    if (refusedSelection(definitionAppendVerdict(plugin, doc, footnoteId, selection.text.split("\n").length, selection.text), notices)) return;
+    // A cell's text holds no block syntax, so it is always plain text.
+    const body = plainOnLabelLine(selection.text);
+    if (refusedSelection(definitionAppendVerdict(plugin, doc, footnoteId, body.split("\n").length, body), notices)) return;
     if (
         !replaceInTableCell(cell, footnoteReference, selection.from, selection.to, footnoteReference.length, docContext(doc).reading().linkLabels, {
-            body: selection.text,
+            body,
             notices,
         })
     ) {
@@ -1330,7 +1335,7 @@ function convertCellSelection(
     // append landed inside the new one, splitting the reference and the
     // row (Kimi hunt cycle 3, 2026-09-16; the numbered cell press had the
     // same bug, sheet 05). So the note is read again here.
-    const plan = planDefinitionAppend({ lines: docLines(doc), edits: [], footnoteId, plugin, body: selection.text });
+    const plan = planDefinitionAppend({ lines: docLines(doc), edits: [], footnoteId, plugin, body });
     landCellDefinitionAppend({
         plugin,
         doc,

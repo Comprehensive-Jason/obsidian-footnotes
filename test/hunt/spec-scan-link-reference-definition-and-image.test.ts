@@ -24,8 +24,13 @@ import { readNote } from "../../src/parsing/note-reading";
 // the note reading, Obsidian's own parser rebuilt: it reads the title and
 // the alt text as text no footnote lives in, so those two now read dead,
 // and the address one still reads live (the parser takes "/u" as the
-// address and "[^1]" as text after it, or no definition at all). Reading
-// view has still not been checked for any of the three.
+// address and "[^1]" as text after it, or no definition at all).
+//
+// Answered: Obsidian's parser says the same for all three (the saved answers
+// pin:spec-scan-link-reference-definition-and-image#1 to #3 in
+// test/obsidian-answers/pins.json): the title and the alt text hold no
+// reference, and the "[^1]" after the address is a live one. The address test
+// below was it.fails until 2026-11-05, expecting it dead.
 //
 // Hunt 2026-10-02, round 2, lens context. Cluster X14.
 //
@@ -39,13 +44,13 @@ function liveReferences(doc: string): string[] {
     return lines.flatMap((_, i) => readNote(lines).referencesOn(i).map((o) => `${i}:${o.name}`));
 }
 
-describe("spec question: link reference definitions and reference-style images", () => {
+describe("link reference definitions and reference-style images", () => {
     it("a title of a link reference definition is attribute text, its [^1] dead", () => {
         expect(liveReferences('[foo]: /url "a [^1] b"\n\nsee [foo]')).toEqual([]);
     });
 
-    it.fails("an address '/u[^1]' of a link reference definition is URL text", () => {
-        expect(liveReferences("[foo]: /u[^1]\n\nsee [foo]")).toEqual([]);
+    it("a '[^1]' glued to the address '/u' of a link reference definition is live", () => {
+        expect(liveReferences("[foo]: /u[^1]\n\nsee [foo]")).toEqual(["0:1"]);
     });
 
     it("a reference-style image's alt text is dead like an inline image's", () => {

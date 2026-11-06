@@ -1,6 +1,6 @@
 import { rulePasses } from "../rule-gate";
 import { readNote } from "../../parsing/note-reading";
-import { labelShapedLines } from "../../parsing/label-shapes";
+import { definitionLabelWithName, labelShapedLines } from "../../parsing/label-shapes";
 import { punctuationAt, wordEndBefore } from "../../parsing/landing";
 import { normalizeEol, restoreEol } from "../../parsing/line-edits";
 import { FootnoteRule } from "../rule";
@@ -13,7 +13,7 @@ import { FootnoteRule } from "../rule";
 // what it does by default, or, with the "Orphaned references" setting on
 // Delete, takes them out of the text.
 //
-// Three kinds of reference are left alone either way:
+// Five kinds of reference are left alone either way:
 //
 //  - Names are compared without regard to case, so a definition written
 //    with different capitals still counts as that reference's definition.
@@ -27,6 +27,18 @@ import { FootnoteRule } from "../rule";
 //    is "2.", is a footnote the user is in the middle of naming. The
 //    unnamed-reference alert speaks for it. Deleting it from under the
 //    user's caret would be losing their work.
+//  - A reference whose definition the user wrote where Obsidian does not
+//    read it as one, as a lazy label, an underlined label, or a label hidden
+//    in a "%%" comment (Jason's ruling on the comment, 2026-11-05; pin
+//    spec-lint-orphan-cut-commented-label). The user wrote the definition,
+//    so deleting the reference would throw that work away. The label's own
+//    "[^x]" counts as a reference too, and cutting it would leave ": text"
+//    behind. Each of these has an alert saying how to fix it.
+//  - A name ending in a backslash, as the note reading finds in "[^a\]b]".
+//    The backslash escapes the "]", so the live check on Obsidian 1.15.0
+//    (2026-11-05) reads that as plain text and no footnote, while the note
+//    reading stops the name at the "]". Cutting it would cut prose apart, and
+//    leave "b]" behind (pin spec-escaped-bracket-in-label).
 
 /**
  * Every name the note defines, lower-cased, wherever the definition sits:
@@ -92,18 +104,95 @@ function labelNames(lines: string[], underlined: boolean): string[] {
 }
 
 /**
+ * The names of definitions written inside a "%%" block comment, in order,
+ * each once. Obsidian never shows a definition there (its reference half
+ * still counts, so the footnote may render from a real definition
+ * elsewhere, or not at all), and the user almost certainly meant it to be
+ * seen, so the lint names it (Jason's ruling A1, 2026-09-15).
+ */
+export function commentedDefinitionNames(markdown: string): string[] {
+    return commentedLabelNames(normalizeEol(markdown).text.split("\n"));
+}
+
+/** The names commentedDefinitionNames gives, for a note already split into lines. */
+function commentedLabelNames(lines: string[]): string[] {
+    const reading = readNote(lines);
+    const names: string[] = [];
+    const seen = new Set<string>();
+    let offset = 0;
+    for (let i = 0; i < lines.length; offset += lines[i].length + 1, i++) {
+        if (!reading.commentLines[i] || reading.protectedLines[i]) continue;
+        const hit = commentedLabel(lines[i], reading.maskedLine(i), reading.containerEnd(i));
+        if (!hit) continue;
+        // Only a label inside the comment is hidden: on the closer line the
+        // text after the "%%" is outside it ("%%[^1]: def" renders a
+        // footnote; GLM hunt cycle 5, probed in Reading view 2026-09-16),
+        // and a label BEFORE the closer ("[^1]: dead %%") is hidden like any
+        // interior line (Kimi hunt cycle 3, 2026-09-16)
+        const at = offset + hit.start;
+        if (!reading.comments.some((comment) => comment.block && comment.from <= at && at < comment.to)) continue;
+        const folded = hit.name.toLowerCase();
+        if (seen.has(folded)) continue;
+        seen.add(folded);
+        names.push(hit.name);
+    }
+    return names;
+}
+
+/**
+ * The definition label on a line of a "%%" comment, as the line would read
+ * with the comment taken away: its name as written and the column of its
+ * "[". `textStart` is where the containers around the comment end
+ * (containerEnd): a quote's marker, a list item's indentation, or the four
+ * columns of a definition the comment is written in. The label is read
+ * from there, as labelShapedLines reads a lazy label. Read from the
+ * margin, a label in a comment indented inside a definition was four
+ * columns in and no label to the alert (hunt 2026-10-02, round 4, pin
+ * bug-lint-indented-commented-label-rewritten).
+ *
+ * Obsidian reads a comment's lines as hidden text, not as blocks, so the
+ * note reading sees no list item inside one. A label behind a list marker
+ * written in the comment ("- [^x]: hidden", "1. [^x]: hidden") is found
+ * by reading that line on its own, which says what it would be outside the
+ * comment: a definition in a list item, which counts like any other
+ * (Jason's ruling 1, option a, 2026-10-03; hunt 2026-10-05, round 2, pin
+ * bug-commented-item-definition-alert). That reading is asked only when
+ * the line holds a label's shape past its start, so most commented lines
+ * never need it.
+ */
+function commentedLabel(line: string, masked: string, textStart: number): { name: string; start: number } | null {
+    const hit = definitionLabelWithName(line.slice(textStart), masked.slice(textStart));
+    if (hit) return { name: hit.name, start: textStart + hit.label.nameStart - 2 };
+    if (!/\[\^[^[\]\s]+\]:/.test(masked.slice(textStart))) return null;
+    const own = readNote([line.slice(textStart)]).labelsOn(0).at(0);
+    return own === undefined ? null : { name: own.name, start: textStart + own.start };
+}
+
+/**
+ * Every name, lower-cased, of a label the user wrote where Obsidian does not
+ * read it as a definition: lazy, underlined, or inside a "%%" comment. A
+ * reference to one of these is not an orphan to delete.
+ */
+function misplacedLabelNamesFolded(lines: string[]): Set<string> {
+    return new Set(
+        [...lazyDefinitionLabelNames(lines), ...underlinedDefinitionLabelNames(lines), ...commentedLabelNames(lines)].map((name) => name.toLowerCase()),
+    );
+}
+
+/**
  * True when this reference is an orphaned reference the setting should act
  * on.
  */
 function isOrphan(
     name: string,
     definitions: Set<string>,
-    lazyLabels: Set<string>,
+    misplacedLabels: Set<string>,
     orphanSafeFolded: string,
 ): boolean {
     const folded = name.toLowerCase();
+    if (name.endsWith("\\")) return false;
     if (definitions.has(folded)) return false;
-    if (lazyLabels.has(folded)) return false;
+    if (misplacedLabels.has(folded)) return false;
     if (orphanSafeFolded !== "" && folded === orphanSafeFolded) return false;
     return true;
 }
@@ -130,18 +219,14 @@ export function orphanedFootnoteReferenceNames(
     const lines = precomputed?.lines ?? normalizeEol(markdown).text.split("\n");
     const reading = readNote(lines);
     const definitions = definitionNamesFolded(lines);
-    const lazyLabels = new Set([
-        ...lazyDefinitionLabelNames(lines).map((n) => n.toLowerCase()),
-        // and an underlined label, one blank line short in the other direction
-        ...underlinedDefinitionLabelNames(lines).map((n) => n.toLowerCase()),
-    ]);
+    const misplacedLabels = misplacedLabelNamesFolded(lines);
     const orphanSafeFolded = orphanSafePrefix.toLowerCase();
 
     const names: string[] = [];
     const seen = new Set<string>();
     for (let i = 0; i < lines.length; i++) {
         for (const { name } of reading.referencesOn(i)) {
-            if (!isOrphan(name, definitions, lazyLabels, orphanSafeFolded)) continue;
+            if (!isOrphan(name, definitions, misplacedLabels, orphanSafeFolded)) continue;
             const folded = name.toLowerCase();
             if (!seen.has(folded)) {
                 seen.add(folded);
@@ -167,11 +252,7 @@ export function removeOrphanedFootnoteReferences(markdown: string, orphanSafePre
     const lines = text.split("\n");
     const reading = readNote(lines);
     const definitions = definitionNamesFolded(lines);
-    const lazyLabels = new Set([
-        ...lazyDefinitionLabelNames(lines).map((n) => n.toLowerCase()),
-        // and an underlined label, one blank line short in the other direction
-        ...underlinedDefinitionLabelNames(lines).map((n) => n.toLowerCase()),
-    ]);
+    const misplacedLabels = misplacedLabelNamesFolded(lines);
     const orphanSafeFolded = orphanSafePrefix.toLowerCase();
 
     // the orphans on each line, rightmost first so that cutting one keeps
@@ -179,7 +260,7 @@ export function removeOrphanedFootnoteReferences(markdown: string, orphanSafePre
     const orphansOn = (i: number): { start: number; end: number }[] =>
         reading
             .referencesOn(i)
-            .filter(({ name }) => isOrphan(name, definitions, lazyLabels, orphanSafeFolded))
+            .filter(({ name }) => isOrphan(name, definitions, misplacedLabels, orphanSafeFolded))
             .map(({ start, end }) => ({ start, end }))
             .reverse();
     if (!lines.some((_, i) => orphansOn(i).length > 0)) return markdown;
@@ -211,7 +292,7 @@ export function removeOrphanedFootnoteReferences(markdown: string, orphanSafePre
     for (let i = 0; i < lines.length; i++) {
         for (const { name } of reading.referencesOn(i)) {
             const folded = name.toLowerCase();
-            if (isOrphan(name, definitions, lazyLabels, orphanSafeFolded) && !orphanNames.includes(folded)) {
+            if (isOrphan(name, definitions, misplacedLabels, orphanSafeFolded) && !orphanNames.includes(folded)) {
                 orphanNames.push(folded);
             }
         }

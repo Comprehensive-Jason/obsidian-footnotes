@@ -5,13 +5,27 @@ import { contextOfLines, DocContext, definitionNames } from "../editor/doc-conte
 import { composeChanges, mapPosition, simulateChanges, simulatedAnchors } from "../editor/insertion-liveness";
 import { definitionLabel } from "../parsing/footnote-grammar";
 import { trimmedSectionHeading } from "../linting/linter";
+import { findSectionHeadingEnd } from "../linting/section-heading";
 import { labelOutrunsLookahead } from "../linting/rules/move-footnotes-to-the-bottom";
-import { findLineRunEnd } from "../parsing/line-edits";
 
 // Where a new footnote definition goes. This module holds the
 // section-heading setting and the append edit, both of which every
 // creation press shares. Split out of the one big commands file on
 // 2026-08-11.
+
+/**
+ * Plain text as it goes onto a new definition's label line. Text there reads
+ * as a block start like any other (docs/obsidian-reading-rules.md E2), so
+ * "[^1]: 2. Aufl., S. 34" draws a numbered list starting at 2. A backslash in
+ * front of the "." or ")" keeps it plain text: "[^1]: 2\. Aufl., S. 34" reads
+ * "2. Aufl., S. 34" (Jason's ruling 2026-11-05, on the live answer from
+ * Obsidian 1.15.0). Only the numbered list gets this. A heading or a bullet at
+ * the start stays as written (the characterization tests in
+ * spec-convert-block-starting-body).
+ */
+export function plainOnLabelLine(text: string): string {
+    return text.replace(/^(\d+)([.)])(?=[ \t\n]|$)/, "$1\\$2");
+}
 
 /** A stretch of a note, from `from` up to `to`. */
 interface TextRange {
@@ -143,12 +157,11 @@ export function buildDefinitionAppend(
     // lines, so what is matched is a run of lines, not one line.
     const heading = sectionHeading(plugin);
     if (heading) {
-        // findLineRunEnd is the single piece of code that finds the
+        // findSectionHeadingEnd is the single piece of code that finds the
         // heading, shared with the move-to-bottom rule. They have to agree
         // on what counts as the existing heading, or running lint twice
         // would keep changing the note instead of settling.
-        const headingLines = heading.split("\n");
-        const anchorEnd = findLineRunEnd(lines, isProtected, headingLines, reading.commentLines);
+        const anchorEnd = findSectionHeadingEnd(lines, reading, heading);
         if (anchorEnd !== -1) {
             let fromLine = anchorEnd;
             let slotText = `\n\n[^${footnoteId}]: `;

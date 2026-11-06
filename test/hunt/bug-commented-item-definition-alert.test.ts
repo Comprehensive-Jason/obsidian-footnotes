@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { commentedDefinitionNames } from "../../src/linting/lint-alerts";
+import { commentedDefinitionNames } from "../../src/linting/rules/remove-orphaned-references";
 
 // BUG (annoyance): the lint's alert for a definition hidden inside a "%%"
 // block comment misses one written in a list item.

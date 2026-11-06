@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
-import { resetNotices } from "../helpers/notices";
+import { messages, resetNotices } from "../helpers/notices";
+import { PasteNestedNotice } from "../helpers/toasts";
 import { handlePaste, resetCarryRegister } from "../../src/commands/carry-footnotes-hooks";
 
 // spec question: when a DIFFERENT text is pasted over a selection that
@@ -30,6 +31,11 @@ import { handlePaste, resetCarryRegister } from "../../src/commands/carry-footno
 // that paste back from a paste of different text by where it lands.
 // Whether a text that is not the definition's own continuation should be
 // put in a paragraph of its own is Jason's call.
+//
+// Answered (Jason's ruling Q20, with Q7 and Q15: a paste that would nest
+// footnotes pastes nothing, the gate's stage 3; ADR 0003). The note stays as
+// it was and the notice says why, so the paste no longer does what the
+// paragraph above describes. These were it.fails until 2026-11-05.
 //
 // Hunt 2026-10-06, cycle 5, lens carry. Cluster X15.
 //
@@ -85,24 +91,20 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
-describe("spec question: a different text pasted over a selection from a definition's second line", () => {
-    it.fails("a paste over a selection from a definition's second line through the next paragraph does not nest the pasted footnote (character-wise)", () => {
+describe("a different text pasted over a selection from a definition's second line", () => {
+    it("a paste over a selection from a definition's second line through the next paragraph pastes nothing and says why (character-wise)", () => {
         const note = ["Text[^1].", "", "[^1]: one", "    two", "", "Para."];
         const back = paste(note, { line: 3, ch: 0 }, ["New[^2].", "", "[^2]: fresh"].join("\n"), { line: 5, ch: 5 });
         expect(back.taken).toBe(true);
-        // "New[^2]." must not sit right under "[^1]: one" as its lazy continuation
-        const i = back.lines.indexOf("New[^2].");
-        expect(i).toBeGreaterThan(0);
-        // Today the line above it is "[^1]: one".
-        expect(back.lines[i - 1]).toBe("");
+        expect(back.lines).toEqual(note);
+        expect(messages()).toEqual([PasteNestedNotice]);
     });
 
-    it.fails("the same with a line-wise selection and a line-wise text", () => {
+    it("the same with a line-wise selection and a line-wise text", () => {
         const note = ["Text[^1].", "", "[^1]: one", "    two", "", "Para.", "End."];
         const back = paste(note, { line: 3, ch: 0 }, ["New[^2].", "", "", "[^2]: fresh"].join("\n"), { line: 6, ch: 0 });
         expect(back.taken).toBe(true);
-        const i = back.lines.indexOf("New[^2].");
-        expect(i).toBeGreaterThan(0);
-        expect(back.lines[i - 1]).toBe("");
+        expect(back.lines).toEqual(note);
+        expect(messages()).toEqual([PasteNestedNotice]);
     });
 });

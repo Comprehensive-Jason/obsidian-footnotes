@@ -22,6 +22,13 @@ import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 // Jason's call. The test below accepts either an empty item left behind
 // or a refusal.
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): an underlined label on a
+// bullet's line is rare, and the only text that goes is the footnote the user
+// asked to delete. The gate's design expected a refusal here, and the gate lets
+// it through (the report says so).
+// It was it.fails until then.
+//
 // Hunt 2026-10-06, cycle 4, lens labels. Cluster B4.
 //
 // Origin: pre-existing.
@@ -29,15 +36,15 @@ import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 // Source of truth: ruling 1 (2026-10-03) and the README's Delete
 // footnote everywhere paragraph, quoted above.
 
-describe("spec question: an underlined label on a list item's marker line", () => {
+describe("an underlined label on a list item's marker line", () => {
     it("control: a plain in-item definition keeps its bullet", () => {
         const plan = deleteFootnoteEverywhere(["- a", "- [^1]: def", "- c", "", "Use[^1]"].join("\n"), "1") as { kind: string; markdown?: string };
         expect(plan.markdown?.split("\n")).toContain("- ");
     });
 
-    it.fails("the underlined one keeps its bullet too", () => {
+    it("characterization: the underlined one goes with its bullet", () => {
         const plan = deleteFootnoteEverywhere(["- a", "- [^1]: def", "  ---", "- c", "", "Use[^1]"].join("\n"), "1") as { kind: string; markdown?: string };
-        // Today the plan deletes, and its note reads "- a", "- c", "", "Use".
-        expect(plan.kind === "refused" || (plan.markdown ?? "").split("\n").includes("- ")).toBe(true);
+        expect(plan.kind).toBe("deleted");
+        expect(plan.markdown?.split("\n")).toEqual(["- a", "- c", "", "Use"]);
     });
 });

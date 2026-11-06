@@ -78,8 +78,8 @@ describe("a definition inside another footnote's definition", () => {
     it("the orphan alert names a as left in place, with deletion on", () => {
         const md = NOTE.join("\n").replace("Text[^a]", "Text");
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS, lintDeleteOrphanedDefinitions: true }), md);
-        // the held-back alert since 2026-10-22 (Jason's shared vocabulary)
-        expect(messages()).toContain('The lint left "[^a]:" as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.');
+        // the alert says what is wrong with it since 2026-11-05 (Jason)
+        expect(messages()).toContain('This note has a footnote definition nothing references ("[^a]"). The lint left it as it is, because deleting it would change how Obsidian reads the text around it. Add a "[^a]" reference in the text, or delete the definition by hand.');
     });
 
     it("the nesting alert names a, which holds b's definition", () => {

@@ -36,11 +36,11 @@ describe("nothing to convert", () => {
 
 describe("every footnote skipped", () => {
     it("inline to normal counts each reason", async () => {
-        expect(await toNormal(["a^[] b^[]"])).toEqual(["Nothing was converted: every footnote was skipped (empty (2))."]);
+        expect(await toNormal(["a^[] b^[]"])).toEqual(["Nothing was converted: every footnote was skipped: empty (2)."]);
     });
     it("normal to inline names each footnote with its reason", async () => {
         expect(await toInline(["text", "", "[^o]: orphan", "", "> [^q]: quoted"])).toEqual([
-            'Nothing was converted: every footnote was skipped ("[^o]" (not referenced), "[^q]" (in a quote)).',
+            'Nothing was converted: every footnote was skipped: "[^o]" (not referenced), "[^q]" (in a quote).',
         ]);
     });
 });
@@ -48,11 +48,11 @@ describe("every footnote skipped", () => {
 describe("the shared skip reasons", () => {
     it("inline to normal: an inline footnote inside a definition, and one whose text holds a footnote", async () => {
         const said = await toNormal(["a[^1] ^[keep] ^[see [^1]]", "", "[^1]: one ^[inner]"]);
-        expect(said[0]).toBe("Converted 1 inline footnote into 1 normal footnote. Skipped its text holds a footnote (1), inside another footnote (1).");
+        expect(said[0]).toBe("Converted 1 inline footnote into 1 normal footnote. Skipped: its text holds a footnote (1), inside another footnote (1).");
     });
     it("normal to inline: a definition in a list item", async () => {
         const said = await toInline(["a[^1] b[^i]", "", "[^1]: one", "", "- [^i]: in the item"]);
-        expect(said[0]).toBe('Converted 1 footnote into an inline footnote at 1 reference. Skipped "[^i]" (in a list item).');
+        expect(said[0]).toBe('Converted 1 footnote into an inline footnote at 1 reference. Skipped: "[^i]" (in a list item).');
     });
 });
 
@@ -60,6 +60,11 @@ describe("the refusals", () => {
     it("a conversion the result gate refuses", async () => {
         expect(await toInline(["Intro[^2].", "", "- a[^1]", "", "[^1]: one", "", "- b", "", "[^2]: two"])).toEqual([
             "Nothing was converted: it would change how Obsidian reads the text around a footnote. Convert it by hand.",
+        ]);
+    });
+    it("a refused conversion still ends with what it skipped", async () => {
+        expect(await toInline(["Intro[^2].", "", "- a[^1]", "", "[^1]: one", "", "- b", "", "[^2]: two", "", "[^o]: orphan"])).toEqual([
+            'Nothing was converted: it would change how Obsidian reads the text around a footnote. Convert it by hand. Skipped: "[^o]" (not referenced).',
         ]);
     });
     it("inline to normal under an invalid footnote-prefix", async () => {

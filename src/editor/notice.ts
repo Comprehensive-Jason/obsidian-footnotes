@@ -38,9 +38,9 @@ const Openers = {
 } as const;
 export type Opener = keyof typeof Openers;
 
-/** The shared reasons, each worded once. The six keys are also the reasons
- * the result gate gives (GateReason in result-gate.ts), so a refusal the
- * gate makes picks its sentence by the gate's reason. */
+/** The shared reasons, each worded once. All but the last are also the
+ * reasons the result gate gives (GateReason in result-gate.ts), so a refusal
+ * the gate makes picks its sentence by the gate's reason. */
 export const Reason = {
     protected: "footnotes can't go inside code, math, or other protected text.",
     nested: "footnotes can't be nested inside other footnotes.",
@@ -48,6 +48,7 @@ export const Reason = {
     formatting: "it would break the line's formatting.",
     dead: "Obsidian wouldn't read it as a footnote here.",
     other: "it would change how Obsidian reads the text around it.",
+    cutsProtected: "the selection cuts through code, math, or other protected text.",
 } as const;
 
 /** The advice that ends some refusals. Each is attached to the reason it
@@ -92,15 +93,58 @@ export function andList(items: readonly string[]): string {
 }
 
 /** The advice for a definition nothing references. The navigation press and
- * the lint alert give the same advice. */
-export function addReferenceOrDeleteDefinition(name: string): string {
-    return `Add a ${quotedReference(name)} reference in the text, or delete the definition.`;
+ * the lint alert give the same advice. `byHand` is for a definition the lint
+ * tried to delete and could not, so the user knows the next lint won't do it. */
+export function addReferenceOrDeleteDefinition(name: string, byHand = false): string {
+    return `Add a ${quotedReference(name)} reference in the text, or delete the definition${byHand ? " by hand" : ""}.`;
 }
+
+/** The same advice for several definitions nothing references. */
+export function addReferencesOrDeleteDefinitions(byHand = false): string {
+    return `Add their references in the text, or delete the definitions${byHand ? " by hand" : ""}.`;
+}
+
+/** The advice for a reference or inline footnote nested in a definition. `what` is the quoted footnote, or "them". */
+export function moveIntoText(what: string): string {
+    return `Move ${what} into the text.`;
+}
+
+/** The advice for a definition written inside another definition: into the
+ * text would be the wrong place for it, since a definition belongs outside
+ * the definition that holds it (Jason's choice, 2026-11-05). `what` is the
+ * quoted label, or "them", and `holders` are the quoted definitions holding it. */
+export function moveOutOfDefinition(what: string, holders: readonly string[]): string {
+    return `Move ${what} out of the ${holders.length === 1 ? "definition" : "definitions"} of ${andList(holders)}.`;
+}
+
+/** The sentence for something the lint could have changed and did not. `what`
+ * is what it left, `one` says whether that is one thing or several, and
+ * `doing` is the change it held back: "changing", "deleting", or "merging".
+ * It names no cause, so a new reason for leaving something never makes the
+ * text wrong (Jason, 2026-10-05). */
+export function lintLeft(what: string, one: boolean, doing: string): string {
+    return one
+        ? `The lint left ${what} as it is, because ${doing} it would change how Obsidian reads the text around it.`
+        : `The lint left ${what} as they are, because ${doing} them would change how Obsidian reads the text around them.`;
+}
+
+/** The alert for a section heading the lint could not add. It has its own
+ * sentence, because the heading was never in the note to be "left as it is"
+ * (Jason's choice, 2026-11-05). */
+export const SectionHeadingNotAdded = `The lint did not add the footnote section heading, because ${Reason.other}`;
 
 /** A name another footnote already carries. The named-selection modal and
  * the Rename modal say the same thing. */
 export function nameAlreadyUsed(name: string): string {
     return `${quotedReference(name)} is already used by another footnote.`;
+}
+
+/** What a rename says when the next lint will number the new name again, so
+ * the user hears it up front and not from the lint (Jason's ruling and his
+ * wording, 2026-11-05). `prefixAdded` is the sentence about a prefix the
+ * rename added, when it added one. */
+export function renamedButNumberedNext(name: string, prefixAdded = ""): string {
+    return `Renamed to ${quotedReference(name)}.${prefixAdded} Your naming style is Numbered, so the next lint will number it again.`;
 }
 
 /** A quoted footnote reference, exactly as the toasts spell it:

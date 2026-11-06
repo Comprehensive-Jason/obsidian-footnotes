@@ -5,6 +5,8 @@ import { fakePlugin } from "../helpers/fake-plugin";
 import { resetNotices } from "../helpers/notices";
 import { convertInlineFootnotesToNormal, convertNormalFootnotesToInline } from "../../src/commands/convert-footnotes";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
+import { selectionPressHandled } from "../../src/commands/selection-footnote";
+import type { TableCellEditor } from "../../src/editor/table-cursor";
 
 // spec question: what should the convert commands do with a footnote whose
 // text starts like a block, such as a heading ("# ") or a list item ("- ")?
@@ -49,55 +51,91 @@ function run(lines: string[]) {
 
 beforeEach(resetNotices);
 
-describe("spec question: a footnote whose text starts like a block", () => {
-    it.fails("normal to inline: a body that starts with a heading has no inline form and is skipped", () => {
+// Characterization tests (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): a footnote that
+// starts with "# " is rare, and all its text stays, so the conversions keep
+// doing this. They were it.fails until then. The numbered list further down is
+// a plausible case, and Jason ruled on it (2026-11-05).
+describe("a footnote whose text starts with a heading", () => {
+    it("characterization: normal to inline converts it, and the heading becomes plain text with a '#' in front", () => {
         const r = convert(["x[^h]", "", "[^h]: # A heading starts this body"]);
-        expect(r.converted).toBe(0);
+        expect(r.converted).toBe(1);
+        expect(r.markdown).toContain("x^[# A heading starts this body]");
     });
 
-    it.fails("inline to normal: an inline body that starts with '# ' does not become a heading in the definition", () => {
+    it("characterization: inline to normal converts it, and the plain text becomes a heading in the definition", () => {
         const doc = run(["a^[# not a heading]"]);
-        const label = doc.lines.find((l) => l.startsWith("[^1]:")) ?? "";
-        expect(label).not.toMatch(/^\[\^1\]: #+ /);
+        expect(doc.lines).toContain("[^1]: # not a heading");
     });
 });
 
 // The cases below came from hunt cycle 6, cluster Z7. They add a numbered
 // list to the heading above, and the selection conversion to the convert
-// command. Either outcome passes: the footnote left as it was, or the
-// text written so that its label line does not start like a block (for
-// example "2\. Aufl.", with the period escaped).
+// command. Jason's ruling, 2026-11-05: the plugin writes the backslash when it
+// writes the label line, because "[^1]: 2\. Aufl., S. 34" reads as the plain
+// text "2. Aufl., S. 34", and "[^1]: 2\) Aufl." as "2) Aufl." (live answers,
+// Obsidian 1.15.0).
 
-/** A label line whose text starts with block syntax: an ordered or bullet list item, a quote, or a heading. */
-const BlockOnLabelLine = /^\[\^[^\]]+\]:[ \t]+(?:\d{1,9}[.)][ \t]|[-+*][ \t]|>|#{1,6}[ \t])/;
+/** Presses the numbered key over the first `selected` in `line`. */
+async function pressOver(line: string, selected: string) {
+    const from = line.indexOf(selected);
+    const doc = fakeEditor([line], {
+        wholeDoc: true,
+        edits: true,
+        cursor: { line: 0, ch: from },
+        selection: { anchor: { line: 0, ch: from }, head: { line: 0, ch: from + selected.length } },
+    });
+    await insertAutonumFootnote(fakePlugin({ enablePopupEditor: false, expandSelectionToWholeWords: false, lintOnFootnoteCreation: false }, doc));
+    return doc.lines;
+}
 
-describe("spec question: text that starts like a numbered list, moved onto a label line", () => {
-    // Now: "[^1]: 2. Aufl., S. 34", a numbered list starting at 2.
-    it.fails("inline to normal: a German edition citation keeps reading as plain text in its footnote", () => {
-        const line = "Vgl. die Neuausgabe^[2. Aufl., S. 34] dazu.";
-        const doc = run([line]);
-        const unchanged = doc.lines.length === 1 && doc.lines[0] === line;
-        if (!unchanged) {
-            for (const written of doc.lines) expect(written).not.toMatch(BlockOnLabelLine);
-        }
+describe("text that starts like a numbered list, moved onto a label line (ruling 2026-11-05)", () => {
+    it("inline to normal: a German edition citation keeps reading as plain text in its footnote", () => {
+        expect(run(["Vgl. die Neuausgabe^[2. Aufl., S. 34] dazu."]).lines).toEqual(["Vgl. die Neuausgabe[^1] dazu.", "", "[^1]: 2\\. Aufl., S. 34"]);
     });
 
-    // Now: "[^1]: 2. Aufl., S. 34", as above.
-    it.fails("the selection conversion: selecting '2. Aufl., S. 34' out of a sentence keeps it plain text in the footnote", async () => {
-        const line = "Siehe dazu die 2. Aufl., S. 34 hier.";
-        const selected = "2. Aufl., S. 34";
-        const from = line.indexOf(selected);
-        const doc = fakeEditor([line], {
+    it("inline to normal: every definition it writes gets the backslash, not only the first", () => {
+        expect(run(["a^[plain] b^[12. März] c^[2) Aufl.]"]).lines).toEqual(["a[^1] b[^2] c[^3]", "", "[^1]: plain", "[^2]: 12\\. März", "[^3]: 2\\) Aufl."]);
+    });
+
+    it("the selection conversion: selecting '2. Aufl., S. 34' out of a sentence keeps it plain text in the footnote", async () => {
+        expect(await pressOver("Siehe dazu die 2. Aufl., S. 34 hier.", "2. Aufl., S. 34")).toEqual(["Siehe dazu die[^1] hier.", "", "[^1]: 2\\. Aufl., S. 34"]);
+    });
+
+    it("the selection conversion: the same with a round bracket", async () => {
+        expect(await pressOver("Siehe dazu die 2) Aufl. hier.", "2) Aufl.")).toEqual(["Siehe dazu die[^1] hier.", "", "[^1]: 2\\) Aufl."]);
+    });
+
+    it("the round trip keeps one backslash: back to inline it reads the same", () => {
+        const doc = run(["x^[2. Aufl.]"]);
+        const back = convert(doc.lines);
+        expect(back.markdown).toBe("x^[2\\. Aufl.]");
+    });
+
+    it("the selection conversion in a table cell: the same backslash", () => {
+        const cellText = "2. Aufl., S. 34";
+        const cell: TableCellEditor = {
+            state: { doc: { toString: () => cellText }, selection: { main: { anchor: 0, head: cellText.length } } },
+            dispatch: () => undefined,
+        };
+        const doc = fakeEditor([`| ${cellText} |`, "| --- |", "| x |"], { wholeDoc: true, edits: true, cursor: { line: 0, ch: 2 } });
+        selectionPressHandled(fakePlugin({ enablePopupEditor: false, expandSelectionToWholeWords: false }, doc), doc, cell, "autonum", { line: 0, ch: 2 });
+        expect(doc.lines.at(-1)).toBe("[^1]: 2\\. Aufl., S. 34");
+    });
+
+    it("control: a number that does not end in '.' or ')' and a space is left as it is", () => {
+        expect(run(["a^[2.5 mm] b^[2.a]"]).lines.slice(-2)).toEqual(["[^1]: 2.5 mm", "[^2]: 2.a"]);
+    });
+
+    it("control: selecting a whole numbered list still moves a list, with no backslash", async () => {
+        const doc = fakeEditor(["Steps:", "", "1. First", "2. Second", "", "After."], {
             wholeDoc: true,
             edits: true,
-            cursor: { line: 0, ch: from },
-            selection: { anchor: { line: 0, ch: from }, head: { line: 0, ch: from + selected.length } },
+            cursor: { line: 2, ch: 0 },
+            selection: { anchor: { line: 2, ch: 0 }, head: { line: 3, ch: 9 } },
         });
         await insertAutonumFootnote(fakePlugin({ enablePopupEditor: false, expandSelectionToWholeWords: false, lintOnFootnoteCreation: false }, doc));
-        const unchanged = doc.lines.length === 1 && doc.lines[0] === line;
-        if (!unchanged) {
-            for (const written of doc.lines) expect(written).not.toMatch(BlockOnLabelLine);
-        }
+        expect(doc.lines.slice(-2)).toEqual(["[^1]: 1. First", "    2. Second"]);
     });
 
     it("control: selecting 'S. 34' converts as plain text", async () => {

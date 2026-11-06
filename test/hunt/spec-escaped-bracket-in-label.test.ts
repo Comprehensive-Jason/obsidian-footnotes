@@ -1,41 +1,60 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
-import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove-orphaned-references";
+import { noticeLintAlerts } from "../../src/linting/lint-alerts";
+import { lintFootnotes, lintOptionsFromSettings } from "../../src/linting/linter";
+import {
+    orphanedFootnoteReferenceNames,
+    removeOrphanedFootnoteReferences,
+} from "../../src/linting/rules/remove-orphaned-references";
+import { DEFAULT_SETTINGS } from "../../src/settings";
+import { fakePlugin } from "../helpers/fake-plugin";
+import { messages, resetNotices } from "../helpers/notices";
 
-// spec question: how should a backslash-escaped "]" inside a footnote name
-// be read, as in the line "[^a\\]b]: body"?
+// A backslash-escaped "]" inside what looks like a footnote name, as in
+// "[^a\]b]". The live check of 2026-11-05 on Obsidian 1.15.0 settled how it
+// reads: Obsidian reads neither "Alpha[^a\]b]." nor "[^a\]b]: body" as a
+// footnote, so both are plain text.
 //
-// Reading one, the CommonMark reading: a label may hold an escaped "]", and
-// the escape is consumed as part of the name. micromark's label factory does
-// exactly this, so the line is one definition whose name is "a\]b". Obsidian
-// builds on the same family of parsers, but its actual behaviour here has
-// not been checked in a live note, so this stays a question rather than a
-// verdict.
+// The note reading stops the name at the first "]", so it sees a reference
+// named "a\" and the rest of the line, "b]", as text. With Delete orphaned
+// references on, the lint cut "[^a\]" out of the prose, leaving "Alphab]." and
+// "b]: body". That destroys plain text, so the rule now leaves alone any name
+// ending in a backslash (Jason's ruling, 2026-11-05). The alert leaves it alone
+// too, because to Obsidian this is no footnote with a missing definition.
 //
-// Reading two, the simpler reading the plugin uses: a name is one or more
-// characters that are neither whitespace nor "]", so the first "]" closes a
-// reference named "a\", and the rest of the line, "b]: body", is plain text.
+// Hunt: 2026-09-13. Lens: grammar. Entry 4 of the spec sort of 2026-11-05.
 //
-// What the user would see today: the line is read as an orphaned reference
-// named "a\", so with "Delete orphaned references" on, the lint cuts "[^a\]"
-// out of the middle of the line and leaves "b]: body" sitting there. Under
-// EITHER reading that is wrong. Reading one says the line is a definition
-// and orphaned-reference deletion should not touch it at all; reading two
-// says the surrounding text is prose, and the plugin's own policy is that
-// prose is never destroyed. So the line must come back unchanged whichever
-// way the question is settled.
-//
-// Hunt: 2026-09-13. Lens: grammar.
-//
-// Source of truth: micromark-factory-label (the label factory shared by the
-// GFM footnote extension, micromark-extension-gfm-footnote 2.1.0) consumes a
-// backslash escape inside a label; the plugin's own policy in
+// Source of truth: the live check above; the plugin's own policy in
 // src/linting/rules/remove-orphaned-references.ts that a deletion must never
 // destroy ordinary prose.
 
-describe("spec question: an escaped ] inside a label", () => {
-    it.fails("orphan deletion does not chop a [^a\\]b]: line in half", () => {
+const NOTE = "Alpha[^a\\]b].\n\n[^a\\]b]: body\n";
+
+const settings = { ...DEFAULT_SETTINGS, lintDeleteOrphanedReferences: true };
+
+beforeEach(resetNotices);
+
+describe("an escaped ] inside a name (Jason's ruling, 2026-11-05, from the live check on Obsidian 1.15.0)", () => {
+    it("orphan deletion does not chop a [^a\\]b]: line in half", () => {
         const before = "Alpha.\n\n[^a\\]b]: body\n";
         expect(removeOrphanedFootnoteReferences(before)).toBe(before);
+    });
+
+    it("orphan deletion leaves the prose and the line that looks like a definition", () => {
+        expect(removeOrphanedFootnoteReferences(NOTE)).toBe(NOTE);
+    });
+
+    it("a whole lint with Delete orphaned references on leaves them too", () => {
+        expect(lintFootnotes(NOTE, lintOptionsFromSettings(fakePlugin(settings), "", NOTE))).toBe(NOTE);
+    });
+
+    it("no alert calls it a reference with no definition", () => {
+        expect(orphanedFootnoteReferenceNames(NOTE)).toEqual([]);
+        noticeLintAlerts(fakePlugin({ ...settings, lintDeleteOrphanedReferences: false }), NOTE);
+        expect(messages().filter((m) => m.includes("no definition"))).toEqual([]);
+    });
+
+    it("control: a backslash anywhere else in the name is an orphan like any other", () => {
+        expect(removeOrphanedFootnoteReferences("Alpha[^a\\b].\n")).toBe("Alpha.\n");
     });
 });

@@ -45,9 +45,9 @@ function editor(lines: string[], caret = { line: 0, ch: 0 }): FakeEditor {
 }
 
 function duplicateAlerts(): string[] {
-    // after a lint, a copy the merge cannot touch is named by the
-    // held-back alert (Jason's shared vocabulary, 2026-10-22)
-    return messages().filter((m) => m.startsWith("This note defines") || m.startsWith("The lint left"));
+    // after a lint, a copy the merge cannot touch gets this alert too, with
+    // what the lint left added to it (Jason, 2026-11-05)
+    return messages().filter((m) => m.startsWith("This note defines"));
 }
 
 /** Pastes "See[^p]." carrying "[^p]: Pasted." at the caret, as Ctrl+V does. */
@@ -120,7 +120,7 @@ describe("controls", () => {
     it("after a lint with merging on, a copy the merge cannot touch is named as left by the lint", () => {
         noticeLintAlerts(fakePlugin(merging), "One[^a] two.\n\n- [^a]: First.\n\n[^a]: Second.");
         expect(duplicateAlerts()).toEqual([
-            'The lint left "[^a]:" as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.',
+            'This note defines "[^a]" more than once. Obsidian renders only the last definition. The lint left them as they are, because merging them would change how Obsidian reads the text around them. Merge them by hand.',
         ]);
     });
 });

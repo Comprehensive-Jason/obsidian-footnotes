@@ -106,14 +106,20 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
-// Answered (Jason's rulings 2026-10-07: ADR 0003, rule 2, a cut pasted
+// Answered (2026-11-05, sorting the spec pins under Jason's scope rule of
+// 2026-10-07): the result gate design he approved (2026-10-07, ADR 0003) lists
+// Q22 under "left as they behave, no code (rare or harmless)": a footnote holding another is never reused on a paste.
+// Nested footnotes are also named as out of scope in the hunt's scope rule,
+// and the lint warns about them. The first test below was it.fails until then.
+//
+// The second test: answered (Jason's rulings 2026-10-07: ADR 0003, rule 2, a cut pasted
 // back is an undo; built in stage 4 of the result gate design,
 // 2026-10-08). A paste of the last cut's text into the note the cut left,
 // at the caret it left, writes the note before the cut back exactly, names
 // and blank lines included, so the paste back below gives the note back.
 // The test was it.fails until then; what it did before is described above.
-describe("spec question: a footnote whose definition holds another is reused on a paste in the same note", () => {
-    it.fails("copy the paragraph, paste it on a fresh line of the same note: [^a] is reused, nothing added", () => {
+describe("a footnote whose definition holds another, pasted in the same note", () => {
+    it("copy the paragraph, paste it on a fresh line of the same note: a renamed copy of both footnotes is added", () => {
         const note = ["Outer[^a].", "", "[^a]: outer text", "", "    [^b]: inner text", "", "End."];
         expect(readNote(note).definitions.map((d) => d.name)).toEqual(["a", "b"]);
         const c = copy(note, { line: 0, ch: 0 }, { line: 1, ch: 0 });
@@ -122,9 +128,8 @@ describe("spec question: a footnote whose definition holds another is reused on 
         const back = paste(host, { line: host.length - 1, ch: 5 }, c.clip);
         expect(back.taken).toBe(true);
         const ctx = JSON.stringify({ clip: c.clip, back: back.lines, toasts: messages() });
-        // Today "[^a-2]: outer text" with "    [^b-2]: inner text" is added and the pasted reference reads [^a-2].
-        expect(readNote(back.lines).definitions.map((d) => d.name), ctx).toEqual(["a", "b"]);
-        expect(messages().join("\n"), ctx).toContain("reused");
+        expect(readNote(back.lines).definitions.map((d) => d.name), ctx).toEqual(["a", "b", "a-2", "b-2"]);
+        expect(back.lines.at(-2), ctx).toBe("Host Outer[^a-2].");
     });
 
     it("cut the paragraph citing the outer footnote while another paragraph cites the held one, paste it back", () => {

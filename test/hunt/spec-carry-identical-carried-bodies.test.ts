@@ -19,6 +19,13 @@ import { planCarriedPaste } from "../../src/commands/carry-footnotes";
 // destination already has". Whether a paste should also tidy duplicates
 // that came from the source is a product decision for Jason.
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): the source note had
+// two footnotes and the paste lands two, each with its own text, so nothing is
+// lost or misread, and merging would break look-alikes such as "Ibid.", whose
+// meaning depends on where they sit.
+// It was it.fails until then.
+//
 // Hunt 2026-10-02, round 1, lens carry-plan. Cluster C24.
 //
 // Source of truth: the README's Paste paragraph, "A definition the
@@ -30,10 +37,10 @@ import { planCarriedPaste } from "../../src/commands/carry-footnotes";
 // hands them over.
 const one = (name: string, ...lines: string[]) => ({ name, lines });
 
-describe("spec question: two carried definitions with identical text", () => {
-    it.fails("merge into one", () => {
+describe("two carried definitions with identical text", () => {
+    it("characterization: both land, each under its own name", () => {
         const plan = planCarriedPaste("p", "a[^x] b[^y]", [one("x", "[^x]: same"), one("y", "[^y]: same")]);
-        expect(plan.definitions).toHaveLength(1);
-        expect(plan.body).toBe("a[^x] b[^x]");
+        expect(plan.definitions).toHaveLength(2);
+        expect(plan.body).toBe("a[^x] b[^y]");
     });
 });

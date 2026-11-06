@@ -27,9 +27,15 @@ import { deleteFootnoteEverywhere } from "../../src/commands/delete-footnote";
 // The first case is answered (Jason's ruling B11, 2026-10-08, stage 3 of
 // the result gate design): the result gate refuses the delete, since the
 // "1." would stop being a list item, and nothing is deleted; it was
-// it.fails until then. The second, a definition on the marker's line, is
-// still open: the gate compares a definition's lines wherever they sit, not
-// as the lines around a cut, so it lets the item fold.
+// it.fails until then.
+//
+// The second, a definition on the marker's line, is a characterization test
+// (behaviour pinned as it is, 2026-11-05, when the spec pins were sorted under
+// Jason's scope rule of 2026-10-07). A definition on a numbered marker's line
+// right under a paragraph is rare, and the only text that goes is the footnote
+// the user asked to delete. The gate compares a definition's lines wherever
+// they sit, not as the lines around a cut, so it lets the delete through. It
+// was it.fails until then.
 
 // Deletes footnote `name` from `lines` and returns the note, or the plan's kind if nothing was deleted.
 function md(lines: string[], name: string): string {
@@ -37,12 +43,12 @@ function md(lines: string[], name: string): string {
     return plan.kind === "deleted" ? plan.markdown : `<<${plan.kind}>>`;
 }
 
-describe("spec question: an ordered item emptied by a delete under a paragraph", () => {
+describe("an ordered item emptied by a delete under a paragraph", () => {
     it("cutting a reference that is an ordered item's whole content does not fold the item into the paragraph: the delete is refused", () => {
         expect(md(["Sources:", "1. [^1]", "", "[^1]: x"], "1")).toBe("<<refused>>");
     });
 
-    it.fails("emptying a numbered marker-line definition does not fold the item into the paragraph", () => {
-        expect(md(["Notes:", "1. [^i]: defined in the list", "", "p[^i]"], "i")).not.toBe("Notes:\n1. \n\np");
+    it("characterization: a numbered marker-line definition is deleted, and its empty item stays under the paragraph", () => {
+        expect(md(["Notes:", "1. [^i]: defined in the list", "", "p[^i]"], "i")).toBe("Notes:\n1. \n\np");
     });
 });

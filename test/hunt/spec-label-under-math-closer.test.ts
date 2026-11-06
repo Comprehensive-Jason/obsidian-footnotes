@@ -4,7 +4,6 @@ import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
 
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
-import { lintFootnotes } from "../../src/linting/linter";
 import { lazyDefinitionLabelNames } from "../../src/linting/rules/remove-orphaned-references";
 import { readNote } from "../../src/parsing/note-reading";
 
@@ -33,8 +32,15 @@ import { readNote } from "../../src/parsing/note-reading";
 // never consults it outside the branch for protected lines.
 //
 // Hunt: 2026-09-13. Lens: the prose-label rule (attack-surface row 1).
-// Still owed: a live Reading-view check of "$$" / "x = 1" / "$$" /
-// "[^1]: real" before either reading is adopted.
+//
+// Answered: Obsidian's parser reads the label as a definition, which is
+// reading one (the saved answer pin:spec-label-under-math-closer#1 in
+// test/obsidian-answers/pins.json). The pin saying the lint would leave
+// such a note alone was deleted on 2026-11-05, when the spec pins were
+// sorted. Its premise had gone: the plugin no longer takes the label for a
+// lazy one, and the blank line a default lint adds above it is the one
+// "Move definitions to the bottom" always leaves above the definitions.
+// With that rule off, the lint leaves the note as it is.
 
 const blocksOf = (doc: string) => {
     const lines = doc.split("\n");
@@ -62,12 +68,6 @@ describe("a label directly under a closed $$ math block", () => {
 
     it("so the definition under it would not be a lazy label", () => {
         expect(lazyNames("use[^1] here\n\n$$\nx = 1\n$$\n[^1]: real definition")).toEqual([]);
-    });
-
-    it.fails("and the lint would leave such a note alone", () => {
-        const doc = "use[^1] here\n\n$$\nx = 1\n$$\n[^1]: real definition";
-        // today the lint inserts a blank line above the label
-        expect(lintFootnotes(doc)).toBe(doc);
     });
 
     it("and a press on the reference would jump instead of appending an empty duplicate", async () => {

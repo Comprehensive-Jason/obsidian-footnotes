@@ -3,7 +3,7 @@
 // GLM 5.3 Flash cycle 9 hunt of 2026-09-16 (this worktree); the red test carries it.fails.
 import { describe, expect, it } from "vitest";
 
-import { commentedDefinitionNames } from "../../src/linting/lint-alerts";
+import { commentedDefinitionNames } from "../../src/linting/rules/remove-orphaned-references";
 
 import { readNote } from "../../src/parsing/note-reading";
 
