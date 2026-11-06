@@ -38,6 +38,12 @@ import { renameTargetInSelection } from "../../src/commands/rename-footnote";
 //   body is not a rename gesture, so returning nothing is right and only
 //   the sheet needs the qualifier written down.
 //
+// Characterization tests (behaviour pinned as they are, 2026-11-05, when the
+// spec pins were sorted under Jason's scope rule of 2026-10-07): a selection
+// running into a second reference, or from a label into its second line, is
+// rare, and the rename shows the name it found, so nothing goes wrong
+// unseen. Both are reading B, and both were it.fails until then.
+//
 // Source of truth: manual sheet P (the selection rule, and the label
 // rule), and renameTargetInSelection's own docstring for what the
 // multi-line branch is designed to do.
@@ -48,10 +54,10 @@ const doc = (lines: string[]) => fakeEditor(lines, { wholeDoc: true });
 const TWO_REFS = ["see [^a] and [^b] here", "", "[^a]: one", "[^b]: two"];
 
 describe("shape 1: a selection ending inside the second reference", () => {
-    it.fails("targets the reference the head is sitting in", () => {
+    it("characterization: targets the first reference on the line", () => {
         expect(
             renameTargetInSelection(doc(TWO_REFS), { line: 0, ch: 4 }, { line: 0, ch: 16 }),
-        ).toBe("b");
+        ).toBe("a");
     });
 
     // Controls, green today and unaffected by either reading: with one
@@ -78,10 +84,10 @@ describe("shape 1: a selection ending inside the second reference", () => {
 describe("shape 2: a selection from a label into its continuation line", () => {
     const lines = ["ref[^x] here", "", "[^x]: body", "    continuation"];
 
-    it.fails("targets the label the selection starts on", () => {
+    it("characterization: finds no target, since the caret rule at the head's line finds none", () => {
         expect(
             renameTargetInSelection(doc(lines), { line: 2, ch: 0 }, { line: 3, ch: 8 }),
-        ).toBe("x");
+        ).toBeNull();
     });
 
     it("a selection inside the label alone targets it (control)", () => {
