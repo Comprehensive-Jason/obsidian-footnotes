@@ -52,12 +52,10 @@ describe("tableRowCellSpans escape edges", () => {
 });
 
 describe("orphan-reference deletion - harder negative cases", () => {
-    it("a reference whose definition sits inside a single-line HTML comment stays, as with a %% comment (hunt 2026-11-06, cycle 9, H14)", () => {
-        // "<!-- [^1]: old -->" is commented out, so Obsidian shows [^1] with no
-        // definition. The user wrote one, so the rule keeps the reference and the
-        // alert says to move the definition out of the comment.
+    it("a reference whose definition sits inside a single-line HTML comment is an orphan (commented-out defs are inert)", () => {
+        // "<!-- [^1]: old -->" is commented out; the live [^1] reference IS an orphan.
         const doc = "live[^1] here\n\n<!-- [^1]: old -->";
-        expect(removeOrphanedFootnoteReferences(doc)).toBe(doc);
+        expect(removeOrphanedFootnoteReferences(doc)).toBe("live here\n\n<!-- [^1]: old -->");
     });
 
     it("deleting an orphan reference from a table row keeps the row intact", () => {
