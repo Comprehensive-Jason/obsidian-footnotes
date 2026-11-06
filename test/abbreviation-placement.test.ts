@@ -30,6 +30,11 @@ import type { FootnotePlacement } from "../src/parsing/landing";
 // - A row marked Wrong is one the rule gets wrong on purpose: the research lists
 //   them as what text alone cannot decide. They are pinned as they behave, not
 //   as a careful writer would want them.
+//
+// The rule behind the tables changed on 2026-11-06, to the winner of the
+// abbreviation hillclimb (src/parsing/final-dot.ts). The tables did not: every
+// row answers as it did under option E. The one statement that changed is that
+// "Etc.[^1]" now stays, since the short list takes any case.
 
 /** The note with the caret at "|", then Before, After, and Don't move, and whether Before is wrong on purpose. */
 type PressRow = readonly [marked: string, before: string, after: string, none: string, wrong?: "wrong"];
@@ -383,8 +388,10 @@ describe("Jason's rulings, stated directly", () => {
         expect(lint("S[^1]. 5")).toBe("S.[^1] 5");
     });
 
-    it("the list is case-sensitive", () => {
-        expect(lint("Etc.[^1]")).toBe("Etc[^1].");
+    it("the list takes any case, and capitals alone do not make an abbreviation", () => {
+        // "Etc." keeps its reference after the dot (Jason's brief, 2026-11-06).
+        expect(lint("Etc.[^1]")).toBe("Etc.[^1]");
+        expect(lint("Etc[^1].")).toBe("Etc.[^1]");
         expect(lint("DR.[^1]")).toBe("DR[^1].");
         expect(lint("Dr.[^1]")).toBe("Dr.[^1]");
     });
@@ -603,6 +610,15 @@ describe("the question itself", () => {
         expect(finalDotOwner(line, line.length - 1)).toBe("sentence");
         expect(performance.now() - started).toBeLessThan(100);
     });
+
+    it("reads a long line once, however many references on it ask", () => {
+        const unit = "aa[^1]. bb ";
+        const line = unit.repeat(20000);
+        const footnotes = lineFootnotes(Array.from({ length: 20000 }, (_, i) => ({ start: i * unit.length + 2, end: i * unit.length + 6 })));
+        const started = performance.now();
+        for (let i = 0; i < 20000; i++) expect(finalDotOwner(line, i * unit.length + 6, footnotes)).toBe("doubt");
+        expect(performance.now() - started).toBeLessThan(2000);
+    });
 });
 
 // Lines made by combining the parts below, so the checks reach many more shapes
@@ -630,6 +646,131 @@ function convertWord({ front, word, tail }: (typeof GeneratedLines)[number], foo
     selectionPressHandled(fakePlugin({ ...Settings, footnotePlacement, expandSelectionToWholeWords: true }, doc), doc, null, "autonum");
     return doc.lines.join("\n");
 }
+
+describe("what the hillclimb's rule adds", () => {
+    it.each([
+        // no list: the shape says it, in any language
+        ["Dr.|", "Dr.[^1]"],
+        ["dr.|", "dr.[^1]"],
+        ["bzw.| das", "bzw.[^1] das"],
+        ["г.|", "г.[^1]"],
+        ["Dr|.", "Dr.[^1]"],
+        ["bzw|. das", "bzw.[^1] das"],
+        ["г|.", "г.[^1]"],
+        // a short word before a number
+        ["pp.| 12", "pp.[^1] 12"],
+        ["pp|. 12", "pp.[^1] 12"],
+        ["Art.| 5", "Art.[^1] 5"],
+        // a lower-case word with no vowel may be a unit or a file type
+        ["open the pdf.|", "open the pdf[^1]."],
+        ["open the pdf|.", "open the pdf[^1]."],
+        ["5 km.|", "5 km[^1]."],
+        ["5 km.| Then it fell.", "5 km[^1]. Then it fell."],
+        ["bzw.| 5 km. Then", "bzw.[^1] 5 km. Then"],
+        // "Hmm" and "Mhm" have no vowel, and they are still words of a sentence
+        ["Hmm.|", "Hmm[^1]."],
+        ["Mhm.| Then", "Mhm[^1]. Then"],
+        // the list takes any case
+        ["Etc.|", "Etc.[^1]"],
+        ["Etc|.", "Etc.[^1]"],
+        // a line that shows lower-case sentence starts
+        ["first thing.| second thing.", "first thing[^1]. second thing."],
+        ["first thing. second thing.|", "first thing. second thing[^1]."],
+        ["i went there. then home.| next", "i went there. then home[^1]. next"],
+        // the same short word, with no such evidence on the line
+        ["then home.| next", "then home.[^1] next"],
+        // a short word before a short dotted word
+        ["Kon.| Ned. Bank", "Kon.[^1] Ned. Bank"],
+        // straight after "("
+        ["(see.| More", "(see.[^1] More"],
+    ])("press at %s gives %s, and the lint leaves it", async (marked, expected) => {
+        const placed = await press(marked, "before");
+        expect(placed).toBe(expected);
+        expect(lint(placed)).toBe(placed);
+    });
+
+    // CHARACTERIZATION, for Jason's review: each of these answers is wrong on
+    // purpose, or at least untested. They are what the rule gives, pinned so a
+    // change shows, not what a careful writer would want.
+    it.each([
+        // "bzw." with nothing after it reads as a file type, like "pdf." The next
+        // lint moves the reference once text follows, as the hillclimb's notes say.
+        ["bzw.", "sentence"],
+        // the hillclimb's notes list these as still wrong
+        ["in md.", "word"],
+        ["the pdf. Then", "word"],
+        ["3 m.", "word"],
+        ["Shh.", "word"],
+        ["Brr.", "word"],
+        ["viz.", "sentence"],
+        ["Smith, J.", "doubt"],
+        // Greek has capitals and no vowel the rule knows, so every Greek word answers as if it had none. Not measured by the hillclimb.
+        ["λόγος. Μετά", "word"],
+    ] as const)("wrong on purpose: %s answers %s", (text, owner) => {
+        expect(finalDotOwner(text, text.indexOf("."))).toBe(owner);
+    });
+
+    it("only the whole phrase et al counts", () => {
+        expect(finalDotOwner("et al.", 5)).toBe("word");
+        expect(finalDotOwner("(et al.", 6)).toBe("word");
+        expect(finalDotOwner("al.", 2)).toBe("sentence");
+        expect(finalDotOwner("wet al.", 6)).toBe("sentence");
+    });
+
+    it("a selection follows the same rule", () => {
+        const convert = (front: string, word: string, tail: string) => convertWord({ front, word, tail, line: `${front}${word}.${tail}` }, "before");
+        expect(convert("", "bzw", " das")).toBe("[^1] das\n\n[^1]: bzw.");
+        expect(convert("", "Etc", "")).toBe("[^1]\n\n[^1]: Etc.");
+        expect(convert("open the ", "pdf", "")).toBe("open the[^1].\n\n[^1]: pdf");
+        expect(convert("", "Hmm", "")).toBe("[^1].\n\n[^1]: Hmm");
+    });
+
+    describe("a table row and its cell read the same stretch", () => {
+        /** Asks about the dot written as "•" in `marked`. */
+        const owner = (marked: string) => finalDotOwner(marked.replace("•", "."), marked.indexOf("•"));
+
+        // Each pair is what a row holds and what the cell's own editor holds.
+        it.each([
+            // the other cell's lower-case sentence starts say nothing about this one
+            ["first thing. second thing. | go home• next", "go home• next", "doubt"],
+            ["go home• next | first thing. second thing.", "go home• next", "doubt"],
+            // the next cell is not the next word
+            ["open the pdf• | next", "open the pdf•", "sentence"],
+            ["see foo• | next", "see foo•", "sentence"],
+            ["see | No•", "No•", "doubt"],
+            // an escaped "|" ends the stretch too, and the editor may hold it without the backslash
+            ["open the pdf• \\| next", "open the pdf• | next", "sentence"],
+            ["open the pdf• \\| next", "open the pdf• \\| next", "sentence"],
+            // a line break in a cell is "<br>" in the row
+            ["go home•<br>next", "go home•\nnext", "sentence"],
+            ["open the pdf•<br>Next", "open the pdf•\nNext", "sentence"],
+        ] as const)("%s and %s", (row, cell, expected) => {
+            expect(owner(row)).toBe(expected);
+            expect(owner(cell)).toBe(expected);
+        });
+
+        it("a footnote holding a \"|\" does not end the stretch", () => {
+            const text = "first thing^[a|b]. go home. next";
+            const start = text.indexOf("^[");
+            const end = text.indexOf("]") + 1;
+            expect(finalDotOwner(text, text.indexOf("home") + 4, lineFootnotes([{ start, end }]))).toBe("sentence");
+        });
+
+        it("a press in a cell by a line break, and the lint of its row, agree", () => {
+            const placed = cellPress("go home.|\nnext", "before");
+            expect(placed).toBe("go home[^1].\nnext");
+            const row = `| ${placed.replace("\n", "<br>")} |`;
+            expect(lint(`${row}\n| --- |`).split("\n")[0]).toBe(row);
+        });
+    });
+
+    it("spaces after the dot cannot hide the next word", () => {
+        const spaces = " ".repeat(40);
+        expect(finalDotOwner(`foo.${spaces}bar`, 3)).toBe("doubt");
+        expect(finalDotOwner(`open the pdf.${spaces}`, 12)).toBe("sentence");
+        expect(finalDotOwner(`open the pdf.${spaces}Next`, 12)).toBe("word");
+    });
+});
 
 describe("generated lines", () => {
     // CHARACTERIZATION, for Jason's review: this pins After and Don't move as
@@ -691,6 +832,22 @@ describe("generated lines", () => {
                 const placed = await press(`${line.slice(0, caret)}|${line.slice(caret)}`, "before");
                 expect(lint(placed), `${line} at ${caret}`).toBe(placed);
             }
+            resetNotices();
+        }
+    }, 120_000);
+
+    it("the lint leaves what a selection placed, and a second lint changes nothing", () => {
+        for (const generated of GeneratedLines) {
+            const written = convertWord(generated, "before");
+            const once = footnoteAfterPunctuation(written, "before");
+            expect(footnoteAfterPunctuation(once, "before"), generated.line).toBe(once);
+            // CHARACTERIZATION, for Jason's review: a selection takes its word
+            // out of the line, so another word now stands in front of the dot,
+            // and that word can answer differently. "see main.js. 12" becomes
+            // "see[^1]. 12", and the lint moves it to "see.[^1] 12", since "see."
+            // is now a short word before a number. Punctuation does not change.
+            if ((generated.front === "see " || generated.front === "i went there. then ") && generated.tail === " 12") continue;
+            expect(once, generated.line).toBe(written);
             resetNotices();
         }
     }, 120_000);

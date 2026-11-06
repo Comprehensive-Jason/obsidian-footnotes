@@ -92,5 +92,14 @@ describe.each(PREFIXES)('prefix "%s"', (prefix) => {
         expect(placed(`No[^${prefix}1].`)).toBe(`No[^${prefix}1].`);
         expect(placed(`No.[^${prefix}1]`)).toBe(`No.[^${prefix}1]`);
         expect(placed(`A word.[^${prefix}1]`)).toBe(`A word[^${prefix}1].`);
+        // what the rule from the hillclimb of 2026-11-06 adds
+        expect(placed(`bzw[^${prefix}1]. das`)).toBe(`bzw.[^${prefix}1] das`);
+        expect(placed(`Etc[^${prefix}1].`)).toBe(`Etc.[^${prefix}1]`);
+        expect(placed(`pp[^${prefix}1]. 12`)).toBe(`pp.[^${prefix}1] 12`);
+        expect(placed(`open the pdf.[^${prefix}1]`)).toBe(`open the pdf[^${prefix}1].`);
+        expect(placed(`5 km.[^${prefix}1]`)).toBe(`5 km[^${prefix}1].`);
+        expect(placed(`Hmm.[^${prefix}1]`)).toBe(`Hmm[^${prefix}1].`);
+        expect(placed(`first thing.[^${prefix}1] second thing.`)).toBe(`first thing[^${prefix}1]. second thing.`);
+        expect(placed(`then home.[^${prefix}1] next`)).toBe(`then home.[^${prefix}1] next`);
     });
 });
