@@ -1,5 +1,6 @@
 import esbuild from "esbuild";
 import process from "node:process";
+import { readFile } from "node:fs/promises";
 import { builtinModules } from "node:module";
 
 // `npm run dev` (watch mode) keeps a readable build with inline sourcemaps;
@@ -13,6 +14,29 @@ https://github.com/Comprehensive-Jason/obsidian-footnotes
 Includes third-party code under the MIT License; notices are in LICENSE-THIRD-PARTY.md in that repository.
 */
 `;
+
+// The "format" package, bundled inside remark-obsidian's dist, looks for the
+// global object with eval if it finds no "module" to export through. That line
+// cannot run here: esbuild's wrapper always hands the package a "module" object,
+// so the branch holding it is dead code. It is harmless, but a plugin review or
+// a scanner may flag the word, so the build rewrites that exact line. If an
+// upgrade changes the line, nothing is rewritten and the check below stops the
+// production build (Jason's ask, 2026-11-06).
+const FormatEvalFallback = 'return this || (1, eval)("this");';
+const removeFormatEval = {
+    name: "remove-format-eval",
+    setup(build) {
+        build.onLoad({ filter: /[\\/]@quartz-community[\\/]remark-obsidian[\\/]dist[\\/]index\.js$/ }, async (args) => {
+            const source = await readFile(args.path, "utf8");
+            return { contents: source.replace(FormatEvalFallback, "return this;"), loader: "js" };
+        });
+    },
+};
+
+// Any call of eval, written plainly as "eval(" or the indirect way the minifier
+// writes that line, "(0,eval)(". A property merely named eval, like the one in
+// the "fault" package, is no call, so it does not count.
+const EvalCall = /\beval\s*\)?\s*\(/;
 
 const context = await esbuild.context({
     banner: { js: banner },
@@ -45,11 +69,18 @@ const context = await esbuild.context({
     treeShaking: true,
     outfile: "main.js",
     minify: prod,
+    plugins: [removeFormatEval],
 });
 
 if (prod) {
     await context.rebuild();
     await context.dispose();
+    const built = await readFile("main.js", "utf8");
+    const call = EvalCall.exec(built);
+    if (call !== null) {
+        console.error(`main.js holds a call of eval, a plugin review or a scanner may flag it: ...${built.slice(Math.max(0, call.index - 60), call.index + 40)}...`);
+        process.exit(1);
+    }
 } else {
     await context.watch();
 }
