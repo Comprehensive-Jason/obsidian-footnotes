@@ -70,10 +70,14 @@ describe("a %% block comment kills the definitions inside it, not the references
         expect(scan.protectedLines).toEqual([false, false, false, false, false, false]);
     });
 
-    it("a commented definition is dead: its visible reference is an orphan", () => {
+    // The definition is dead to Obsidian, but the plugin does not name its
+    // visible reference as an orphan: the user wrote the definition, and the
+    // alert about the comment says how to fix it (Jason's ruling, 2026-11-05;
+    // pin spec-lint-orphan-cut-commented-label). It was named until then.
+    it("a commented definition is dead, and its visible reference is not named as an orphan", () => {
         const doc = "x[^1]\n\n%%\n[^1]: def\n%%";
         expect(blocksOf(doc)).toEqual([]);
-        expect(orphanedFootnoteReferenceNames(doc)).toEqual(["1"]);
+        expect(orphanedFootnoteReferenceNames(doc)).toEqual([]);
     });
 
     it("a hidden reference binds: the definition it points at is no orphan", () => {

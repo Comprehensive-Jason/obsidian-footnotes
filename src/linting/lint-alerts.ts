@@ -1,6 +1,6 @@
 import type FootnotePlugin from "../main";
 import { footnotePrefix, footnotePrefixProblem } from "../parsing/footnote-prefix";
-import { definitionLabelWithName, labelShapedLines, underlinedLazyLabelNames } from "../parsing/label-shapes";
+import { labelShapedLines, underlinedLazyLabelNames } from "../parsing/label-shapes";
 import { normalizeEol } from "../parsing/line-edits";
 import { readNote } from "../parsing/note-reading";
 import {
@@ -18,10 +18,12 @@ import { duplicateFootnoteDefinitionNames, mergeDuplicateFootnoteDefinitions } f
 import { definitionsHoldingTheMoveBack, sectionHeadingHeldBack } from "./rules/move-footnotes-to-the-bottom";
 import {
     definitionsHeldBy,
+    definitionsTakenAlong,
     orphanedFootnoteDefinitionNames,
     removeOrphanedFootnoteDefinitions,
 } from "./rules/remove-orphaned-definitions";
 import {
+    commentedDefinitionNames,
     lazyDefinitionLabelNames,
     underlinedDefinitionLabelNames,
     orphanedFootnoteReferenceNames,
@@ -301,11 +303,19 @@ function noticeOrphanedReferences(
     return [];
 }
 
-/** What is wrong with definitions nothing references, whichever alert says it. */
-function orphanedDefinitionsProblem(names: string[]): string {
-    return names.length === 1
-        ? `This note has a footnote definition nothing references (${referenceList(names)}).`
-        : `This note has ${names.length} footnote definitions nothing references (${referenceList(names)}).`;
+/**
+ * What is wrong with definitions nothing references, whichever alert says it.
+ * `takes` lists the definitions that deleting them would also delete, because
+ * only they cite those. The user weighing the setting needs to know what they
+ * would lose (Jason's ruling, 2026-11-05; pin spec-orphan-alert-and-residue).
+ */
+function orphanedDefinitionsProblem(names: string[], takes: readonly string[] = []): string {
+    const one = names.length === 1;
+    const problem = one
+        ? `This note has a footnote definition nothing references (${referenceList(names)})`
+        : `This note has ${names.length} footnote definitions nothing references (${referenceList(names)})`;
+    if (takes.length === 0) return `${problem}.`;
+    return `${problem}, and deleting ${one ? "it" : "them"} also takes ${andList(takes.map(quotedName))}, which only ${one ? "it cites" : "they cite"}.`;
 }
 
 // Orphaned definitions that were kept get an alert as well (ruling: Jason,
@@ -346,7 +356,7 @@ function noticeOrphanedDefinitions(
         return toldLabels(names);
     }
     showNotice(
-        `${orphanedDefinitionsProblem(names)} ${names.length === 1 ? addReferenceOrDeleteDefinition(names[0]) : addReferencesOrDeleteDefinitions()}`,
+        `${orphanedDefinitionsProblem(names, definitionsTakenAlong(precomputed.lines, names))} ${names.length === 1 ? addReferenceOrDeleteDefinition(names[0]) : addReferencesOrDeleteDefinitions()}`,
         8000,
     );
     return [];
@@ -651,67 +661,6 @@ function noticeNestedFootnotes(lines: string[]) {
 // Every way of starting a lint calls this with the text as it stands AFTER
 // the lint, so the alerts speak whether or not any rule changed anything.
 //
-/**
- * The names of definitions written inside a "%%" block comment, in order,
- * each once. Obsidian never shows a definition there (its reference half
- * still counts, so the footnote may render from a real definition
- * elsewhere, or not at all), and the user almost certainly meant it to be
- * seen, so the lint names it (Jason's ruling A1, 2026-09-15).
- */
-export function commentedDefinitionNames(markdown: string): string[] {
-    const lines = normalizeEol(markdown).text.split("\n");
-    const reading = readNote(lines);
-    const names: string[] = [];
-    const seen = new Set<string>();
-    let offset = 0;
-    for (let i = 0; i < lines.length; offset += lines[i].length + 1, i++) {
-        if (!reading.commentLines[i] || reading.protectedLines[i]) continue;
-        const hit = commentedLabel(lines[i], reading.maskedLine(i), reading.containerEnd(i));
-        if (!hit) continue;
-        // Only a label inside the comment is hidden: on the closer line the
-        // text after the "%%" is outside it ("%%[^1]: def" renders a
-        // footnote; GLM hunt cycle 5, probed in Reading view 2026-09-16),
-        // and a label BEFORE the closer ("[^1]: dead %%") is hidden like any
-        // interior line (Kimi hunt cycle 3, 2026-09-16)
-        const at = offset + hit.start;
-        if (!reading.comments.some((comment) => comment.block && comment.from <= at && at < comment.to)) continue;
-        const folded = hit.name.toLowerCase();
-        if (seen.has(folded)) continue;
-        seen.add(folded);
-        names.push(hit.name);
-    }
-    return names;
-}
-
-/**
- * The definition label on a line of a "%%" comment, as the line would read
- * with the comment taken away: its name as written and the column of its
- * "[". `textStart` is where the containers around the comment end
- * (containerEnd): a quote's marker, a list item's indentation, or the four
- * columns of a definition the comment is written in. The label is read
- * from there, as labelShapedLines reads a lazy label. Read from the
- * margin, a label in a comment indented inside a definition was four
- * columns in and no label to the alert (hunt 2026-10-02, round 4, pin
- * bug-lint-indented-commented-label-rewritten).
- *
- * Obsidian reads a comment's lines as hidden text, not as blocks, so the
- * note reading sees no list item inside one. A label behind a list marker
- * written in the comment ("- [^x]: hidden", "1. [^x]: hidden") is found
- * by reading that line on its own, which says what it would be outside the
- * comment: a definition in a list item, which counts like any other
- * (Jason's ruling 1, option a, 2026-10-03; hunt 2026-10-05, round 2, pin
- * bug-commented-item-definition-alert). That reading is asked only when
- * the line holds a label's shape past its start, so most commented lines
- * never need it.
- */
-function commentedLabel(line: string, masked: string, textStart: number): { name: string; start: number } | null {
-    const hit = definitionLabelWithName(line.slice(textStart), masked.slice(textStart));
-    if (hit) return { name: hit.name, start: textStart + hit.label.nameStart - 2 };
-    if (!/\[\^[^[\]\s]+\]:/.test(masked.slice(textStart))) return null;
-    const own = readNote([line.slice(textStart)]).labelsOn(0).at(0);
-    return own === undefined ? null : { name: own.name, start: textStart + own.start };
-}
-
 function noticeCommentedDefinitions(markdown: string) {
     const names = commentedDefinitionNames(markdown);
     if (names.length === 0) return;

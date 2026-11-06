@@ -165,8 +165,9 @@ function heldIndices(definitions: readonly Definition[], i: number): number[] {
  *
  * This deliberately does not follow chains. A definition referenced only
  * from an orphan's body still counts as referenced, which is what the
- * alert's wording says. Once the user fixes the orphan that was listed, the
- * next lint reports that one.
+ * alert's wording says. The alert names those separately, as what deleting
+ * the orphan also takes (definitionsTakenAlong). Once the user fixes the
+ * orphan that was listed, the next lint reports that one.
  */
 export function orphanedFootnoteDefinitionNames(
     markdown: string,
@@ -204,6 +205,25 @@ export function orphanedDefinitionBlocks(lines: string[]): Definition[] {
     // a definition that is not removable is reported by the alert but
     // never cut, and orphanedBlocks already keeps it alive
     return orphanedBlocks(scanReferences(lines));
+}
+
+/**
+ * The names of the definitions the rule would delete along with the orphans
+ * in `orphans`, because only those orphans keep them alive, each once, spelled
+ * as written, in the order the definitions appear. It asks before the result
+ * gate has judged the cut, so in the rare note where the gate refuses it, this
+ * promises more than the rule then deletes, which loses nothing.
+ */
+export function definitionsTakenAlong(lines: string[], orphans: readonly string[]): string[] {
+    const seen = new Set(orphans.map((name) => name.toLowerCase()));
+    const names: string[] = [];
+    for (const block of orphanedDefinitionBlocks(lines)) {
+        const folded = block.name.toLowerCase();
+        if (seen.has(folded)) continue;
+        seen.add(folded);
+        names.push(block.name);
+    }
+    return names;
 }
 
 /** Whether taking `dead` out of a note, leaving `out`, may go ahead. */

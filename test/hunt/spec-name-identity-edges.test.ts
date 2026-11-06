@@ -5,37 +5,30 @@ import {
     idListIncludes,
 } from "../../src/parsing/footnote-grammar";
 
-// Two small questions about what counts as the same footnote name. Neither
-// is a verdict; both are recorded so a later change to either flips this
-// file red on purpose.
+// Two small questions about what counts as the same footnote name. Both are
+// recorded so a later change to either flips this file red on purpose.
 //
 // Hunt: 2026-09-13. Lens: grammar.
 //
-// spec question one: should two Unicode spellings of the same visible name
-// be the same footnote?
-// Reading one, match the reference grammar: no. micromark's
-// normalizeIdentifier folds case and collapses whitespace, and does no
-// Unicode normalization at all, so a name typed with a single "e-acute"
-// character and a name typed as "e" plus a combining accent really are two
-// different footnotes there. The plugin's idListIncludes folds case and
-// nothing else, so it already matches that behaviour.
-// Reading two, match what the user sees: yes. The two spellings look
-// identical on screen, so a note edited outside Obsidian can come back
-// carrying the decomposed spelling and the reference and the definition
-// would then silently never pair up.
-// What the user would see under reading two's complaint: a footnote that
-// looks correct but behaves as an orphan. Low value in practice, since
-// Obsidian's own cache almost certainly only lowercases too; recorded for
-// completeness.
+// Question one, settled by the live check of 2026-11-05 on Obsidian 1.15.0: two
+// Unicode spellings of one visible name are two different footnotes. A reference
+// and a definition whose names differ only in composed and decomposed spelling
+// ("cafe" with its accent as one character or as two) do not pair in Obsidian,
+// in either direction. The plugin's idListIncludes folds case and nothing else,
+// so it agrees, and no code changed for this. Entry 5 of the spec sort of
+// 2026-11-05.
 //
-// Source of truth: micromark-util-normalize-identifier, used by
-// micromark-extension-gfm-footnote 2.1.0 to decide footnote identity.
+// Source of truth: the live check above.
 
-describe("spec question: Unicode spellings of one visible name", () => {
-    it.fails("a composed and a decomposed spelling are the same footnote", () => {
-        // "\u00e9" is the single character, and "e\u0301" is "e"
-        // followed by a combining acute accent. They print the same.
-        expect(idListIncludes(["\u00e9"], "e\u0301")).toBe(true);
+describe("Unicode spellings of one visible name (live check on Obsidian 1.15.0, 2026-11-05)", () => {
+    // "é" is the single character, and "é" is "e" followed by a
+    // combining acute accent. They print the same.
+    it("a decomposed reference does not pair with a composed definition", () => {
+        expect(idListIncludes(["é"], "é")).toBe(false);
+    });
+
+    it("a composed reference does not pair with a decomposed definition", () => {
+        expect(idListIncludes(["é"], "é")).toBe(false);
     });
 });
 

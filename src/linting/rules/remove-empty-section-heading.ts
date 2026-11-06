@@ -1,6 +1,7 @@
 import { rulePasses } from "../rule-gate";
-import { findLineRunEnd, normalizeEol, restoreEol } from "../../parsing/line-edits";
+import { normalizeEol, restoreEol } from "../../parsing/line-edits";
 import { readNote } from "../../parsing/note-reading";
+import { findSectionHeadingEnd } from "../section-heading";
 
 // Jason's ask, 2026-09-25: when a plugin action leaves nothing under the
 // footnote section heading, the heading goes too, if the "Remove empty
@@ -14,7 +15,7 @@ import { readNote } from "../../parsing/note-reading";
 /**
  * `markdown` with its footnote section heading removed when the section
  * is empty: the heading (the configured run of lines, found the one way
- * the plugin finds it, findLineRunEnd) is followed by nothing but blank
+ * the plugin finds it, findSectionHeadingEnd) is followed by nothing but blank
  * lines to the end of the note. The blank lines above the heading go with
  * it, so the note ends on its last line of text. A heading that prose,
  * a definition, or another heading follows is not an empty footnote
@@ -29,7 +30,7 @@ export function removeEmptySectionHeading(markdown: string, sectionHeading: stri
     const lines = text.split("\n");
     const reading = readNote(lines);
     const headingLines = sectionHeading.split("\n");
-    const end = findLineRunEnd(lines, reading.protectedLines, headingLines, reading.commentLines);
+    const end = findSectionHeadingEnd(lines, reading, sectionHeading);
     if (end === -1) return markdown;
     for (let i = end + 1; i < lines.length; i++) {
         if (lines[i].trim() !== "") return markdown;
