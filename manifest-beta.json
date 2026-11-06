@@ -6,6 +6,9 @@
   "description": "Create, edit, move, and tidy footnotes in Obsidian without leaving the keyboard.",
   "author": "Alexis Rondeau, Micha Brugger, Jason Qin",
   "authorUrl": "https://github.com/Comprehensive-Jason",
-  "fundingUrl": "https://ko-fi.com/comprehensivejason",
+  "fundingUrl": {
+    "GitHub Sponsors": "https://github.com/sponsors/Comprehensive-Jason",
+    "Ko-fi": "https://ko-fi.com/comprehensivejason"
+  },
   "isDesktopOnly": false
 }
