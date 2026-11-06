@@ -128,7 +128,7 @@ One hotkey takes you back and forth between a reference and its note.
 
 ### Renaming a footnote
 
-Put your cursor on any reference or definition and run **Rename footnote**. It works like renaming a variable in a code editor: every reference and the definition get the new name in one step. It's also in the right-click menu when you click on a footnote, just like Obsidian's own rename for headings. Names are case-insensitive, so `[^Note]` and `[^note]` count as the same footnote. The command refuses names that are already taken and names a footnote can't have, and under a per-note prefix the new name gets the prefix added for you.
+Put your cursor on any reference or definition and run **Rename footnote**. It works like renaming a variable in a code editor: every reference and the definition get the new name in one step. It's also in the right-click menu when you click on a footnote, just like Obsidian's own rename for headings. Names are case-insensitive, so `[^Note]` and `[^note]` count as the same footnote. The command refuses names that are already taken and names a footnote can't have, and under a per-note prefix the new name gets the prefix added for you. With **Preferred footnote naming style** set to **Numbered**, the next lint numbers a renamed footnote again, and the toast says so.
 
 ![Rename footnote: every reference and the definition take the new name together](README/rename.gif)
 
