@@ -10,14 +10,18 @@ import { removeOrphanedFootnoteReferences } from "../../src/linting/rules/remove
 // front of a reference belong to it, as they do when punctuation follows it
 // (Jason's ruling Q35, 2026-10-09). Emphasis closers stay as they are:
 // "**foo [^1]** bar" gives "**foo ** bar", since Obsidian still draws that bold
-// (live answer H32).
+// (live answer H32). So does "]": "[see [^1]](http://x)" is a link, and taking
+// the space changed the link's text, so hunt cycle 10 found Delete refused and
+// the lint's cut held back where they had gone through.
 //
 // Delete footnote everywhere and the lint's orphan cut share cutOne, so both are
 // tested here.
 //
-// Hunt 2026-11-06, cycle 9, finding H32. Severity: annoyance. Origin:
+// Hunt 2026-11-06, cycle 9, finding H32, narrowed in cycle 10 (the convert
+// lens's finding on "[see [^1]](http://x)"). Severity: annoyance. Origin:
 // pre-existing. Source of truth: the triage's choice, for Jason's objection,
-// extending ruling Q35; the live answers H32 and H32b.
+// extending ruling Q35; the decision for Jason of 2026-11-06 on "]"; the live
+// answers H32 and H32b.
 
 const deleted = (note: string) => {
     const plan = deleteFootnoteEverywhere(note, "1");
@@ -27,7 +31,6 @@ const deleted = (note: string) => {
 describe("the spaces in front of a reference go when a closing bracket or quote follows", () => {
     const rows: [string, string][] = [
         ["foo (see [^1]) bar", "foo (see) bar"],
-        ["foo [see [^1]] bar", "foo [see] bar"],
         ["foo {see [^1]} bar", "foo {see} bar"],
         ['he said "foo [^1]" then', 'he said "foo" then'],
         ["he said 'foo [^1]' then", "he said 'foo' then"],
@@ -64,6 +67,23 @@ describe("what stays", () => {
             expect(deleted(`${before}\n\n[^1]: x`)).toBe(after);
         });
     }
+
+    // A closing square bracket stays out, so the space stays as it did on
+    // 0fb8ac3 and the link it closes reads the same (hunt 2026-11-06, cycle 10).
+    it.each([
+        ["[see [^1]](http://x) y", "[see ](http://x) y"],
+        ["[see [^1]][label] y\n\n[label]: http://x", "[see ][label] y\n\n[label]: http://x"],
+        ["foo [see [^1]] bar", "foo [see ] bar"],
+    ])("a closing square bracket: %s", (before, after) => {
+        expect(deleted(`${before}\n\n[^1]: x`)).toBe(after);
+    });
+
+    it.each([
+        ["[see [^1]](http://x) y", "[see ](http://x) y"],
+        ["foo [see [^1]] bar", "foo [see ] bar"],
+    ])("a closing square bracket, the lint's orphan cut: %s", (before, after) => {
+        expect(removeOrphanedFootnoteReferences(before)).toBe(after);
+    });
 
     it("control: the same with punctuation, ruling Q35", () => {
         expect(deleted("foo [^1]. bar\n\n[^1]: x")).toBe("foo. bar");

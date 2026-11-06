@@ -304,11 +304,13 @@ function closesBracketedText(text: string, close: number): boolean {
  * finding H32, the triage's choice extending that ruling). A quote glued to the
  * word after it opens rather than closes (markRunEnd). An emphasis closer does
  * not count, so "**foo [^1]**" gives "**foo **": Obsidian still draws that bold
- * (live answer H32 on 1.15.0).
+ * (live answer H32 on 1.15.0). Nor does "]", since it may close a link's text,
+ * and taking the space from "[see [^1]](http://x)" changed the link, so the
+ * deletion was refused (hunt 2026-11-06, cycle 10).
  */
 export function spacesGoWithFootnoteBefore(text: string, at: number): boolean {
     if (punctuationAt(text, at)) return true;
-    return at < text.length && ClosingMarkChars.includes(text[at]) && !"*_~=".includes(text[at]) && markRunEnd(text, at) !== -1;
+    return at < text.length && ClosingMarkChars.includes(text[at]) && !"*_~=]".includes(text[at]) && markRunEnd(text, at) !== -1;
 }
 
 /**
