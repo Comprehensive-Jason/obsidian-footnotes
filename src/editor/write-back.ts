@@ -68,7 +68,7 @@ export function writeChanges(doc: Editor, before: string, changes: OffsetChange[
     const after = applyOffsetChanges(before, changes);
     keepCaretsWithDefinitions(doc, before, changes, after, selections);
     // a caret the caller placed is already where it should be
-    if (!selection) keepCaretBelowLinesAbove(doc, changes);
+    if (!selection) keepCaretBelowLinesAbove(doc, changes, selections);
     if (foldInfo && foldInfo.folds.length > 0 && mode?.applyFoldInfo) {
         mode.applyFoldInfo({
             folds: mapFoldLines(foldInfo.folds, changes, before),
@@ -97,14 +97,19 @@ export function writeChanges(doc: Editor, before: string, changes: OffsetChange[
  * all, already starts after the new lines, since the editor keeps
  * inserted text out of a selection's start (hunt 2026-10-05 round 2,
  * cluster D2, pin bug-caret-jumps-to-inserted-line).
+ *
+ * `selections` are the selections before the edits. A caret at the note's start
+ * now may be one that followed its definition there, which is where it belongs,
+ * so this asks whether one was there before the edits (hunt 2026-11-06, cycle
+ * 10, pin bug-caret-column-zero-definition-moved-to-first-line).
  */
-function keepCaretBelowLinesAbove(doc: Editor, changes: OffsetChange[]): void {
+function keepCaretBelowLinesAbove(doc: Editor, changes: OffsetChange[], selections: EditorSelection[]): void {
     const first = changes[0];
     // lines inserted above the first line come as one edit at offset 0
-    // that ends with a line break; no other edit touches offset 0, so a
-    // caret there now is one that was there before
+    // that ends with a line break; no other edit touches offset 0
     if (first.from !== 0 || first.to !== 0 || !first.text.endsWith("\n")) return;
     const atNoteStart = (range: EditorSelection) => range.anchor.line === 0 && range.anchor.ch === 0 && range.head.line === 0 && range.head.ch === 0;
+    if (!selections.some(atNoteStart)) return;
     const ranges = doc.listSelections();
     if (!ranges.some(atNoteStart)) return;
     const ownLine = { line: first.text.split("\n").length - 1, ch: 0 };
