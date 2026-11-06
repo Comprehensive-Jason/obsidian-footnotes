@@ -332,7 +332,7 @@ function openPopupForNewDefinition(
     seededBody?: string,
 ) {
     const ordinal = referenceOrdinalAtCursor(doc, footnoteId, doc.getCursor());
-    const relocated = lintAfterFootnoteCreation(plugin, doc, false, seededBody);
+    const relocated = lintAfterFootnoteCreation(plugin, doc, false, seededBody, footnoteId);
     const effectiveId = relocated ?? footnoteId;
     if (relocated !== null) {
         // The lint changed the note. It rewrites as little text as it can,

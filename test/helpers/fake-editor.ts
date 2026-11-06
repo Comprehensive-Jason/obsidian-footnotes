@@ -95,6 +95,11 @@ export function fakeEditor(
             state.cursor = pos;
             state.moves.push(pos);
         },
+        // a selection set after the edits, as the write-back sets one: the
+        // caret goes to the first range's head
+        setSelections(ranges: { anchor: EditorPosition; head?: EditorPosition }[]) {
+            state.cursor = ranges[0].head ?? ranges[0].anchor;
+        },
         scrollIntoView() {},
         posToOffset(pos: EditorPosition): number {
             let offset = 0;

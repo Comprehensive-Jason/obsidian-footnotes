@@ -8,6 +8,7 @@ import {
 } from "../commands/footnote-popup";
 import { jumpToFootnoteDefinition } from "../commands/navigation";
 import { docContext } from "../editor/doc-context";
+import { definitionNameAfter } from "../editor/document-diff";
 import { replaceMinimal } from "../editor/write-back";
 import { rewriteDocument } from "./rewrite-document";
 import { GatedLint, gatedLint, heldBackBy, HoldingRule } from "./rule-gate";
@@ -779,7 +780,9 @@ export function installVimWriteHook(plugin: FootnotePlugin) {
 // order of appearance. So the name it had a moment ago is no help in
 // finding it again. What is reliable is that the brand new definition is
 // empty, and as long as it is the only empty one in the note, it can only
-// be the footnote just created.
+// be the footnote just created. When it is not the only one, the creation
+// lint follows the name instead (definitionNameAfter, Jason's ruling,
+// 2026-11-05).
 function uniqueEmptyDefinitionName(doc: Editor): string | null {
     const ctx = docContext(doc);
     let found: string | null = null;
@@ -865,6 +868,14 @@ function uniqueSeededDefinitionName(doc: Editor, body: string): string | null {
  * not be picked out for certain; either way the caller keeps the name it
  * started with.
  *
+ * `createdName` is the name the press gave the new footnote. When the note
+ * has another footnote just like it, such as a second empty one, its shape no
+ * longer picks it out, so it is followed by that name through the lint's
+ * renumbering. The popup arm needs this, since it opens on the returned name.
+ * The jump arm does not: the caret sits in the new definition, and the
+ * write-back keeps it there (Jason's ruling, 2026-11-05, pin
+ * spec-lint-creation-landing-twin-definitions).
+ *
  * Creations inside a table cell skip this trigger completely: editing the
  * document while a cell's sub-editor has focus is the issue #28 corruption
  * family.
@@ -882,6 +893,7 @@ export function lintAfterFootnoteCreation(
     edited: Editor,
     relandCursor: boolean,
     seededBody?: string,
+    createdName?: string,
 ): string | null {
     if (!plugin.settings.lintOnFootnoteCreation) return null;
     // with every rule off, lint is off and its alerts stay silent, as the
@@ -921,10 +933,11 @@ export function lintAfterFootnoteCreation(
     replaceMinimal(doc, before, after, target.mdView);
     showNotice("Footnotes linted.");
     noticeLintAlerts(plugin, after);
-    const relocated =
+    const unique =
         seededBody === undefined
             ? uniqueEmptyDefinitionName(doc)
             : uniqueSeededDefinitionName(doc, seededBody);
+    const relocated = unique ?? (createdName === undefined ? null : definitionNameAfter(before, after, createdName));
     if (relandCursor && relocated !== null) {
         jumpToFootnoteDefinition(relocated, doc.getCursor(), plugin, doc);
     }
