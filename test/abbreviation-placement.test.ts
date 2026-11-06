@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { fakeEditor } from "./helpers/fake-editor";
@@ -601,4 +603,108 @@ describe("the question itself", () => {
         expect(finalDotOwner(line, line.length - 1)).toBe("sentence");
         expect(performance.now() - started).toBeLessThan(100);
     });
+});
+
+// Lines made by combining the parts below, so the checks reach many more shapes
+// than the tables above can state one by one.
+const GeneratedFronts = ["", "- ", "> ", "see ", "(", "5 ", "i went there. then ", "z. "];
+const GeneratedWords = [
+    "U.S", "e.g", "Ph.D", "z.B", "EE.UU", "main.js", "3.14", "5th", "2026",
+    "Dr", "dr", "Mrs", "St", "bzw", "pp", "vs", "km", "pdf", "md", "г", "др",
+    "etc", "Etc", "ETC", "et al", "al", "wet al", "ibid", "ed", "Inc", "prof", "usw", "EE. UU",
+    "No", "no", "Fig", "fig", "Art", "J", "plan B", "x", "S",
+    "Hmm", "Mhm", "esp", "foo", "word", "thing", "Yes", "USA", "can't", "km/h",
+    "这是句子", "美国U.S", "있다", "λόγος",
+];
+const GeneratedTails = ["", " Then we left.", " then we left.", " 12", ", and", "? And", "..", " e.g. this", " second thing. third"];
+const GeneratedLines = GeneratedFronts.flatMap((front) => GeneratedWords.flatMap((word) => GeneratedTails.map((tail) => ({ front, word, tail, line: `${front}${word}.${tail}` }))));
+
+/** Selects the word in `front + word + "." + tail` and turns it into a footnote with the numbered key. */
+function convertWord({ front, word, tail }: (typeof GeneratedLines)[number], footnotePlacement: FootnotePlacement): string {
+    const doc = fakeEditor([`${front}${word}.${tail}`], {
+        selection: { anchor: { line: 0, ch: front.length }, head: { line: 0, ch: front.length + word.length } },
+        edits: true,
+        wholeDoc: true,
+        words: true,
+    });
+    selectionPressHandled(fakePlugin({ ...Settings, footnotePlacement, expandSelectionToWholeWords: true }, doc), doc, null, "autonum");
+    return doc.lines.join("\n");
+}
+
+describe("generated lines", () => {
+    // CHARACTERIZATION, for Jason's review: this pins After and Don't move as
+    // they behave, not as anyone chose them. The digest below is a fingerprint of
+    // every result, recorded on master at 59b2743, just before the rule from the
+    // hillclimb of 2026-11-06 went in. A change under either setting changes it,
+    // and the failure says which setting moved but not which line.
+    it.each([
+        ["after", "eb22abf7321d03acea6d4e2a6dfd77d5df57291621a38621f8716846ca1ac2ff"],
+        ["none", "16e87d121f688710f469550aad7ae0447832d4e95b9224949f92c42f7f6500ae"],
+    ] as const)("under %s, presses, lints, and selections stay as recorded from master", async (placement, digest) => {
+        const results = createHash("sha256");
+        let count = 0;
+        const record = (result: string) => {
+            results.update(`${result}\0`);
+            count++;
+        };
+        for (const generated of GeneratedLines) {
+            const { line, front, word } = generated;
+            const dot = front.length + word.length;
+            record(await press(`${line.slice(0, dot)}|${line.slice(dot)}`, placement));
+            record(await press(`${line.slice(0, dot + 1)}|${line.slice(dot + 1)}`, placement));
+            record(lint(`${line.slice(0, dot)}[^1]${line.slice(dot)}`, placement));
+            record(lint(`${line.slice(0, dot + 1)}[^1]${line.slice(dot + 1)}`, placement));
+            record(cellPress(`${line.slice(0, dot)}|${line.slice(dot)}`, placement));
+            record(cellPress(`${line.slice(0, dot + 1)}|${line.slice(dot + 1)}`, placement));
+            record(convertWord(generated, placement));
+            resetNotices();
+        }
+        expect(count).toBe(7 * GeneratedLines.length);
+        expect(results.digest("hex")).toBe(digest);
+    }, 120_000);
+
+    it("a reference on either side of the dot does not change the answer", () => {
+        for (const { line, front, word } of GeneratedLines) {
+            const dot = front.length + word.length;
+            const plain = finalDotOwner(line, dot);
+            const left = `${line.slice(0, dot)}[^1]${line.slice(dot)}`;
+            const right = `${line.slice(0, dot + 1)}[^1]${line.slice(dot + 1)}`;
+            expect(finalDotOwner(left, dot + 4, lineFootnotes([{ start: dot, end: dot + 4 }])), left).toBe(plain);
+            expect(finalDotOwner(right, dot, lineFootnotes([{ start: dot + 1, end: dot + 5 }])), right).toBe(plain);
+        }
+    });
+
+    it("a lint run twice changes nothing, with the reference on either side of the dot", () => {
+        for (const { line, front, word } of GeneratedLines) {
+            const dot = front.length + word.length;
+            for (const written of [`${line.slice(0, dot)}[^1]${line.slice(dot)}`, `${line.slice(0, dot + 1)}[^1]${line.slice(dot + 1)}`]) {
+                const once = lint(written);
+                expect(lint(once), written).toBe(once);
+            }
+        }
+    }, 120_000);
+
+    it("the lint leaves what a press placed, with the caret on either side of the dot", async () => {
+        for (const { line, front, word } of GeneratedLines) {
+            const dot = front.length + word.length;
+            for (const caret of [dot, dot + 1]) {
+                const placed = await press(`${line.slice(0, caret)}|${line.slice(caret)}`, "before");
+                expect(lint(placed), `${line} at ${caret}`).toBe(placed);
+            }
+            resetNotices();
+        }
+    }, 120_000);
+
+    it("the lint of a table row leaves what a press in its cell placed, whatever the row's other cell holds", () => {
+        for (const { line, front, word } of GeneratedLines) {
+            if (front === "- " || front === "> ") continue;
+            const dot = front.length + word.length;
+            for (const caret of [dot, dot + 1]) {
+                const placed = cellPress(`${line.slice(0, caret)}|${line.slice(caret)}`, "before");
+                for (const row of [`| ${placed} |`, `| first thing. second thing. | ${placed} |`, `| ${placed} | first thing. second thing. |`]) {
+                    expect(lint(`${row}\n| --- | --- |`).split("\n")[0], `${line} at ${caret}`).toBe(row);
+                }
+            }
+        }
+    }, 120_000);
 });
