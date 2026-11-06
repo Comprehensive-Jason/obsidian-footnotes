@@ -348,7 +348,12 @@ function noticeOrphanedDefinitions(
     precomputed: { lines: string[] },
     afterLint: boolean,
 ): string[] {
-    let names = orphanedFootnoteDefinitionNames(markdown, precomputed);
+    const orphans = orphanedFootnoteDefinitionNames(markdown, precomputed);
+    // A definition whose name is invalid (a "#", a backtick) is the
+    // invalid-name alert's to report, as a reference with one is: asking for a
+    // reference that name could never have gives two alerts with opposite
+    // advice (hunt 2026-11-06, cycle 9, H17).
+    let names = orphans.filter((name) => footnoteNameProblem(name) === null);
     if (names.length === 0) return [];
     if (afterLint && plugin.settings.lintDeleteOrphanedDefinitions) {
         // With the toggle ON, an orphaned definition still in the note is
@@ -374,7 +379,7 @@ function noticeOrphanedDefinitions(
         return toldLabels(names);
     }
     showNotice(
-        `${orphanedDefinitionsProblem(names, definitionsTakenAlong(precomputed.lines, names))} ${names.length === 1 ? addReferenceOrDeleteDefinition(names[0]) : addReferencesOrDeleteDefinitions()}`,
+        `${orphanedDefinitionsProblem(names, definitionsTakenAlong(precomputed.lines, orphans))} ${names.length === 1 ? addReferenceOrDeleteDefinition(names[0]) : addReferencesOrDeleteDefinitions()}`,
         8000,
     );
     return [];
