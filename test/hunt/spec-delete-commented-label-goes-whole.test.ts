@@ -60,6 +60,10 @@ describe("a label in a %% comment", () => {
         expect(deleted("text[^k] here\n\n%% [^k]: hidden %%", "k")).toBe("refused");
     });
 
+    it("control: a label in an HTML comment is plain text and stays, as the README says", () => {
+        expect(deleted("text[^k] here\n\n<!--\n[^k]: hidden\n-->\n\n[^k]: real", "k")).toEqual({ markdown: "text here\n\n<!--\n[^k]: hidden\n-->", references: 1, definitions: 1 });
+    });
+
     it("control: a plain reference in a comment is cut as a reference (rule F)", () => {
         expect(deleted("%%a[^1]%% b[^1]\n\n[^1]: one", "1")).toEqual({ markdown: "%%a%% b", references: 2, definitions: 1 });
     });

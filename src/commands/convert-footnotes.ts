@@ -11,7 +11,7 @@ import { runOutsideTableCell } from "../editor/table-cursor";
 import { replaceMinimal, writeChanges } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
 import { lintAfterFootnoteCreation, lintBlockedByPrefix, lintRulesAllDisabled, withEmptySectionHeadingRemoved } from "../linting/linter";
-import { commentedDefinitionNames } from "../linting/rules/remove-orphaned-references";
+import { commentedLabelLines } from "../linting/rules/remove-orphaned-references";
 import { computeNextFootnoteNumber, definitionLabel, nameForBody, quotedReference } from "../parsing/footnote-grammar";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
 import { plainOnLabelLine, planDefinitionAppend } from "./definition-append";
@@ -194,7 +194,7 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
 
     // decide each name, in the order its definitions appear
     const skipped: { line: number; name: string; reason: string }[] = [];
-    const definedInComment = new Set(commentedDefinitionNames(markdown).map((name) => name.toLowerCase()));
+    const definedInComment = new Set(commentedLabelLines(lines).map(({ name }) => name.toLowerCase()));
     type Eligible = { block: Definition; body: string; refs: Ref[] };
     const eligible: Eligible[] = [];
     for (const [folded, entries] of found) {

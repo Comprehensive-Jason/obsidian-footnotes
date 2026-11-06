@@ -50,6 +50,10 @@ describe("a footnote also defined inside a %% comment", () => {
         expect(convertNormalFootnotesToInline("%% see[^1] %% a[^1]\n\n[^1]: real").markdown).toBe("%% see^[real] %% a^[real]");
     });
 
+    it("control: a label in an HTML comment is plain text, so the footnote converts and the comment stays", () => {
+        expect(convertNormalFootnotesToInline("<!--\n[^1]: hidden\n-->\n\na[^1]\n\n[^1]: real").markdown).toBe("<!--\n[^1]: hidden\n-->\n\na^[real]");
+    });
+
     it("control: a label in a comment with no real definition has nothing to convert", async () => {
         const doc = editor("%%\n[^1]: hidden\n%%\n\na[^1]");
         await convertNormalToInlineCommand(fakePlugin({}, doc));

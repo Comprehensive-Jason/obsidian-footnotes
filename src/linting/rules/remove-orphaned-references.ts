@@ -127,7 +127,12 @@ function commentedLabelNames(lines: string[]): string[] {
     return names;
 }
 
-/** Every definition label inside a "%%" block comment, in order: its line and its name as written. */
+/**
+ * Every definition label inside a "%%" block comment, in order: its line and its
+ * name as written. Only a "%%" comment belongs here, since its "[^x]" still counts
+ * as a reference, so commands that cut or convert references must treat the label
+ * itself. A label in an HTML comment is plain text to them.
+ */
 export function commentedLabelLines(lines: string[]): { line: number; name: string }[] {
     const reading = readNote(lines);
     const labels: { line: number; name: string }[] = [];
