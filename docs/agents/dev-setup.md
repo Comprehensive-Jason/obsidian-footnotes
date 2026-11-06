@@ -65,6 +65,8 @@ MemoryMax=4G
 
 **The smoke suite** runs from the clone inside that vault, since it finds its vault from its own path: `npm run build && npm run test:smoke`. The first run after Obsidian starts can time out a few tests that pass on a rerun (2026-10-06).
 
+**Keeping it current.** The app downloads its own updates into `~/.config/obsidian/` but loads one only on restart, so a long-running service silently stays behind: on 2026-11-05 it was still answering as 1.14.4 three days after downloading 1.15.0. `obsidian version` reports the app and the installer separately. Restarting the service is enough, and needs no root; the installer can stay older.
+
 **One app, one probe at a time.** Parallel agents never drive it; one session runs live probes serially. Put probe notes in a folder of their own, reuse one leaf (`app.workspace.getLeaf(false)`, then `leaf.setViewState({type: "markdown", state: {file, mode: "preview"}})`), and delete the folder and any dotfile afterwards. Never detach the last leaf: the workspace is left with no tab group and every later open fails with "No tab group found" until the app restarts (2026-10-06). Load longer scripts with the dotfile loader of rule 4, store results on `window`, and read them in a second eval.
 
 **Copying files in over ssh:** quote a remote path that holds a space as one argument (`scp f "host:vault/Probe notes/"`); a backslash-escaped space made a folder literally named with the backslash (2026-10-06).
