@@ -271,7 +271,7 @@ export class FootnotePluginSettingTab extends PluginSettingTab {
                         name: "Remove empty section heading",
                         // off by default (Jason, 2026-09-25): a template's
                         // References heading should stay even while empty
-                        desc: rich("When **Convert normal footnotes to inline footnotes**, **Delete footnote everywhere**, a cut, or linting leaves no footnotes under the section heading, and nothing else below it, the heading goes too. Leave it off if your template always carries the heading."),
+                        desc: rich("When **Convert normal footnotes to inline footnotes**, **Delete footnote everywhere**, a cut that carries the last definition away, or linting leaves no footnotes under the section heading, and nothing else below it, the heading goes too. Leave it off if your template always carries the heading."),
                         control: {
                             type: "toggle",
                             key: "removeEmptySectionHeading",
@@ -337,7 +337,7 @@ export class FootnotePluginSettingTab extends PluginSettingTab {
                             },
                             {
                                 name: "Apply the note's footnote prefix",
-                                desc: rich("Linting adds the note's `footnote-prefix` to plain footnotes and renumbers the prefixed ones within their namespace. The **Rename footnote** command adds the prefix the same way. While off, prefixed footnotes are treated as named and keep their names."),
+                                desc: rich("Linting adds the note's `footnote-prefix` to plain footnotes and renumbers the prefixed ones within their namespace. The **Rename footnote** command adds the prefix the same way. While off, prefixed footnotes are treated as named, so Numbered renumbers them."),
                                 control: {
                                     type: "toggle",
                                     key: "lintApplyPrefix",

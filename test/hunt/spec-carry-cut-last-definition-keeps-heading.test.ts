@@ -18,7 +18,7 @@ import { lintFootnotes } from "../../src/linting/linter";
 // What a user might expect: the heading goes too, because the cut left no
 // footnotes under it and nothing else below it.
 // Why it is a question and not a bug: the two places that describe the
-// setting disagree. The setting's description in the settings tab says
+// setting disagreed. The setting's description in the settings tab said
 // "a cut", any cut. The README says "a cut that carries the last
 // definition away", and this cut carries nothing: the definition IS the
 // selection. Whether the setting covers every cut that empties the
@@ -29,15 +29,14 @@ import { lintFootnotes } from "../../src/linting/linter";
 // Hunt 2026-10-02, round 1, lens carry-reg. Cluster C34.
 //
 // Source of truth: the Remove empty section heading description in
-// src/settings.ts: "When ... a cut, or linting leaves no footnotes under
-// the section heading, and nothing else below it, the heading goes too."
-// Against it, README: "a cut that carries the last definition away".
+// src/settings.ts and the README, which both say "a cut that carries the
+// last definition away".
 //
 // Answered (2026-11-05, sorting the spec pins under Jason's scope rule of
 // 2026-10-07): when unsure, the plugin does what the editor would do without
 // it (ADR 0003), so this cut stays the editor's. The next lint takes the empty
-// heading out. The test was it.fails until then. The setting's description
-// still says "a cut", which is a wording question in the report.
+// heading out. The test was it.fails until then. The setting's description now
+// says what the README says (Jason's wording, 2026-11-05).
 
 /** A stand-in for the browser's clipboard event: it records what the hook writes and whether the hook took the event over. */
 function clipboardEvent() {
