@@ -1039,6 +1039,14 @@ function headingKeys(lines: string[]): { lines: number[]; keys: string[] } {
 function alignRun(a: string[], b: string[], kindsA: LineKind[], kindsB: LineKind[]): { from: number; to: number }[] {
     const na = a.map(lineKey);
     const nb = b.map(lineKey);
+    // Two lines are the same line when they have the same key and are the
+    // same kind. The key drops the indentation, so by key alone the
+    // note's last prose line "Para two." was the same line as a
+    // definition's continuation line "    Para two." gathered to the
+    // bottom under it, and a second pane's caret on the prose landed in
+    // the footnote (hunt 2026-11-06, cycle 9, finding H34, pin
+    // bug-second-pane-prose-matches-continuation-line).
+    const same = (i: number, j: number) => na[i] === nb[j] && kindsA[i] === kindsB[j];
     // The lines that match at the end are taken first, then those at the
     // start. The lint adds lines at the bottom of the note, so a stretch
     // that only grew grew at its end: its last line, often the note's
@@ -1046,12 +1054,12 @@ function alignRun(a: string[], b: string[], kindsA: LineKind[], kindsB: LineKind
     // still runs to the end (test/fold-heading-level.test.ts).
     let aTail = na.length;
     let bTail = nb.length;
-    while (aTail > 0 && bTail > 0 && na[aTail - 1] === nb[bTail - 1]) {
+    while (aTail > 0 && bTail > 0 && same(aTail - 1, bTail - 1)) {
         aTail--;
         bTail--;
     }
     let head = 0;
-    while (head < aTail && head < bTail && na[head] === nb[head]) head++;
+    while (head < aTail && head < bTail && same(head, head)) head++;
     const hunks = proseFirstRuns(na.slice(head, aTail), nb.slice(head, bTail), kindsA.slice(head, aTail), kindsB.slice(head, bTail));
     const map: { from: number; to: number }[] = [];
     let bi = 0;
