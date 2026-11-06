@@ -30,9 +30,9 @@ import { messages, resetNotices } from "../helpers/notices";
 //
 // This is the random case behind seed -581674678 of
 // test/command-properties.test.ts's "FULL MULTI-CARET NAMED flow", which
-// keeps failing the full suite now and then. That property expects "edits
-// nothing" from the second press, but it foresaw only one dead reference;
-// here both are dead.
+// failed the full suite now and then. That property expected "edits nothing"
+// from the second press, but it foresaw only one dead reference; here both
+// are dead.
 //
 // Options:
 //   (a) refuse with the born-dead notice when the caret sits in a
@@ -46,8 +46,7 @@ import { messages, resetNotices } from "../helpers/notices";
 // spec pins were sorted under Jason's scope rule of 2026-10-07): the rule names
 // a "$" name pairing into math as out of scope unless it loses data, and these
 // lose none, so the three tests below, it.fails until then, pin what the press
-// writes. Option (b) stands, and widening the property it mentions is left for
-// a later change.
+// writes. Option (b) stands, and the property is widened to match.
 //
 // The same question with a "|" in a table row: "|" is a legal name
 // character too, but in a table row it splits the cell, so "[^|]" is no

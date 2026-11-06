@@ -1248,6 +1248,16 @@ describe("multi-caret press invariants over random documents", () => {
                 const liveTyped = readNote(typedLines).references.filter(
                     (reference) => reference.live && reference.name.toLowerCase() === name.toLowerCase(),
                 ).length;
+                // With both references dead, the press finds no reference at
+                // either caret and writes a fresh "[^]" into each dead shape.
+                // That is out of scope, since the scope rule names a "$" name
+                // pairing into math, and nothing is lost: take the "[^]" back
+                // out and the note is as it was (2026-11-05, option (b) of
+                // spec-press-in-dead-dollar-name; seed -581674678).
+                if (liveTyped === 0) {
+                    expect(doc2.lines.map((line) => line.split("[^]").join(""))).toEqual(typedLines);
+                    return;
+                }
                 if (liveTyped < 2) {
                     expect(doc2.lines).toEqual(typedLines);
                     return;
