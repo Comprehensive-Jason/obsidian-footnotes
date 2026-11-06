@@ -82,8 +82,10 @@ describe("a selection ending right after a mark leaves the touching word in the 
         expect(await press("日本語です。次の文です。", 0, 6)).toEqual(["[^1]次の文です。", "", "[^1]: 日本語です。"]);
     });
 
+    // under Before the reference also hops in front of the comma the
+    // selection follows, as a press there does (finding H39 of the same hunt)
     it("the same under Before", async () => {
-        expect(await press("中文，英文。第三句。", 3, 6, "before")).toEqual(["中文，[^1]第三句。", "", "[^1]: 英文。"]);
+        expect(await press("中文，英文。第三句。", 3, 6, "before")).toEqual(["中文[^1]，第三句。", "", "[^1]: 英文。"]);
     });
 
     it("the same with the inline key", async () => {
