@@ -59,10 +59,15 @@ const EditLines = [
     "text[^1] more",
     "%% a %%",
     "$$ x $$",
+    'an <a id="q"> open tag',
+    'a <a id="q"/> closed-looking tag',
+    "</a>",
+    "a closer </a> here",
+    "a [link](u) and http://u.example",
 ];
 
 /** Pieces of text an edit may put inside a line; "\n" splits the line. */
-const EditPieces = ["`", "```", "%", "%%", "$", "$$", "<", "<!--", "-->", "!", "-", "---", ">", "[", "]", "^", "[^", "]:", "[^1]", "^[", ":", " ", "    ", "\t", "|", "=", "*", "1. ", "x", "\n", "\n\n"];
+const EditPieces = ["`", "```", "%", "%%", "$", "$$", "<", "<!--", "-->", "!", "-", "---", ">", "[", "]", "^", "[^", "]:", "[^1]", "^[", ":", " ", "    ", "\t", "|", "=", "*", "1. ", "x", "\n", "\n\n", '<a id="q">', "<a ", "</a>"];
 
 /** One random edit of `lines`: a line put in, taken out, or replaced, a piece of text put in or taken out, or two lines joined. */
 function edit(lines: string[], r: () => number): string[] {
@@ -213,6 +218,93 @@ describe("the note reading in parts reads every note as one parse of the whole n
             ["[foo]: <a", "", ...Array.from({ length: 60 }, (_, i) => [`Paragraph ${i} of the address`, ""]).flat(), "c>", "", "use[^1]", "", "[^1]: d"].join("\n"),
         ];
         expect(notes.map((note) => difference(note.split("\n")))).toEqual(notes.map(() => null));
+    });
+
+    // An "<a ...>" tag in running text changes how the parser reads what
+    // follows: until a "</a>", it reads no link and no bare address, across
+    // blocks, for the rest of the note. Obsidian does the same, live on 1.15.0
+    // (hunt 2026-11-06, cycle 9, finding H1; live answers H1a to H1g). So
+    // this is the one thing a part can leave behind besides an open block, and
+    // a part that leaves it open must not end there. Each note below runs
+    // over 200 paragraphs, enough that parts start inside it.
+    describe("an <a> tag left open carries through the parts as through the whole note", () => {
+        const Fill = Array.from({ length: 200 }, (_, i) => [`Paragraph number ${i} of the note, with some words.`, ""]).flat();
+        const Later = ["See [the report](http://example.com/report) here.", "", "See http://example.com/bare too.", "", "See [the report][^1] too.", "", "[Foo] and [Foo][]", "", "[Foo]: http://example.com", "", "[^1]: one"];
+        const reads = (head: string): string | null => difference([...head.split("\n"), "", ...Fill, ...Later]);
+
+        it.each([
+            'Jump back to <a name="top"> the top.',
+            "Jump back to <A NAME=top> the top.",
+            '## Results <a id="results"/>',
+            '- item <a id="q"/>',
+            '> quoted <a id="q"/>',
+            '> [!note] title <a id="q"/>',
+            '| a <a id="q"/> |\n| - |',
+            '[^9]: a source <a id="q"/>',
+            'x ==marked <a id="q"/> text== y',
+            'x ^[inline <a id="q"/> note] y',
+            'x %% comment <a id="q"/> %% y',
+            '%%\nblock <a id="q"/> comment\n%%',
+            'x **bold <a id="q"/> text** y',
+        ])("left open by: %s", (head) => {
+            expect(reads(head)).toBeNull();
+        });
+
+        it.each([
+            'Jump <a name="top"> up</a> now.',
+            'Jump to <a name="top"></a> the top.',
+            '<a name="top">',
+            '`<a id="q"/>`',
+            '<!-- <a id="q"/> -->',
+            '[text <a id="q"/> more](http://example.com)',
+            '[text <a id="q"/> more]',
+            '```\n<a id="q"/>\n```',
+            "<a\tid=q> and <abbr title=q> and <a",
+        ])("not left open by: %s", (head) => {
+            expect(reads(head)).toBeNull();
+        });
+
+        it.each([
+            ["a later paragraph", "Closed </a> here."],
+            ["a later list item", "- closed </a> here"],
+            ["what looks like a link's text, which no link is read from under an open tag", "[closed </a> here](http://example.com)"],
+        ])("closed by %s, with links read as links again below it", (_, closer) => {
+            expect(difference(['Open <a id="q"> here.', "", ...Fill, closer, "", ...Fill, ...Later])).toBeNull();
+        });
+
+        it.each([
+            ["a code span", "Not closed `</a>` here."],
+            ["a code block", "```\n</a>\n```"],
+            ["an HTML comment", "<!-- </a> -->"],
+        ])("stays open past a closer in %s", (_, closer) => {
+            expect(difference(['Open <a id="q"> here.', "", ...Fill, ...closer.split("\n"), "", ...Fill, ...Later])).toBeNull();
+        });
+
+        // A part's last line is borrowed from the next part, so what counts is
+        // whether the tag is open before that line. Which lines start a part
+        // depends on a hash of their text, so each row is tried with 64
+        // different texts, of which about eight start a part.
+        it("reads a line that a part borrows by what comes before it", () => {
+            const notes = Array.from({ length: 64 }, (_, i) => [
+                // the tag opened above and closed on the line that may be borrowed: its link stays plain text
+                ['Open <a id="q"> here.', "", `[l](u) </a> closes ${i}.`, "", ...Later],
+                // the tag opened on the line that may be borrowed: the part above it still ends cleanly
+                ["Plain text.", "", `Opens <a id="q"> at ${i}.`, "", ...Later],
+                // opened and closed in separate blocks, each of which may start a part
+                ['Open <a id="q"> here.', "", `</a> closes ${i}.`, "", `[l](u) opens <a id="q"> at ${i}.`, "", ...Later],
+            ]).flat();
+            expect(notes.map((note) => difference(note))).toEqual(notes.map(() => null));
+        });
+
+        it("reads such notes as the whole note does while they are edited at random", () => {
+            const r = random(20261106 + Seed);
+            const notes = Array.from({ length: 12 }, () => {
+                const lines = Fill.slice(0, 80);
+                for (const shape of ['Open <a id="q"> here.', "Closed </a> here.", ...Later]) lines.splice(Math.floor(r() * lines.length) & ~1, 0, shape, "");
+                return lines.join("\n");
+            });
+            expect(differences(notes, GeneratedEdits, 20261107 + Seed)).toEqual([]);
+        }, 120000 * Soak);
     });
 
     it("tries a longer part when a part does not end cleanly, which the notes above do often", () => {

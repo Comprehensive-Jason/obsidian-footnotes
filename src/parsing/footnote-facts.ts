@@ -444,6 +444,30 @@ export function footnoteFacts(text: string): FootnoteFacts {
     return factsOfTree(doc, tree, containerColumns);
 }
 
+/** What an inline "<a ...>" tag starts with, as the parser checks it: a tag such as "<a\tid=x>" or "<abbr>" changes nothing. */
+const LinkTagOpener = /<a /i;
+
+/** A bare web address, which the parser reads as a link unless an "<a ...>" tag is open. */
+const BareAddress = "http://example.com/";
+
+/**
+ * Whether the parser is still inside an "<a ...>" tag at the end of `before`,
+ * the lines of a part above its borrowed line. Once it reads such a tag in
+ * running text, the parser reads no link and no bare address until a "</a>",
+ * across blocks, for the rest of the note. Obsidian does the same (hunt
+ * 2026-11-06, cycle 9, finding H1; live answers H1a to H1g). The parser keeps
+ * that to itself, so this asks it: it parses the lines again with a bare
+ * address below them, and a tag is open when no link comes out. That is one
+ * more parse, so only a part that holds such a tag pays for it. Asking this
+ * way needs no copy of the parser's rules for where a tag counts: one in a
+ * code span or inside a link's text does not, for example.
+ */
+function leavesLinkTagOpen(before: string, startsNote: boolean): boolean {
+    if (!LinkTagOpener.test(before)) return false;
+    const blocks = parseObsidianNote(`${before}\n${BareAddress}`, startsNote).tree.children ?? [];
+    return blocks[blocks.length - 1]?.children?.[0]?.type !== "link";
+}
+
 /**
  * The footnote facts of one part of a note, read on its own, for the note
  * reading, which parses a long note in parts (see note-reading.ts). `doc`
@@ -461,7 +485,8 @@ export function footnoteFacts(text: string): FootnoteFacts {
  * item, a code block or comment still open), or a link definition's label
  * is still open at the end (the one reader that looks further than the
  * line after a block; see readsPastTheEnd in obsidian-markdown.ts),
- * the part does not end there, and the result is null.
+ * or an "<a ...>" tag is still open (see leavesLinkTagOpen), the part does
+ * not end there, and the result is null.
  */
 export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean): FootnoteFacts | null {
     const { tree, containerColumns, readsPastEnd } = parseObsidianNote(doc, startsNote);
@@ -470,6 +495,7 @@ export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean
     // where the borrowed line starts, as an offset and as a line
     const last = doc.lastIndexOf("\n") + 1;
     if (!(tree.children ?? []).some((block) => block.position.start.offset === last)) return null;
+    if (leavesLinkTagOpen(doc.slice(0, last), startsNote)) return null;
     let lastLine = 0;
     for (let i = doc.indexOf("\n"); i !== -1; i = doc.indexOf("\n", i + 1)) lastLine++;
     const facts = factsOfTree(doc, tree, containerColumns);

@@ -374,6 +374,12 @@ function addPart(into: FootnoteFacts, part: FootnoteFacts, lines: number, offset
  * the one block whose start depends on a line far below it (its closing
  * "---"), so no part starts inside it.
  *
+ * "Starting each block afresh" has one exception: an "<a ...>" tag left open
+ * in running text stays open across blocks. A part that leaves one open
+ * does not end cleanly either, so it joins the parts after it up to the
+ * "</a>" or the note's end, and every part still starts with no tag open
+ * (see leavesLinkTagOpen in footnote-facts.ts).
+ *
  * test/note-reading-parts.test.ts holds this to the whole-note parse, over
  * every saved Obsidian answer and thousands of generated notes, edited
  * at random through the part memory.
