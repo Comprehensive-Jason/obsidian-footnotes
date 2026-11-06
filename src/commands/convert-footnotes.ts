@@ -51,8 +51,15 @@ const Skip = {
     referencedFromFootnote: "referenced from inside another footnote",
 } as const;
 
+// A colon introduces the skip list in both of the texts below, because each
+// item in the list already carries brackets of its own, and brackets around
+// them made the sentence hard to read (Jason's choice, 2026-11-05).
+
 /** The refusal of a conversion that skipped every footnote, `list` naming them. */
-const everySkipped = (list: string) => refusal("convert", `every footnote was skipped (${list}).`);
+const everySkipped = (list: string) => refusal("convert", `every footnote was skipped: ${list}.`);
+
+/** The sentence that ends a toast when some footnotes were skipped, `list` naming them. */
+const someSkipped = (list: string) => ` Skipped: ${list}.`;
 
 /** What converting a note's normal footnotes to inline did, or would do. */
 export interface ConversionToInline {
@@ -434,7 +441,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         `Converted ${plural(result.converted, "inline footnote")} into ${plural(result.definitions, "normal footnote")}` +
             (result.merged > 0 ? ` (${plural(result.merged, "identical body", "identical bodies")} merged)` : "") +
             "." +
-            (skipped.length > 0 ? ` Skipped ${skippedList(skipped)}.` : ""),
+            (skipped.length > 0 ? someSkipped(skippedList(skipped)) : ""),
     );
     // anything that creates a footnote lints, when that setting is on;
     // otherwise the alerts alone speak (ADR 2)
@@ -485,7 +492,7 @@ export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
             const before = doc.getValue();
             const result = convertNormalFootnotesToInline(before);
             const list = result.skipped.map((s) => `${quotedReference(s.name)} (${s.reason})`).join(", ");
-            const skippedText = result.skipped.length > 0 ? ` Skipped ${list}.` : "";
+            const skippedText = result.skipped.length > 0 ? someSkipped(list) : "";
             if (result.refused) {
                 showNotice(`${result.refused}${skippedText}`, 8000);
                 return;

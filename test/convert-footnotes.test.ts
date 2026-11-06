@@ -208,7 +208,7 @@ describe("the two command entries", () => {
         expect(doc.lines).toEqual(["a^[one] b^[shared] c^[shared]", "", "[^long]: first", "    second"]);
         expect(doc.transactions).toBe(1);
         expect(messages()).toContain(
-            'Converted 2 footnotes into inline footnotes at 3 references (1 definition used more than once became copies). Skipped "[^long]" (more than one line).',
+            'Converted 2 footnotes into inline footnotes at 3 references (1 definition used more than once became copies). Skipped: "[^long]" (more than one line).',
         );
     });
 
@@ -219,7 +219,7 @@ describe("the two command entries", () => {
             selection: { anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 0 } },
         });
         await convertNormalToInlineCommand(fakePlugin({}, doc));
-        expect(messages()).toContain('Nothing was converted: every footnote was skipped ("[^m]" (more than one line)).');
+        expect(messages()).toContain('Nothing was converted: every footnote was skipped: "[^m]" (more than one line).');
     });
 
     it("inline to normal runs through the command entry", async () => {

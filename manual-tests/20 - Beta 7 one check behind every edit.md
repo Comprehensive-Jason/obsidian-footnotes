@@ -112,7 +112,7 @@ End of the duplicate fixture.
 
 Convert fixture: a plain inline footnote^[a plain note] and one whose text cites another^[see [^cvt] there].
 
-- [ ] Run **Convert inline footnotes to normal footnotes**: the plain inline footnote becomes `[^1]` with its definition at the bottom, the other stays inline, and the toast reads "Converted 1 inline footnote into 1 normal footnote. Skipped its text holds a footnote (1)." One Ctrl+Z puts the plain one back
+- [ ] Run **Convert inline footnotes to normal footnotes**: the plain inline footnote becomes `[^1]` with its definition at the bottom, the other stays inline, and the toast reads "Converted 1 inline footnote into 1 normal footnote. Skipped: its text holds a footnote (1)." One Ctrl+Z puts the plain one back
 
 [^src]: the carry source's own definition
 [^host]: the host footnote's text, where a paste is refused
