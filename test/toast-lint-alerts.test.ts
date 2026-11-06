@@ -58,6 +58,43 @@ describe("an orphaned definition the lint could not delete", () => {
     });
 });
 
+// An orphaned reference the lint could not delete names its problem too,
+// because "Fix it by hand" gave no clue that the reference has no definition
+// (Jason's ruling, 2026-11-06). Deleting a reference alone on its line here
+// would make the indented line under it part of the definition above.
+const OrphanReferenceToggle = { lintDeleteOrphanedReferences: true };
+const heldOrphan = (name: string, definition: string) => [`[^${definition}]: its text`, "", `[^${name}]`, "", "    indented text", ""];
+
+describe("an orphaned reference the lint could not delete", () => {
+    it("one", () => {
+        expect(alerts(["a[^1]", "", ...heldOrphan("x", "1")], OrphanReferenceToggle)).toEqual([
+            'This note has a footnote reference with no definition ("[^x]"). The lint left it as it is, because deleting it would change how Obsidian reads the text around it. Write its definition or delete the reference by hand.',
+        ]);
+    });
+    it("two", () => {
+        expect(alerts(["a[^1] b[^2]", "", ...heldOrphan("x", "1"), ...heldOrphan("y", "2")], OrphanReferenceToggle)).toEqual([
+            'This note has 2 footnote references with no definition ("[^x]", "[^y]"). The lint left them as they are, because deleting them would change how Obsidian reads the text around them. Write their definitions or delete the references by hand.',
+        ]);
+    });
+    it("a reference the next lint can delete is not named", () => {
+        expect(alerts(["a[^1] stray[^z] here", "", ...heldOrphan("x", "1")], OrphanReferenceToggle)).toEqual([
+            'This note has a footnote reference with no definition ("[^x]"). The lint left it as it is, because deleting it would change how Obsidian reads the text around it. Write its definition or delete the reference by hand.',
+        ]);
+    });
+    it("with the toggle off the alert keeps its own words, without 'by hand'", () => {
+        expect(alerts(["a[^1]", "", ...heldOrphan("x", "1")])).toEqual([
+            'This note has a footnote reference with no definition ("[^x]"). Write its definition or delete the reference.',
+        ]);
+    });
+    it("the held-back alert keeps the references that have a definition", () => {
+        const note = ["free[^1]!(sic) here", "", ...heldOrphan("x", "1")];
+        expect(alertsAfterLint(note, { ...OrphanReferenceToggle, lintFixPunctuation: true, footnotePlacement: "after", lintReindex: false, lintMoveToBottom: false })).toEqual([
+            'This note has a footnote reference with no definition ("[^x]"). The lint left it as it is, because deleting it would change how Obsidian reads the text around it. Write its definition or delete the reference by hand.',
+            'The lint left "[^1]" as it is, because changing it would change how Obsidian reads the text around it. Fix it by hand.',
+        ]);
+    });
+});
+
 describe("a duplicate definition the lint could not merge", () => {
     it("one name", () => {
         expect(alerts(["a[^a]", "", "- [^a]: in the item", "", "[^a]: at the top"], OnToggles)).toEqual([

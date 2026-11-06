@@ -222,11 +222,12 @@ function noticeUnderlinedLazyDefinitions(names: readonly string[]) {
 // names what was left, with one general sentence that names no cause (hunt
 // 2026-10-05, pin spec-callout-title-orphan-alert-wording).
 //
-// Three things that were in this alert for a while have left it (Jason's
-// choice, 2026-11-05). An orphaned definition and a duplicate need to say
-// what is wrong with them, because "Fix it by hand" gives no clue otherwise.
-// The section heading was never in the note, so it was not "left as it is".
-// Those speak in their own alerts below.
+// Four things that were in this alert for a while have left it. An orphaned
+// definition and a duplicate need to say what is wrong with them, because "Fix
+// it by hand" gives no clue otherwise (Jason's choice, 2026-11-05), and so does
+// an orphaned reference (his ruling, 2026-11-06). The section heading was never
+// in the note, so it was not "left as it is" (2026-11-05). Those speak in their
+// own alerts below.
 //
 // `left` holds what was left, quoted, in the order the checks found it:
 // footnotes as "[^a]" and definitions as "[^a]:". `told` holds the labels an
@@ -255,10 +256,11 @@ function toldLabels(names: readonly string[]): string[] {
 // remove-orphaned-references.ts). The alert used to assume the toggle had
 // dealt with every orphan and said nothing, so the survivor was neither
 // deleted nor reported, on that save and every later one (Kimi and Claude
-// sweeps 2026-09-13; ADR 2, lint is never silent). Now it is returned for
-// the held-back alert (noticeHeldBack). A single-rule command such as Move definitions to
-// bottom also ends here, and an orphan a full lint WOULD delete is not
-// reported after one of those: the next lint takes it, as before.
+// sweeps 2026-09-13; ADR 2, lint is never silent). Now the alert names it, says
+// what is wrong with it, and says the lint left it (Jason's ruling, 2026-11-06).
+// A single-rule command such as Move definitions to bottom also ends here, and
+// an orphan a full lint WOULD delete is not reported after one of those: the
+// next lint takes it, as before.
 //
 // That holds only for text a lint, or one of its rules, has just
 // produced. After a command that runs no lint at all (Delete footnote
@@ -273,7 +275,7 @@ function noticeOrphanedReferences(
     prefix: string,
     precomputed: { lines: string[] },
     afterLint: boolean,
-): string[] {
+): void {
     // a reference whose name is invalid (a "#", a backtick) is the
     // invalid-name alert's to report; naming it here as well would ask
     // the user to write a definition that could never bind (Jason's
@@ -281,7 +283,7 @@ function noticeOrphanedReferences(
     let names = orphanedFootnoteReferenceNames(markdown, prefix, precomputed).filter(
         (name) => footnoteNameProblem(name) === null,
     );
-    if (names.length === 0) return [];
+    if (names.length === 0) return;
     if (afterLint && plugin.settings.lintDeleteOrphanedReferences) {
         // Each orphan is judged on its own by the rule now (Kimi hunt
         // cycle 4, 2026-09-16), so the ones it would still leave are the
@@ -292,15 +294,25 @@ function noticeOrphanedReferences(
             const left = new Set(orphanedFootnoteReferenceNames(after, prefix).map((n) => n.toLowerCase()));
             names = names.filter((name) => left.has(name.toLowerCase()));
         }
-        return names.map(quotedName);
+        if (names.length === 0) return;
+        const one = names.length === 1;
+        showNotice(
+            `${orphanedReferencesProblem(names)} ${lintLeft(one ? "it" : "them", one, "deleting")} ${one ? "Write its definition or delete the reference by hand." : "Write their definitions or delete the references by hand."}`,
+            8000,
+        );
+        return;
     }
     showNotice(
-        names.length === 1
-            ? `This note has a footnote reference with no definition (${referenceList(names)}). Write its definition or delete the reference.`
-            : `This note has ${names.length} footnote references with no definition (${referenceList(names)}). Write their definitions or delete the references.`,
+        `${orphanedReferencesProblem(names)} ${names.length === 1 ? "Write its definition or delete the reference." : "Write their definitions or delete the references."}`,
         8000,
     );
-    return [];
+}
+
+/** What is wrong with references that have no definition, whichever alert says it. */
+function orphanedReferencesProblem(names: string[]): string {
+    return names.length === 1
+        ? `This note has a footnote reference with no definition (${referenceList(names)}).`
+        : `This note has ${names.length} footnote references with no definition (${referenceList(names)}).`;
 }
 
 /**
@@ -727,7 +739,7 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string, after
     const prefix = orphanSafePrefixFor(plugin, markdown);
     const lines = normalizeEol(markdown).text.split("\n");
     noticeEmptyReferences(markdown, prefix);
-    const left = noticeOrphanedReferences(plugin, markdown, prefix, { lines }, afterLint);
+    noticeOrphanedReferences(plugin, markdown, prefix, { lines }, afterLint);
     // the labels the two alerts below leave to the one after them
     const both = underlinedLazyLabelNames(lines);
     const bothFolded = new Set(both.map((name) => name.toLowerCase()));
@@ -738,8 +750,7 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string, after
     noticeDefinitionsInsideTables(markdown);
     const told = noticeOrphanedDefinitions(plugin, markdown, { lines }, afterLint);
     noticeSectionHeadingNotAdded(plugin, markdown);
-    left.push(...ungatheredDefinitions(plugin, markdown));
-    left.push(...heldChanges(plugin, markdown, afterLint));
+    const left = [...ungatheredDefinitions(plugin, markdown), ...heldChanges(plugin, markdown, afterLint)];
     told.push(...noticeDuplicateDefinitions(plugin, markdown, { lines }, afterLint));
     noticeHeldBack(left, new Set(told));
     noticeNestedFootnotes(lines);
