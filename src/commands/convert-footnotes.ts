@@ -313,8 +313,8 @@ const nothingToConvert: ConversionToNormal = { converted: 0, definitions: 0, mer
 
 /**
  * Turn every "^[body]" in the editor's note into a "[^N]" reference with
- * its definition appended, in ONE transaction. Identical bodies (after
- * trimming) share one definition. Numbering continues past the note's
+ * its definition appended, in ONE transaction. Inline footnotes whose
+ * definitions would read the same share one (definitionTextOf). Numbering continues past the note's
  * numbered footnotes and carries the note's prefix when that feature is
  * on, exactly as a creation press would. Where the definitions land is
  * the creation press's own decision (buildDefinitionAppend): after the
@@ -351,9 +351,10 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         if (entry) entry.count++;
         else skipped.push({ reason, count: 1 });
     };
-    // every convertible inline footnote, in document order, with its
-    // body's key for merging (the body as written, trimmed)
-    type Span = { line: number; open: number; close: number; body: string };
+    // every convertible inline footnote, in document order, with its body as
+    // written, and the text its definition would hold, which is what decides
+    // that two of them share a definition
+    type Span = { line: number; open: number; close: number; body: string; definitionText: string };
     const spans: Span[] = [];
     for (let i = 0; i < lines.length; i++) {
         for (const span of ctx.reading().inlineNotesOn(i)) {
@@ -370,7 +371,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
                 skip(Skip.holdsFootnote);
                 continue;
             }
-            spans.push({ line: i, open: span.open, close: span.close, body });
+            spans.push({ line: i, open: span.open, close: span.close, body, definitionText: definitionTextOf(body, ctx.reading().tableRowLines[i]) });
         }
         // An inline footnote that opens on this line and closes on a later
         // one. The lookup above lists only the ones wholly on one line, so
@@ -409,22 +410,21 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
     // result gate refuses it. It is worked out afresh for each choice, so a
     // skipped footnote takes no number and no name from the ones converted.
     const planFor = (chosen: readonly Span[]) => {
-        // one id per distinct body, in order of first appearance: numbered the
-        // way a creation press numbers, or, when the setting says so, named
-        // after the first meaningful word of the body (Jason, 2026-09-22),
-        // with a number for a body that offers no word
+        // one id per distinct definition text, in order of first appearance:
+        // numbered the way a creation press numbers, or, when the setting says
+        // so, named after the first meaningful word of the body (Jason,
+        // 2026-09-22), with a number for a body that offers no word
         let nextNumber = firstNumber;
         const used = new Set(taken);
         const idOf = new Map<string, string>();
-        const bodies: string[] = [];
         for (const span of chosen) {
-            if (idOf.has(span.body)) continue;
+            if (idOf.has(span.definitionText)) continue;
             const name = (named ? nameForBody(span.body, used, prefix) : null) ?? `${prefix}${nextNumber++}`;
             used.add(name.toLowerCase());
-            idOf.set(span.body, name);
-            bodies.push(span.body);
+            idOf.set(span.definitionText, name);
         }
-        const ids = bodies.map((body) => idOf.get(body) as string);
+        const texts = [...idOf.keys()];
+        const ids = [...idOf.values()];
 
         // the reference replacements, plus the definitions as ONE append: the
         // creation press's own append for the first id, seeded with its body,
@@ -433,15 +433,15 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         const edits: EditorChange[] = chosen.map((span) => ({
             from: { line: span.line, ch: span.open },
             to: { line: span.line, ch: span.close + 1 },
-            text: `[^${idOf.get(span.body) as string}]`,
+            text: `[^${idOf.get(span.definitionText) as string}]`,
         }));
         const plan = planDefinitionAppend({
             lines,
             edits,
             footnoteId: ids[0],
             plugin,
-            body: plainOnLabelLine(bodies[0]),
-            moreDefinitionLines: ids.slice(1).map((id, k) => `${definitionLabel(id)} ${plainOnLabelLine(bodies[k + 1])}`),
+            body: texts[0],
+            moreDefinitionLines: ids.slice(1).map((id, k) => `${definitionLabel(id)} ${texts[k + 1]}`),
         });
         // The result gate judges the conversion: each name's definition is one
         // line, the first at the label line the append planned, the others
@@ -454,7 +454,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
                     (id, k): CreatedFootnote => ({
                         kind: "footnote",
                         name: id,
-                        references: chosen.flatMap((span, s) => (idOf.get(span.body) === id ? [plan.edits[s].start] : [])),
+                        references: chosen.flatMap((span, s) => (idOf.get(span.definitionText) === id ? [plan.edits[s].start] : [])),
                         definition: { line: plan.labelLine + k, lines: 1 },
                     }),
                 ),
@@ -503,6 +503,28 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         noticeLintAlerts(plugin, doc.getValue(), false);
     }
     return result;
+}
+
+/**
+ * The text a definition made from an inline footnote's `body` would hold. Two
+ * inline footnotes with the same answer share one definition, since two
+ * identical definitions serve no one (hunt 2026-11-06, cycle 9, findings H28 and
+ * H33).
+ *
+ * Two things change on the way. A number and its dot at the start of the text
+ * get a backslash, so the definition is not read as a list (plainOnLabelLine).
+ * And in a table row, "\|" loses its backslash, which was there only so the
+ * pipe would not end the cell. In protected text it stays. Obsidian draws it in
+ * a code span, in the cell and in the definition alike (live answers H24a and
+ * H24c), in math "\|" is a double bar, and a wikilink reads the same with it or
+ * without it (H24b), while the result gate holds that text to be unchanged. A
+ * backslash that a backslash escapes is passed over whole, so "\\|" is no escaped
+ * pipe.
+ */
+function definitionTextOf(body: string, onTableRow: boolean): string {
+    if (!onTableRow) return plainOnLabelLine(body);
+    const masked = readNote([body]).maskedLine(0);
+    return plainOnLabelLine(body.replace(/\\[\s\S]/g, (escape: string, at: number) => (escape === "\\|" && masked[at] === "\\" ? "|" : escape)));
 }
 
 /**
