@@ -422,8 +422,8 @@ function noticeSectionHeadingNotAdded(plugin: FootnotePlugin, markdown: string) 
 // references and renamed footnotes as "[^a]", definitions left out of
 // order as "[^a]:". Only after a lint that held something back
 // (lastLintHeldBack), since a lint the gate passed whole held nothing.
-function heldChanges(plugin: FootnotePlugin, markdown: string, afterLint: boolean): string[] {
-    if (!afterLint || !lastLintHeldBack(markdown)) return [];
+function heldChanges(plugin: FootnotePlugin, markdown: string): string[] {
+    if (!lastLintHeldBack(markdown)) return [];
     const heading = configuredSectionHeading(plugin);
     const held = heldByTheLint(markdown, lintOptionsFromSettings(plugin, sectionHeadingProblem(heading) === null ? heading : "", markdown));
     return [
@@ -755,8 +755,11 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string, after
     noticeCommentedDefinitions(markdown);
     noticeDefinitionsInsideTables(markdown);
     const told = noticeOrphanedDefinitions(plugin, markdown, { lines }, afterLint);
-    noticeSectionHeadingNotAdded(plugin, markdown);
-    const left = [...ungatheredDefinitions(plugin, markdown), ...heldChanges(plugin, markdown, afterLint)];
+    // These two say what the lint did not do. After a command that ran no
+    // lint they would be false, and the next lint says them truly (hunt
+    // 2026-11-06, cycle 9, H18, pin bug-alerts-say-lint-when-no-lint-ran).
+    if (afterLint) noticeSectionHeadingNotAdded(plugin, markdown);
+    const left = afterLint ? [...ungatheredDefinitions(plugin, markdown), ...heldChanges(plugin, markdown)] : [];
     told.push(...noticeDuplicateDefinitions(plugin, markdown, { lines }, afterLint));
     noticeHeldBack(left, new Set(told));
     noticeNestedFootnotes(lines);
