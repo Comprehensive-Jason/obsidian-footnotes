@@ -10,23 +10,25 @@ import { DEFAULT_SETTINGS } from "../../src/settings";
 import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
 
-// A backslash-escaped "]" inside what looks like a footnote name, as in
-// "[^a\]b]". The live check of 2026-11-05 on Obsidian 1.15.0 settled how it
-// reads: Obsidian reads neither "Alpha[^a\]b]." nor "[^a\]b]: body" as a
-// footnote, so both are plain text.
+// A backslash in front of a "]" in what looks like a footnote name, as in
+// "[^a\]b]". Reading view on Obsidian 1.15.0 (2026-11-06) draws "[^a\]" as a
+// reference with no definition, shown bare as "a\", and then the text "b]". The
+// note reading agrees. The metadata cache lists no reference there only because
+// it lists defined ones, which is why the check of 2026-11-05 took this for plain
+// text and no footnote: that evidence was wrong.
 //
-// The note reading stops the name at the first "]", so it sees a reference
-// named "a\" and the rest of the line, "b]", as text. With Delete orphaned
-// references on, the lint cut "[^a\]" out of the prose, leaving "Alphab]." and
-// "b]: body". That destroys plain text, so the rule now leaves alone any name
-// ending in a backslash (Jason's ruling, 2026-11-05). The alert leaves it alone
-// too, because to Obsidian this is no footnote with a missing definition.
+// With Delete orphaned references on, the lint cut "[^a\]" out of the text,
+// leaving "Alphab]." and "b]: body". The rule leaves alone any name ending in a
+// backslash, and so does the alert (Jason's ruling, 2026-11-05). That still holds
+// on the corrected evidence, because it protects prose such as a regex written
+// outside code, where the cut would destroy what the user wrote.
 //
-// Hunt: 2026-09-13. Lens: grammar. Entry 4 of the spec sort of 2026-11-05.
+// Hunt: 2026-09-13. Lens: grammar. Entry 4 of the spec sort of 2026-11-05. The
+// evidence corrected in hunt 2026-11-06, cycle 9.
 //
-// Source of truth: the live check above; the plugin's own policy in
-// src/linting/rules/remove-orphaned-references.ts that a deletion must never
-// destroy ordinary prose.
+// Source of truth: the live answers above (H10a, H10b, H10d); the plugin's own
+// policy in src/linting/rules/remove-orphaned-references.ts that a deletion must
+// never destroy ordinary prose.
 
 const NOTE = "Alpha[^a\\]b].\n\n[^a\\]b]: body\n";
 
@@ -34,7 +36,7 @@ const settings = { ...DEFAULT_SETTINGS, lintDeleteOrphanedReferences: true };
 
 beforeEach(resetNotices);
 
-describe("an escaped ] inside a name (Jason's ruling, 2026-11-05, from the live check on Obsidian 1.15.0)", () => {
+describe("a name ending in a backslash (Jason's ruling, 2026-11-05; the evidence corrected 2026-11-06)", () => {
     it("orphan deletion does not chop a [^a\\]b]: line in half", () => {
         const before = "Alpha.\n\n[^a\\]b]: body\n";
         expect(removeOrphanedFootnoteReferences(before)).toBe(before);
@@ -52,6 +54,11 @@ describe("an escaped ] inside a name (Jason's ruling, 2026-11-05, from the live 
         expect(orphanedFootnoteReferenceNames(NOTE)).toEqual([]);
         noticeLintAlerts(fakePlugin({ ...settings, lintDeleteOrphanedReferences: false }), NOTE);
         expect(messages().filter((m) => m.includes("no definition"))).toEqual([]);
+    });
+
+    it("a regex written outside code stays whole, which is what the exemption is for", () => {
+        const note = "Use the regex [^\\]]+ here.\n";
+        expect(removeOrphanedFootnoteReferences(note)).toBe(note);
     });
 
     it("control: a backslash anywhere else in the name is an orphan like any other", () => {

@@ -36,11 +36,13 @@ import { FootnoteRule } from "../rule";
 //    so deleting the reference would throw that work away. The label's own
 //    "[^x]" counts as a reference too, and cutting it would leave ": text"
 //    behind. Each of these has an alert saying how to fix it.
-//  - A name ending in a backslash, as the note reading finds in "[^a\]b]".
-//    The backslash escapes the "]", so the live check on Obsidian 1.15.0
-//    (2026-11-05) reads that as plain text and no footnote, while the note
-//    reading stops the name at the "]". Cutting it would cut prose apart, and
-//    leave "b]" behind (pin spec-escaped-bracket-in-label).
+//  - A name ending in a backslash, as in "[^a\]b]". Reading view draws "[^a\]"
+//    as a reference with no definition, shown bare as "a\", and then the text
+//    "b]" (live Obsidian 1.15.0, 2026-11-06; the metadata cache lists no
+//    reference there only because it lists defined ones). This one is left
+//    alone because it protects prose, such as a regex written outside code:
+//    cutting "[^\]" out of "[^\]]+" would leave "]+" behind (Jason's ruling,
+//    2026-11-05; pin spec-escaped-bracket-in-label).
 
 /**
  * Every name the note defines, lower-cased, wherever the definition sits:
