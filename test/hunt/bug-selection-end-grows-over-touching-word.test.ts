@@ -40,9 +40,13 @@ describe("endOfWordForSelection: an offset right after a stop stays put", () => 
         expect(endOfWordForSelection("（注）次の文", 3)).toBe(3);
     });
 
-    it("after an exclamation mark or a question mark with a word glued to it", () => {
-        expect(endOfWordForSelection("Stop!Next word", 5)).toBe(5);
-        expect(endOfWordForSelection("Why?Next word", 4)).toBe(4);
+    // A plain "!" or "?" no longer stops the growth: with them in the list, a
+    // drag ending on the "?" of an address was refused, and text that uses these
+    // marks seldom runs on after one with no space (hunt 2026-11-06, cycle 10).
+    // This is a characterization test, behaviour pinned as it was before cycle 9.
+    it("not after a plain exclamation mark or question mark with a word glued to it", () => {
+        expect(endOfWordForSelection("Stop!Next word", 5)).toBe(9);
+        expect(endOfWordForSelection("Why?Next word", 4)).toBe(8);
     });
 
     it("after a stop with a closer in front of it", () => {
@@ -116,8 +120,8 @@ describe("a selection ending right after a mark leaves the touching word in the 
         expect(await press("中文，英文。第三句。", 3, 6, "after", insertInlineFootnote)).toEqual(["中文，^[英文。]第三句。"]);
     });
 
-    it("the Latin twin, a word glued after an exclamation mark", async () => {
-        expect(await press("Stop!Next word", 0, 5)).toEqual(["[^1]Next word", "", "[^1]: Stop!"]);
+    it("the Latin twin, a word glued after an exclamation mark, grows as it did before cycle 9 (characterization)", async () => {
+        expect(await press("Stop!Next word", 0, 5)).toEqual(["[^1] word", "", "[^1]: Stop!Next"]);
     });
 
     // Characterization (behaviour pinned as it is): a CJK sentence ended by an

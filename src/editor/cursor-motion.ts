@@ -126,11 +126,14 @@ const joinsWordAt = (text: string, at: number): boolean => {
 
 /**
  * The marks a selection does not grow past when its end sits right after one:
- * those that end a sentence, and CJK punctuation other than an opening bracket.
+ * a full stop, an ellipsis, and CJK punctuation other than an opening bracket.
  * CJK text puts no space after these, so the next word touching one is the next
- * sentence or clause, not more of the same word (endOfWordForSelection).
+ * sentence or clause, not more of the same word (endOfWordForSelection). A plain
+ * "!" or "?" isn't one of them: inside an address such as "a.b/c?d=1" the end
+ * has to grow, and a sentence that runs on after one with no space is rare in
+ * text that uses them (hunt 2026-11-06, cycle 10).
  */
-const EndsSelectionGrowth = /[.!?\u2026\u3002\uff0c\u3001\uff1b\uff1a\uff01\uff1f\uff0e\uff61\uff64\u22ef\u2025\u203c\u2047\u2048\u2049\u300d\u300f\uff09\u3011\u3015\u300b\u3009\uff63\uff3d\uff5d\uff60\u3017\u3019\u301b]/;
+const EndsSelectionGrowth = /[.\u2026\u3002\uff0c\u3001\uff1b\uff1a\uff01\uff1f\uff0e\uff61\uff64\u22ef\u2025\u203c\u2047\u2048\u2049\u300d\u300f\uff09\u3011\u3015\u300b\u3009\uff63\uff3d\uff5d\uff60\u3017\u3019\u301b]/;
 
 /** Which of two positions comes first in the document. Negative, zero, or
  * positive, like any sort comparator. The one copy of it; it used to live
@@ -220,7 +223,7 @@ function wordEndOffset(text: string, offset: number): number {
  * embed, and `footnotes` the footnotes on the line, as endOfWordOffset takes
  * them.
  *
- * An end right after a mark that ends a sentence, or after a CJK mark, stays
+ * An end right after a full stop, an ellipsis, or a CJK mark stays
  * where it is, even when the next word touches it (EndsSelectionGrowth).
  * Chinese and Japanese put no space between sentences, so a whole sentence
  * selected with its full stop, "英文。" in "中文，英文。第三句。", grew over the next
