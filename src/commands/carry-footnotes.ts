@@ -308,7 +308,8 @@ export interface CarriedPastePlan {
  * - Merged: a carried block whose text, whitespace collapsed outside its
  *   code blocks and with the paste's own merges made, equals the text of a
  *   definition the destination shows. Its references are pointed at the
- *   existing name, whatever its label, and the block is not added.
+ *   existing name, whatever its label, and the block is not added. An empty
+ *   definition is never merged.
  * - Kept: a name the destination does not define, and that no name
  *   settled before it has taken. A reference the destination has with no
  *   definition does not take its name, so a definition cut and pasted
@@ -490,10 +491,15 @@ export function planCarriedPaste(destination: string, body: string, carried: Car
     // pasted elsewhere in its note left its reference with no definition
     // (Jason's ruling Q29, 2026-10-08; hunt 2026-10-08 cycle 6, cluster
     // Z14). Everywhere else same-text footnotes still merge (Q13).
+    //
+    // An empty definition is never merged either. It is a placeholder waiting
+    // for its text, not text, and merged, two unrelated references shared one
+    // definition, so typing into it filled both (Jason's ruling, 2026-11-05,
+    // pin spec-carry-empty-bodies-merge).
     const merged = new Map<string, string>();
-    const unmerged = new Set(carried.map((definition) => definition.name.toLowerCase()).filter((name) => gaps.has(name)));
-    const blockOf = new Map(carried.map((definition, i) => [definition.name.toLowerCase(), i]));
     const shapes = carried.map((definition, i) => shapeOf(definition.lines, blockReadings[i].labelOn(0)?.labelEnd ?? 0, blockSyntax(i), codeBlockLines(blockReadings[i])));
+    const unmerged = new Set(carried.filter((definition, i) => gaps.has(definition.name.toLowerCase()) || shapes[i].text === "").map((definition) => definition.name.toLowerCase()));
+    const blockOf = new Map(carried.map((definition, i) => [definition.name.toLowerCase(), i]));
     // whether carried block `i` reads as the destination's `offered` once
     // every name in it is paired up; `pairs` holds the matches assumed so
     // far, and gains the ones this match needs
