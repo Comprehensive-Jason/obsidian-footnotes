@@ -8,12 +8,13 @@ Two inline footnotes with the same body^[the same note] and again^[the same note
 
 - [ ] Run **Convert inline footnotes to normal footnotes**: the three inline footnotes above become numbered references, two definitions are appended after the last definition block (the two identical bodies share one), and the toast reads well ("Converted 3 inline footnotes into 2 normal footnotes (1 identical body merged).")
 - [ ] One undo brings all three inline footnotes back and removes both definitions at once
-- [ ] With **Lint on footnote creation** on, the same command lints straight after (references renumbered if needed) and the note reads right in Reading view
+- [ ] With **Lint on footnote creation** on, the same command lints straight after (references renumbered if needed), the note reads right in Reading view, and one undo brings back the note as it was before the command
 
 ## Normal to inline
 
 - [ ] Run **Convert normal footnotes to inline footnotes**: `[^twice]` becomes two identical inline copies, `[^single]` becomes one, `[^long]` stays with its definition, and the toast names `[^long]` with "more than one line" and says the twice-used definition became copies
 - [ ] One undo restores the references and the definitions together
+- [ ] With **Lint on footnote creation** on, the same command lints straight after, and one undo brings back the note as it was before the command
 
 ## The round trip
 

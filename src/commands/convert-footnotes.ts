@@ -8,9 +8,9 @@ import { docContext, listExistingFootnoteDefinitions } from "../editor/doc-conte
 import { everyFootnoteSkipped, showNotice } from "../editor/notice";
 import { CreatedFootnote, judgeEdit } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
-import { replaceMinimal, writeChanges } from "../editor/write-back";
+import { replaceMinimal } from "../editor/write-back";
 import { noticeLintAlerts } from "../linting/lint-alerts";
-import { lintAfterFootnoteCreation, lintBlockedByPrefix, lintRulesAllDisabled, withEmptySectionHeadingRemoved } from "../linting/linter";
+import { creationLintOf, lintBlockedByPrefix, lintRulesAllDisabled, withEmptySectionHeadingRemoved } from "../linting/linter";
 import { commentedLabelLines } from "../linting/rules/remove-orphaned-references";
 import { computeNextFootnoteNumber, definitionLabel, nameForBody, quotedReference } from "../parsing/footnote-grammar";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
@@ -345,8 +345,9 @@ const nothingToConvert: ConversionToNormal = { converted: 0, definitions: 0, mer
  * result gate refuses is counted too, and stays inline while the others
  * convert (Jason's ruling, 2026-11-06). Protected text is never read.
  *
- * Then the lint-on-creation trigger runs when that setting is on, as it
- * does after every press that creates a footnote.
+ * The lint-on-creation trigger runs when that setting is on, as it does after
+ * every press that creates a footnote, and goes in with the conversion in that
+ * one transaction.
  */
 export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Editor): ConversionToNormal {
     const ctx = docContext(doc);
@@ -485,13 +486,15 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         showNotice(everyFootnoteSkipped(skippedList(skipped)), 8000);
         return { ...nothingToConvert, skipped };
     }
+    // Anything that creates a footnote lints, when that setting is on. The lint
+    // reads the converted text first and both go in as one transaction, so one
+    // undo takes back the conversion and the lint together (hunt 2026-11-06,
+    // cycle 9, finding H31, the triage's ruling).
+    const lint = creationLintOf(plugin, doc, planned.plan.final.join("\n"));
     // through the shared write-back, so a folded section the conversion
     // edits stays folded and a second pane on the note stays where it was
     // (hunt 2026-10-02, round 4, cluster U2)
-    const offsetChanges = planned.plan.changes
-        .map((change) => ({ from: doc.posToOffset(change.from), to: doc.posToOffset(change.to ?? change.from), text: change.text }))
-        .sort((a, b) => a.from - b.from);
-    writeChanges(doc, doc.getValue(), offsetChanges, plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined);
+    replaceMinimal(doc, doc.getValue(), lint.after, plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined);
 
     const result: ConversionToNormal = {
         converted: kept.length,
@@ -509,11 +512,9 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
             (skipped.length > 0 ? someSkipped(skippedList(skipped)) : ""),
         skipped.length > 0 ? 8000 : undefined,
     );
-    // anything that creates a footnote lints, when that setting is on;
-    // otherwise the alerts alone speak (ADR 2)
-    if (lintAfterFootnoteCreation(plugin, doc, false) === null && !plugin.settings.lintOnFootnoteCreation) {
-        noticeLintAlerts(plugin, doc.getValue(), false);
-    }
+    lint.speak();
+    // with no creation lint, the alerts alone speak (ADR 2)
+    if (!plugin.settings.lintOnFootnoteCreation) noticeLintAlerts(plugin, lint.after, false);
     return result;
 }
 
@@ -572,9 +573,10 @@ export async function convertInlineToNormalCommand(plugin: FootnotePlugin) {
  * The "Convert normal footnotes to inline footnotes" command: the pure
  * transform above, written back as one transaction that keeps folds and
  * the caret, then a toast with the counts and every skipped definition's
- * name and reason. Then the lint runs when Lint on footnote creation is on,
- * because that setting names the convert commands (Jason's ruling,
- * 2026-11-05); with it off, the lint alerts alone speak.
+ * name and reason. The lint runs when Lint on footnote creation is on, because
+ * that setting names the convert commands (Jason's ruling, 2026-11-05), and
+ * goes in with the conversion in that one transaction (finding H31); with it
+ * off, the lint alerts alone speak.
  */
 export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
     await withEditableEditor(plugin, (doc) => {
@@ -591,7 +593,8 @@ export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
             // the section heading goes when every definition became inline
             // and the setting says so (Jason, 2026-09-25)
             const markdown = withEmptySectionHeadingRemoved(plugin, result.markdown);
-            replaceMinimal(doc, before, markdown, mdView);
+            const lint = creationLintOf(plugin, doc, markdown);
+            replaceMinimal(doc, before, lint.after, mdView);
             const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
             showNotice(
                 `Converted ${plural(result.converted, "footnote")} into ${result.converted === 1 ? "an inline footnote" : "inline footnotes"} at ${plural(result.references, "reference")}` +
@@ -602,7 +605,7 @@ export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
                     skippedText,
                 result.skipped.length > 0 ? 8000 : undefined,
             );
-            if (lintAfterFootnoteCreation(plugin, doc, false) !== null) return;
+            lint.speak();
             if (!plugin.settings.lintOnFootnoteCreation) {
                 noticeLintAlerts(plugin, markdown, false);
                 return;
