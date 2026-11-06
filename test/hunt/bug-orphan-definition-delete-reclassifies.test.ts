@@ -70,8 +70,12 @@ describe("orphaned-definition deletion reclassifying the lines below it", () => 
         expect(removeOrphanedFootnoteDefinitions(doc)).toBe("para\n===\n$$ tail\n[^3]: y");
     });
 
-    it("control: without the lazy label below, the orphaned block deletes fine", () => {
-        expect(removeOrphanedFootnoteDefinitions("para\n===\n[^4]: x $$\n$$ tail")).toBe("para\n===");
+    // Changed 2026-11-06 (hunt cycle 10): "$$ tail" is not indented, so it would stay
+    // behind, and the inline math running from the label's line into it would be
+    // parted. So the orphan stays whole, and the alert names it (pin
+    // spec-orphan-cut-leaves-lazy-lines).
+    it("control: without the lazy label below, the orphan stays, since cutting it would part inline math", () => {
+        expect(removeOrphanedFootnoteDefinitions("para\n===\n[^4]: x $$\n$$ tail")).toBe("para\n===\n[^4]: x $$\n$$ tail");
     });
 
     it("control: with `Delete orphaned definitions` OFF the note is untouched", () => {
