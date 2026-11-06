@@ -1,7 +1,7 @@
 import { rulePasses } from "../rule-gate";
 import { readNote } from "../../parsing/note-reading";
 import { definitionLabelWithName, labelShapedLines } from "../../parsing/label-shapes";
-import { punctuationAt, wordEndBefore } from "../../parsing/landing";
+import { spacesGoWithFootnoteBefore, wordEndBefore } from "../../parsing/landing";
 import { normalizeEol, restoreEol } from "../../parsing/line-edits";
 import { FootnoteRule } from "../rule";
 
@@ -338,15 +338,17 @@ export function removeOrphanedFootnoteReferences(markdown: string, orphanSafePre
  * it too, since they belong to it: "word [^1]." becomes "word.", not
  * "word ." (Jason's ruling Q35, 2026-10-09, which settles D10; pin
  * spec-delete-stray-space-before-punctuation), and "word, [^1]." becomes
- * "word,." (the same ruling applied after punctuation). `textStart` is
- * the column where the line's text begins (NoteReading.blockSyntaxEnd),
- * so the space after "- " or "> " stays (wordEndBefore).
+ * "word,." (the same ruling applied after punctuation). The same goes for a
+ * closing bracket or quote: "(see [^1])" becomes "(see)" (hunt 2026-11-06,
+ * cycle 9, finding H32, the triage's choice extending that ruling). `textStart`
+ * is the column where the line's text begins (NoteReading.blockSyntaxEnd), so
+ * the space after "- " or "> " stays (wordEndBefore).
  *
  * Shared with the Delete footnote command, which cuts references the same
  * way (T4, 2026-09-21).
  */
 export function cutOne(line: string, start: number, end: number, textStart = 0): string {
-    const head = line.slice(0, punctuationAt(line, end) ? wordEndBefore(line, start, textStart) : start);
+    const head = line.slice(0, spacesGoWithFootnoteBefore(line, end) ? wordEndBefore(line, start, textStart) : start);
     let copied = end;
     if (line[copied] === " " && (head === "" || head.endsWith(" "))) copied++;
     const tail = line.slice(copied);

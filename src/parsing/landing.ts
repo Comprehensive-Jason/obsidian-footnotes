@@ -298,6 +298,20 @@ function closesBracketedText(text: string, close: number): boolean {
 }
 
 /**
+ * Whether the spaces typed in front of a footnote go with it when the text at
+ * `at` follows it: punctuation (Jason's ruling Q35, 2026-10-09), or a closing
+ * bracket or quote, so "(see [^1])" gives "(see)" (hunt 2026-11-06, cycle 9,
+ * finding H32, the triage's choice extending that ruling). A quote glued to the
+ * word after it opens rather than closes (markRunEnd). An emphasis closer does
+ * not count, so "**foo [^1]**" gives "**foo **": Obsidian still draws that bold
+ * (live answer H32 on 1.15.0).
+ */
+export function spacesGoWithFootnoteBefore(text: string, at: number): boolean {
+    if (punctuationAt(text, at)) return true;
+    return at < text.length && ClosingMarkChars.includes(text[at]) && !"*_~=".includes(text[at]) && markRunEnd(text, at) !== -1;
+}
+
+/**
  * The closing marks that only ever close: the closing brackets of every
  * kind and the CJK closing quotes. A straight or curly quote can also open
  * or sit inside a word ("Marx's"), and an emphasis marker can also open
