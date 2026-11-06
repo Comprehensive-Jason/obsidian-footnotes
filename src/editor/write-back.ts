@@ -1,3 +1,4 @@
+import { ChangeSet, EditorSelection as CodeMirrorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { Editor, EditorPosition, EditorRangeOrCaret, EditorSelection, MarkdownView } from "obsidian";
 
@@ -64,10 +65,10 @@ export function writeChanges(doc: Editor, before: string, changes: OffsetChange[
         })),
         ...(selection ? { selection } : {}),
     });
+    const after = applyOffsetChanges(before, changes);
+    keepCaretsWithDefinitions(doc, before, changes, after, selections);
     // a caret the caller placed is already where it should be
     if (!selection) keepCaretBelowLinesAbove(doc, changes);
-    const after = applyOffsetChanges(before, changes);
-    keepCaretsWithDefinitions(doc, before, after, selections);
     if (foldInfo && foldInfo.folds.length > 0 && mode?.applyFoldInfo) {
         mode.applyFoldInfo({
             folds: mapFoldLines(foldInfo.folds, changes, before),
@@ -116,16 +117,20 @@ function keepCaretBelowLinesAbove(doc: Editor, changes: OffsetChange[]): void {
  *
  * It is set after the edits, so the undo that brings the old note back also
  * brings the caret back to where it was, as with any edit. `selections` are
- * the selections before the edits. When the edits carried two carets onto one
- * place, the editor has fewer selections now than it had and they no longer
- * pair up one for one, so they are left as the editor put them. (Jason's
- * ruling, 2026-11-05, pin spec-caret-in-swapped-definition.)
+ * the selections before the edits, as positions in `before`. Where the editor
+ * carried each of them is worked out here (carriedSelections) rather than
+ * read back from the editor: a definition moved to the bottom is lines
+ * deleted in one place and written in another, so the editor carries every
+ * caret in it to the deletion point and merges them into one, and the
+ * editor's list then no longer pairs up with `selections`. Read back, two
+ * carets in one moved definition were left as one caret on the prose line
+ * under it (hunt 2026-11-06, cycle 9, finding H35, pin
+ * spec-two-carets-in-moved-definition).
  */
-function keepCaretsWithDefinitions(doc: Editor, before: string, after: string, selections: EditorSelection[]): void {
+function keepCaretsWithDefinitions(doc: Editor, before: string, changes: OffsetChange[], after: string, selections: EditorSelection[]): void {
     const followed = selectionsFollowingDefinitions(before, after, selections);
     if (followed.every((range) => range === null)) return;
-    const carried = doc.listSelections();
-    if (carried.length !== selections.length) return;
+    const carried = carriedSelections(before, changes, after, selections);
     const samePlace = (a: EditorPosition, b: EditorPosition) => a.line === b.line && a.ch === b.ch;
     const moved = carried.some((range, i) => {
         const place = followed[i];
@@ -133,8 +138,58 @@ function keepCaretsWithDefinitions(doc: Editor, before: string, after: string, s
     });
     // Setting a selection scrolls the view to it, so it is not set when the
     // editor already carried it to the right place (Obsidian's editor scrolls
-    // on a set selection, as restoreOtherPanes notes).
+    // on a set selection, as restoreOtherPanes notes). Two selections carried
+    // onto one place merge into one as the editor merged them.
     if (moved) doc.setSelections(carried.map((range, i) => followed[i] ?? range));
+}
+
+/**
+ * Where the editor carried each of `selections` (positions in `before`)
+ * through `changes`, as positions in `after`: CodeMirror's own mapping of a
+ * selection through a change set, which the editor applies to a transaction
+ * that sets no selection. A caret in replaced text goes to the start of the
+ * new text, and a caret where text goes in stays in front of it.
+ */
+function carriedSelections(before: string, changes: OffsetChange[], after: string, selections: EditorSelection[]): EditorSelection[] {
+    const changeSet = ChangeSet.of(
+        changes.map((change) => ({ from: change.from, to: change.to, insert: change.text })),
+        before.length,
+    );
+    const offsetIn = offsetsOf(before);
+    const positionIn = positionsOf(after);
+    return selections.map((range) => {
+        const carried = CodeMirrorSelection.range(offsetIn(range.anchor), offsetIn(range.head)).map(changeSet);
+        return { anchor: positionIn(carried.anchor), head: positionIn(carried.head) };
+    });
+}
+
+/** For `text`, the offset of a line and column in it. */
+function offsetsOf(text: string): (pos: EditorPosition) => number {
+    const starts = lineStarts(text);
+    return (pos) => starts[pos.line] + pos.ch;
+}
+
+/** For `text`, the line and column of an offset in it. */
+function positionsOf(text: string): (offset: number) => EditorPosition {
+    const starts = lineStarts(text);
+    return (offset) => {
+        // the last line starting at or before the offset
+        let low = 0;
+        let high = starts.length - 1;
+        while (low < high) {
+            const mid = Math.ceil((low + high) / 2);
+            if (starts[mid] <= offset) low = mid;
+            else high = mid - 1;
+        }
+        return { line: low, ch: offset - starts[low] };
+    };
+}
+
+/** The offset where each line of `text` starts. */
+function lineStarts(text: string): number[] {
+    const starts = [0];
+    for (let i = 0; i < text.length; i++) if (text[i] === "\n") starts.push(i + 1);
+    return starts;
 }
 
 /**
