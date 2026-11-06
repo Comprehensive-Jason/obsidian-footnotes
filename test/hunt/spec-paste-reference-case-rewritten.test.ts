@@ -20,6 +20,11 @@ import { handleCopy, handlePaste, resetCarryRegister } from "../../src/commands/
 // The only question is whether a paste should touch a reference it does
 // not need to rename. Severity if ruled a bug: annoyance.
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): a reference spelled in a
+// different case from its label is rare, and the footnote works either way.
+// It was it.fails until then.
+//
 // Hunt 2026-10-02, round 3, lens carry-model. Cluster M4.
 //
 // Source of truth: GLOSSARY.md and the README's Rename paragraph, "Names
@@ -78,11 +83,10 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
-describe("spec question: a pasted reference keeps its own case", () => {
-    it.fails("[^Note] stays [^Note] when its definition is labelled [^note] and the destination has no such name", () => {
+describe("the case of a pasted reference", () => {
+    it("characterization: [^Note] takes its label's case, [^note], when the destination has no such name", () => {
         const text = copy(["See[^Note] here.", "", "[^note]: the text"], { line: 0, ch: 0 }, { line: 0, ch: 16 });
         const lines = pasteRegister(["Other."], { line: 0, ch: 6 }, text);
-        // Today: "Other.See[^note] here."
-        expect(lines[0]).toBe("Other.See[^Note] here.");
+        expect(lines[0]).toBe("Other.See[^note] here.");
     });
 });

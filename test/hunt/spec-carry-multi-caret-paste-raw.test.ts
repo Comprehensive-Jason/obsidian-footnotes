@@ -22,6 +22,12 @@ import { handlePaste, resetCarryRegister } from "../../src/commands/carry-footno
 // check too: the fake editor cannot show what Obsidian's own multi-caret
 // paste does with the text.
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): a paste with footnotes at
+// several carets is rare, and nothing is lost: the plugin steps aside, and the
+// editor pastes the text as it was copied.
+// It was it.fails until then.
+//
 // Hunt 2026-10-02, round 1, lens carry-hook. Cluster C21.
 //
 // Source of truth: the README's Paste paragraph ("Paste inside Obsidian
@@ -56,13 +62,12 @@ beforeEach(() => {
     resetCarryRegister();
 });
 
-describe("spec question: a multi-caret paste of text that carries a definition", () => {
-    it.fails("is not left to paste the definition lines as plain text at every caret without a word", () => {
+describe("a multi-caret paste of text that carries a definition", () => {
+    it("characterization: is left to the editor, without a word", () => {
         // Two carets, one at the end of each line.
         const dest = fakeEditor(["a", "b"], { wholeDoc: true, edits: true, carets: [{ line: 0, ch: 1 }, { line: 1, ch: 1 }] });
         const taken = handlePaste(fakePlugin(on, dest), clipboardEvent("c[^7]\n\n[^7]: seven") as never, dest);
-        // Either taken over, or at least a word about why the definitions
-        // were not landed. Today: not taken, and no toast.
-        expect(taken || messages().length > 0).toBe(true);
+        expect(taken).toBe(false);
+        expect(messages()).toEqual([]);
     });
 });

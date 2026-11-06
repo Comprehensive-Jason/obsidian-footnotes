@@ -95,8 +95,9 @@ describe("reindex's slot swap", () => {
     });
 
     // Answered (2026-11-05, sorting the spec pins under Jason's scope rule of
-    // 2026-10-07): the result gate design he approved (2026-10-07, ADR 0003) lists
-    // Q21 under "left as they behave, no code (rare or harmless)": the caret after reindex swaps two long definitions.
+    // 2026-10-07): the result gate design he approved (2026-10-07, ADR 0003)
+    // lists Q21 under "left as they behave, no code (rare or harmless)": the
+    // caret after reindex swaps two long definitions.
     // The caret at the end of "    cont one" lands at column 0 of "[^1]: two"
     // (line 2). This was it.fails until then. The everyday case below, a
     // definition gathered at the bottom, came later and is still open.
