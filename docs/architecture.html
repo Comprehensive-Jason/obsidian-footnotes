@@ -451,8 +451,8 @@
 </header>
 
 <div class="stats">
-  <div class="stat" style="--st: var(--commands)"><div class="n">56</div><div class="l">source files, 24,103 lines (about 40% of them comments)</div></div>
-  <div class="stat" style="--st: var(--scaffold)"><div class="n">820</div><div class="l">test files (488 of them are pinned bugs)</div></div>
+  <div class="stat" style="--st: var(--commands)"><div class="n">56</div><div class="l">source files, 24,083 lines (about 40% of them comments)</div></div>
+  <div class="stat" style="--st: var(--scaffold)"><div class="n">821</div><div class="l">test files (492 of them are pinned bugs)</div></div>
   <div class="stat" style="--st: var(--commands)"><div class="n">10</div><div class="l">commands you can bind to a key</div></div>
   <div class="stat" style="--st: var(--linting)"><div class="n">8</div><div class="l">lint rules, run in a fixed order, plus one sweep</div></div>
 </div>
@@ -484,31 +484,31 @@
   </div>
   <div class="gap"><span>loads</span></div>
   <div class="band l-plumbing">
-    <div><span class="name">plumbing</span><span class="count">main.ts + settings.ts · 2 files · 931 lines</span></div>
+    <div><span class="name">plumbing</span><span class="count">main.ts + settings.ts · 2 files · 932 lines</span></div>
     <div class="what">Registers the 10 commands and 9 icons, loads and migrates settings, installs the save hook and the vim hook, and puts it all back on unload.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-commands">commands</span><span class="chip l-linting">linting</span><span class="chip l-editor">editor</span><span class="chip l-parsing">parsing</span></div>
   </div>
   <div class="gap"><span>calls</span></div>
   <div class="band l-commands">
-    <div><span class="name">commands/</span><span class="count">17 files · 9,045 lines</span></div>
+    <div><span class="name">commands/</span><span class="count">17 files · 9,145 lines</span></div>
     <div class="what">The press: claims, guards, jumps, create, the popup, rename, the prefix dialog. And the whole-note commands: delete everywhere, the two style conversions, and the copy, cut, and paste hooks that carry definitions along.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-linting">linting</span><span class="chip l-editor">editor</span><span class="chip l-parsing">parsing</span></div>
   </div>
   <div class="gap"><span>calls (one function: lint right after creating a footnote)</span></div>
   <div class="band l-linting">
-    <div><span class="name">linting/</span><span class="count">17 files · 4,908 lines</span></div>
+    <div><span class="name">linting/</span><span class="count">17 files · 5,086 lines</span></div>
     <div class="what">The 8 rules and the empty-heading sweep, the pipeline that runs them in order, the shared rewrite engine, the shared rename engine, and the alerts.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-editor">editor</span><span class="chip l-parsing">parsing</span></div>
   </div>
   <div class="gap"><span>calls</span></div>
   <div class="band l-editor">
-    <div><span class="name">editor/</span><span class="count">10 files · 5,067 lines</span></div>
+    <div><span class="name">editor/</span><span class="count">10 files · 5,157 lines</span></div>
     <div class="what">Helpers between the note and the live editor: DocContext, caret motion, table cells, the insertion rehearsal, the shared write-back (a line diff that keeps folds, the caret, and other panes in place), notices, and the quarantine for undocumented Obsidian internals.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-parsing">parsing</span></div>
   </div>
   <div class="gap"><span>calls</span></div>
   <div class="band l-parsing">
-    <div><span class="name">parsing/</span><span class="count">10 files · 3,628 lines</span></div>
+    <div><span class="name">parsing/</span><span class="count">10 files · 3,763 lines</span></div>
     <div class="what">The note reading (the shared remark-obsidian package, which holds Obsidian's parser, read in parts and remembered) with its masked twin, the footnote grammar, the landing walk, the label shapes, and the prefix reader. Pure text in, facts out.</div>
     <div class="uses"><span class="lbl">leans on</span><span class="chip l-obsidian">nothing</span></div>
   </div>
@@ -775,7 +775,7 @@
 <p>This is where most of the file count lives, and why the repo feels much larger than a 17,000-line plugin. Each layer catches a different kind of mistake, and each is coloured here by the part of the plugin it mostly protects.</p>
 </div>
 <div class="layers">
-  <div class="layer t1"><span class="k">1</span><span class="t">Unit and property tests</span><span class="c">npm test · 820 files</span><span class="d">123 feature specs, 23 files that pin what the retired manual sheets used to ask a human, and under <span class="mono">test/hunt/</span> 488 bug pins and 181 spec rulings. The referee holds the reader to Obsidian's saved answers, and the parts test holds the reading in parts to one parse of the whole note. Plus the properties: random documents are generated, linted, and checked for invariants like "no NUL leaks", "protected text is byte-identical", and a differential oracle that parses each document with an independent Markdown parser before and after and demands the same footnote structure. When a property finds a bug, the shrunk counterexample becomes a permanent pin in <span class="mono">test/hunt/</span>.</span></div>
+  <div class="layer t1"><span class="k">1</span><span class="t">Unit and property tests</span><span class="c">npm test · 821 files</span><span class="d">123 feature specs, 23 files that pin what the retired manual sheets used to ask a human, and under <span class="mono">test/hunt/</span> 488 bug pins and 181 spec rulings. The referee holds the reader to Obsidian's saved answers, and the parts test holds the reading in parts to one parse of the whole note. Plus the properties: random documents are generated, linted, and checked for invariants like "no NUL leaks", "protected text is byte-identical", and a differential oracle that parses each document with an independent Markdown parser before and after and demands the same footnote structure. When a property finds a bug, the shrunk counterexample becomes a permanent pin in <span class="mono">test/hunt/</span>.</span></div>
   <div class="layer t2"><span class="k">2</span><span class="t">Static analysis</span><span class="c">npm run lint · npm run knip</span><span class="d">Type-aware ESLint with the official plugin guidelines, and knip for dead exports and unused dependencies, kept at zero findings.</span></div>
   <div class="layer t3"><span class="k">3</span><span class="t">Mutation testing</span><span class="c">npm run mutation</span><span class="d">Stryker makes small deliberate breakages in the pure modules (all of parsing and linting, the non-DOM parts of the rest) and checks that some test fails. A surviving mutant is a logic change nobody would notice. Local only, before a release; it needs its own slower vitest config because per-mutant bookkeeping breaks under shared workers.</span></div>
   <div class="layer t4"><span class="k">4</span><span class="t">Smoke tests</span><span class="c">npm run test:smoke · 3,086-line script</span><span class="d">Drives the real plugin inside the real app through the Obsidian CLI: deploys the build, makes a scratch note, moves the caret, fires commands, reads the editor back. The only layer that can catch Obsidian changing under the plugin, so the popup and table cells live here.</span></div>
@@ -784,7 +784,7 @@
 <div class="prose">
 <p>Continuous integration on GitHub runs only layers 1 and 2 plus the build. The rest is a pre-release ritual you run by hand.</p>
 
-<h3>Why there are 478 bug files</h3>
+<h3>Why there are 492 bug files</h3>
 <p>The standing rule is that every bug found gets a failing test before it is fixed, and the test stays forever as a regression pin. That many pins means that many bugs were found and fixed that way, most of them by the adversarial hunts (in mid-September 2026 alone, five Kimi cycles, ten GLM cycles, and one Opus cycle found and fixed about a hundred) and the property suite. The spec rulings next to them pin behaviour Jason ruled on after a hunt asked whether it was a bug. They are not clutter you need to read; they are a ratchet. Delete one and the bug it pins can come back unnoticed.</p>
 
 <h3>Things that look like duplicates but are not</h3>
@@ -872,7 +872,7 @@
     lint-alerts.ts          the notices
     rewrite-document.ts     the shared rewrite engine
     rewrite-footnote-names.ts   the shared rename engine</span>
-<span class="l-scaffold">test/                     800 files: specs, manual-* pins, hunt/ pins, properties, the referee, helpers
+<span class="l-scaffold">test/                     821 files: specs, manual-* pins, hunt/ pins, properties, the referee, helpers
 scripts/smoke-test.mjs    drives the real app
 manual-tests/             19 sheets   ·   compat-tests/   2 sheets
 docs/adr/                 the two standing decisions
