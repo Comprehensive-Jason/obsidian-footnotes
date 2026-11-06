@@ -350,6 +350,34 @@ describe("the part memory", () => {
         expect(partParseCounts().parsed - before).toBeLessThanOrEqual(2);
     });
 
+    // A tag left open far up must not make every press on a long note parse
+    // from the tag down (hunt 2026-11-06, cycle 9, finding H1).
+    it.each([
+        ["left open far up", 'Jump back to <a name="top"> the top.'],
+        ["left open and closed further down", 'Jump back to <a name="top"> the top.\n\nThis closes </a> it.'],
+    ])("parses only the part an edit falls in, with an <a> tag %s", (_, head) => {
+        const lines = [...head.split("\n"), "", ...note(200, "open tag")];
+        const whole = readNote(lines);
+        expect(whole.references.length).toBe(200);
+        const before = partParseCounts();
+        const edited = [...lines];
+        const line = edited.indexOf("It goes on a little.", 300);
+        edited[line] = "It goes on a little longer.";
+        readNote(edited);
+        expect(partParseCounts().parsed - before.parsed).toBe(1);
+        expect(partParseCounts().unclean).toBe(before.unclean);
+    });
+
+    it("parses the parts below again when an edit closes the tag above them, since they now read differently", () => {
+        const lines = ['Jump back to <a name="top"> the top.', "", ...note(200, "closing tag"), "See [l](u) too."];
+        expect(readNote(lines).links.map((link) => link.lookup)).toEqual(["l"]);
+        const before = partParseCounts().parsed;
+        const edited = [...lines];
+        edited[0] = 'Jump back to <a name="top"> the top.</a>';
+        expect(readNote(edited).links.map((link) => link.lookup)).toEqual([undefined]);
+        expect(partParseCounts().parsed - before).toBeGreaterThan(5);
+    });
+
     it("never starts a part inside the frontmatter, whose closing line decides what its first line is", () => {
         const lines = ["---", "a: 1", "", "b: [^1]", "---", "", "text[^1]", "", "[^1]: d"];
         expect(readNote(lines).protectedSpans.map((span) => [span.kind, span.startLine, span.endLine])).toEqual([["frontmatter", 0, 4]]);

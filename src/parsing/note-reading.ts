@@ -32,7 +32,7 @@
 // region that never closes). The hand-written scanner's walk that used to
 // work these out is gone.
 
-import { DefinitionFact, FootnoteFacts, partFacts } from "./footnote-facts";
+import { addPart, DefinitionFact, FootnoteFacts, noFacts, PartReading, partFacts } from "./footnote-facts";
 import { frontmatterEnd } from "./obsidian-markdown";
 
 /** A definition as the reading gives it: name, label line and columns, last line, container. */
@@ -218,16 +218,18 @@ export function parseCount(): number {
     return readings;
 }
 
-/** What the part memory holds for one stretch of text: its facts (null when it does not end cleanly) and the last reading that used it. */
+/** What the part memory holds for one stretch of text: how it reads (null when it does not end cleanly) and the last reading that used it. */
 interface RememberedPart {
-    facts: FootnoteFacts | null;
+    read: PartReading | null;
     usedBy: number;
 }
 
 /**
  * The remembered parts, keyed by their text. A key starts with two marks:
- * whether the part starts the note (only there is frontmatter read) and
- * whether its last line is borrowed from the next part (see partFacts).
+ * how the part starts ("s" at the start of the note, the only place
+ * frontmatter is read; "a" with an "<a ...>" tag left open above it; "p"
+ * otherwise) and whether its last line is borrowed from the next part (see
+ * partFacts).
  */
 const parts = new Map<string, RememberedPart>();
 
@@ -313,38 +315,24 @@ function partStarts(lines: readonly string[], firstAllowed: number): number[] {
 }
 
 /**
- * The facts of one part, `from` to `to` (exclusive, the borrowed line
+ * How one part reads, `from` to `to` (exclusive, the borrowed line
  * included), from the part memory or by parsing it. `lineStarts` gives each
  * line's offset in `text`, with one more entry for the end of the text.
+ * `linkTagOpen` says whether an "<a ...>" tag is open at the part's start.
  */
-function rememberedPart(text: string, lineStarts: readonly number[], from: number, to: number, borrowsLine: boolean, reading: number): FootnoteFacts | null {
+function rememberedPart(text: string, lineStarts: readonly number[], from: number, to: number, borrowsLine: boolean, linkTagOpen: boolean, reading: number): PartReading | null {
     const partText = text.slice(lineStarts[from], lineStarts[to] - 1);
-    const key = (from === 0 ? "s" : "p") + (borrowsLine ? "+" : ".") + partText;
+    const key = (from === 0 ? "s" : linkTagOpen ? "a" : "p") + (borrowsLine ? "+" : ".") + partText;
     const known = parts.get(key);
     if (known) {
         known.usedBy = reading;
-        return known.facts;
+        return known.read;
     }
     partCounts.parsed++;
-    const facts = partFacts(partText, from === 0, borrowsLine);
-    if (facts === null) partCounts.unclean++;
-    parts.set(key, { facts, usedBy: reading });
-    return facts;
-}
-
-/** Adds a part's facts to the note's, moved down by the lines and characters before the part. */
-function addPart(into: FootnoteFacts, part: FootnoteFacts, lines: number, offset: number): void {
-    for (const definition of part.definitions) into.definitions.push({ ...definition, start: definition.start + lines, end: definition.end + lines });
-    for (const reference of part.references) into.references.push({ ...reference, line: reference.line + lines });
-    for (const span of part.protectedSpans) {
-        into.protectedSpans.push({ ...span, from: span.from + offset, to: span.to + offset, startLine: span.startLine + lines, endLine: span.endLine + lines });
-    }
-    for (const syntax of part.blockSyntax) into.blockSyntax.push({ ...syntax, line: syntax.line + lines });
-    for (const row of part.tableRows) into.tableRows.push(row + lines);
-    for (const blocks of part.lineBlocks) into.lineBlocks.push(blocks);
-    for (const note of part.inlineNotes) into.inlineNotes.push({ ...note, line: note.line + lines, closeLine: note.closeLine + lines });
-    for (const link of part.links) into.links.push({ ...link, startLine: link.startLine + lines, endLine: link.endLine + lines });
-    for (const definition of part.linkDefinitions) into.linkDefinitions.push({ ...definition, line: definition.line + lines });
+    const read = partFacts(partText, from === 0, borrowsLine, linkTagOpen);
+    if (read === null) partCounts.unclean++;
+    parts.set(key, { read, usedBy: reading });
+    return read;
 }
 
 /**
@@ -375,10 +363,10 @@ function addPart(into: FootnoteFacts, part: FootnoteFacts, lines: number, offset
  * "---"), so no part starts inside it.
  *
  * "Starting each block afresh" has one exception: an "<a ...>" tag left open
- * in running text stays open across blocks. A part that leaves one open
- * does not end cleanly either, so it joins the parts after it up to the
- * "</a>" or the note's end, and every part still starts with no tag open
- * (see leavesLinkTagOpen in footnote-facts.ts).
+ * in running text stays open across blocks, so a part is told whether the
+ * parts above left one open, and says whether it does. A part holding no
+ * such tag and no "</a>" reads as fast as any other, so a tag left open far
+ * up costs an edit below it no more than usual (see partFacts).
  *
  * test/note-reading-parts.test.ts holds this to the whole-note parse, over
  * every saved Obsidian answer and thousands of generated notes, edited
@@ -391,17 +379,19 @@ function notePartFacts(text: string, lines: readonly string[], reading: number):
     const frontmatter = frontmatterEnd(text);
     const afterFrontmatter = frontmatter === 0 ? 0 : text.slice(0, frontmatter).split("\n").length;
     const starts = partStarts(lines, afterFrontmatter);
-    const facts: FootnoteFacts = { definitions: [], references: [], protectedSpans: [], blockSyntax: [], tableRows: [], lineBlocks: [], inlineNotes: [], links: [], linkDefinitions: [] };
+    const facts = noFacts();
     let from = 0;
+    let linkTagOpen = false;
     // the first entry of `starts` after `from`
     let next = 0;
     for (;;) {
         let ended = false;
         for (let joined = 1; next + joined - 1 < starts.length; joined *= 2) {
             const to = starts[next + joined - 1];
-            const part = rememberedPart(text, lineStarts, from, to + 1, true, reading);
+            const part = rememberedPart(text, lineStarts, from, to + 1, true, linkTagOpen, reading);
             if (part !== null) {
-                addPart(facts, part, from, lineStarts[from]);
+                addPart(facts, part.facts, from, lineStarts[from]);
+                linkTagOpen = part.linkTagOpen;
                 from = to;
                 next += joined;
                 ended = true;
@@ -411,8 +401,8 @@ function notePartFacts(text: string, lines: readonly string[], reading: number):
         if (!ended) break;
     }
     // the last part runs to the end of the note and borrows nothing, so it always reads as the note does
-    const last = rememberedPart(text, lineStarts, from, lines.length, false, reading);
-    if (last !== null) addPart(facts, last, from, lineStarts[from]);
+    const last = rememberedPart(text, lineStarts, from, lines.length, false, linkTagOpen, reading);
+    if (last !== null) addPart(facts, last.facts, from, lineStarts[from]);
     // forget the parts no recent reading used
     for (const [key, part] of parts) if (part.usedBy <= reading - PartMemory) parts.delete(key);
     return facts;

@@ -437,6 +437,26 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
     return { definitions, references, protectedSpans, blockSyntax, tableRows, lineBlocks: lineBlocks.map((kinds) => kinds.join(" ")), inlineNotes, links, linkDefinitions };
 }
 
+/** Facts with nothing in them yet, for addPart to fill. */
+export function noFacts(): FootnoteFacts {
+    return { definitions: [], references: [], protectedSpans: [], blockSyntax: [], tableRows: [], lineBlocks: [], inlineNotes: [], links: [], linkDefinitions: [] };
+}
+
+/** Adds a part's facts to the note's, moved down by the lines and characters before the part. */
+export function addPart(into: FootnoteFacts, part: FootnoteFacts, lines: number, offset: number): void {
+    for (const definition of part.definitions) into.definitions.push({ ...definition, start: definition.start + lines, end: definition.end + lines });
+    for (const reference of part.references) into.references.push({ ...reference, line: reference.line + lines });
+    for (const span of part.protectedSpans) {
+        into.protectedSpans.push({ ...span, from: span.from + offset, to: span.to + offset, startLine: span.startLine + lines, endLine: span.endLine + lines });
+    }
+    for (const syntax of part.blockSyntax) into.blockSyntax.push({ ...syntax, line: syntax.line + lines });
+    for (const row of part.tableRows) into.tableRows.push(row + lines);
+    for (const blocks of part.lineBlocks) into.lineBlocks.push(blocks);
+    for (const note of part.inlineNotes) into.inlineNotes.push({ ...note, line: note.line + lines, closeLine: note.closeLine + lines });
+    for (const link of part.links) into.links.push({ ...link, startLine: link.startLine + lines, endLine: link.endLine + lines });
+    for (const definition of part.linkDefinitions) into.linkDefinitions.push({ ...definition, line: definition.line + lines });
+}
+
 /** The footnote facts of a note, as Obsidian reads it. */
 export function footnoteFacts(text: string): FootnoteFacts {
     const doc = normalizeLineBreaks(text);
@@ -447,25 +467,43 @@ export function footnoteFacts(text: string): FootnoteFacts {
 /** What an inline "<a ...>" tag starts with, as the parser checks it: a tag such as "<a\tid=x>" or "<abbr>" changes nothing. */
 const LinkTagOpener = /<a /i;
 
+/** The tag that closes it, as the parser checks it. */
+const LinkTagCloser = /<\/a>/i;
+
 /** A bare web address, which the parser reads as a link unless an "<a ...>" tag is open. */
 const BareAddress = "http://example.com/";
 
 /**
- * Whether the parser is still inside an "<a ...>" tag at the end of `before`,
- * the lines of a part above its borrowed line. Once it reads such a tag in
- * running text, the parser reads no link and no bare address until a "</a>",
- * across blocks, for the rest of the note. Obsidian does the same (hunt
- * 2026-11-06, cycle 9, finding H1; live answers H1a to H1g). The parser keeps
- * that to itself, so this asks it: it parses the lines again with a bare
- * address below them, and a tag is open when no link comes out. That is one
- * more parse, so only a part that holds such a tag pays for it. Asking this
- * way needs no copy of the parser's rules for where a tag counts: one in a
- * code span or inside a link's text does not, for example.
+ * Two lines put in front of a part that starts with an "<a ...>" tag open: a
+ * paragraph that opens one, and a blank line, so the part's first line still
+ * starts a block of its own. The parser takes no starting state, so this is
+ * how to hand it one.
  */
-function leavesLinkTagOpen(before: string, startsNote: boolean): boolean {
-    if (!LinkTagOpener.test(before)) return false;
+const LinkTagOpenLead = "x<a b>\n\n";
+
+/**
+ * Whether the parser is inside an "<a ...>" tag at the end of `before`, the
+ * lines of a part above its borrowed line, given whether it was at their
+ * start. Once it reads such a tag in running text, the parser reads no link
+ * and no bare address until a "</a>", across blocks, for the rest of the
+ * note. Obsidian does the same (hunt 2026-11-06, cycle 9, finding H1; live
+ * answers H1a to H1g). The parser keeps that to itself, so this asks it: it
+ * parses the lines again with a bare address below them, and a tag is open
+ * when no link comes out. That is one more parse, so only a part that holds
+ * a tag that could change the answer pays for it. Asking this way needs no
+ * copy of the parser's rules for where a tag counts: one in a code span or
+ * inside a link's text does not, for example.
+ */
+function linkTagOpenAfter(before: string, startsNote: boolean, openBefore: boolean): boolean {
+    if (!(openBefore ? LinkTagCloser : LinkTagOpener).test(before)) return openBefore;
     const blocks = parseObsidianNote(`${before}\n${BareAddress}`, startsNote).tree.children ?? [];
     return blocks[blocks.length - 1]?.children?.[0]?.type !== "link";
+}
+
+/** A part's facts, and whether an "<a ...>" tag is open where the part ends. */
+export interface PartReading {
+    facts: FootnoteFacts;
+    linkTagOpen: boolean;
 }
 
 /**
@@ -475,31 +513,38 @@ function leavesLinkTagOpen(before: string, startsNote: boolean): boolean {
  * offsets count from the part's own start.
  *
  * `startsNote` says whether the part is the start of the note: only there
- * may frontmatter be read. `borrowsLine` says whether the part's last line
- * is borrowed: not its own, but the first line of the part after it, added
- * to show where this part ends. The part ends cleanly when the borrowed
- * line starts a block of its own at the top level, the way it does in the
- * whole note: then the facts of the lines before it are the whole note's
- * facts for those lines, and they are returned. When the borrowed line is
- * taken into something above it (a paragraph's lazy line, a list's next
- * item, a code block or comment still open), or a link definition's label
- * is still open at the end (the one reader that looks further than the
- * line after a block; see readsPastTheEnd in obsidian-markdown.ts),
- * or an "<a ...>" tag is still open (see leavesLinkTagOpen), the part does
- * not end there, and the result is null.
+ * may frontmatter be read. `linkTagOpen` says whether an "<a ...>" tag is
+ * open at the part's start, left open by the parts above it. `borrowsLine`
+ * says whether the part's last line is borrowed: not its own, but the first
+ * line of the part after it, added to show where this part ends. The part
+ * ends cleanly when the borrowed line starts a block of its own at the top
+ * level, the way it does in the whole note: then the facts of the lines
+ * before it are the whole note's facts for those lines, and they are
+ * returned. When the borrowed line is taken into something above it (a
+ * paragraph's lazy line, a list's next item, a code block or comment still
+ * open), or a link definition's label is still open at the end (the one
+ * reader that looks further than the line after a block; see
+ * readsPastTheEnd in obsidian-markdown.ts), the part does not end there,
+ * and the result is null.
  */
-export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean): FootnoteFacts | null {
-    const { tree, containerColumns, readsPastEnd } = parseObsidianNote(doc, startsNote);
-    if (!borrowsLine) return factsOfTree(doc, tree, containerColumns);
-    if (readsPastEnd) return null;
-    // where the borrowed line starts, as an offset and as a line
-    const last = doc.lastIndexOf("\n") + 1;
-    if (!(tree.children ?? []).some((block) => block.position.start.offset === last)) return null;
-    if (leavesLinkTagOpen(doc.slice(0, last), startsNote)) return null;
-    let lastLine = 0;
-    for (let i = doc.indexOf("\n"); i !== -1; i = doc.indexOf("\n", i + 1)) lastLine++;
-    const facts = factsOfTree(doc, tree, containerColumns);
-    return {
+export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean, linkTagOpen: boolean): PartReading | null {
+    const lead = linkTagOpen ? LinkTagOpenLead : "";
+    const text = lead + doc;
+    const { tree, containerColumns, readsPastEnd } = parseObsidianNote(text, startsNote);
+    // the line after the part's own, and whether a tag is open there
+    let lastLine = Infinity;
+    let openAtEnd = linkTagOpen;
+    if (borrowsLine) {
+        if (readsPastEnd) return null;
+        // where the borrowed line starts, as an offset and as a line
+        const last = text.lastIndexOf("\n") + 1;
+        if (!(tree.children ?? []).some((block) => block.position.start.offset === last)) return null;
+        lastLine = 0;
+        for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) lastLine++;
+        openAtEnd = linkTagOpenAfter(text.slice(0, last), startsNote, linkTagOpen);
+    }
+    const facts = factsOfTree(text, tree, containerColumns);
+    const own: FootnoteFacts = {
         definitions: facts.definitions.filter((definition) => definition.start < lastLine),
         references: facts.references.filter((reference) => reference.line < lastLine),
         protectedSpans: facts.protectedSpans.filter((span) => span.startLine < lastLine),
@@ -510,4 +555,9 @@ export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean
         links: facts.links.filter((link) => link.startLine < lastLine),
         linkDefinitions: facts.linkDefinitions.filter((definition) => definition.line < lastLine),
     };
+    if (lead === "") return { facts: own, linkTagOpen: openAtEnd };
+    // Back to counting from the part's own start. The lead's paragraph gives no fact but its two entries in lineBlocks.
+    const moved = noFacts();
+    addPart(moved, { ...own, lineBlocks: own.lineBlocks.slice(2) }, -2, -lead.length);
+    return { facts: moved, linkTagOpen: openAtEnd };
 }
