@@ -14,6 +14,7 @@ start messy[^20] references[^10] here
 Settings: `Lint on save` ON, everything else default.
 
 - [ ] Ctrl+S lints, and ONE undo restores the mess in a single step
+- [ ] In a long note, write a definition mid-note with a blank line around it, caret at its end, and Ctrl+S: the view jumps to the bottom with the definition, the next keystroke goes into the definition, and the jump doesn't feel disorienting
 - [ ] Fold a heading and a bulleted list in this note (any of them, including one the lint will edit inside), put the caret on an unchanged line, and Ctrl+S: the note is linted, every fold is still folded, and the caret is still where it was
 
 ## Lint on footnote creation
