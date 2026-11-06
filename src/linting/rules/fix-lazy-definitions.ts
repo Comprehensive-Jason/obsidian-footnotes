@@ -1,9 +1,8 @@
 import { rulePasses } from "../rule-gate";
 import { lazyDefinitionLabelLines } from "../../parsing/label-shapes";
-import { Definition, readNote } from "../../parsing/note-reading";
+import { readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
-import { orphanedDefinitionBlocks } from "./remove-orphaned-definitions";
 
 // The "Fix definitions hidden by a missing blank line" rule.
 //
@@ -44,30 +43,13 @@ import { orphanedDefinitionBlocks } from "./remove-orphaned-definitions";
 // bug-fix-lazy-makes-heading-of-next-label), or a heading inside the new
 // definition's own text (Jason's ruling on Q24 and list B, B6). The rest of
 // the label's own paragraph may become the definition's text, or
-// definitions and tables of their own: that is what the user meant. Unless
-// nothing references the label: then those lines are prose the user would lose,
-// since Delete orphaned definitions would cut them with the label, so the label
-// stays lazy and the alert names it (hunt 2026-11-06, cycle 9, H13; pin
-// spec-lazy-label-tail-orphan-deleted).
+// definitions and tables of their own: that is what the user meant.
 
 // The blockquote markers in front of a label line. Inside a quote, a line
 // holding nothing but those same ">" markers is what counts as a blank
 // line, so the inserted line copies them (checked against the real app,
 // ground truth 2026-09-09).
 const QuoteMarkers = /^ {0,3}((?:>[ \t]?)*)/;
-
-/**
- * Whether one of the `made` definitions of the `trial` note holds lines under
- * its label and has nothing keeping it alive, so the orphan rule would cut
- * those lines with it. It asks the orphan rule itself, so a label cited only by
- * a definition that nothing references counts too.
- */
-function wouldBeCutWithItsText(trial: string[], made: readonly Definition[]): boolean {
-    const withText = made.filter((definition) => definition.end > definition.start);
-    if (withText.length === 0) return false;
-    const orphans = orphanedDefinitionBlocks(trial);
-    return withText.some((definition) => orphans.some((orphan) => orphan.start === definition.start));
-}
 
 /**
  * `markdown` with one blank line inserted above each hidden definition, or a
@@ -129,17 +111,12 @@ function fixLazyDefinitionsOnce(markdown: string): string {
                 skipped.add(at);
                 continue;
             }
-            const made = lazy
+            const defined = lazy
                 .map((line) => (line >= at ? line + 1 : line))
                 .flatMap((line) => {
                     const label = reading.labelLines[line] ? reading.labelOn(line) : null;
-                    return label === null ? [] : [label];
+                    return label === null ? [] : [label.name];
                 });
-            if (wouldBeCutWithItsText(trial, made)) {
-                skipped.add(at);
-                continue;
-            }
-            const defined = made.map((label) => label.name);
             // A lazy label can sit inside a footnote's own text: one typed
             // straight under a footnote longer than Obsidian's look-ahead
             // reads as more of that footnote (rule E4 of
