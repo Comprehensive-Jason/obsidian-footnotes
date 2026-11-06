@@ -742,6 +742,72 @@ export function lineMapper(changes: OffsetChange[], before: string): (line: numb
     };
 }
 
+/** A place in a note: its line and its column, both counted from 0. */
+interface LineColumn {
+    line: number;
+    ch: number;
+}
+
+/**
+ * Where each selection of `ranges`, in the text `before`, belongs in the text
+ * `after` when it sits in a definition: the same place in the same text, as
+ * the line alignment finds that definition again (findMovedDefinitions). The
+ * answer is null for a selection this does not cover, which the editor's own
+ * carrying decides: one that is not inside a single definition the lint can
+ * move, or whose lines the rewrite took out or changed.
+ *
+ * The edits are left small so a caret on the line being typed stays put
+ * (lineDiffChanges), and so a definition moved to the bottom is lines deleted
+ * in one place and written again in another. The editor cannot carry a caret
+ * across that: it put a caret at the end of the definition on the paragraph
+ * that was under it, and the next keystroke went into the prose. Jason's
+ * ruling: the caret follows the text, for that move and for reindex's swap
+ * (2026-11-05, pin spec-caret-in-swapped-definition).
+ *
+ * The note is lined up only when some selection is in a definition, because
+ * most lints run with the caret in the prose.
+ */
+export function selectionsFollowingDefinitions(
+    before: string,
+    after: string,
+    ranges: readonly { anchor: LineColumn; head: LineColumn }[],
+): ({ anchor: LineColumn; head: LineColumn } | null)[] {
+    const a = before.split("\n");
+    const movable = readNote(a).definitions.filter((definition) => definition.movable);
+    const definitionAt = (line: number) => movable.find((definition) => definition.start <= line && line <= definition.end);
+    const b = after.split("\n");
+    let map: { from: number; to: number }[] | undefined;
+    const follow = (pos: LineColumn): LineColumn | null => {
+        map ??= alignLines(a, b);
+        const now = map[pos.line].from;
+        if (now === -1 || lineKey(a[pos.line]) !== lineKey(b[now])) return null;
+        return { line: now, ch: columnAfter(a[pos.line], b[now], pos.ch) };
+    };
+    return ranges.map(({ anchor, head }) => {
+        const definition = definitionAt(anchor.line);
+        if (definition === undefined || definition !== definitionAt(head.line)) return null;
+        const newAnchor = follow(anchor);
+        const newHead = follow(head);
+        return newAnchor && newHead && { anchor: newAnchor, head: newHead };
+    });
+}
+
+/**
+ * Where column `ch` of the line `before` sits in `after`, the same line with
+ * its footnotes rewritten, so a renumbered label shorter or longer than the
+ * old one leaves the caret in the same place in the text. A caret inside a
+ * changed stretch goes to the stretch's start, as the editor does.
+ */
+function columnAfter(before: string, after: string, ch: number): number {
+    let shift = 0;
+    for (const change of rewrittenLineChanges(0, before, after).map((change) => trimCommonEdges(before, change))) {
+        if (ch <= change.from) break;
+        if (ch < change.to) return change.from + shift;
+        shift += change.text.length - (change.to - change.from);
+    }
+    return ch + shift;
+}
+
 /**
  * For each line of `a`, where it lives in `b`: `from` is the line a fold
  * may START on (-1 when the line is gone), `to` the line a fold may END
@@ -798,8 +864,9 @@ function alignLines(a: string[], b: string[]): { from: number; to: number }[] {
  * another, so a fold on the definition (Obsidian folds a line followed by
  * more indented lines, such as a definition with an indented second line)
  * had no line to start on and was dropped (hunt 2026-10-06 cycle 3,
- * cluster D2, pin bug-fold-moved-definition). Only the folds and the
- * other panes' carets read this map; the edits themselves
+ * cluster D2, pin bug-fold-moved-definition). The folds, the other panes'
+ * carets, and a caret in a moved definition read this map (the last one
+ * through selectionsFollowingDefinitions); the edits themselves
  * (lineDiffChanges) are left as they are, so the caret on the line being
  * typed still stays put (pin bug-caret-below-moved-definitions).
  *

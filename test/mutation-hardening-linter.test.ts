@@ -79,6 +79,10 @@ function fakeEditor(
         setCursor(pos: EditorPosition) {
             doc.cursor = pos;
         },
+        listSelections: () => [{ anchor: doc.cursor, head: doc.cursor }],
+        setSelections(ranges: { anchor: EditorPosition; head: EditorPosition }[]) {
+            doc.cursor = ranges[0].head;
+        },
         scrollIntoView() {},
         transaction(spec: {
             changes?: EditorChange[];

@@ -2247,6 +2247,66 @@ async function main() {
         await expectEditorText("Beta[^1] alpha[^2] end\n\n[^1]: two\n[^2]: one");
     });
 
+    // A caret in a definition the lint moves follows its text (Jason's ruling,
+    // 2026-11-05, pin spec-caret-in-swapped-definition). The caret's place is
+    // read from the live editor, since the write-back sets it after the edits.
+    await test("a save gathers the definition being typed, and the caret goes with it", async () => {
+        resetSettings({ lintOnSave: true });
+        const before = "Para one.[^1]\n\n[^1]: my note\n\nPara two.";
+        await setupNote(before);
+        setCursorAndRun(2, "[^1]: my note".length, "editor:save-file");
+        await expectEditorText("Para one.[^1]\n\nPara two.\n\n[^1]: my note");
+        await pollUntil(
+            "caret at the end of the moved definition",
+            `(${EDITOR}).editor.getCursor()`,
+            (c) => c && c.line === 4 && c.ch === "[^1]: my note".length,
+        );
+        // the next keystroke goes into the definition, not the prose
+        action(`(${EDITOR}).editor.replaceSelection('!');`);
+        await expectEditorText("Para one.[^1]\n\nPara two.\n\n[^1]: my note!");
+    });
+
+    await test("the lint's swap of two definitions: the caret goes with its text, and one undo brings it back", async () => {
+        resetSettings();
+        const before = "See[^2] then[^1]\n\n[^1]: one\n    cont one\n[^2]: two\n    cont two";
+        await setupNote(before);
+        setCursorAndRun(3, "    cont one".length, CMD_LINT);
+        await expectEditorText("See[^1] then[^2]\n\n[^1]: two\n    cont two\n[^2]: one\n    cont one");
+        await pollUntil(
+            "caret at the end of 'cont one' on its new line",
+            `(${EDITOR}).editor.getCursor()`,
+            (c) => c && c.line === 5 && c.ch === "    cont one".length,
+        );
+        action(`(${EDITOR}).editor.undo();`);
+        await expectEditorText(before);
+        await pollUntil(
+            "caret back where it was",
+            `(${EDITOR}).editor.getCursor()`,
+            (c) => c && c.line === 3 && c.ch === "    cont one".length,
+        );
+    });
+
+    await test("a caret that follows its definition far down the note is scrolled into view", async () => {
+        resetSettings();
+        const lines = Array.from({ length: 120 }, (_, i) => `Paragraph ${i + 1} lorem ipsum.`);
+        lines.splice(1, 0, "Para one.[^1]", "", "[^1]: my note", "");
+        await setupNote(lines.join("\n"));
+        setCursorAndRun(3, "[^1]: my note".length, CMD_LINT);
+        await pollUntil(
+            "caret on the moved definition",
+            `(() => { const e = (${EDITOR}).editor; return e.getLine(e.getCursor().line); })()`,
+            (v) => v === "[^1]: my note",
+        );
+        await pollUntil(
+            "caret line inside the window",
+            `(() => { const cm = (${EDITOR}).editor.cm; ` +
+            `const c = cm.coordsAtPos(cm.state.selection.main.head); ` +
+            `const r = cm.scrollDOM.getBoundingClientRect(); ` +
+            `return c ? c.top >= r.top && c.bottom <= r.bottom : false; })()`,
+            (v) => v === true,
+        );
+    });
+
     await test("a clean manual save still reports 'No linting needed.'", async () => {
         // a manual save is an explicit user command, so it reports its
         // outcome either way (Jason, 2026-08-08, revisiting an earlier
