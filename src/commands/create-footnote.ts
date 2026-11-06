@@ -19,7 +19,7 @@ import { openFootnotePopup, popupEditingAvailable } from "./footnote-popup";
 import { jumpToFootnoteDefinition } from "./navigation";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
 import { adjustFootnotePosition, cellInFrontOfPunctuationBehindCaret, cellInFrontOfTakenPunctuation, endOfWordOffset, moveCursorAndSetJumpPoint } from "../editor/cursor-motion";
-import { cellImageStarts, cellLinkLikeEndAt } from "../parsing/landing";
+import { cellFootnotes, cellImageStarts, cellLinkLikeEndAt } from "../parsing/landing";
 import { planDefinitionAppend } from "./definition-append";
 import {
     DocContext,
@@ -102,6 +102,7 @@ export function insertInTableCell(
             plugin.settings.footnotePlacement,
             cellLinkLikeEndAt(cellText, head, linkLabels),
             cellImageStarts(cellText, linkLabels),
+            cellFootnotes(cellText),
         );
         // Under Before, a caret right after the punctuation that ends a word
         // hops back in front of it, as it does in a paragraph (Jason's ruling,

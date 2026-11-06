@@ -1,6 +1,7 @@
 import { holdBack, rulePasses } from "../rule-gate";
 import { definitionLabelIn } from "../../parsing/label-shapes";
-import { ClosingMarkChars, FootnotePlacement, imageStartsOn, linkLikeEndAt, punctuationAt, referenceLandingAfter, wordEndBefore } from "../../parsing/landing";
+import { lineFootnotes, NoFootnotes } from "../../parsing/final-dot";
+import { ClosingMarkChars, dotStaysWithWord, FootnotePlacement, imageStartsOn, linkLikeEndAt, punctuationAt, referenceLandingAfter, wordEndBefore } from "../../parsing/landing";
 import { NoteReading, readNote } from "../../parsing/note-reading";
 import { rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
@@ -97,6 +98,10 @@ function swapInSegment(
     linkEndsAt: (segment: string, at: number) => boolean = () => false,
     textStart = 0,
 ): string {
+    // The footnotes on the stretch, which the question about a final dot reads
+    // past, so "U.S[^1]." and "U.S.[^1]" get one answer and a lint never moves
+    // what the last lint or a press placed (finalDotOwner). Only Before asks.
+    const footnotes = placement === "before" ? lineFootnotes(units) : NoFootnotes;
     let out = "";
     let copied = 0;
     // A run whose forward move ends right where the next run starts goes
@@ -160,14 +165,17 @@ function swapInSegment(
             // the walk stops in front of punctuation and steps over it only
             // together with a closing mark that follows, so the forward
             // move then carries the run out of a quote and no further.
-            const punctuationEnd = referenceLandingAfter(original, end, placement, images);
+            const punctuationEnd = referenceLandingAfter(original, end, placement, images, footnotes);
             if (punctuationEnd === end) {
                 // Under "before", a run that sits right AFTER punctuation
                 // moves back in front of it: "word.[^1]" becomes
                 // "word[^1].", and "句子。[^1]" becomes "句子[^1]。" (T5,
                 // 2026-09-21). A run after a closing mark stays: the marker
                 // belongs outside the quote in every convention found,
-                // punctuation inside the quote or not.
+                // punctuation inside the quote or not. A run after a dot that
+                // belongs to the word, or may, stays too: "U.S.[^1]",
+                // "No.[^1]", and French's "etc.[^1]." (Jason's ruling,
+                // 2026-11-06, finalDotOwner).
                 if (placement !== "before") return null;
                 // A spaced run in front of punctuation sits, once its spaces
                 // go, right after the text in front of them (ruling Q35), and
@@ -176,9 +184,9 @@ function swapInSegment(
                 // claim[^1],.". A spaced run with no punctuation after it
                 // stays as typed.
                 const at = wordEnd < start && punctuationAt(masked, end, images) ? wordEnd : start;
-                if (!punctuationAt(masked, at - 1, images)) return at < start ? { before: original.slice(copied, at), after: "", to: end } : null;
                 let punctuationStart = at;
-                while (punctuationAt(masked, punctuationStart - 1, images)) punctuationStart--;
+                while (punctuationAt(masked, punctuationStart - 1, images) && !dotStaysWithWord(original, punctuationStart - 1, footnotes)) punctuationStart--;
+                if (punctuationStart === at) return at < start ? { before: original.slice(copied, at), after: "", to: end } : null;
                 // A space in front of the punctuation stays with it, and the
                 // run lands on the word: "Vraiment ?[^1]", with the no-break
                 // space French puts before a "?", becomes "Vraiment[^1] ?",

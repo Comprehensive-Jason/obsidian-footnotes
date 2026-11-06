@@ -5,6 +5,7 @@ import { computeNextFootnoteNumber } from "../src/parsing/footnote-grammar";
 import { countEmptyFootnoteReferences } from "../src/linting/lint-alerts";
 import { lintFootnotes } from "../src/linting/linter";
 import { applyFootnotePrefix } from "../src/linting/rules/apply-footnote-prefix";
+import { footnoteAfterPunctuation } from "../src/linting/rules/footnote-after-punctuation";
 import { reindexFootnotes } from "../src/linting/rules/re-index-footnotes";
 
 // Standing test convention (Jason, 2026-08-08): prefixes are not always
@@ -73,5 +74,23 @@ describe.each(PREFIXES)('prefix "%s"', (prefix) => {
 
     it("the bare-prefix placeholder counts as an unnamed reference", () => {
         expect(countEmptyFootnoteReferences(`a [^${prefix}] b [^]`, prefix)).toBe(2);
+    });
+
+    // Under Before placement the question about a word's final dot reads past
+    // the references next to the dot, whatever their names hold, and a name
+    // can hold a dot or a regular expression's special characters (Jason's
+    // ruling on abbreviations, 2026-11-06).
+    it("a prefixed reference does not change who owns a word's final dot", () => {
+        const placed = (line: string) => {
+            const note = `${line}\n\n[^${prefix}1]: one\n[^${prefix}2]: two`;
+            return footnoteAfterPunctuation(note, "before").split("\n")[0];
+        };
+        expect(placed(`the U.S[^${prefix}1]. law`)).toBe(`the U.S.[^${prefix}1] law`);
+        expect(placed(`the U.S.[^${prefix}1] law`)).toBe(`the U.S.[^${prefix}1] law`);
+        expect(placed(`Dr[^${prefix}1][^${prefix}2]. Smith`)).toBe(`Dr.[^${prefix}1][^${prefix}2] Smith`);
+        expect(placed(`etc.[^${prefix}1].`)).toBe(`etc.[^${prefix}1].`);
+        expect(placed(`No[^${prefix}1].`)).toBe(`No[^${prefix}1].`);
+        expect(placed(`No.[^${prefix}1]`)).toBe(`No.[^${prefix}1]`);
+        expect(placed(`A word.[^${prefix}1]`)).toBe(`A word[^${prefix}1].`);
     });
 });

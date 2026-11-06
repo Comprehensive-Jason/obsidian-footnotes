@@ -198,6 +198,14 @@ An actively edited table cell's own sub-editor — a single-caret world
 whose text only the cell itself may write (main-editor writes corrupt
 it).
 
+**Final dot**:
+A "." at the end of a word. Under Before placement it belongs to the word
+("U.S.", "Dr."), to the sentence ("A word."), or is in doubt ("No.",
+"plan B."): the reference goes after the word's, in front of the
+sentence's, and stays where the caret put it under doubt. One function,
+`finalDotOwner`, answers for the press, the selection, and the lint
+(ruling: 2026-11-06).
+
 **End-of-word adjustment**:
 Moving an insertion point to the end of the word (and past trailing
 punctuation) under the caret, so mid-word presses don't split words.

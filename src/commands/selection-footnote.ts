@@ -16,7 +16,7 @@ import { DocContext, docContext, docLines, listExistingFootnoteDefinitions } fro
 import { sanitizeInlineFootnoteContent } from "./inline-footnotes";
 import { simulateChanges } from "../editor/insertion-liveness";
 import { readCell } from "../parsing/cell-reading";
-import { cellImageStarts, imageStartsOn } from "../parsing/landing";
+import { cellFootnotes, cellImageStarts, footnotesOn, imageStartsOn } from "../parsing/landing";
 import { NoteReading, readNote } from "../parsing/note-reading";
 import { GateReason, GateVerdict, judgeEdit } from "../editor/result-gate";
 import {
@@ -284,7 +284,7 @@ export function selectionPressHandled(
         // main-editor branch below does.
         if (plugin.settings.expandSelectionToWholeWords) {
             from = startOfWordOffset(cellText, from);
-            to = endOfWordForSelection(cellText, to, plugin.settings.footnotePlacement, cellImageStarts(cellText, docContext(doc).reading().linkLabels));
+            to = endOfWordForSelection(cellText, to, plugin.settings.footnotePlacement, cellImageStarts(cellText, docContext(doc).reading().linkLabels), cellFootnotes(cellText));
         }
         // A selection that cuts a code span in half, or holds a footnote,
         // is refused by the result gate when the conversion writes into the
@@ -379,6 +379,7 @@ export function selectionPressHandled(
                 trimmed.to.ch,
                 plugin.settings.footnotePlacement,
                 imageStartsOn(ctx.reading(), trimmed.to.line),
+                footnotesOn(ctx.reading(), trimmed.to.line),
             ),
         };
     }

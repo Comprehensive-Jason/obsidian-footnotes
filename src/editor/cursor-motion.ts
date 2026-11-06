@@ -3,7 +3,8 @@ import { Editor, EditorChange, EditorPosition } from "obsidian";
 import type FootnotePlugin from "../main";
 import { docLines } from "./doc-context";
 import { mapPosition, safeInsertionCh } from "./insertion-liveness";
-import { FootnotePlacement, imageStartsOn, lineLinkLikeEndAt, linkLikeEndAt, punctuationAt, referenceLandingAfter, wordEndBefore } from "../parsing/landing";
+import { finalDotOwner, LineFootnotes, NoFootnotes } from "../parsing/final-dot";
+import { dotStaysWithWord, FootnotePlacement, footnotesOn, imageStartsOn, lineLinkLikeEndAt, linkLikeEndAt, punctuationAt, referenceLandingAfter, wordEndBefore } from "../parsing/landing";
 import { NoteReading, readNote } from "../parsing/note-reading";
 import { readCell } from "../parsing/cell-reading";
 import {
@@ -128,7 +129,8 @@ export function comparePositions(a: EditorPosition, b: EditorPosition): number {
  * reading says and a table cell what its cell reading says; by default the
  * text is read on its own, as a note of one line. `images` are the columns
  * where the line draws an image or an embed, whose "!" is no punctuation
- * (punctuationAt), handed in the same way.
+ * (punctuationAt), handed in the same way, and so are `footnotes`, the
+ * footnotes on the line (finalDotOwner).
  */
 export function endOfWordOffset(
     text: string,
@@ -136,18 +138,19 @@ export function endOfWordOffset(
     placement: FootnotePlacement = "after",
     linkEnd: number = lineLinkLikeEndAt(text, offset),
     images?: ReadonlySet<number>,
+    footnotes: LineFootnotes = NoFootnotes,
 ): number {
     // Inside a link, a wikilink, an address, or an email address the
     // "word" is the whole construct: a reference written inside
     // "[text](url)" or between the segments of "example.com" breaks the
     // link (Jason's landing rulings, 2026-09-15).
-    if (linkEnd !== -1) return referenceLandingAfter(text, linkEnd, placement, images);
+    if (linkEnd !== -1) return referenceLandingAfter(text, linkEnd, placement, images, footnotes);
     const end = wordEndOffset(text, offset);
     if (end === -1) return offset;
     // then past the closing marks, and past or in front of the punctuation
     // that follows the word as the placement setting says (the landing
     // convention, referenceLandingAfter)
-    return referenceLandingAfter(text, end, placement, images);
+    return referenceLandingAfter(text, end, placement, images, footnotes);
 }
 
 /**
@@ -198,11 +201,18 @@ function wordEndOffset(text: string, offset: number): number {
  * ("This is \"some bravo\". End" gives "some bravo" and leaves the quote;
  * Claude sweep 2026-09-13, the README's "plus one trailing punctuation
  * mark"). `images` are the columns where the line draws an image or an
- * embed, as endOfWordOffset takes them.
+ * embed, and `footnotes` the footnotes on the line, as endOfWordOffset takes
+ * them.
  */
-export function endOfWordForSelection(text: string, offset: number, placement: FootnotePlacement = "after", images?: ReadonlySet<number>): number {
+export function endOfWordForSelection(text: string, offset: number, placement: FootnotePlacement = "after", images?: ReadonlySet<number>, footnotes: LineFootnotes = NoFootnotes): number {
     const end = wordEndOffset(text, offset);
     if (end === -1) return offset;
+    // Under "before", a final dot that belongs to the word goes with the word,
+    // so "U.S" of "in the U.S." grows to "U.S." and the footnote's body keeps
+    // its dot. It is the same question the press and the lint ask (Jason's
+    // ruling, 2026-11-06). A dot in doubt stays out, as a caret in front of it
+    // would leave it.
+    if (placement === "before" && punctuationAt(text, end, images) && text[end] === "." && finalDotOwner(text, end, footnotes) === "word") return end + 1;
     // the trailing mark comes along only when the reference is to land
     // after it: under "before" or "don't move" the reference goes in front
     // of the mark, so the mark stays outside the selection (T5, 2026-09-21)
@@ -285,9 +295,14 @@ function readWithReference(lines: readonly string[], line: number, at: number): 
  * in the word lands, so "A word.|" gives "A word[^1]." and "这是句子。|" gives
  * "这是句子[^1]。". It is the mirror of After, where a caret in front of the
  * punctuation hops past it (Jason's ruling, 2026-11-05, pin
- * spec-placement-before-caret-after-punctuation). The spaces in front of the
- * punctuation stay with it, as the lint leaves them: "Vraiment ?|" gives
- * "Vraiment[^1] ?". A closing mark after the punctuation is still stepped over.
+ * spec-placement-before-caret-after-punctuation). A dot that belongs to the word
+ * in front of it, or that may, is not crossed: "U.S.|" stays where it is, and
+ * "U.S.,|" gives "U.S.[^1],". That is why "No.|" no longer hops back, a narrow
+ * exception to that ruling (Jason's ruling, 2026-11-06, finalDotOwner). The
+ * spaces in front of the punctuation stay with it, as the lint leaves them:
+ * "Vraiment ?|" gives "Vraiment[^1] ?". A closing mark after the punctuation is
+ * still stepped over, from behind a dot that stays too: "(the U.S.|)" gives
+ * "(the U.S.)[^1]".
  * The caret stays at column `ch` when no punctuation touches it from the left,
  * or when no text stands in front of the punctuation. It stays there too when
  * a reference in front of the punctuation would not be live, as in "[see p.
@@ -297,12 +312,13 @@ function inFrontOfPunctuationBehindCaret(reading: NoteReading, lines: readonly s
     const text = lines[line] ?? "";
     const images = imageStartsOn(reading, line);
     const textStart = reading.blockSyntaxEnd(line);
+    const footnotes = footnotesOn(reading, line);
     let start = ch;
-    while (start > textStart && punctuationAt(text, start - 1, images)) start--;
-    if (start === ch || start === textStart) return ch;
+    while (start > textStart && punctuationAt(text, start - 1, images) && !dotStaysWithWord(text, start - 1, footnotes)) start--;
+    if ((start === ch && !punctuationAt(text, ch - 1, images)) || start === textStart) return ch;
     const wordEnd = wordEndBefore(text, start, textStart, true);
     if (wordEnd === start && /\s/.test(text[start - 1])) return ch;
-    const landing = wordEnd === start ? referenceLandingAfter(text, start, "before", images) : wordEnd;
+    const landing = wordEnd === start ? referenceLandingAfter(text, start, "before", images, footnotes) : wordEnd;
     return readWithReference(lines, line, landing).referencesOn(line).some((reference) => reference.start === landing) ? landing : ch;
 }
 
@@ -381,7 +397,7 @@ export function adjustFootnotePosition(
         const link = linkLikeEndAt(reading, cursorPosition.line, cursorPosition.ch);
         if (link !== null && link.line !== cursorPosition.line) {
             const endText = lines[link.line];
-            const landing = referenceLandingAfter(endText, link.ch, plugin.settings.footnotePlacement, imageStartsOn(reading, link.line));
+            const landing = referenceLandingAfter(endText, link.ch, plugin.settings.footnotePlacement, imageStartsOn(reading, link.line), footnotesOn(reading, link.line));
             return { line: link.line, ch: safeInsertionCh(endText, landing) };
         }
         // The insertion point is the end of the word, then past the closing
@@ -399,6 +415,7 @@ export function adjustFootnotePosition(
             plugin.settings.footnotePlacement,
             link?.ch ?? -1,
             imageStartsOn(reading, cursorPosition.line),
+            footnotesOn(reading, cursorPosition.line),
         );
         if (landing !== cursorPosition.ch) {
             cursorPosition = { line: cursorPosition.line, ch: landing };

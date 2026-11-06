@@ -8,6 +8,7 @@
 // of that file went).
 
 import { readCell } from "./cell-reading";
+import { finalDotOwner, LineFootnotes, lineFootnotes, NoFootnotes } from "./final-dot";
 import { escapedAt } from "./footnote-grammar";
 import { NoteReading, readNote } from "./note-reading";
 
@@ -63,6 +64,33 @@ const NoImages: ReadonlySet<number> = new Set();
 export function punctuationAt(text: string, i: number, images: ReadonlySet<number> = NoImages): boolean {
     if (images.has(i)) return false;
     return i >= 0 && i < text.length && TrailingPunctuationChars.includes(text[i]) && !escapedAt(text, i);
+}
+
+/**
+ * Whether the mark at column `at` is a dot a reference does not cross under
+ * Before: one that belongs to the word in front of it, or that may (Jason's
+ * ruling of 2026-11-06, finalDotOwner). Every walk back over punctuation asks
+ * this, the press's and the lint's, so they stop at the same dot.
+ */
+export function dotStaysWithWord(text: string, at: number, footnotes: LineFootnotes = NoFootnotes): boolean {
+    return text[at] === "." && finalDotOwner(text, at, footnotes) !== "sentence";
+}
+
+/** The footnotes `reading` finds on `line`, in the form finalDotOwner reads a line with. */
+export function footnotesOn(reading: NoteReading, line: number): LineFootnotes {
+    return lineFootnotes([
+        ...reading.referencesOn(line),
+        ...reading.inlineNotesOn(line).map((note) => ({ start: note.open, end: note.close + 1 })),
+    ]);
+}
+
+/** footnotesOn for a table cell's own text, read as the note holds it (readCell), as offsets into `text`. */
+export function cellFootnotes(text: string): LineFootnotes {
+    const cell = readCell(text);
+    return lineFootnotes([
+        ...cell.reading.referencesOn(0),
+        ...cell.reading.inlineNotesOn(0).map((note) => ({ start: note.open, end: note.close + 1 })),
+    ].map((span) => ({ start: cell.offset(span.start), end: cell.offset(span.end) })));
 }
 
 /**
@@ -174,6 +202,13 @@ export const ClosingMarkChars = "\"'’”)]}」』）】〕》〉*_~=｣］｝�
  * `images` are the columns where the line draws an image or an embed, as
  * punctuationAt takes them.
  *
+ * Under "before", a final dot that belongs to the word is no punctuation to
+ * stop in front of, so the reference goes after it: "in the U.S." gives "in
+ * the U.S.[^1]" and "U.S.." gives "U.S.[^1]." (Jason's ruling, 2026-11-06).
+ * `footnotes` are the footnotes on the line, which that question reads past
+ * (finalDotOwner). Under doubt the walk stops in front of the dot, as a caret
+ * in front of it asks.
+ *
  * A walk that would end right after the "]" of bracketed text that is no
  * link stops in front of that "]" instead, inside the brackets: "[see p.
  * 5][^1]" is a reference link to Obsidian, labelled "^1", so the footnote
@@ -183,7 +218,7 @@ export const ClosingMarkChars = "\"'’”)]}」』）】〕》〉*_~=｣］｝�
  * the link notice. "[see p. 5]." under "after" still lands after the
  * period, where the reference is live.
  */
-export function referenceLandingAfter(text: string, end: number, placement: FootnotePlacement = "after", images?: ReadonlySet<number>): number {
+export function referenceLandingAfter(text: string, end: number, placement: FootnotePlacement = "after", images?: ReadonlySet<number>, footnotes: LineFootnotes = NoFootnotes): number {
     if (placement === "none") return end;
     // the last "]" the walk stepped over as a closing mark, or -1
     let bracketClose = -1;
@@ -234,6 +269,10 @@ export function referenceLandingAfter(text: string, end: number, placement: Foot
                 !ClosingMarkChars.includes(text[runEnd]) ||
                 markRunEnd(text, runEnd) === -1
             ) {
+                if (c === "." && finalDotOwner(text, at, footnotes) === "word") {
+                    at++;
+                    continue;
+                }
                 return landed(at);
             }
             at = runEnd;
