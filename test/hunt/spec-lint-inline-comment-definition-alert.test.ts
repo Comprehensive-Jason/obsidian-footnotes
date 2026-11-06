@@ -23,20 +23,26 @@ import { messages, resetNotices } from "../helpers/notices";
 // (bug-lazy-label-in-inline-comment), and whether the alert should reach
 // that shape too is Jason's call.
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): a label inside a one-line
+// %% pair is rare and is dead text, and the orphan alert still points the user
+// at the footnote.
+// It was it.fails until then.
+//
 // Hunt 2026-10-02, round 4, lens alerts. Cluster A10.
 //
 // Source of truth: ruling A1 and the commented-definition alert in
 // lint-alerts.ts; ADR 0002 (the lint is never silent about what it cannot
 // fix, and its advice should fit the case).
 
-describe("spec question: a definition inside a one-line %% comment", () => {
-    it.fails("is named by the commented-definition alert", () => {
+describe("a definition inside a one-line %% comment", () => {
+    it("characterization: gets the orphan alert, not the commented-definition alert", () => {
         const doc = "use[^98] here\n\n%% [^98]: inline comment label %%\n";
         const plugin = fakePlugin({ ...DEFAULT_SETTINGS, lintMoveToBottom: false, lintReindex: false });
         const after = lintFootnotes(doc, lintOptionsFromSettings(plugin, "", doc));
         resetNotices();
         noticeLintAlerts(plugin, after);
-        // Today: only the orphan alert.
-        expect(messages().some((m) => m.includes("inside a %% comment"))).toBe(true);
+        expect(messages().some((m) => m.includes("inside a %% comment"))).toBe(false);
+        expect(messages().some((m) => m.includes("[^98]"))).toBe(true);
     });
 });

@@ -17,16 +17,20 @@ import { reindexFootnotes } from "../../src/linting/rules/re-index-footnotes";
 // as words. Commit 4b23542 says a footnote "whose definition offers no
 // word stays numbered", which leans towards leaving [^1] alone.
 //
+// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
+// pins were sorted under Jason's scope rule of 2026-10-07): a footnote whose only
+// word is a reference to another footnote is rare, and the name still works.
+// It was it.fails until then.
+//
 // Hunt 2026-10-02, round 2, lens properties. Cluster P8.
 //
 // Source of truth: commit 4b23542 ("names taken from the first meaningful
 // word of their definitions ... a numbered footnote whose definition
 // offers no word stays numbered").
 
-describe("spec question: Named and a reference inside a footnote's text", () => {
-    it.fails("Named does not name a footnote after a reference name in its body", () => {
+describe("Named and a reference inside a footnote's text", () => {
+    it("characterization: Named names a footnote after a reference name in its body", () => {
         const out = reindexFootnotes("a[^1] b[^2]\n\n[^1]: see [^2]\n[^2]: two", { nameNumberedFootnotes: true });
-        // Today: "a[^two-2] b[^two]\n\n[^two-2]: see [^two]\n[^two]: two".
-        expect(out).toBe("a[^1] b[^two]\n\n[^1]: see [^two]\n[^two]: two");
+        expect(out).toBe("a[^two-2] b[^two]\n\n[^two-2]: see [^two]\n[^two]: two");
     });
 });

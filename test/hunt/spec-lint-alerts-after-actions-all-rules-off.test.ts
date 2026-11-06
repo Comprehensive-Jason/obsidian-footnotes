@@ -23,6 +23,11 @@ import { messages, resetNotices } from "../helpers/notices";
 // leave something for them to say". Whether "every rule off" silences the
 // alerts everywhere, or only around the lint itself, is Jason's call.
 //
+// Characterization tests (behaviour pinned as they are, 2026-11-05, when the
+// spec pins were sorted under Jason's scope rule of 2026-10-07): a user with
+// every rule off is rare, and an extra alert loses nothing. They were it.fails
+// until then.
+//
 // Hunt 2026-10-02, round 4, lens settings. Cluster S5.
 //
 // Source of truth: lintRulesAllDisabled's comment in linter.ts, quoted
@@ -44,8 +49,8 @@ const allOff = {
 
 beforeEach(resetNotices);
 
-describe("spec question: lint alerts after the 0.3.0 commands while every lint rule is off", () => {
-    it.fails("Delete footnote everywhere says nothing about an unrelated orphan", async () => {
+describe("lint alerts after the 0.3.0 commands while every lint rule is off", () => {
+    it("characterization: Delete footnote everywhere still names an unrelated orphan", async () => {
         const doc = fakeEditor(["a[^1] b", "", "[^1]: one", "[^9]: stray"], {
             wholeDoc: true,
             edits: true,
@@ -53,14 +58,12 @@ describe("spec question: lint alerts after the 0.3.0 commands while every lint r
             selection: { anchor: { line: 0, ch: 2 }, head: { line: 0, ch: 2 } },
         });
         await deleteFootnote(fakePlugin(allOff, doc));
-        // Today: the orphan alert names [^9].
-        expect(messages().filter((m) => m.includes("[^9]"))).toEqual([]);
+        expect(messages().filter((m) => m.includes("[^9]"))).toHaveLength(1);
     });
 
-    it.fails("Convert inline to normal says nothing about an unrelated orphan", () => {
+    it("characterization: Convert inline to normal still names an unrelated orphan", () => {
         const doc = fakeEditor(["a^[one]", "", "[^9]: stray"], { wholeDoc: true, edits: true, cursor: { line: 0, ch: 0 } });
         convertInlineFootnotesToNormal(fakePlugin(allOff, doc), doc);
-        // Today: the orphan alert names [^9].
-        expect(messages().filter((m) => m.includes("[^9]"))).toEqual([]);
+        expect(messages().filter((m) => m.includes("[^9]"))).toHaveLength(1);
     });
 });

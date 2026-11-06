@@ -48,9 +48,13 @@ describe("spec question: an existing section heading spelled slightly differentl
         expect(doc.lines.filter((l) => l.trim() === "# Footnotes")).toHaveLength(1);
     });
 
-    it.fails("a heading with a closing hash sequence is reused", () => {
+    // Characterization test (behaviour pinned as it is, 2026-11-05, when the
+    // spec pins were sorted under Jason's scope rule of 2026-10-07): a closing
+    // hash is a deliberate spelling and a rare one, and nothing is lost. It was
+    // it.fails until then. The trailing space above is invisible, so a person
+    // could plausibly hit it, and it is still open.
+    it("characterization: a heading with a closing hash sequence is not reused, and a second heading is added", () => {
         const doc = runInline(["a^[one]", "", "# Footnotes #"], heading);
-        // Today: "# Footnotes #" and a second "# Footnotes".
-        expect(doc.lines.filter((l) => l.startsWith("# Footnotes"))).toHaveLength(1);
+        expect(doc.lines.filter((l) => l.startsWith("# Footnotes"))).toEqual(["# Footnotes #", "# Footnotes"]);
     });
 });
