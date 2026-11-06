@@ -34,8 +34,11 @@ import { ProtectedCreationNotice } from "../helpers/toasts";
 //       inside an HTML comment, which keeps the README's promise;
 //   (b) keep creating it there, and reword the README to say which
 //       comments it means.
-// The tests below take option (a), the hunt's recommendation (the
-// reference would be invisible in Reading view).
+//
+// Answered: Jason's ruling Q18 (2026-10-07) took option (b), and the README
+// now says footnotes are allowed inside a "%%" comment "like any other text
+// there". The two tests below were it.fails, taking option (a), until
+// 2026-11-05.
 //
 // Hunt 2026-10-06, cycle 5, lens press. Cluster X2.
 //
@@ -62,26 +65,23 @@ const Settings = {
 };
 
 describe('a press inside a "%%" comment', () => {
-    // Now: "text", "%%", "hidden[^1] draft", "%%", "after", "", "[^1]: ",
-    // with no notice.
-    it.fails("autonum: inside a block comment refuses with the protected-text notice", async () => {
+    it("autonum: inside a block comment creates the footnote there, with no notice", async () => {
         const lines = ["text", "%%", "hidden draft", "%%", "after"];
         const doc = fakeEditor([...lines], { cursor: { line: 2, ch: 3 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(Settings, doc));
-        expect(doc.lines, JSON.stringify(messages())).toEqual(lines);
-        expect(messages()).toContain(ProtectedCreationNotice);
+        expect(doc.lines, JSON.stringify(messages())).toEqual(["text", "%%", "hidden[^1] draft", "%%", "after", "", "[^1]: "]);
+        expect(messages()).toEqual([]);
     });
 
-    // Now: "a %%hidden[^1]%% b", "", "[^1]: ", with no notice.
-    it.fails("autonum: inside an inline comment refuses with the protected-text notice", async () => {
+    it("autonum: inside an inline comment creates the footnote there, with no notice", async () => {
         const lines = ["a %%hidden%% b"];
         const doc = fakeEditor([...lines], { cursor: { line: 0, ch: 6 }, edits: true, wholeDoc: true, words: true });
         await insertAutonumFootnote(fakePlugin(Settings, doc));
-        expect(doc.lines, JSON.stringify(messages())).toEqual(lines);
-        expect(messages()).toContain(ProtectedCreationNotice);
+        expect(doc.lines, JSON.stringify(messages())).toEqual(["a %%hidden[^1]%% b", "", "[^1]: "]);
+        expect(messages()).toEqual([]);
     });
 
-    // HTML comments are refused today, the shape the README's promise holds for.
+    // HTML comments are still refused, as the README says.
     it("control: inside an HTML comment the press is refused", async () => {
         const lines = ["a <!-- hidden --> b"];
         const doc = fakeEditor([...lines], { cursor: { line: 0, ch: 8 }, edits: true, wholeDoc: true, words: true });
