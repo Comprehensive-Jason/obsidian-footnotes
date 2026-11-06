@@ -2307,6 +2307,46 @@ async function main() {
         );
     });
 
+    // A new footnote pressed in front of a still empty one (Jason's ruling,
+    // 2026-11-05, pin spec-lint-creation-landing-twin-definitions): the lint
+    // renumbers both, and the new one gets the text, by either route.
+    await test("the creation lint, popup off: the caret lands in the new footnote, not the old empty one", async () => {
+        resetSettings({ lintOnFootnoteCreation: true });
+        await setupNote("Alpha bravo charlie.[^1]\n\n[^1]: ");
+        setCursorAndRun(0, 2, CMD_AUTONUM);
+        await expectEditorText("Alpha[^1] bravo charlie.[^2]\n\n[^1]: \n[^2]: ");
+        await pollUntil(
+            "caret on the new footnote's definition",
+            `(${EDITOR}).editor.getCursor()`,
+            (c) => c && c.line === 2 && c.ch === "[^1]: ".length,
+        );
+    });
+
+    await test("the creation lint, popup on: the popup opens on the new footnote, not the old empty one", async () => {
+        resetSettings({ enablePopupEditor: true, lintOnFootnoteCreation: true });
+        await setupNote("Alpha bravo charlie.[^1]\n\n[^1]: ");
+        setCursorAndRun(0, 2, CMD_AUTONUM);
+        await pollUntil(
+            "popup open and focused",
+            `(() => { const p = document.querySelector('.footnote-shortcut-popup:not(.footnote-shortcut-popup-loading)');
+                return !!p && p.contains(document.activeElement); })()`,
+            (v) => v === true,
+        );
+        action(`document.execCommand('insertText', false, 'new text');`);
+        await pollUntil(
+            "text typed into the popup",
+            `(() => { const c = document.querySelector('.footnote-shortcut-popup .cm-content'); return c ? c.textContent : null; })()`,
+            (v) => typeof v === "string" && v.includes("new text"),
+        );
+        action(`app.commands.executeCommandById('${CMD_AUTONUM}');`);
+        await expectEditorText("Alpha[^1] bravo charlie.[^2]\n\n[^1]: new text\n[^2]: ");
+        await pollUntil(
+            "caret just past the new reference",
+            `(${EDITOR}).editor.getCursor()`,
+            (c) => c && c.line === 0 && c.ch === "Alpha[^1]".length,
+        );
+    });
+
     await test("a clean manual save still reports 'No linting needed.'", async () => {
         // a manual save is an explicit user command, so it reports its
         // outcome either way (Jason, 2026-08-08, revisiting an earlier

@@ -793,6 +793,25 @@ export function selectionsFollowingDefinitions(
 }
 
 /**
+ * The name the definition called `name` in the text `before` has in `after`,
+ * as the line alignment finds it again, or null when no definition of that
+ * name can move, or the rewrite took it out. Names ignore case, as Obsidian
+ * compares them, and the last of two definitions with one name is the one
+ * Obsidian renders. The creation lint uses this for a new footnote that looks
+ * just like another (pin spec-lint-creation-landing-twin-definitions).
+ */
+export function definitionNameAfter(before: string, after: string, name: string): string | null {
+    const a = before.split("\n");
+    const folded = name.toLowerCase();
+    const definition = readNote(a).definitions.filter((candidate) => candidate.movable && candidate.name.toLowerCase() === folded).at(-1);
+    if (definition === undefined) return null;
+    const b = after.split("\n");
+    const now = alignLines(a, b)[definition.start].from;
+    if (now === -1 || lineKey(a[definition.start]) !== lineKey(b[now])) return null;
+    return readNote(b).definitions.find((candidate) => candidate.start === now)?.name ?? null;
+}
+
+/**
  * Where column `ch` of the line `before` sits in `after`, the same line with
  * its footnotes rewritten, so a renumbered label shorter or longer than the
  * old one leaves the caret in the same place in the text. A caret inside a
