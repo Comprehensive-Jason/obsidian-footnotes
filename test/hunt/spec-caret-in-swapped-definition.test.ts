@@ -141,6 +141,8 @@ describe("what the caret-following leaves as the editor carries it", () => {
         expect(afterLint(before, [caret(4, "[^1]: my".length)])).toEqual([caret(4, "[^1]: my".length)]);
     });
 
+    // Characterization test (behaviour pinned as it is, 2026-11-05): the ruling
+    // does not say what a selection reaching past the definition should do.
     it("a selection that runs out of the definition is not followed", () => {
         const selection = { anchor: { line: 2, ch: 6 }, head: { line: 4, ch: 4 } };
         const [range] = afterLint(note, [selection]);
@@ -149,11 +151,28 @@ describe("what the caret-following leaves as the editor carries it", () => {
         expect(range.head.line).not.toBe(4);
     });
 
+    // Characterization test (behaviour pinned as it is, 2026-11-05): its text is
+    // gone, so there is nothing for the caret to follow.
     it("a caret in a definition the lint deletes stays where the editor carries it", () => {
         const before = "Para one.[^1]\n\n[^1]: my note\n\n[^9]: no reference\n\nPara two.";
         const [range] = afterLint(before, [caret(4, "[^9]: no".length)], { removeOrphanedDefinitions: true });
         expect(lintFootnotes(before, { removeOrphanedDefinitions: true })).not.toContain("[^9]");
         expect(range.head.ch).toBe(0);
+    });
+
+    // Characterization test (behaviour pinned as it is, 2026-11-05): the edits
+    // merged two carets into one, so the selections no longer pair up one for
+    // one, and every caret stays where the editor carried it. That includes the
+    // caret that could have followed its definition. It takes several carets
+    // and a deleted definition at once, which is rare, and no text is lost.
+    it("two carets merged by a deletion: a third caret in a moved definition is not followed", () => {
+        const before = "Para one.[^1]\n\n[^9]: no reference\n\nPara two.\n\n[^1]: my note\n\nPara three.";
+        const options = { removeOrphanedDefinitions: true };
+        const ranges = afterLint(before, [caret(2, "[^9]".length), caret(2, "[^9]: no".length), caret(6, "[^1]: my".length)], options);
+        expect(ranges).toHaveLength(2);
+        const lines = lintFootnotes(before, options).split("\n");
+        expect(lines).toContain("[^1]: my note");
+        for (const range of ranges) expect(lines[range.head.line]).not.toBe("[^1]: my note");
     });
 
     it("a caret at the very start of the note stays on its own line when a heading goes in above", () => {
