@@ -1,9 +1,10 @@
 import { judgeEdit, NoteRange } from "../../editor/result-gate";
 import { rulePasses } from "../rule-gate";
-import { findLineRunEnd, normalizeEol, removeLineRanges } from "../../parsing/line-edits";
+import { normalizeEol, removeLineRanges } from "../../parsing/line-edits";
 import { Definition, readNote } from "../../parsing/note-reading";
 import { DocumentView, endsInLazyLine, movedDefinitions, rewriteDocument } from "../rewrite-document";
 import { FootnoteRule } from "../rule";
+import { findSectionHeadingEnd } from "../section-heading";
 
 // The obsidian-linter plugin's "move footnotes to the bottom" rule,
 // rewritten here as a pure function and joined up with this plugin's
@@ -135,7 +136,7 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): { t
     // meant a multi-line heading was never recognised and a fresh copy
     // was added on every lint (bug reported 2026-07-17).
     //
-    // findLineRunEnd is the ONE piece of code that finds the heading,
+    // findSectionHeadingEnd is the ONE piece of code that finds the heading,
     // shared with the heading slot in buildDefinitionAppend. That is
     // what guarantees a note the plugin built comes back unchanged.
     //
@@ -146,12 +147,7 @@ function gathered(text: string, view: DocumentView, sectionHeading: string): { t
     let anchorEnd = -1;
     const bodyReading = readNote(body);
     if (sectionHeading) {
-        anchorEnd = findLineRunEnd(
-            body,
-            bodyReading.protectedLines,
-            sectionHeading.split("\n"),
-            bodyReading.commentLines,
-        );
+        anchorEnd = findSectionHeadingEnd(body, bodyReading, sectionHeading);
     }
 
     if (anchorEnd !== -1) {

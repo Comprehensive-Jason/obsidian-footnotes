@@ -5,8 +5,8 @@ import { contextOfLines, DocContext, definitionNames } from "../editor/doc-conte
 import { composeChanges, mapPosition, simulateChanges, simulatedAnchors } from "../editor/insertion-liveness";
 import { definitionLabel } from "../parsing/footnote-grammar";
 import { trimmedSectionHeading } from "../linting/linter";
+import { findSectionHeadingEnd } from "../linting/section-heading";
 import { labelOutrunsLookahead } from "../linting/rules/move-footnotes-to-the-bottom";
-import { findLineRunEnd } from "../parsing/line-edits";
 
 // Where a new footnote definition goes. This module holds the
 // section-heading setting and the append edit, both of which every
@@ -143,12 +143,11 @@ export function buildDefinitionAppend(
     // lines, so what is matched is a run of lines, not one line.
     const heading = sectionHeading(plugin);
     if (heading) {
-        // findLineRunEnd is the single piece of code that finds the
+        // findSectionHeadingEnd is the single piece of code that finds the
         // heading, shared with the move-to-bottom rule. They have to agree
         // on what counts as the existing heading, or running lint twice
         // would keep changing the note instead of settling.
-        const headingLines = heading.split("\n");
-        const anchorEnd = findLineRunEnd(lines, isProtected, headingLines, reading.commentLines);
+        const anchorEnd = findSectionHeadingEnd(lines, reading, heading);
         if (anchorEnd !== -1) {
             let fromLine = anchorEnd;
             let slotText = `\n\n[^${footnoteId}]: `;
