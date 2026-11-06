@@ -73,13 +73,13 @@ describe("a commented label inside a definition's indented %% block", () => {
 
     it("the commented-definition alert names it", () => {
         // Before the fix, no such alert.
-        expect(alertsOn(DOC).some((m) => m.includes('inside a comment ("[^k]:")'))).toBe(true);
+        expect(alertsOn(DOC).some((m) => m.includes('inside a %% comment ("[^k]:")'))).toBe(true);
     });
 
     it("control: the column-0 twin is left alone and named", () => {
         const doc = "use[^a]\n\n%%\n[^k]: y\n%%\n\n[^a]: x\n";
         const { after, alerts } = lintThenAlerts(doc);
         expect(after).toBe(doc);
-        expect(alerts.some((m) => m.includes('inside a comment ("[^k]:")'))).toBe(true);
+        expect(alerts.some((m) => m.includes('inside a %% comment ("[^k]:")'))).toBe(true);
     });
 });

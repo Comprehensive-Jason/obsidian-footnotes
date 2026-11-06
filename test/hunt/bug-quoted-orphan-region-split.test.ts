@@ -46,17 +46,20 @@ function liveReferenceNames(markdown: string): string[] {
     return names;
 }
 
+// Changed 2026-11-06 (hunt cycle 10): the lines holding the comment or the math are
+// not indented, so they stay behind whole when the label goes, and the region is
+// still not split (pin spec-orphan-cut-leaves-lazy-lines).
 describe("orphan deletion of a quoted definition whose continuation opens an inline comment", () => {
-    it("takes the whole comment region with the definition", () => {
-        expect(removeOrphanedFootnoteDefinitions(doc)).toBe("after");
+    it("leaves the whole comment region behind", () => {
+        expect(removeOrphanedFootnoteDefinitions(doc)).toBe("> tail <!-- open\n> hidden [^9]\n> -->\n\nafter");
     });
 
     it("never wakes the reference hidden inside the comment", () => {
         expect(liveReferenceNames(removeOrphanedFootnoteDefinitions(doc))).not.toContain("9");
     });
 
-    it("the math-region twin: takes the whole math block with the definition", () => {
-        expect(removeOrphanedFootnoteDefinitions(mathDoc)).toBe("after");
+    it("the math-region twin: leaves the whole math block behind", () => {
+        expect(removeOrphanedFootnoteDefinitions(mathDoc)).toBe("> tail $$\n> math [^9]\n> $$\n\nafter");
     });
 
     it("control: the column-0 shape already takes the whole region (the precedent)", () => {

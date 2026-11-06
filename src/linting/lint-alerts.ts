@@ -212,12 +212,21 @@ function noticeNotDefinitions(names: readonly string[], readsAs: "plain text" | 
 /** Whether a line's blocks say it starts another item of a list already running. */
 const NextItemOfItsList = /(?:^| )list(?:\.ordered)? \^listItem/;
 
-/** The names of the labels a blank line above alone would not fix (the third and fourth shapes above), each once. */
+/** How many characters a line's indentation and quote markers take. */
+const marginLength = (line: string): number => /^[ \t>]*/.exec(line)?.[0].length ?? 0;
+
+/**
+ * The names of the labels a blank line above alone would not fix (the third and
+ * fourth shapes above), each once. A label indented past the next item sits in its
+ * own item, and that next item ends the footnote already, so the blank line above
+ * is enough (hunt 2026-11-06, cycle 10; pin bug-lazy-alert-label-in-its-own-item).
+ */
 function labelsNeedingBlankBelow(lines: string[]): string[] {
     const reading = readNote(lines);
     const names = underlinedLazyLabelNames(lines);
     for (const label of labelShapedLines(lines, undefined, reading)) {
         if (!NextItemOfItsList.test(reading.lineBlocks[label.line + 1] ?? "")) continue;
+        if (marginLength(lines[label.line]) > marginLength(lines[label.line + 1])) continue;
         if (!names.some((name) => name.toLowerCase() === label.name.toLowerCase())) names.push(label.name);
     }
     return names;
@@ -707,8 +716,8 @@ function noticeCommentedDefinitions(markdown: string) {
     if (names.length === 0) return;
     showNotice(
         names.length === 1
-            ? `This note has a footnote definition inside a comment (${labelList(names)}), where Obsidian never shows it. Move it out of the comment.`
-            : `This note has ${names.length} footnote definitions inside comments (${labelList(names)}), where Obsidian never shows them. Move them out of the comments.`,
+            ? `This note has a footnote definition inside a %% comment (${labelList(names)}), where Obsidian never shows it. Move it out of the comment.`
+            : `This note has ${names.length} footnote definitions inside %% comments (${labelList(names)}), where Obsidian never shows them. Move them out of the comments.`,
         8000,
     );
 }

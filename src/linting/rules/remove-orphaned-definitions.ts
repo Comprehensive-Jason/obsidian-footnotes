@@ -1,4 +1,5 @@
 import { rulePasses } from "../rule-gate";
+import { BlockquotePrefix } from "../../parsing/label-shapes";
 import { definitionCuts, normalizeEol, removeLineRangesKeeping, restoreEol } from "../../parsing/line-edits";
 import { Definition, NoteReading, readNote } from "../../parsing/note-reading";
 import { FootnoteRule } from "../rule";
@@ -26,6 +27,38 @@ import { FootnoteRule } from "../rule";
 // the footnote such a body cites, so cutting it would orphan a live
 // reference (GLM hunt cycle 9, probed 2026-09-16), and the alert names it
 // instead (ADR 2).
+//
+// A cut takes the label and the indented lines under it. A line under the label
+// that is not indented stays behind as prose. Obsidian reads such a line as more
+// of the footnote, but the user may well have written it as a paragraph: a label
+// typed into the middle of one gets its blank line from Fix definitions, and the
+// rest of the paragraph then reads as the footnote's text. This reverses an older
+// ruling, for data loss (hunt 2026-11-06, cycle 10, replacing cycle 9's H13; pin
+// spec-orphan-cut-leaves-lazy-lines). Delete footnote everywhere and the cut that
+// carries definitions still take those lines: there the user asked for that
+// footnote to go, or the clipboard keeps its text.
+
+/** How many characters a line's quote markers take. */
+function quoteMarkersLength(line: string): number {
+    return BlockquotePrefix.exec(line)?.[0].length ?? 0;
+}
+
+/**
+ * Whether line `line`, in the body of `owner`, stays behind when `owner` is cut:
+ * it has text, and it starts to the left of the four columns past the label that
+ * would make it the footnote's own, so it reads as the footnote's text only
+ * because a paragraph carries on across it. Both columns are counted from after
+ * the quote markers, and a tab runs on to the next multiple of four, as Obsidian
+ * reads it (pin bug-quoted-definition-tab-continuation).
+ */
+function staysBehind(lines: readonly string[], owner: Definition, line: number): boolean {
+    if (line === owner.start) return false;
+    const text = lines[line].slice(quoteMarkersLength(lines[line]));
+    if (text.trim() === "") return false;
+    let indent = 0;
+    for (const character of /^[ \t]*/.exec(text)?.[0] ?? "") indent += character === "\t" ? 4 - (indent % 4) : 1;
+    return indent < owner.labelStart - quoteMarkersLength(lines[owner.start]) + 4;
+}
 
 interface ReferenceScan {
     blocks: readonly Definition[];
@@ -51,14 +84,16 @@ function scanReferences(lines: string[]): ReferenceScan {
     // not point at one, and counting labels as references kept orphaned
     // definitions alive. A LAZY label's "[^x]" is a reference, because
     // that is how it renders, and it does keep the definition it points at
-    // alive.
+    // alive. So does a reference on a line that stays behind when the definition
+    // around it is cut: that line is the user's prose, and cutting what it cites
+    // would leave it citing nothing.
     const liveRefs = new Map<string, number>();
     const blockRefs: string[][] = blocks.map(() => []);
     for (let i = 0; i < lines.length; i++) {
         const owner = reading.definitionAt(i);
         for (const { name: raw } of reading.referencesOn(i)) {
             const name = raw.toLowerCase();
-            if (owner === null) {
+            if (owner === null || staysBehind(lines, owner, i)) {
                 liveRefs.set(name, (liveRefs.get(name) ?? 0) + 1);
             } else {
                 blockRefs[indexOf.get(owner) ?? 0].push(name);
@@ -229,14 +264,66 @@ export function definitionsTakenAlong(lines: string[], orphans: readonly string[
 /** Whether taking `dead` out of a note, leaving `out`, may go ahead. */
 type CutAccepted = (dead: readonly Definition[], out: string[]) => boolean;
 
+/** `ranges` as one range per line, leaving out the lines where `stays` says true. */
+function rangesWithout(ranges: readonly { start: number; end: number }[], stays: (line: number) => boolean): { start: number; end: number }[] {
+    const left: { start: number; end: number }[] = [];
+    for (const { start, end } of ranges) {
+        for (let line = start; line <= end; line++) if (!stays(line)) left.push({ start: line, end: line });
+    }
+    return left;
+}
+
+/**
+ * A test for which lines stay behind when `dead` are cut. A line stays only when
+ * no definition being cut holds it as its own, so an inner footnote's short line
+ * that is the outer footnote's indented text goes.
+ */
+function proseAmong(lines: readonly string[], dead: readonly Definition[]): (line: number) => boolean {
+    return (line) => dead.every((block) => line < block.start || line > block.end || staysBehind(lines, block, line));
+}
+
+/**
+ * `lines` with a blank line above each stretch of prose that stays behind when
+ * `dead` are cut, so that prose no longer reads as part of a footnote. This is
+ * the note the result gate compares the cut with. Compared with the note as it
+ * stands, the gate would see a link or a reference on such a line arrive from
+ * nowhere, since what a removed footnote holds is not counted, and it would
+ * refuse a cut that loses nothing.
+ */
+function withProseSetApart(lines: readonly string[], dead: readonly Definition[]): string[] {
+    const stays = proseAmong(lines, dead);
+    const owned = (line: number): boolean => dead.some((block) => block.start <= line && line <= block.end);
+    return lines.flatMap((text, line) => (owned(line) && stays(line) && !stays(line - 1) ? [text.slice(0, quoteMarkersLength(text)).trimEnd(), text] : [text]));
+}
+
+/**
+ * Whether cutting `dead` would part a stretch of protected text, such as inline
+ * code or an inline comment running over several lines, by taking some of its
+ * lines and leaving the rest. What is left would read as something else, so such a
+ * definition stays and the alert names it (hunt 2026-11-06, cycle 10).
+ */
+function partsProtectedText(lines: string[], dead: readonly Definition[]): boolean {
+    const stays = proseAmong(lines, dead);
+    return readNote(lines).protectedSpans.some(({ startLine, endLine }) => {
+        for (let line = startLine + 1; line <= endLine; line++) if (stays(line) !== stays(startLine)) return true;
+        return false;
+    });
+}
+
 /**
  * `lines` with `dead` cut out (definitionCuts, removeLineRangesKeeping),
  * never line `keep`, and where that line is now; or null when `accepts`
- * refuses the cut.
+ * refuses the cut. With `leaveProse`, the lines that stay behind (staysBehind) do.
  */
-function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[], accepts: CutAccepted, keep: number): { lines: string[]; keep: number } | null {
+function cutDefinitionsIfClean(
+    lines: string[],
+    dead: readonly Definition[],
+    accepts: CutAccepted,
+    keep: number,
+    leaveProse: boolean,
+): { lines: string[]; keep: number } | null {
     const cut = definitionCuts(lines, dead);
-    const out = removeLineRangesKeeping(cut.lines, cut.ranges, keep);
+    const out = removeLineRangesKeeping(cut.lines, leaveProse ? rangesWithout(cut.ranges, proseAmong(lines, dead)) : cut.ranges, keep);
     return accepts(dead, out.lines) ? out : null;
 }
 
@@ -247,8 +334,8 @@ function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[], acc
  * definitions in place (hunt 2026-10-05 round 2, cluster C2, and the pin
  * bug-orphan-rule-cuts-footnote-cited-by-kept-orphan).
  *
- * A candidate stays when `accepts` refuses taking it out: by default when
- * the result gate refuses it (rule-gate.ts), as when it would change how
+ * A candidate stays when `accepts` refuses taking it out: for the orphan rule,
+ * when the result gate refuses it (rule-gate.ts), as when it would change how
  * Obsidian reads a line that stays: a definition between two lists keeps
  * them apart, and with it gone the lists join into one, a second numbered
  * list running on from the first one's numbers. Such a definition stays in
@@ -265,16 +352,21 @@ function cutDefinitionsIfClean(lines: string[], dead: readonly Definition[], acc
  * Line `keep` of `lines` is never removed (removeLineRangesKeeping): the
  * cut keeps the line its caret stands on, and `keptLine` says where that
  * line is in `kept` (-1 without one).
+ *
+ * `leaveProse` leaves the lines under a label that are not indented in the note
+ * (staysBehind). The orphan rule asks for that, and the cut that carries
+ * definitions does not, since the clipboard takes those lines with the footnote.
  */
 export function definitionsToCut(
     lines: string[],
     candidates: readonly Definition[],
-    accepts: CutAccepted = (dead, out) => rulePasses(lines, out, { removed: dead.map((block) => block.name) }),
+    accepts: CutAccepted,
     keep = -1,
+    leaveProse = false,
 ): { removed: Definition[]; kept: string[]; keptLine: number } {
     const reading = readNote(lines);
     const all = stillUnused(reading, candidates);
-    const whole = cutDefinitionsIfClean(lines, all, accepts, keep);
+    const whole = cutDefinitionsIfClean(lines, all, accepts, keep, leaveProse);
     if (whole !== null) return { removed: all, kept: whole.lines, keptLine: whole.keep };
     let removed: Definition[] = [];
     let kept = { lines, keep };
@@ -284,7 +376,7 @@ export function definitionsToCut(
             if (removed.includes(block)) continue;
             const trial = stillUnused(reading, [...removed, block]);
             if (trial.length === removed.length) continue;
-            const out = cutDefinitionsIfClean(lines, trial, accepts, keep);
+            const out = cutDefinitionsIfClean(lines, trial, accepts, keep, leaveProse);
             if (out === null) continue;
             removed = trial;
             kept = out;
@@ -345,7 +437,10 @@ export function removeOrphanedFootnoteDefinitions(markdown: string): string {
     for (;;) {
         const dead = orphanedDefinitionBlocks(current);
         if (dead.length === 0) break;
-        const { removed, kept } = definitionsToCut(current, dead);
+        const before = current;
+        const accepts: CutAccepted = (gone, out) =>
+            !partsProtectedText(before, gone) && rulePasses(withProseSetApart(before, gone), out, { removed: gone.map((block) => block.name) });
+        const { removed, kept } = definitionsToCut(before, dead, accepts, -1, true);
         if (removed.length === 0) break;
         current = kept;
     }

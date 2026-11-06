@@ -2,7 +2,6 @@ import { holdBack, rulePasses } from "../rule-gate";
 import { footnotePrefixProblem } from "../../parsing/footnote-prefix";
 import { computeNextFootnoteNumber } from "../../parsing/footnote-grammar";
 
-import { namesOnlyInHtmlComments } from "./remove-orphaned-references";
 import { rewriteDocument } from "../rewrite-document";
 import { rewriteFootnoteNames } from "../rewrite-footnote-names";
 import { FootnoteRule } from "../rule";
@@ -96,9 +95,7 @@ export function applyFootnotePrefix(markdown: string, prefix: string): string {
         // with in each place. Names are compared without regard to case, so
         // "[^Note]" and "[^note]:" are still one footnote once both have
         // gained the prefix.
-        const keptNames = namesOnlyInHtmlComments(lines);
         const renameFor = (id: string): string | null => {
-            if (keptNames.has(id.toLowerCase())) return null; // its only definition is hidden in an HTML comment
             const numbered = numberedRenames.get(id);
             if (numbered !== undefined) return numbered;
             if (/^\d+$/.test(id)) return null; // a number the walk above did not collect

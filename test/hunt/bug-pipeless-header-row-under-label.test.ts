@@ -47,7 +47,9 @@ describe("pipe runs under a definition label: the rows of a table agree on the l
         expect(readNote(lines).tableRowLines).toEqual([false, false, false, false, false, false]);
         expect(readNote(lines).blocks.map(({ name, start, end }) => ({ name, start, end }))).toEqual([{ name: "1", start: 2, end: 5 }]);
         expect(moveFootnoteDefinitionsToBottom(mixed)).toBe(mixed);
-        expect(removeOrphanedFootnoteDefinitions("[^1]: body\na | b\n| --- | --- |\nc | d")).toBe("");
+        // Changed 2026-11-06 (hunt cycle 10): those lines are not indented, so they
+        // stay behind when the label goes (pin spec-orphan-cut-leaves-lazy-lines).
+        expect(removeOrphanedFootnoteDefinitions("[^1]: body\na | b\n| --- | --- |\nc | d")).toBe("a | b\n| --- | --- |\nc | d");
     });
 
     it("a pipe-less header over a pipe-less delimiter is a table of its own under the label", () => {

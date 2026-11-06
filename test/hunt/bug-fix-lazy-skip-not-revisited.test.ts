@@ -32,12 +32,8 @@ import { fixLazyDefinitions } from "../../src/linting/rules/fix-lazy-definitions
 // Settings involved: `Fix definitions hidden by a missing blank line` ON
 // (the default).
 
-// The reference above the list keeps [^37] alive: a label nothing references,
-// with lines of its paragraph under it, now stays lazy (hunt 2026-11-06, cycle 9,
-// H13; pin spec-lazy-label-tail-orphan-deleted), which would leave this run with
-// no insertion to test.
 const doc =
-    "see[^37]\n\n- item\n  [^37]: a\nx $$\n$$ tail\n[^3]: b\nstray[^26] reference\n[^21]: first\n    continuation\n\n    second para[^22]";
+    "- item\n  [^37]: a\nx $$\n$$ tail\n[^3]: b\nstray[^26] reference\n[^21]: first\n    continuation\n\n    second para[^22]";
 
 describe("fix-lazy's skip verdict is state-dependent and skipped labels are never revisited", () => {
     it("fixLazyDefinitions on its own is idempotent", () => {

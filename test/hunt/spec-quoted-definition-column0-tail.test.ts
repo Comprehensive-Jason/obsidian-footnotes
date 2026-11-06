@@ -83,7 +83,7 @@ describe("a label under a column-0 line that follows a quoted definition", () =>
         expect(readNote(lines).blocks.map((b) => b.start)).toEqual([]);
     });
 
-    it("the orphan rules' reader owns the column-0 tail, so the whole footnote is cut together", () => {
+    it("the orphan rules' reader owns the column-0 tail, and the cut leaves it behind", () => {
         const { lines, masked, starts } = ctxOf(doc);
         expect(starts[0]).toBe(true);
         expect((readNote(lines).labelOn(0)?.end ?? 0)).toBe(1);
@@ -91,9 +91,11 @@ describe("a label under a column-0 line that follows a quoted definition", () =>
         expect(hit?.name).toBe("1");
         // the quoted label's own "[^1]" is not a reference
         expect(readNote(lines).referencesOn(0)).toEqual([]);
-        // an orphaned quoted definition takes its column-0 tail with it
-        // instead of stranding the footnote's body as prose
-        expect(removeOrphanedFootnoteDefinitions("> [^1]: quoted def\nplain column-0 line\n\ntail")).toBe("tail");
+        // Changed 2026-11-06 (hunt cycle 10), reversing the older ruling: an
+        // orphaned quoted definition leaves its column-0 tail behind as prose, since
+        // the user may have written it as a paragraph (pin
+        // spec-orphan-cut-leaves-lazy-lines).
+        expect(removeOrphanedFootnoteDefinitions("> [^1]: quoted def\nplain column-0 line\n\ntail")).toBe("plain column-0 line\n\ntail");
     });
 
     it("the tail runs through further plain lines, stops at a heading, and takes no indented chunk", () => {

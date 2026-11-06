@@ -83,9 +83,11 @@ describe("the boundary: deletions that change nothing around them", () => {
         expect(removeOrphanedFootnoteDefinitions("para.\n\n> [^9]: stray")).toBe("para.");
     });
 
-    it("a quoted definition's lazy continuation line goes with it, and the quoted text after a blank stays", () => {
+    // Changed 2026-11-06 (hunt cycle 10), reversing the older ruling that the lazy
+    // line goes with the label, for data loss (pin spec-orphan-cut-leaves-lazy-lines).
+    it("a quoted definition's lazy continuation line stays when the label goes, and so does the quoted text after a blank", () => {
         const doc = "para.\n\n> [^9]: stray\n> and more of it\n\n> a quote of its own";
-        expect(removeOrphanedFootnoteDefinitions(doc)).toBe("para.\n\n> a quote of its own");
+        expect(removeOrphanedFootnoteDefinitions(doc)).toBe("para.\n\n> and more of it\n\n> a quote of its own");
     });
 
     it("a quoted definition ends at the next quoted label", () => {
