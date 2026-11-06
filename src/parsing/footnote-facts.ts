@@ -460,7 +460,7 @@ export function footnoteFacts(text: string): FootnoteFacts {
  * taken into something above it (a paragraph's lazy line, a list's next
  * item, a code block or comment still open), or a link definition's label
  * is still open at the end (the one reader that looks further than the
- * line after a block; see linkDefinitionsAtTheEnd in obsidian-markdown.ts),
+ * line after a block; see readsPastTheEnd in obsidian-markdown.ts),
  * the part does not end there, and the result is null.
  */
 export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean): FootnoteFacts | null {
