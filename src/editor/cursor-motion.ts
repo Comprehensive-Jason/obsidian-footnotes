@@ -124,6 +124,14 @@ const joinsWordAt = (text: string, at: number): boolean => {
     return (c === "'" || c === "\u2019" || c === ".") && isWordCp(cpBefore(text, at - 1)) && isWordCp(text.codePointAt(at));
 };
 
+/**
+ * The marks a selection does not grow past when its end sits right after one:
+ * those that end a sentence, and CJK punctuation other than an opening bracket.
+ * CJK text puts no space after these, so the next word touching one is the next
+ * sentence or clause, not more of the same word (endOfWordForSelection).
+ */
+const EndsSelectionGrowth = /[.!?\u2026\u3002\uff0c\u3001\uff1b\uff1a\uff01\uff1f\uff0e\uff61\uff64\u22ef\u2025\u203c\u2047\u2048\u2049\u300d\u300f\uff09\u3011\u3015\u300b\u3009\uff63\uff3d\uff5d\uff60\u3017\u3019\u301b]/;
+
 /** Which of two positions comes first in the document. Negative, zero, or
  * positive, like any sort comparator. The one copy of it; it used to live
  * in two files. */
@@ -212,17 +220,17 @@ function wordEndOffset(text: string, offset: number): number {
  * embed, and `footnotes` the footnotes on the line, as endOfWordOffset takes
  * them.
  *
- * Only a selection that ends strictly inside a word grows, as its start does
- * (startOfWordOffset): an end that sits between two words stays where it is,
- * even when the next word touches it. Chinese and Japanese put no space
- * between sentences, so a whole sentence selected with its full stop,
- * "英文。" in "中文，英文。第三句。", grew over the next sentence and moved it into
- * the footnote too (hunt 2026-11-06, cycle 9, finding H36). An end right
- * after a dot or an apostrophe inside a word, "U.|S." or "don'|t", is inside
- * the word and still grows (joinsWordAt).
+ * An end right after a mark that ends a sentence, or after a CJK mark, stays
+ * where it is, even when the next word touches it (EndsSelectionGrowth).
+ * Chinese and Japanese put no space between sentences, so a whole sentence
+ * selected with its full stop, "英文。" in "中文，英文。第三句。", grew over the next
+ * sentence and moved it into the footnote too (hunt 2026-11-06, cycle 9,
+ * finding H36). A dot inside a word, "U.|S.", is not a stop, so that end still
+ * grows (joinsWordAt). An end after any other mark grows too: "well-|known"
+ * and "1,|000" are one word to a reader (hunt 2026-11-06, cycle 10).
  */
 export function endOfWordForSelection(text: string, offset: number, placement: FootnotePlacement = "after", images?: ReadonlySet<number>, footnotes: LineFootnotes = NoFootnotes): number {
-    if (!isWordCp(cpBefore(text, offset)) && !joinsWordAt(text, offset)) return offset;
+    if (EndsSelectionGrowth.test(text[offset - 1] ?? "") && !joinsWordAt(text, offset)) return offset;
     const end = wordEndOffset(text, offset);
     if (end === -1) return offset;
     // Under "before", a final dot that belongs to the word goes with the word,
