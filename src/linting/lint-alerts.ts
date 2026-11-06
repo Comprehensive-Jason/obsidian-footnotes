@@ -707,8 +707,8 @@ function noticeCommentedDefinitions(markdown: string) {
     if (names.length === 0) return;
     showNotice(
         names.length === 1
-            ? `This note has a footnote definition inside a %% comment (${labelList(names)}), where Obsidian never shows it. Move it out of the comment.`
-            : `This note has ${names.length} footnote definitions inside %% comments (${labelList(names)}), where Obsidian never shows them. Move them out of the comments.`,
+            ? `This note has a footnote definition inside a comment (${labelList(names)}), where Obsidian never shows it. Move it out of the comment.`
+            : `This note has ${names.length} footnote definitions inside comments (${labelList(names)}), where Obsidian never shows them. Move them out of the comments.`,
         8000,
     );
 }

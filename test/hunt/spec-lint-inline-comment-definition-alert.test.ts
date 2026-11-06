@@ -7,7 +7,7 @@ import { fakePlugin } from "../helpers/fake-plugin";
 import { messages, resetNotices } from "../helpers/notices";
 
 // spec question: should a definition written inside a one-line %% comment
-// get the "inside a %% comment" alert?
+// get the "inside a comment" alert?
 //
 // What it does now: the note has "use[^98] here" and the line "%% [^98]:
 // inline comment label %%". Obsidian hides the whole line, so [^98] has no
@@ -15,7 +15,7 @@ import { messages, resetNotices } from "../helpers/notices";
 // delete the reference"), which tells the user to write a definition they
 // already wrote.
 // What a user might expect: the alert a definition inside a %% block
-// comment gets: "This note has a footnote definition inside a %% comment
+// comment gets: "This note has a footnote definition inside a comment
 // ... Move it out of the comment."
 // Why it is a question and not a bug: ruling A1 (2026-09-15) and its alert
 // were about %% block comments, the lines between a "%%" line and the
@@ -42,7 +42,7 @@ describe("a definition inside a one-line %% comment", () => {
         const after = lintFootnotes(doc, lintOptionsFromSettings(plugin, "", doc));
         resetNotices();
         noticeLintAlerts(plugin, after);
-        expect(messages().some((m) => m.includes("inside a %% comment"))).toBe(false);
+        expect(messages().some((m) => m.includes("inside a comment"))).toBe(false);
         expect(messages().some((m) => m.includes("[^98]"))).toBe(true);
     });
 });

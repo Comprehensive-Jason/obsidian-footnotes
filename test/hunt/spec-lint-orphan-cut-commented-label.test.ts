@@ -26,7 +26,7 @@ import { messages, resetNotices } from "../helpers/notices";
 // remove-orphaned-references.ts (2026-09-09); ADR 0002.
 
 const NOTE = "text[^k] here\n\n%%\n[^k]: hidden\n%%\n";
-const ALERT = 'This note has a footnote definition inside a %% comment ("[^k]:"), where Obsidian never shows it. Move it out of the comment.';
+const ALERT = 'This note has a footnote definition inside a comment ("[^k]:"), where Obsidian never shows it. Move it out of the comment.';
 
 /** The plugin with the default settings plus `extra`. */
 function pluginWith(extra: Record<string, unknown>) {
