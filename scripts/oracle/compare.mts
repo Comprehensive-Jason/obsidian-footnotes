@@ -1,8 +1,8 @@
 // Turns two readings of one note into a list of disagreements in plain
 // terms: Obsidian's (from inapp-parse.js in the live app, or from the
 // answers saved under test/obsidian-answers/) and a reader's (the plugin's
-// scanner through plugin-facts.ts, or the remark-parse 8 reader through
-// reader-facts.ts). Lines are 0-based, as both sides report them.
+// note reading through plugin-facts.ts, or one whole-note parse of the note
+// reader through reader-facts.ts). Lines are 0-based, as both sides report them.
 //
 // This one file is the comparison rule for the live oracle (run-oracle.mjs)
 // and for the offline referee suite (test/obsidian-referee.test.ts), so the

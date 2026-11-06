@@ -509,7 +509,7 @@
 {"id":"probe:e2-cont-label-blank","text":"[^9]: a\n\n    [^1]: b\n\nuse[^1] use[^2] use[^3]\n","defs":[["9",0,0,2],["1",2,4,2]],"refs":[["1",4,3],["2",4,11],["3",4,19]],"code":[]},
 {"id":"probe:e2-label-sp3","text":"   [^1]: x\n\nuse[^1] use[^2] use[^3]\n","defs":[["1",0,0,0]],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]},
 {"id":"probe:e2-label-sp4","text":"    [^1]: x\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[[0,0]]},
-{"id":"probe:e2-label-space-name","text":"[^a b]: x\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[],"code":[],"unknown":["a b","1","2","3"]},
+{"id":"probe:e2-label-space-name","text":"[^a b]: x\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]},
 {"id":"probe:e2-label-nospace","text":"[^1]:x\n\nuse[^1] use[^2] use[^3]\n","defs":[["1",0,0,0]],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]},
 {"id":"probe:e2-label-caret-only","text":"[^]: x\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]},
 {"id":"probe:e3-ref","text":"a^[x [^1] y]\n\nuse[^1] use[^2] use[^3]\n","defs":[],"refs":[["1",2,3],["2",2,11],["3",2,19]],"code":[]},

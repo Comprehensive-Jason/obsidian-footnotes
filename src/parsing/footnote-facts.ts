@@ -146,7 +146,7 @@ interface LinkFact {
 }
 
 /** The node types read as a LinkFact. */
-const LinkNodes = new Set(["link", "linkReference", "image", "imageReference", "wikiLink"]);
+const LinkNodes = new Set(["link", "linkReference", "image", "imageReference", "wikilink"]);
 
 export interface FootnoteFacts {
     definitions: DefinitionFact[];
@@ -186,7 +186,7 @@ const BlockContainers = new Set(["root", "blockquote", "list", "listItem", "foot
  * the definition: indentation, quote markers ">", and list markers ("-",
  * "*", "+", "1.", "1)", each followed by a space or a tab) with a task box
  * after one: "[ ]", "[x]", or any other one character in the brackets, as
- * the list reader takes them (remark-parse-list.js). So "---" (a
+ * Obsidian's list reader takes them (rule B8). So "---" (a
  * frontmatter closer) and "%%" do not qualify.
  */
 const ContainerMarkersOnly = /^(?:[ \t]*(?:>|(?:[-+*]|\d{1,9}[.)])(?:[ \t]+\[.\])?(?=[ \t])))*[ \t]*$/;
@@ -337,8 +337,9 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
                 else if (node.value?.startsWith("<!--")) protect("htmlComment", false, from, to);
                 break;
             case "percentComment":
-                // protected, though a reference inside still counts as live (Jason's ruling, 2026-10-03)
-                protect("percentComment", node.block === true, from, to);
+                // protected, though a reference inside still counts as live (Jason's ruling, 2026-10-03);
+                // a comment that is a block of its own sits directly under a block holder
+                protect("percentComment", block, from, to);
                 break;
             case "inlineCode":
                 protect("inlineCode", false, from, to);
@@ -381,7 +382,7 @@ function factsOfTree(doc: string, tree: MarkdownNode, containerColumns: Readonly
             case "thematicBreak":
                 blockSyntax.push({ line: node.position.start.line - 1, end: Infinity, container: false });
                 break;
-            case "wikiLink": {
+            case "wikilink": {
                 const open = doc[from] === "!" ? 3 : 2;
                 protect("wikilink", false, from + open, to - 2);
                 break;
@@ -459,7 +460,7 @@ export function footnoteFacts(text: string): FootnoteFacts {
  * taken into something above it (a paragraph's lazy line, a list's next
  * item, a code block or comment still open), or a link definition's label
  * is still open at the end (the one reader that looks further than the
- * line after a block; see linkDefinitionsAtTheEnd in obsidian-markdown.ts),
+ * line after a block; see readsPastTheEnd in obsidian-markdown.ts),
  * the part does not end there, and the result is null.
  */
 export function partFacts(doc: string, startsNote: boolean, borrowsLine: boolean): FootnoteFacts | null {

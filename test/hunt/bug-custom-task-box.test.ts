@@ -30,8 +30,9 @@ import { BlockSyntaxNotice } from "../helpers/toasts";
 // broad:20261004-4658 ("- [ ] [^Note]: ..." is a definition in a task
 // item).
 //
-// Cause: src/parsing/remark-parse-list.js keeps stock remark's checkbox
-// regex /^\[([ X\tx])][ \t]/, so the reader sees "[/]" as text (a
+// Cause: the vendored list reader (src/parsing/remark-parse-list.js, gone
+// since the plugin moved to @quartz-community/remark-obsidian on 2026-11-06)
+// kept stock remark's checkbox regex /^\[([ X\tx])][ \t]/, so the reader saw "[/]" as text (a
 // shortcut reference link) and blockSyntaxEnd (the column where a line's
 // block syntax ends and its text begins) stops at the list marker.
 

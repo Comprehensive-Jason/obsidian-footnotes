@@ -27,7 +27,8 @@ import { readNote } from "../../src/parsing/note-reading";
 // line breaks, and run over lines.
 //
 // Cause: a part that starts inside the title reads it as a paragraph.
-// linkDefinitionsAtTheEnd (obsidian-markdown.ts) marks a part whose last
+// linkDefinitionsAtTheEnd (obsidian-markdown.ts, since replaced by
+// readsPastTheEnd in the same file) marked a part whose last
 // link definition would read differently with more text after it, but
 // the only text it tries is "]: x" and "x", which finish a label. It
 // never tries a title or an angle-bracket address that runs on past the

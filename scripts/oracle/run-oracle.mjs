@@ -16,9 +16,9 @@
 //       clusters the reproducers by shape, and with --render adjudicates one
 //       representative per cluster in Reading view.
 //
-//   --reader, with either command, compares Obsidian with the remark-parse 8
-//   reader (src/parsing/obsidian-markdown.ts, through reader-facts.ts)
-//   instead of the plugin's scanner.
+//   --reader, with either command, compares Obsidian with one whole-note parse
+//   of the note reader (src/parsing/obsidian-markdown.ts, through
+//   reader-facts.ts) instead of the plugin's note reading in parts.
 
 import { build } from "esbuild";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";

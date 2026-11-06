@@ -1,4 +1,4 @@
-// The remark-parse 8 reader's reading of a note (src/parsing/footnote-facts.ts),
+// The note reader's reading of a note (src/parsing/footnote-facts.ts),
 // in the shape the oracle's comparison takes (compare.mts): its definitions
 // with their last lines, its live references, and per line the kind of
 // protected block covering it, or "" for an ordinary line.
