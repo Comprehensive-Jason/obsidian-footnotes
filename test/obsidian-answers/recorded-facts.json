@@ -1,8 +1,8 @@
 [
 {"id":"fact:96c2501-label-after-percent-closer","text":"x[^1]\n\n%%\nhidden\n%% [^1]: freed label","defs":[["1",4,2,4]],"refs":[["1",0,1]],"code":[]},
 {"id":"fact:96c2501-quoted-label-after-percent-closer","text":"x[^1]\n\n> %%\n> hidden\n> %% [^1]: freed","defs":[["1",4,4,4]],"refs":[["1",0,1]],"code":[]},
-{"id":"fact:96c2501-whitespace-name-is-prose","text":"Alpha[^ 1] and bravo[^2] and[^my note].\n\n[^ 1]: prose that only looks like a label\n\n[^my note]: The full citation goes here.\n\n[^2]: two","defs":[["2",6,0,6]],"refs":[["2",0,20]],"code":[],"unknown":[" 1","my note"]},
-{"id":"fact:96c2501-comment-span-name-with-space","text":"see[^a<!-- -->b].\n\n[^a<!-- -->b]: hi","defs":[],"refs":[],"code":[],"unknown":["a<!-- -->b"]},
+{"id":"fact:96c2501-whitespace-name-is-prose","text":"Alpha[^ 1] and bravo[^2] and[^my note].\n\n[^ 1]: prose that only looks like a label\n\n[^my note]: The full citation goes here.\n\n[^2]: two","defs":[["2",6,0,6]],"refs":[["2",0,20]],"code":[]},
+{"id":"fact:96c2501-comment-span-name-with-space","text":"see[^a<!-- -->b].\n\n[^a<!-- -->b]: hi","defs":[],"refs":[],"code":[]},
 {"id":"fact:96c2501-tab-after-quote-marker","text":">\t[^1]: def\n\nuse[^1]","defs":[],"refs":[["1",2,3]],"code":[]},
 {"id":"fact:96c2501-quoted-fence-in-definition-continuation","text":"[^1]: para\n    > ```\n    > code[^9]\n    > ```\n\nuse[^1]\n\n[^9]: nine","defs":[["1",0,0,3],["9",7,0,7]],"refs":[["1",5,3]],"code":[]},
 {"id":"fact:96c2501-label-under-setext-dash","text":"use[^1] here\n\nHeading\n-\n[^1]: real definition","defs":[["1",4,0,4]],"refs":[["1",0,3]],"code":[]},

@@ -1,3 +1,4 @@
+import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 
 import { footnoteFacts } from "../src/parsing/footnote-facts";
@@ -120,6 +121,24 @@ describe("a %% comment", () => {
 // mark when a container held the line, and read no callout on that line. The
 // adapter's columns are the true ones, so this group does not pass there.
 describe("a note that starts with a byte order mark", () => {
+    // Why the true column is the right one, though the metadata cache reports
+    // one less (the known disagreements in test/obsidian-referee.test.ts).
+    // CodeMirror, the editor inside Obsidian, keeps a mark as one character of
+    // the line, and the plugin edits by the columns of the line the editor
+    // holds. A note opened from disk holds no mark at all, because Obsidian's
+    // Vault.read drops one (read from its app code, 1.15.0, 2026-11-06), so a
+    // mark reaches the editor only when it is pasted or typed in. Then the
+    // cache and the editor do differ, and the editor's count is the one an
+    // edit lands by.
+    it("gives the column CodeMirror counts in the line", () => {
+        const text = "\ufeff- a[^1]\n";
+        const { doc } = EditorState.create({ doc: text });
+        const line = doc.line(1);
+        expect(line.text).toBe("\ufeff- a[^1]");
+        const [reference] = footnoteFacts(text).references;
+        expect(doc.sliceString(line.from + reference.start, line.from + reference.start + 4)).toBe("[^1]");
+    });
+
     it("counts the mark in offsets and in the first line's columns", () => {
         const text = "﻿- a[^1]\nb[^2]\n";
         const { references } = footnoteFacts(text);
