@@ -6,7 +6,8 @@ import { fakePlugin } from "./helpers/fake-plugin";
 import { messages, resetNotices } from "./helpers/notices";
 
 // The Convert toasts in the shared vocabulary (Jason's choice, 2026-10-22,
-// run toast-consolidate): "Nothing was converted:" opens every refusal,
+// run toast-consolidate): "Nothing was converted:" opens every refusal but
+// the one that skipped every footnote (its opener ends in a full stop, 2026-11-06),
 // one sentence says a note has nothing to convert, and both directions
 // skip with the same reason words. Written out in full.
 
@@ -36,11 +37,11 @@ describe("nothing to convert", () => {
 
 describe("every footnote skipped", () => {
     it("inline to normal counts each reason", async () => {
-        expect(await toNormal(["a^[] b^[]"])).toEqual(["Nothing was converted: every footnote was skipped: empty (2)."]);
+        expect(await toNormal(["a^[] b^[]"])).toEqual(["Nothing was converted. Every footnote was skipped: empty (2)."]);
     });
     it("normal to inline names each footnote with its reason", async () => {
         expect(await toInline(["text", "", "[^o]: orphan", "", "> [^q]: quoted"])).toEqual([
-            'Nothing was converted: every footnote was skipped: "[^o]" (not referenced), "[^q]" (in a quote).',
+            'Nothing was converted. Every footnote was skipped: "[^o]" (not referenced), "[^q]" (in a quote).',
         ]);
     });
 });

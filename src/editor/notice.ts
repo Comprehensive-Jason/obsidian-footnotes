@@ -72,6 +72,15 @@ export function refusal(opener: Opener, reason: string, advice?: string): string
     return `${Openers[opener]}: ${reason}${advice === undefined ? "" : ` ${advice}`}`;
 }
 
+/** The refusal of a conversion that skipped every footnote, `list` naming
+ * them. It is the one refusal that does not follow the opener, colon, reason
+ * pattern above. Its list is introduced by a colon of its own, and two colons
+ * in one sentence read badly, so the opener ends in a full stop here (Jason
+ * accepted breaking the pattern for this one text, 2026-11-06). */
+export function everyFootnoteSkipped(list: string): string {
+    return `${Openers.convert}. Every footnote was skipped: ${list}.`;
+}
+
 /** The reason for a note whose footnote-prefix property cannot be used,
  * worded the same way whether a press refuses, a conversion refuses, or the
  * lint cancels. `problem` is the sentence footnotePrefixProblem gives. */

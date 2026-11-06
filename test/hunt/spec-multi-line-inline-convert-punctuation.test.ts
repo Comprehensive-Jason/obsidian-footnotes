@@ -45,7 +45,7 @@ describe("multi-line inline footnotes, Convert inline to normal and the punctuat
         expect(result.converted).toBe(0);
         expect(result.skipped).toEqual([{ reason: "more than one line", count: 1 }]);
         expect(after).toBe(lines.join("\n"));
-        expect(messages()).toContain("Nothing was converted: every footnote was skipped: more than one line (1).");
+        expect(messages()).toContain("Nothing was converted. Every footnote was skipped: more than one line (1).");
     });
 
     it("beside a one-line inline footnote, the one-line one is converted and the multi-line one is counted", () => {

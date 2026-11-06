@@ -219,7 +219,7 @@ describe("the two command entries", () => {
             selection: { anchor: { line: 0, ch: 0 }, head: { line: 0, ch: 0 } },
         });
         await convertNormalToInlineCommand(fakePlugin({}, doc));
-        expect(messages()).toContain('Nothing was converted: every footnote was skipped: "[^m]" (more than one line).');
+        expect(messages()).toContain('Nothing was converted. Every footnote was skipped: "[^m]" (more than one line).');
     });
 
     it("inline to normal runs through the command entry", async () => {

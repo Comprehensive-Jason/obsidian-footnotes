@@ -56,7 +56,7 @@ describe("spec question: an inline footnote whose text holds a reference", () =>
         const result = convertInlineFootnotesToNormal(fakePlugin({}, doc), doc);
         expect(result.converted).toBe(0);
         expect(doc.lines).toEqual(lines);
-        expect(messages()).toEqual(["Nothing was converted: every footnote was skipped: its text holds a footnote (1)."]);
+        expect(messages()).toEqual(["Nothing was converted. Every footnote was skipped: its text holds a footnote (1)."]);
     });
 
     it("a reference-shaped text in a code span inside it is not a footnote, so it converts", () => {

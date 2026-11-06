@@ -5,7 +5,7 @@ import { Editor, EditorChange, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
-import { Advice, refusal, showNotice } from "../editor/notice";
+import { Advice, everyFootnoteSkipped, refusal, showNotice } from "../editor/notice";
 import { CreatedFootnote, judgeEdit } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { replaceMinimal, writeChanges } from "../editor/write-back";
@@ -51,12 +51,11 @@ const Skip = {
     referencedFromFootnote: "referenced from inside another footnote",
 } as const;
 
-// A colon introduces the skip list in both of the texts below, because each
-// item in the list already carries brackets of its own, and brackets around
-// them made the sentence hard to read (Jason's choice, 2026-11-05).
-
-/** The refusal of a conversion that skipped every footnote, `list` naming them. */
-const everySkipped = (list: string) => refusal("convert", `every footnote was skipped: ${list}.`);
+// A colon introduces the skip list in the sentence below and in the refusal
+// of a conversion that skipped every footnote (everyFootnoteSkipped in
+// notice.ts), because each item in the list already carries brackets of its
+// own, and brackets around them made the sentence hard to read (Jason's
+// choice, 2026-11-05).
 
 /** The sentence that ends a toast when some footnotes were skipped, `list` naming them. */
 const someSkipped = (list: string) => ` Skipped: ${list}.`;
@@ -347,7 +346,7 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         }
     }
     if (spans.length === 0) {
-        showNotice(skipped.length === 0 ? "This note has no inline footnotes to convert." : everySkipped(skippedList(skipped)));
+        showNotice(skipped.length === 0 ? "This note has no inline footnotes to convert." : everyFootnoteSkipped(skippedList(skipped)));
         return { ...nothingToConvert, skipped };
     }
 
@@ -500,7 +499,7 @@ export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
                 return;
             }
             if (result.converted === 0) {
-                showNotice(result.skipped.length === 0 ? "This note has no footnotes to convert." : everySkipped(list), 8000);
+                showNotice(result.skipped.length === 0 ? "This note has no footnotes to convert." : everyFootnoteSkipped(list), 8000);
                 return;
             }
             const mdView = plugin.app.workspace.getActiveViewOfType(MarkdownView) ?? undefined;
