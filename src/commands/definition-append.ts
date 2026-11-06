@@ -13,6 +13,20 @@ import { labelOutrunsLookahead } from "../linting/rules/move-footnotes-to-the-bo
 // creation press shares. Split out of the one big commands file on
 // 2026-08-11.
 
+/**
+ * Plain text as it goes onto a new definition's label line. Text there reads
+ * as a block start like any other (docs/obsidian-reading-rules.md E2), so
+ * "[^1]: 2. Aufl., S. 34" draws a numbered list starting at 2. A backslash in
+ * front of the "." or ")" keeps it plain text: "[^1]: 2\. Aufl., S. 34" reads
+ * "2. Aufl., S. 34" (Jason's ruling 2026-11-05, on the live answer from
+ * Obsidian 1.15.0). Only the numbered list gets this. A heading or a bullet at
+ * the start stays as written (the characterization tests in
+ * spec-convert-block-starting-body).
+ */
+export function plainOnLabelLine(text: string): string {
+    return text.replace(/^(\d+)([.)])(?=[ \t\n]|$)/, "$1\\$2");
+}
+
 /** A stretch of a note, from `from` up to `to`. */
 interface TextRange {
     from: EditorPosition;

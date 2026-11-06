@@ -10,7 +10,7 @@ import { fakePlugin } from "../helpers/fake-plugin";
 // What it does now: the note's prefix is "2-" and it holds "[^2-1]" and
 // "[^x]". With Apply prefix off and Preferred footnote naming style on
 // Numbered, the lint renumbers both: "a[^2-1] b[^x]" becomes "a[^1] b[^2]".
-// What a user might expect: the Apply prefix setting says "While off,
+// What a user might expect: the Apply prefix setting said "While off,
 // prefixed footnotes are treated as named and keep their names."
 // Why it is a question and not a bug: under Numbered, named footnotes are
 // renumbered on purpose, so "treated as named" is honoured; only "keep
@@ -21,13 +21,13 @@ import { fakePlugin } from "../helpers/fake-plugin";
 // Characterization tests (behaviour pinned as they are, 2026-11-05, when the
 // spec pins were sorted under Jason's scope rule of 2026-10-07): a prefix with
 // Apply prefix off and Numbered on is a rare combination, and every footnote
-// keeps its text. It was one it.fails test until then. The setting's sentence
-// still says "keep their names", which is a wording question in the report.
+// keeps its text. It was one it.fails test until then. The setting now says
+// "treated as named, so Numbered renumbers them" (Jason's wording, 2026-11-05).
 //
 // Hunt 2026-10-02, round 4, lens promise. Cluster PR4.
 //
 // Source of truth: the Apply the note's footnote prefix description in
-// src/settings.ts, quoted above.
+// src/settings.ts.
 
 describe("Numbered with Apply prefix off", () => {
     // The prefixes vary their separator, as every prefix test does (Jason's

@@ -3,7 +3,7 @@ import { Editor, EditorChange, EditorPosition } from "obsidian";
 import type FootnotePlugin from "../main";
 import { docLines } from "./doc-context";
 import { mapPosition, safeInsertionCh } from "./insertion-liveness";
-import { FootnotePlacement, imageStartsOn, lineLinkLikeEndAt, linkLikeEndAt, punctuationAt, referenceLandingAfter } from "../parsing/landing";
+import { FootnotePlacement, imageStartsOn, lineLinkLikeEndAt, linkLikeEndAt, punctuationAt, referenceLandingAfter, wordEndBefore } from "../parsing/landing";
 import { NoteReading, readNote } from "../parsing/note-reading";
 import { readCell } from "../parsing/cell-reading";
 import {
@@ -274,6 +274,48 @@ export function startOfWordOffset(text: string, offset: number): number {
  */
 export const TrailingBlockId = /[ \t]+\^[A-Za-z0-9-]+$/;
 
+/** The note `lines` read with a reference written at column `at` of `line` ("[^1]" stands in for it). */
+function readWithReference(lines: readonly string[], line: number, at: number): NoteReading {
+    return readNote(lines.map((written, i) => (i === line ? `${written.slice(0, at)}[^1]${written.slice(at)}` : written)));
+}
+
+/**
+ * Under Before, where a press goes whose caret sits right after the
+ * punctuation that ends some text: in front of that punctuation, where a press
+ * in the word lands, so "A word.|" gives "A word[^1]." and "这是句子。|" gives
+ * "这是句子[^1]。". It is the mirror of After, where a caret in front of the
+ * punctuation hops past it (Jason's ruling, 2026-11-05, pin
+ * spec-placement-before-caret-after-punctuation). The spaces in front of the
+ * punctuation stay with it, as the lint leaves them: "Vraiment ?|" gives
+ * "Vraiment[^1] ?". A closing mark after the punctuation is still stepped over.
+ * The caret stays at column `ch` when no punctuation touches it from the left,
+ * or when no text stands in front of the punctuation. It stays there too when
+ * a reference in front of the punctuation would not be live, as in "[see p.
+ * 5].|", where "[see p. 5][^1]" reads as a link and the press would be refused.
+ */
+function inFrontOfPunctuationBehindCaret(reading: NoteReading, lines: readonly string[], line: number, ch: number): number {
+    const text = lines[line] ?? "";
+    const images = imageStartsOn(reading, line);
+    const textStart = reading.blockSyntaxEnd(line);
+    let start = ch;
+    while (start > textStart && punctuationAt(text, start - 1, images)) start--;
+    if (start === ch || start === textStart) return ch;
+    const wordEnd = wordEndBefore(text, start, textStart, true);
+    if (wordEnd === start && /\s/.test(text[start - 1])) return ch;
+    const landing = wordEnd === start ? referenceLandingAfter(text, start, "before", images) : wordEnd;
+    return readWithReference(lines, line, landing).referencesOn(line).some((reference) => reference.start === landing) ? landing : ch;
+}
+
+/**
+ * inFrontOfPunctuationBehindCaret for a table cell's own text, as an offset
+ * into `text`. The cell is read as the note holds it, as the one row of a table
+ * (readCell).
+ */
+export function cellInFrontOfPunctuationBehindCaret(text: string, offset: number): number {
+    const cell = readCell(text);
+    return cell.offset(inFrontOfPunctuationBehindCaret(cell.reading, [cell.line, "| --- |"], 0, cell.column(offset)));
+}
+
 /**
  * Where a reference that would land at column `ch` of `line` goes instead
  * when the punctuation right in front of it ends a link-like construct
@@ -289,10 +331,8 @@ function inFrontOfTakenPunctuation(reading: NoteReading, lines: readonly string[
     let start = ch;
     while (start > 0 && punctuationAt(text, start - 1)) start--;
     if (start === ch || start === 0 || linkLikeEndAt(reading, line, start - 1)?.ch !== start) return ch;
-    // the note with a reference written at column `at` of the line, read
-    const withReference = (at: number) => readNote(lines.map((written, i) => (i === line ? `${written.slice(0, at)}[^1]${written.slice(at)}` : written)));
-    if (linkLikeEndAt(withReference(ch), line, start - 1)?.ch === start) return ch;
-    const inFront = withReference(start);
+    if (linkLikeEndAt(readWithReference(lines, line, ch), line, start - 1)?.ch === start) return ch;
+    const inFront = readWithReference(lines, line, start);
     const live = inFront.referencesOn(line).some((reference) => reference.start === start);
     return live && linkLikeEndAt(inFront, line, start - 1)?.ch === start ? start : ch;
 }
@@ -362,6 +402,11 @@ export function adjustFootnotePosition(
         );
         if (landing !== cursorPosition.ch) {
             cursorPosition = { line: cursorPosition.line, ch: landing };
+        } else if (plugin.settings.footnotePlacement === "before") {
+            // No word touches the caret. A caret right after the punctuation
+            // that ends a word hops back in front of it (Jason's ruling,
+            // 2026-11-05).
+            cursorPosition = { line: cursorPosition.line, ch: inFrontOfPunctuationBehindCaret(reading, lines, cursorPosition.line, cursorPosition.ch) };
         }
         // An email address takes in a period that a reference follows
         // (docs/obsidian-reading-rules.md D8), so a press after the period

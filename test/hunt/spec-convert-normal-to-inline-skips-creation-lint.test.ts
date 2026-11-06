@@ -4,29 +4,22 @@ import { convertNormalToInlineCommand } from "../../src/commands/convert-footnot
 import { DEFAULT_SETTINGS } from "../../src/settings";
 import { fakeEditor } from "../helpers/fake-editor";
 import { fakePlugin } from "../helpers/fake-plugin";
-import { resetNotices } from "../helpers/notices";
+import { messages, resetNotices } from "../helpers/notices";
+import { PREFIXES } from "../helpers/prefixes";
 
-// spec question: should Convert normal footnotes to inline footnotes run
-// the lint afterwards when Lint on footnote creation is on?
+// Jason's ruling, 2026-11-05: Convert normal footnotes to inline footnotes
+// runs the lint afterwards when Lint on footnote creation is on, as Convert
+// inline footnotes to normal footnotes does. The setting's description says
+// "including when the convert commands or a paste create them", and "the
+// convert commands" means both.
 //
-// What it does now: the note has [^1] (one line) and [^2] (two lines, so it
-// cannot become inline). The conversion turns [^1] into "^[one]" and
-// leaves "[^2]" as it is. With Lint on footnote creation on, nothing lints
-// afterwards, so the footnote left behind keeps its number 2 although it
-// is now the first numbered footnote in the note. Convert inline to normal
-// does lint afterwards.
-// What a user might expect: the Lint on footnote creation description says
-// "Lint the note right after a new footnote is created in it, including
-// when the convert commands or a paste create them."
-// Why it is a question and not a bug: converting to inline creates no new
-// normal footnote, so "a new footnote is created" can be read as not
-// covering it; "the convert commands" (plural) reads as covering it.
-// Either the conversion lints, or the description narrows; Jason's call.
+// The case: the note has [^1] (one line) and [^2] (two lines, so it cannot
+// become inline). The conversion turns [^1] into "^[one]" and leaves "[^2]".
+// The lint then numbers the footnote left behind [^1], because it is now the
+// first numbered footnote in the note. Before the ruling, nothing linted, and
+// it kept its number 2 until the next lint.
 //
 // Hunt 2026-10-02, round 4, lens promise. Cluster PR8.
-//
-// Source of truth: the Lint on footnote creation description in
-// src/settings.ts, quoted above.
 
 /** A fake editor holding `lines`, caret at the start. */
 function doc(lines: string[]) {
@@ -40,11 +33,33 @@ function doc(lines: string[]) {
 
 beforeEach(resetNotices);
 
-describe("spec question: Lint on footnote creation after Convert normal footnotes to inline footnotes", () => {
-    it.fails("lints straight after, so the footnote left behind is renumbered", async () => {
+describe("Lint on footnote creation after Convert normal footnotes to inline footnotes (ruling 2026-11-05)", () => {
+    it("lints straight after, so the footnote left behind is renumbered", async () => {
         const d = doc(["a[^1] b[^2]", "", "[^1]: one", "[^2]: first", "    second"]);
         await convertNormalToInlineCommand(fakePlugin({ ...DEFAULT_SETTINGS, lintOnFootnoteCreation: true }, d));
-        // Today: ["a^[one] b[^2]", "", "[^2]: first", "    second"].
         expect(d.lines).toEqual(["a^[one] b[^1]", "", "[^1]: first", "    second"]);
+        expect(messages()).toContain("Footnotes linted.");
+    });
+
+    for (const prefix of PREFIXES) {
+        it(`renumbers inside the note's prefix too (${prefix})`, async () => {
+            const d = doc(["---", `footnote-prefix: ${prefix}`, "---", `a[^${prefix}1] b[^${prefix}2]`, "", `[^${prefix}1]: one`, `[^${prefix}2]: first`, "    second"]);
+            await convertNormalToInlineCommand(fakePlugin({ ...DEFAULT_SETTINGS, lintOnFootnoteCreation: true, enableFootnotePrefix: true }, d));
+            expect(d.lines.slice(3)).toEqual([`a^[one] b[^${prefix}1]`, "", `[^${prefix}1]: first`, "    second"]);
+        });
+    }
+
+    it("control: with the setting off, the footnote left behind keeps its number until the next lint", async () => {
+        const d = doc(["a[^1] b[^2]", "", "[^1]: one", "[^2]: first", "    second"]);
+        await convertNormalToInlineCommand(fakePlugin({ ...DEFAULT_SETTINGS, lintOnFootnoteCreation: false }, d));
+        expect(d.lines).toEqual(["a^[one] b[^2]", "", "[^2]: first", "    second"]);
+        expect(messages()).not.toContain("Footnotes linted.");
+    });
+
+    it("says so when a bad prefix stops the lint, since nothing else in this conversion reads the prefix", async () => {
+        const d = doc(["---", "footnote-prefix: 2", "---", "a[^1] b[^2]", "", "[^1]: one", "[^2]: first", "    second"]);
+        await convertNormalToInlineCommand(fakePlugin({ ...DEFAULT_SETTINGS, lintOnFootnoteCreation: true, enableFootnotePrefix: true }, d));
+        expect(d.lines).toEqual(["---", "footnote-prefix: 2", "---", "a^[one] b[^2]", "", "[^2]: first", "    second"]);
+        expect(messages().some((message) => message.startsWith("Linting canceled: this note's footnote-prefix (\"2\") is invalid."))).toBe(true);
     });
 });

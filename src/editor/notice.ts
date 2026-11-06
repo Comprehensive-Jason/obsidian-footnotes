@@ -139,6 +139,14 @@ export function nameAlreadyUsed(name: string): string {
     return `${quotedReference(name)} is already used by another footnote.`;
 }
 
+/** What a rename says when the next lint will number the new name again, so
+ * the user hears it up front and not from the lint (Jason's ruling and his
+ * wording, 2026-11-05). `prefixAdded` is the sentence about a prefix the
+ * rename added, when it added one. */
+export function renamedButNumberedNext(name: string, prefixAdded = ""): string {
+    return `Renamed to ${quotedReference(name)}.${prefixAdded} Your naming style is Numbered, so the next lint will number it again.`;
+}
+
 /** A quoted footnote reference, exactly as the toasts spell it:
  * `"[^name]"`, including the empty `"[^]"` and bare-prefix `"[^2.]"`
  * placeholders, and the quoted label `"[^name]:"` that the lazy-definition

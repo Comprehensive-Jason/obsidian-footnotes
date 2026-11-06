@@ -10,7 +10,7 @@ import { judgeEdit } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { withEditableEditor } from "./insert-or-navigate-footnotes";
 
-import { nameAlreadyUsed, showNotice } from "../editor/notice";
+import { nameAlreadyUsed, renamedButNumberedNext, showNotice } from "../editor/notice";
 // Renaming a footnote (Jason's calls 2026-08-12).
 //
 // With the caret on a "[^name]" reference or on a definition label, the
@@ -318,6 +318,35 @@ export async function renameFootnote(plugin: FootnotePlugin) {
     );
 }
 
+/**
+ * Whether the next lint will turn the footnote name `name` into a number.
+ * That happens under the Numbered naming style while the reindex rule is on.
+ * A name that is already a number, plain or behind the prefix the lint is
+ * armed with, only moves to its place in the order, so it stays a number. A
+ * prefixed name counts as named while the lint is not armed with the prefix
+ * (the Apply prefix setting's text, 2026-11-05).
+ */
+function nextLintNumbers(plugin: FootnotePlugin, name: string, sweepPrefix: string | undefined): boolean {
+    if (plugin.settings.footnoteNaming !== "numbered" || !plugin.settings.lintReindex) return false;
+    const armed = sweepPrefix !== undefined && name.toLowerCase().startsWith(sweepPrefix.toLowerCase());
+    return !/^\d+$/.test(armed ? name.slice(sweepPrefix.length) : name);
+}
+
+/**
+ * The toast after a rename: how many places changed, or, when the next lint
+ * will undo the new name, that warning instead (Jason's ruling, 2026-11-05,
+ * pin spec-lint-naming-style-undoes-rename). The warning stays up longer, as
+ * the other warnings do. `sweepPrefix` is the prefix the planner was given.
+ */
+export function showRenamedNotice(plugin: FootnotePlugin, oldName: string, plan: Extract<RenamePlan, { kind: "renamed" }>, sweepPrefix: string | undefined): void {
+    const prefixAdded = plan.prefixAdded ? ` The note's prefix "${sweepPrefix}" was added.` : "";
+    if (nextLintNumbers(plugin, plan.newName, sweepPrefix)) {
+        showNotice(renamedButNumberedNext(plan.newName, prefixAdded), 8000);
+        return;
+    }
+    showNotice(`Renamed "[^${oldName}]" to "[^${plan.newName}]" in ${plan.count} ${plan.count === 1 ? "place" : "places"}.${prefixAdded}`);
+}
+
 // One text box, prefilled with the current name. Enter, or the Rename
 // button, applies it. Invalid names, collisions, and names the simulation
 // refuses each show their reason inside the modal and leave it open. It is
@@ -389,12 +418,7 @@ class RenameFootnoteModal extends ValidatedTextModal {
             case "renamed":
                 this.doc.transaction({ changes: plan.changes });
                 this.close();
-                showNotice(
-                    `Renamed "[^${this.oldName}]" to "[^${plan.newName}]" in ${plan.count} ${plan.count === 1 ? "place" : "places"}.` +
-                        (plan.prefixAdded
-                            ? ` The note's prefix "${sweepPrefix}" was added.`
-                            : ""),
-                );
+                showRenamedNotice(this.plugin, this.oldName, plan, sweepPrefix);
         }
     }
 }

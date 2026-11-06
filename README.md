@@ -128,7 +128,7 @@ One hotkey takes you back and forth between a reference and its note.
 
 ### Renaming a footnote
 
-Put your cursor on any reference or definition and run **Rename footnote**. It works like renaming a variable in a code editor: every reference and the definition get the new name in one step. It's also in the right-click menu when you click on a footnote, just like Obsidian's own rename for headings. Names are case-insensitive, so `[^Note]` and `[^note]` count as the same footnote. The command refuses names that are already taken and names a footnote can't have, and under a per-note prefix the new name gets the prefix added for you.
+Put your cursor on any reference or definition and run **Rename footnote**. It works like renaming a variable in a code editor: every reference and the definition get the new name in one step. It's also in the right-click menu when you click on a footnote, just like Obsidian's own rename for headings. Names are case-insensitive, so `[^Note]` and `[^note]` count as the same footnote. The command refuses names that are already taken and names a footnote can't have, and under a per-note prefix the new name gets the prefix added for you. With **Preferred footnote naming style** set to **Numbered**, the next lint numbers a renamed footnote again, and the toast says so.
 
 ![Rename footnote: every reference and the definition take the new name together](README/rename.gif)
 
@@ -154,7 +154,7 @@ Turn the whole thing off with **Carry footnote definitions on copy, cut, and pas
 
 Two commands convert a whole note at once, each way, in one undo:
 
-- **Convert inline footnotes to normal footnotes** turns every `^[body]` into a reference with its definition appended where a new footnote would go (after the last definition, under your section heading, or at the end of the note), carrying the note's prefix if it has one. The references are numbered, or, with **Preferred footnote naming style** set to **Named**, named after the first word of each body that is not a filler word (`^[the same note]` becomes `[^same]`, with `-2`, `-3` for repeats). Identical bodies become one definition with several references, and the toast says how many merged. An empty `^[]` and one inside a definition's body are left alone.
+- **Convert inline footnotes to normal footnotes** turns every `^[body]` into a reference with its definition appended where a new footnote would go (after the last definition, under your section heading, or at the end of the note), carrying the note's prefix if it has one. The references are numbered, or, with **Preferred footnote naming style** set to **Named**, named after the first word of each body that is not a filler word (`^[the same note]` becomes `[^same]`, with `-2`, `-3` for repeats). Identical bodies become one definition with several references, and the toast says how many merged. An empty `^[]` and one inside a definition's body are left alone. A body that starts like a numbered list (`2. Aufl.`) gets a backslash (`2\. Aufl.`), here and when you turn a selection into a footnote, so it stays plain text in its footnote.
 - **Convert normal footnotes to inline footnotes** turns every single-line definition into `^[body]` at each of its references and removes the definition. A definition of more than one line has no inline form, so it is skipped and named, as is one whose body holds a footnote (footnotes never nest), one referenced from inside another footnote, one inside a blockquote or list item, an orphan, and a name defined twice. A definition cited in three places necessarily becomes three copies; the toast says so.
 
 Why: Obsidian's embed renderer drops normal footnote definitions, so a transcluded section keeps only its inline footnotes. Convert to inline before embedding and back afterwards, and a shared definition comes back shared.
@@ -179,7 +179,7 @@ Writing and revising can leave footnotes messy. The **Lint footnotes** command c
 Each rule can be toggled individually in **Settings → Footnote Shortcut → Linting**, along with 2 automatic triggers (both off by default):
 
 - **Lint on save**: lints the note whenever you press <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>+<kbd>S</kbd> (vim users: `:w` works too).
-- **Lint on footnote creation**: lints the note right after you create a new footnote.
+- **Lint on footnote creation**: lints the note right after you create a new footnote, run either **Convert** command, or paste footnotes.
 
 The linter also watches for problems it can't fix by itself and tells you about them, naming every footnote involved:
 
@@ -208,7 +208,7 @@ Notes without the property keep normal `[^1]`, `[^2]`, … numbering. A prefix f
 
 ## Other settings
 
-- **Insert footnote reference at end of word** *(on by default)*: pressing the hotkey mid-word places the reference at the end of the word, past any closing quotation marks, brackets, or emphasis, and past or in front of the punctuation after them as the placement setting says, so you don't have to aim.
+- **Insert footnote reference at end of word** *(on by default)*: pressing the hotkey mid-word places the reference at the end of the word, past any closing quotation marks, brackets, or emphasis, and past or in front of the punctuation after them as the placement setting says, so you don't have to aim. Under **Before punctuation**, a press right after the punctuation hops back in front of it, so you can type the sentence first.
 - **Placement relative to punctuation** *(after punctuation by default, in the Footnote reference placement section)*: which side of the punctuation a reference goes on, for new footnotes and for the lint rule. **After punctuation** is what English, Taiwanese, Korean, and Dutch writing do (`word.[^1]`). **Before punctuation** is mainland Chinese, Japanese, French, Italian, Portuguese, Polish, and the EU style guide (`句子[^1]。`; China's GB/T 7714-2015 shows it in its worked examples). **Don't move** leaves the reference exactly at the end of the word and the lint rule idle, for conventions that place each mark differently (Russian, Polish) or by sense (German), and for notes that mix scripts. Under the other two, a closing quotation mark or bracket is always stepped over, since every convention puts the marker outside the quote, except a square bracket that would leave the reference glued to it: Obsidian reads `[see p. 5][^1]` as a link, so the reference goes inside, `[see p. 5[^1]]`; under **Don't move** nothing is, not even a closing quote, so you place the reference yourself. Changing the setting moves the references in a note the next time it is linted.
 - **Expand selections to whole words** *(on by default)*: the selection twin of the above; a selection converted into a footnote grows to whole words first.
 - **Enable section heading** *(off by default)*: automatically adds a heading (e.g. `# Footnotes`) above your footnote definitions. The heading text is fully customizable, can span multiple lines, and if it already exists in the note it's reused instead of duplicated.
