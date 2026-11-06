@@ -172,7 +172,7 @@ function labelList(names: string[]): string {
 
 // A label line Obsidian does not read as a definition gets one alert, in
 // one shape: what Obsidian reads it as, then the fix that applies (Jason's
-// shared vocabulary, 2026-10-22). Three shapes need it:
+// shared vocabulary, 2026-10-22). Four shapes need it:
 //
 // - A "[^x]:" line directly under a line of prose is plain text to
 //   Obsidian, more of the paragraph (the prose-label rule, 2026-09-09):
@@ -190,6 +190,10 @@ function labelList(names: string[]): string {
 //   heading: it needs one above and one below (underlinedLazyLabelNames;
 //   Jason's ruling Q9, 2026-10-07; pin bug-underlined-label-wide-item).
 //   The other two leave its names to this one (`both`).
+// - A label between two items of a list, with the next item right under it.
+//   A blank line above alone would take that item, and the ones after it,
+//   into the footnote's text, so this label gets the same advice (hunt
+//   2026-11-06, cycle 9, H16; pin spec-lazy-alert-advice-next-list-item).
 //
 // Like every alert, these are never silent.
 
@@ -203,6 +207,20 @@ function noticeNotDefinitions(names: readonly string[], readsAs: "plain text" | 
         `Obsidian reads ${andList(names.map(quotedDefinitionLabel))} as ${as}, not as ${one ? "a footnote definition" : "footnote definitions"}. ${one ? fix[0] : fix[1]}`,
         8000,
     );
+}
+
+/** Whether a line's blocks say it starts another item of a list already running. */
+const NextItemOfItsList = /(?:^| )list(?:\.ordered)? \^listItem/;
+
+/** The names of the labels a blank line above alone would not fix (the third and fourth shapes above), each once. */
+function labelsNeedingBlankBelow(lines: string[]): string[] {
+    const reading = readNote(lines);
+    const names = underlinedLazyLabelNames(lines);
+    for (const label of labelShapedLines(lines, undefined, reading)) {
+        if (!NextItemOfItsList.test(reading.lineBlocks[label.line + 1] ?? "")) continue;
+        if (!names.some((name) => name.toLowerCase() === label.name.toLowerCase())) names.push(label.name);
+    }
+    return names;
 }
 
 function noticeLazyDefinitions(lines: string[], both: ReadonlySet<string>) {
@@ -752,7 +770,7 @@ export function noticeLintAlerts(plugin: FootnotePlugin, markdown: string, after
     noticeEmptyReferences(markdown, prefix);
     noticeOrphanedReferences(plugin, markdown, prefix, { lines }, afterLint);
     // the labels the two alerts below leave to the one after them
-    const both = underlinedLazyLabelNames(lines);
+    const both = labelsNeedingBlankBelow(lines);
     const bothFolded = new Set(both.map((name) => name.toLowerCase()));
     noticeLazyDefinitions(lines, bothFolded);
     noticeUnderlinedDefinitions(lines, bothFolded);
