@@ -13,7 +13,7 @@ import { noticeLintAlerts } from "../linting/lint-alerts";
 import { lintAfterFootnoteCreation, lintBlockedByPrefix, lintRulesAllDisabled, withEmptySectionHeadingRemoved } from "../linting/linter";
 import { computeNextFootnoteNumber, definitionLabel, nameForBody, quotedReference } from "../parsing/footnote-grammar";
 import { activeFootnotePrefix, footnotePrefixFromEditor } from "../parsing/footnote-prefix";
-import { planDefinitionAppend } from "./definition-append";
+import { plainOnLabelLine, planDefinitionAppend } from "./definition-append";
 import { withEditableEditor } from "./insert-or-navigate-footnotes";
 
 // Converting a note's footnotes between the two styles (T6 of the 2026-09
@@ -393,8 +393,8 @@ export function convertInlineFootnotesToNormal(plugin: FootnotePlugin, doc: Edit
         edits,
         footnoteId: ids[0],
         plugin,
-        body: bodies[0],
-        moreDefinitionLines: ids.slice(1).map((id, k) => `${definitionLabel(id)} ${bodies[k + 1]}`),
+        body: plainOnLabelLine(bodies[0]),
+        moreDefinitionLines: ids.slice(1).map((id, k) => `${definitionLabel(id)} ${plainOnLabelLine(bodies[k + 1])}`),
     });
     // The result gate judges the conversion: each name's definition is one
     // line, the first at the label line the append planned, the others
