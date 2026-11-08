@@ -1442,16 +1442,27 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
     const becameLazy = (was: readonly number[], is: readonly number[]) =>
         is.filter((line) => lazyLines(newSide).has(line)).length > was.filter((line) => lazyLines(oldSide).has(line)).length;
 
-    // Whether the lines `was` of the note before are whole blocks: the
+    // Whether the lines `was` of the note before can be taken out whole: the
     // first starts its own block, and the line after the last starts
-    // another or is blank. A selection that takes the last row of a table
-    // with the text under it leaves the table a row short, and its
-    // reference standing where the row was is no whole block's (Jason's
-    // ruling, 2026-09-04: a partial table refuses).
-    const wholeBlocks = (was: readonly number[]) => {
-        const own = (line: number) => (oldSide.reading.lineBlocks[line] ?? "").split(" ").pop() ?? "";
+    // another, is blank, or carries on a paragraph the last line is part
+    // of. A selection that takes the last row of a table with the text
+    // under it leaves the table a row short, and its reference standing
+    // where the row was is no whole block's (Jason's ruling, 2026-09-04: a
+    // partial table refuses).
+    // A paragraph cut after one of its lines is a clean cut too: the lines
+    // under it stay a paragraph, as when a selection that starts with prose
+    // cuts it. Without this, a selection from a code fence or a heading
+    // down to a paragraph's first line was refused, though that line looks
+    // whole in the editor (Jason, sheet 5, 2026-11-06; pin
+    // bug-selection-from-block-into-paragraph-first-line-refused).
+    const cutsCleanly = (was: readonly number[]) => {
+        const blocks = (line: number) => oldSide.reading.lineBlocks[line] ?? "";
+        const own = (line: number) => blocks(line).split(" ").pop() ?? "";
         const last = was[was.length - 1];
-        return was.length > 0 && own(was[0]).startsWith("^") && (last + 1 >= oldSide.lines.length || own(last + 1) === "" || own(last + 1).startsWith("^"));
+        if (was.length === 0 || !own(was[0]).startsWith("^")) return false;
+        if (last + 1 >= oldSide.lines.length || own(last + 1) === "" || own(last + 1).startsWith("^")) return true;
+        const unmarked = (line: number) => containersOf(blocks(line)).replace(/\^/g, "");
+        return ownKind(blocks(last)) === "paragraph" && own(last + 1) === "paragraph" && unmarked(last) === unmarked(last + 1);
     };
     // two lines lined up with each other: they read alike, and a line whose
     // text changed (its footnotes) did not become a lazy label
@@ -1562,7 +1573,7 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
             const pairs = usersText || was.length !== is.length ? Math.min(1, was.length, is.length) : was.length;
             for (let k = 0; k < pairs; k++) {
                 if (!usersText && reworded(was[k], is[k])) return refuse("other", 5, `line ${String(is[k])}: ${(newSide.lines[is[k]] ?? "").slice(0, 60)}`);
-                if (blankLine(oldSide, was[k]) || blankLine(newSide, is[k]) || lenient[is[k]] || (onlyFootnotes(newSide.lines[is[k]] ?? "") && wholeBlocks(was))) continue;
+                if (blankLine(oldSide, was[k]) || blankLine(newSide, is[k]) || lenient[is[k]] || (onlyFootnotes(newSide.lines[is[k]] ?? "") && cutsCleanly(was))) continue;
                 const wasBlocks = oldSide.reading.lineBlocks[was[k]] ?? "";
                 const isBlocks = newSide.reading.lineBlocks[is[k]] ?? "";
                 if (usersText ? containersOf(wasBlocks) !== containersOf(isBlocks) : !sameKind(wasBlocks, isBlocks) || !sameCells(was[k], is[k])) return formatting(is[k]);
