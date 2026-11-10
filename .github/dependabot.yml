@@ -1,0 +1,14 @@
+# Dependabot version updates, for the parser only (Jason's choice, 2026-11-10).
+# Security updates for every other package stay on through the repository
+# settings and need nothing here. remark-obsidian is pinned to an exact version
+# in package.json; each new release opens one pull request that moves the pin,
+# so CI runs the whole suite against it before anything is merged.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    allow:
+      - dependency-name: "@quartz-community/remark-obsidian"
+    open-pull-requests-limit: 2
