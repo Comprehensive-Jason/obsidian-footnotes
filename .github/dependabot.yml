@@ -11,12 +11,25 @@
 # own pull request at once. CI runs the suite on each, but it does not check
 # LICENSE-THIRD-PARTY.md: a pull request that changes what main.js bundles
 # needs the notices table updated by hand.
+#
+# The obsidian typings and the CodeMirror packages stay at what the oldest
+# supported Obsidian (minAppVersion in manifest.json) ships, so the compiler
+# rejects an API those users lack; they move by hand when minAppVersion moves
+# (Jason, 2026-11-10). @types/node stays on the Node that CI runs (22); the
+# plugin's own code uses no Node API.
 version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "obsidian"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "@codemirror/*"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       # remark-obsidian is left out of the group, so it gets its own PR
       everything-else:
