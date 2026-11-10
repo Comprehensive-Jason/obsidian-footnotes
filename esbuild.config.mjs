@@ -15,24 +15,11 @@ Includes third-party code under the MIT License; notices are in LICENSE-THIRD-PA
 */
 `;
 
-// The "format" package, bundled inside remark-obsidian's dist, looks for the
-// global object with eval if it finds no "module" to export through. That line
-// cannot run here: esbuild's wrapper always hands the package a "module" object,
-// so the branch holding it is dead code. It is harmless, but a plugin review or
-// a scanner may flag the word, so the build rewrites that exact line. If an
-// upgrade changes the line, nothing is rewritten and the check below stops the
-// production build (Jason's ask, 2026-11-06).
-const FormatEvalFallback = 'return this || (1, eval)("this");';
-const removeFormatEval = {
-    name: "remove-format-eval",
-    setup(build) {
-        build.onLoad({ filter: /[\\/]@quartz-community[\\/]remark-obsidian[\\/]dist[\\/]index\.js$/ }, async (args) => {
-            const source = await readFile(args.path, "utf8");
-            return { contents: source.replace(FormatEvalFallback, "return this;"), loader: "js" };
-        });
-    },
-};
-
+// The build stops if main.js holds a call of eval, since a plugin review or a
+// scanner may flag one. The "format" package bundled inside remark-obsidian
+// used to carry an eval fallback that could never run here; the build rewrote
+// it away until remark-obsidian 2.2.0 removed it upstream (2026-11-09). This
+// check stays so a later upgrade can't bring one back unnoticed.
 // Any call of eval, written plainly as "eval(" or the indirect way the minifier
 // writes that line, "(0,eval)(". A property merely named eval, like the one in
 // the "fault" package, is no call, so it does not count.
@@ -69,7 +56,6 @@ const context = await esbuild.context({
     treeShaking: true,
     outfile: "main.js",
     minify: prod,
-    plugins: [removeFormatEval],
 });
 
 if (prod) {
