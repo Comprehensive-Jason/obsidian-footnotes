@@ -9,6 +9,8 @@
     "_timeout_comment": "hard 15s cap per mutant run: the default derives from the (slow, isolation-forced) dry run, and the suite's loop-killing tests make infinite-loop mutants hang until timeout \u2014 uncapped, ~100 such mutants stretched a scoped run from 16 minutes to hours (2026-08-11)",
     "timeoutMS": 15000,
     "timeoutFactor": 1.25,
+    "_dryRun_comment": "the first, unmutated run of the suite under Stryker's instrumentation took 17 to 18 minutes on the laptop with Vitest 5 (2026-11-10), past the default limit of 5, so it gets 30",
+    "dryRunTimeoutMinutes": 30,
     "mutate": [
         "src/parsing/landing.ts",
         "src/parsing/line-edits.ts",
