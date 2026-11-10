@@ -96,3 +96,31 @@ describe("a selection from a block into a paragraph's first line converts", () =
         expect(messages()).toEqual([]);
     });
 });
+
+// Characterization tests: shapes that still refuse, pinned so a later change
+// to the result gate cannot let them through. In each, the lines under the
+// selection would read differently with a reference in its place: a quote, a
+// callout, or a list item would lose its first line, a setext underline would
+// make the reference a heading, or a table would lose rows. The setext case is
+// the one the clean-cut rule itself refuses; the gate catches the others when
+// it compares the lines under the cut (review of the fix, 2026-11-10).
+describe("a selection into a block that the cut would break still refuses", () => {
+    beforeEach(resetNotices);
+
+    const QuoteNotice = "No footnote was created: it would break the line's formatting. Select one line's text, or the whole quote.";
+    const ListNotice = "No footnote was created: it would break the line's formatting. Select one item's text, or the whole list.";
+    const LineNotice = "No footnote was created: it would break the line's formatting. Select the whole line, or only its text.";
+    const TableNotice = "No footnote was created: the selection cuts through a table. Select text inside one cell, or the whole table with the text around it.";
+
+    it.each([
+        ["a quote's heading and first line", ["> # H", "> first", "> second"], 0, 1, QuoteNotice],
+        ["a callout's marker and first line", ["> [!note]", "> first", "> second"], 0, 1, QuoteNotice],
+        ["a quote's heading and first line, with a lazy line under it", ["> # H", "> first", "second"], 0, 1, QuoteNotice],
+        ["a list item's heading and first continuation line", ["- # H", "  first", "  second"], 0, 1, ListNotice],
+        ["a $$ block through a setext heading's text, without its ---", ["$$", "x", "$$", "first", "---"], 0, 3, LineNotice],
+        ["a heading through a table's second row", ["# H", "| a |", "| - |", "| b |", "| c |"], 0, 3, TableNotice],
+    ] as const)("%s", async (_name, lines, from, to, notice) => {
+        expect(await press([...lines], from, to)).toEqual(lines);
+        expect(messages()).toEqual([notice]);
+    });
+});

@@ -43,13 +43,12 @@ describe("masking a long line of dollars and backticks", () => {
 
     /**
      * The fastest of three reads of `line` as a one-line note. Each read is of
-     * a new text, so nothing is remembered; `tail` is a run of spaces that
-     * keeps one attempt's texts apart from another's.
+     * a new text, so nothing is remembered.
      */
-    const fastest = (line: string, tail = ""): number => {
+    const fastest = (line: string): number => {
         let took = Infinity;
         for (let run = 0; run < 3; run++) {
-            const text = line + tail + " ".repeat(run + 1);
+            const text = line + " ".repeat(run + 1);
             const started = performance.now();
             const masked = readNote([text]).maskedLine(0);
             took = Math.min(took, performance.now() - started);
@@ -59,11 +58,11 @@ describe("masking a long line of dollars and backticks", () => {
     };
 
     /** The limit itself: the line four times over takes at most eight times as long as the line once. */
-    const expectLinearish = (line: string, tail = ""): void => {
+    const expectLinearish = (line: string): void => {
         // warm up, then compare the line with four of it in a row
-        readNote([line + tail + " warm"]).maskedLine(0);
-        const one = fastest(line, tail);
-        const four = fastest(line.repeat(4), tail);
+        readNote([line + " warm"]).maskedLine(0);
+        const one = fastest(line);
+        const four = fastest(line.repeat(4));
         expect(four).toBeLessThan(Math.max(8 * one, 40));
     };
 

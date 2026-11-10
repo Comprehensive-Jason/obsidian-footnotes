@@ -8,13 +8,13 @@ Each row was checked on 2026-11-10 in the package's own published files, for rem
 
 | Package | Version | Licence | Copyright |
 | --- | --- | --- | --- |
-| `@quartz-community/remark-obsidian` | 2.2.1 | MIT | Copyright (c) 2021-2026 Alexis Rondeau, Micha Brugger, Jason Qin, and contributors |
+| `@quartz-community/remark-obsidian` | 2.2.1 | MIT | Copyright (c) 2026 Quartz Community |
 | `bail` | 2.0.2 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
 | `character-entities` | 2.0.2 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
 | `character-entities-legacy` | 3.0.0 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
 | `decode-named-character-reference` | 1.3.0 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
 | `devlop` | 1.1.0 | MIT | Copyright (c) 2023 Titus Wormer <tituswormer@gmail.com> |
-| `escape-string-regexp` | 4.0.0 | MIT | Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com) |
+| `escape-string-regexp` | 5.0.0 | MIT | Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com) |
 | `extend` | 3.0.2 | MIT | Copyright (c) 2014 Stefan Thomas |
 | `fault` | 2.0.1 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
 | `format` | 0.2.2 | MIT | Copyright 2010 - 2014 Sami Samhuri sami@samhuri.net |

@@ -1453,7 +1453,7 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
     // under it stay a paragraph, as when a selection that starts with prose
     // cuts it. Without this, a selection from a code fence or a heading
     // down to a paragraph's first line was refused, though that line looks
-    // whole in the editor (Jason, sheet 5, 2026-11-06; pin
+    // whole in the editor (Jason, the "Fenced code and $ math" sheet, 2026-11-06; pin
     // bug-selection-from-block-into-paragraph-first-line-refused).
     const cutsCleanly = (was: readonly number[]) => {
         const blocks = (line: number) => oldSide.reading.lineBlocks[line] ?? "";

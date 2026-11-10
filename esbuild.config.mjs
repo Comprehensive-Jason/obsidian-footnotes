@@ -20,6 +20,7 @@ Includes third-party code under the MIT License; notices are in LICENSE-THIRD-PA
 // used to carry an eval fallback that could never run here; the build rewrote
 // it away until remark-obsidian 2.2.0 removed it upstream (2026-11-09). This
 // check stays so a later upgrade can't bring one back unnoticed.
+//
 // Any call of eval, written plainly as "eval(" or the indirect way the minifier
 // writes that line, "(0,eval)(". A property merely named eval, like the one in
 // the "fault" package, is no call, so it does not count.
