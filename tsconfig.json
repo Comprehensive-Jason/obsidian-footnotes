@@ -7,7 +7,11 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    // TypeScript 6 loads no @types package unless it is named here
+    // (TypeScript 5 loaded them all). The tests use Node's process and
+    // node:fs; the plugin's own code uses no Node API (2026-11-10).
+    "types": ["node"]
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }
