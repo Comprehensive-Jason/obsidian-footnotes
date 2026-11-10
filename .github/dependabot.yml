@@ -1,14 +1,29 @@
-# Dependabot version updates, for the parser only (Jason's choice, 2026-11-10).
-# Security updates for every other package stay on through the repository
-# settings and need nothing here. remark-obsidian is pinned to an exact version
-# in package.json; each new release opens one pull request that moves the pin,
-# so CI runs the whole suite against it before anything is merged.
+# Dependabot version updates for every npm package, checked weekly (Jason's
+# choice, 2026-11-10). There is no "allow" list on purpose: GitHub applies
+# "allow" to security updates too, so naming packages there would stop
+# security pull requests for every package it leaves out, including those
+# that other packages pull in, such as vite and postcss.
+#
+# remark-obsidian, the parser, gets a pull request of its own, since a new
+# release can change how notes are read. The other packages come grouped, one
+# pull request for minor and patch releases; a major release opens its own.
+# The groups apply to version updates only, so a security fix still opens its
+# own pull request at once. CI runs the suite on each, but it does not check
+# LICENSE-THIRD-PARTY.md: a pull request that changes what main.js bundles
+# needs the notices table updated by hand.
 version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
-    allow:
-      - dependency-name: "@quartz-community/remark-obsidian"
-    open-pull-requests-limit: 2
+    groups:
+      # remark-obsidian is left out of the group, so it gets its own PR
+      everything-else:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "@quartz-community/remark-obsidian"
+        update-types:
+          - "minor"
+          - "patch"
