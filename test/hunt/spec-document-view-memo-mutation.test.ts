@@ -81,7 +81,7 @@ describe("spec question: a rule that changes the arrays in the view it was given
         rewriteDocument(outerDoc, (text) => {
             capture(text, (v) => {
                 v.lines.pop();
-                void v.maskedLines;
+                expect(v.maskedLines).toBeDefined();
                 return text;
             });
             const next = capture(text);
@@ -128,8 +128,8 @@ describe("spec question: a rule that changes the arrays in the view it was given
         // above can happen yet
         rewriteDocument(outerDoc, (text) => {
             const first = capture(text, (v) => {
-                void v.blocks;
-                void v.maskedLines;
+                expect(v.blocks).toBeDefined();
+                expect(v.maskedLines).toBeDefined();
                 return text;
             });
             expect(first.view.blocks.map((b) => b.name)).toEqual(["1"]);

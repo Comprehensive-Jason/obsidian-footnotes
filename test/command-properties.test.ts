@@ -1141,7 +1141,7 @@ describe("multi-caret press invariants over random documents", () => {
     soakIt("the FULL MULTI-CARET NAMED flow: plant, type the name once, re-press creates the ONE shared definition (2026-09-16 hunt)", async () => {
         await fc.assert(
             fc.asyncProperty(multiPressArb, typedNameArb, async ({ lines, carets, settings }, name) => {
-                const plugin0 = sharedFakePlugin(
+                sharedFakePlugin(
                     {
                         ...settings,
                         footnoteSectionHeading: "# Footnotes",
@@ -1158,7 +1158,6 @@ describe("multi-caret press invariants over random documents", () => {
                         doc,
                     ),
                 );
-                void plugin0;
                 // the flow starts only when both carets got a "[^]" with a cursor inside each
                 const planted = doc.selections;
                 if (!planted || planted.length !== 2) return;

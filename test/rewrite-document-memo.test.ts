@@ -59,7 +59,7 @@ describe("views of the same text share the note reading", () => {
 
     it("still refuses a trim after anything was read through the same view", () => {
         rewriteDocument(doc, (text, v) => {
-            void v.reading;
+            expect(v.reading).toBeDefined();
             expect(() => v.trimTrailingBlankLines()).toThrow(/before the view is read/);
             return text;
         });

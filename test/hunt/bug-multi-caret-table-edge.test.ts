@@ -5,7 +5,6 @@ import FootnotePlugin from "../../src/main";
 import { insertAutonumFootnote } from "../../src/commands/insert-or-navigate-footnotes";
 import { fakeEditor as sharedFakeEditor, FakeEditor } from "../helpers/fake-editor";
 import { fakePlugin as sharedFakePlugin } from "../helpers/fake-plugin";
-import { noticeCalls } from "../mocks/obsidian";
 import { resetNotices } from "../helpers/notices";
 
 // The single-caret press refuses to create a footnote at the edge of a
@@ -109,6 +108,5 @@ describe("a multi-caret press with one caret at a table edge", () => {
         // not refused: one shared footnote landed (the table guard never
         // fired, and the reference went into both cells)
         expect(doc.lines[2]).toContain("[^1]");
-        void noticeCalls;
     });
 });

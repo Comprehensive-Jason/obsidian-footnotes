@@ -91,12 +91,11 @@ describe("a footnote label directly under a setext underline that sits under the
 
 describe("the reading's own definition state after a setext underline that is the footnote's body text", () => {
 	it("keeps the indented chunk after it live, as the block walker already reads it", () => {
-		const { lines, reading } = scanFacts("[^1]: x\n    y\n===\n    z[^9]");
+		const { reading } = scanFacts("[^1]: x\n    y\n===\n    z[^9]");
 		// the block walker owns both the "===" and the line under it
 		// (the resolved spec question: "x y ===" is one footnote)
 		expect(reading.protectedLines[3]).toBe(false);
 		expect(reading.protectedLines).toEqual([false, false, false, false]);
-		void lines;
 	});
 
 	it("keeps it live across the blank gap too, like any definition's content", () => {
