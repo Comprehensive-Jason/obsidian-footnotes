@@ -1608,6 +1608,15 @@ function blockShapeVerdict(oldSide: Side, newSide: Side, created: readonly Creat
                 const startsBlock = lastBlocks.split(" ").some((kind) => kind.startsWith("^") && kind !== "^paragraph");
                 if (ownKind(lastBlocks) !== ownKind(joined) || unmarked(lastBlocks) !== unmarked(joined) || startsBlock) return formatting(is[0]);
             }
+            // A selection of whole lines may not stop above a setext
+            // heading's underline (a "===" or "---" line), the only way a
+            // heading carries on to a later line. The underline would stay
+            // under the reference and make it a heading, and the text it
+            // replaced would go into the definition as plain text. A cut from
+            // a heading through "first", with "===" under it, converted
+            // (review of the "Fenced code and $$ math" fix, 2026-11-10; pin
+            // bug-selection-from-block-into-paragraph-first-line-refused).
+            if (selection !== undefined && /^heading\d$/.test((oldSide.reading.lineBlocks[selection.replaced.to.line + 1] ?? "").split(" ").pop() ?? "")) return formatting(is[0]);
             // A line the edit adds may join the paragraph next to it, as a
             // reference written on the blank line under a paragraph does;
             // what it does to the lines around it is judged on those lines

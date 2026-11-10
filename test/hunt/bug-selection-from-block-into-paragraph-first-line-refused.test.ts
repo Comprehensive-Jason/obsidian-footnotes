@@ -124,3 +124,29 @@ describe("a selection into a block that the cut would break still refuses", () =
         expect(messages()).toEqual([notice]);
     });
 });
+
+// BUG (converts, breaking formatting): a selection of whole lines from a
+// heading through a setext heading's text, without its "===" or "---" line
+// under it, converted. The reference was left over the underline, so it
+// became a heading itself, and the text it replaced went into the definition
+// as plain text. The same cut that starts with prose or a $$ block refuses.
+// Found by the review of the fix above (2026-11-10), not reported by Jason.
+// Source of truth: the reader, which reads "[^1]" over "===" as a heading.
+// Severity: changes formatting. Origin: a whole-line selection compares only
+// its first line, and the underline reads as more of a heading both before
+// and after. The "---" case and the fence start already refused: those two
+// are characterization tests.
+describe("a selection that leaves a setext underline under the reference refuses", () => {
+    beforeEach(resetNotices);
+
+    const LineNotice = "No footnote was created: it would break the line's formatting. Select the whole line, or only its text.";
+
+    it.each([
+        ["a heading through the text of a === heading", ["# H", "first", "==="], 0, 1],
+        ["a heading through the text of a --- heading", ["# H", "first", "---"], 0, 1],
+        ["a fence through the text of a === heading", [FENCE, "c", FENCE, "first", "==="], 0, 3],
+    ] as const)("%s", async (_name, lines, from, to) => {
+        expect(await press([...lines], from, to)).toEqual(lines);
+        expect(messages()).toEqual([LineNotice]);
+    });
+});
