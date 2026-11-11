@@ -26,12 +26,14 @@ import { carriedInputHandler, handleCopy, resetCarryRegister } from "../../src/c
 // "puts the selection and the definitions its footnotes need into the
 // clipboard text". Which trade-off wins is Jason's call.
 //
-// Characterization test (behaviour pinned as it is, 2026-11-05, when the spec
-// pins were sorted under Jason's scope rule of 2026-10-07): a selection that ends
-// inside a code block, then pasted from a phone keyboard's history, is rare,
-// and nothing is lost: the handler declines, and the editor pastes all the text
-// as it was copied.
-// It was it.fails until then.
+// Answered (Jason's ruling, 2026-11-11, after the DeepSeek V4.1 Flash
+// review found the same shape ending on a fence's opening line, pin
+// bug-copy-carries-definition-into-open-region): when the carried
+// definitions would not read as definitions in the clipboard text, the copy
+// is the editor's own, the selected text alone. Nothing is added to the
+// user's text and nothing lands as code. From 2026-11-05 until then this
+// file pinned the old copy as a characterization test (Jason's scope rule
+// of 2026-10-07), and before that it was it.fails.
 //
 // Hunt 2026-10-02, round 1, lens carry-clip. Cluster C11.
 //
@@ -78,16 +80,17 @@ describe("a copy whose selection ends inside a code block, pasted from a phone k
     // through the input method (the system that turns key presses into
     // text) instead of firing a paste event, so carriedInputHandler sees
     // it and returns whether it took the text over.
-    it("characterization: the handler declines, so the editor pastes it as plain text", () => {
+    it("the copy is the editor's own, the selected text alone, and the phone route pastes it as plain text", () => {
         // The selection runs from the start of the note to the end of
         // "code", inside the fence.
         const source = editor(["a[^1]", "```", "code", "```", "", "[^1]: one"], { line: 0, ch: 0 }, { line: 2, ch: 4 });
         const copy = clipboardEvent();
         handleCopy(fakePlugin(on, source), copy as never);
-        const text = copy.written["text/plain"];
-        // The definition is written after the unclosed fence, so it is
-        // inside it.
-        expect(text).toBe("a[^1]\n```\ncode\n\n[^1]: one");
+        // the plugin leaves the clipboard to the editor, which writes the
+        // selection as it is
+        expect(copy.defaultPrevented).toBe(false);
+        expect(copy.written["text/plain"]).toBeUndefined();
+        const text = "a[^1]\n```\ncode";
         const doc = editor(["p"], { line: 0, ch: 1 });
         const handle = carriedInputHandler(fakePlugin(on, doc), () => doc);
         const at = doc.posToOffset({ line: 0, ch: 1 });

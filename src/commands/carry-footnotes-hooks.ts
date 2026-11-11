@@ -238,6 +238,21 @@ export function handleCopy(plugin: FootnotePlugin, event: ClipboardEvent): void 
 /** What a copy of the text between `from` and `to` puts in the clipboard, remembered for the paste that follows; null when the text needs no definition, and the editor's own copy is right. */
 function carriedCopyText(doc: Editor, from: EditorPosition, to: EditorPosition): string | null {
     const needed = carriedDefinitions(doc.getValue(), from, to);
+    // The clipboard text must read its carried definitions back as
+    // definitions. A selection that ends on the line that opens a code
+    // fence, a "%%" comment, a "$$" block, or an HTML comment leaves that
+    // block open in the clipboard, where the definitions after it are code
+    // or comment text, so the copy is then the editor's own, the selected
+    // text alone (Jason's ruling, 2026-11-11; DeepSeek review, pin
+    // bug-copy-carries-definition-into-open-region).
+    if (needed.carried.length > 0) {
+        const text = withCarriedText(textBetween(doc, from, to), needed.carried);
+        const read = new Set(splitCarriedText(text).carried.map((block) => block.name));
+        if (!needed.carried.every((block) => read.has(block.name))) {
+            remember(doc, from, to, { ...needed, carried: [], missing: [] });
+            return null;
+        }
+    }
     const entry = remember(doc, from, to, needed);
     return needed.carried.length === 0 ? null : entry.text;
 }
