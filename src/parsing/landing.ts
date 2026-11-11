@@ -327,6 +327,19 @@ export function spacesGoWithFootnoteBefore(text: string, at: number): boolean {
 const OnlyClosingChars = ")]}」』）】〕》〉｣］｝｠〗〙〛〞〟";
 
 /**
+ * The Chinese and Japanese punctuation that never sits inside a word: the
+ * full stop, comma, enumeration comma, semicolon, colon, exclamation and
+ * question marks, in their fullwidth and halfwidth forms. Those languages
+ * write no space after them, so the next sentence touches the mark, and
+ * that does not make it punctuation inside a word, as the "." of "U.S."
+ * is. Under the placement After a footnote goes after it, as after Latin
+ * punctuation (Jason's ruling, 2026-11-11; Fable review, pin
+ * bug-cjk-punctuation-glued-to-next-sentence). The fullwidth "．" is left
+ * out: it can stand between digits, as in "３．１４".
+ */
+const CjkSentencePunctuationChars = "。，、；：！？｡､";
+
+/**
  * Where the walk goes on after the closing mark or punctuation character
  * at `at`, or -1 when it is no closer and the walk stops in front of it.
  *
@@ -337,11 +350,12 @@ const OnlyClosingChars = ")]}」』）】〕》〉｣］｝｠〗〙〛〞〟";
  * emphasis (Kimi and Claude sweeps 2026-09-13; Jason's landing rulings
  * 2026-09-15). Emphasis markers come in runs ("**"), so the run is judged
  * as one. A mark that only ever closes (OnlyClosingChars) is a closer
- * whatever follows it.
+ * whatever follows it, and so is Chinese and Japanese punctuation
+ * (CjkSentencePunctuationChars).
  */
 function markRunEnd(text: string, at: number): number {
     const c = text[at];
-    if (OnlyClosingChars.includes(c)) return at + 1;
+    if (OnlyClosingChars.includes(c) || CjkSentencePunctuationChars.includes(c)) return at + 1;
     let runEnd = at + 1;
     if ("*_~=".includes(c)) {
         while (runEnd < text.length && text[runEnd] === c) runEnd++;
