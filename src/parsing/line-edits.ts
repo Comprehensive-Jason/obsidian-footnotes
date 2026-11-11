@@ -91,6 +91,12 @@ export function removeLineRanges(
  * the caret on, so the caret went somewhere else, and a paste there joined
  * the text onto a definition or onto the next paragraph (Jason's ruling
  * Q5, option (a), 2026-10-07; pin spec-cut-last-definition-caret-paste-back).
+ *
+ * The ranges must not overlap, and no two may start on the same line: the
+ * ranges are looked up by their first line, so of two that start on one
+ * line only the last would be cut, and the other's later lines would stay
+ * in the note as text, with nothing to say so. Every caller builds them
+ * that way today (DeepSeek review 2026-11-11).
  */
 export function removeLineRangesKeeping(
     lines: string[],
@@ -238,12 +244,14 @@ function sameBlankQuoteLine(a: string, b: string): boolean {
  * On a list marker's line that leaves the bullet, an empty item, because
  * that is what Obsidian's own delete leaves (Jason, 2026-09-24, on the
  * feature-round sheet; since Jason's ruling 1, option a, 2026-10-03, for
- * every rule that cuts a definition). Delete footnote everywhere also
- * passes definitions that are not `removable`, such as one after a
- * comment's closing "%%", on a callout's marker line, or after the
- * frontmatter's closing "---" (the subtraction pass, 2026-10-08): the
- * "%% ", "> [!note] ", or "--- " in front stays, and the result gate judges
- * what is left (Jason accepts the space left at the end, 2026-10-09).
+ * every rule that cuts a definition). Delete footnote everywhere passes
+ * every definition of its name, so also one with more than indentation
+ * and quote markers in front of its label (one the note's facts mark as
+ * not `removable`, in footnote-facts.ts), such as one after a comment's
+ * closing "%%", on a callout's marker line, or after the frontmatter's
+ * closing "---" (the subtraction pass, 2026-10-08): the "%% ",
+ * "> [!note] ", or "--- " in front stays, and the result gate judges what
+ * is left (Jason accepts the space left at the end, 2026-10-09).
  * `lines` comes back as the same array when nothing was trimmed.
  */
 export function definitionCuts(
