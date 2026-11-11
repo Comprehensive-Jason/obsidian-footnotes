@@ -26,8 +26,11 @@ describe("sanitizeInlineFootnoteContent", () => {
         );
     });
 
-    it("collapses runs of whitespace to one space", () => {
-        expect(sanitizeInlineFootnoteContent("a \t  b")).toBe("a b");
+    // Changed 2026-11-11: spaces and tabs on one line used to be squeezed
+    // to one space, which changed code and link targets
+    // (bug-inline-key-squeezes-spaces-in-code). Only line breaks go now.
+    it("keeps a run of spaces and tabs on one line as written", () => {
+        expect(sanitizeInlineFootnoteContent("a \t  b")).toBe("a \t  b");
     });
 
     it("keeps balanced brackets so markdown links survive", () => {

@@ -60,15 +60,22 @@ export async function readInlineFootnoteFromClipboard(
     return `^[${content}]`;
 }
 
-// A run of the whitespace a line of text can lose without anyone seeing it:
-// spaces, tabs, and line breaks. JavaScript's "\s" also matches no-break, narrow
-// no-break, and ideographic spaces, but those are the writer's own typography:
-// French puts one before a colon, and Japanese spaces with the wide one. So
-// they are left out (hunt 2026-11-06, cycle 9, finding H23).
-const PlainWhitespaceRun = /[ \t\n\r\f\v\u2028\u2029]+/g;
+// "Plain whitespace" below is the whitespace a line of text can lose without
+// anyone seeing it: spaces, tabs, and line breaks. JavaScript's "\s" also
+// matches no-break, narrow no-break, and ideographic spaces, but those are
+// the writer's own typography: French puts one before a colon, and Japanese
+// spaces with the wide one. So they are left out (hunt 2026-11-06, cycle 9,
+// finding H23).
+//
+// A run of plain whitespace that holds a line break, with the spaces and
+// tabs around it: what an inline footnote, which lives on one line, cannot
+// keep. A run of spaces or tabs on one line stays as written, since inside
+// code, math, or a link's target the spaces are part of what is shown or
+// linked (Fable review 2026-11-11, pin bug-inline-key-squeezes-spaces-in-code).
+const LineBreakRun = /[ \t\f\v]*[\n\r\u2028\u2029][ \t\n\r\f\v\u2028\u2029]*/g;
 const PlainWhitespaceAtEnds = /^[ \t\n\r\f\v\u2028\u2029]+|[ \t\n\r\f\v\u2028\u2029]+$/g;
 
-/** `text` without plain whitespace at its two ends. JavaScript's `trim` would take the special spaces too (see PlainWhitespaceRun). */
+/** `text` without plain whitespace at its two ends. JavaScript's `trim` would take the special spaces too (see the note on plain whitespace above). */
 export function trimmedPlainly(text: string): string {
     return text.replace(PlainWhitespaceAtEnds, "");
 }
@@ -76,9 +83,10 @@ export function trimmedPlainly(text: string): string {
 /**
  * Clipboard text made safe to use as the body of an inline footnote.
  *
- * An inline footnote lives on one line, so any run of plain whitespace,
- * newlines included, becomes a single space, and the result is trimmed. A
- * no-break, narrow no-break, or ideographic space stays (PlainWhitespaceRun).
+ * An inline footnote lives on one line, so each line break, with the plain
+ * whitespace around it, becomes a single space, and the result is trimmed.
+ * Spaces and tabs on one line stay as written (LineBreakRun), and so does a
+ * no-break, narrow no-break, or ideographic space.
  *
  * When "^[text]" already reads as one whole inline footnote, the text is
  * left as it is: brackets that balance, so a pasted markdown link still
@@ -102,7 +110,7 @@ export function trimmedPlainly(text: string): string {
  */
 export function sanitizeInlineFootnoteContent(raw: string): string {
     if (raw.trim() === "") return "";
-    let text = trimmedPlainly(raw.replace(PlainWhitespaceRun, " "));
+    let text = trimmedPlainly(raw.replace(LineBreakRun, " "));
     // an odd number of backslashes at the end leaves one of them escaping
     // the wrapper's own closing "]". Double it, so it renders as a plain
     // backslash instead.

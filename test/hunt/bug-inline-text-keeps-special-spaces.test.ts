@@ -76,8 +76,12 @@ describe("special spaces survive going into an inline footnote", () => {
         expect(sanitizeInlineFootnoteContent(" \t a \t\r\n b\n\f\vc\u2028d\u2029e  ")).toBe("a b c d e");
     });
 
-    it("whitespace beside a special space collapses, and the special space stays", () => {
-        expect(sanitizeInlineFootnoteContent(`a  ${NoBreak}  b`)).toBe(`a ${NoBreak} b`);
+    // Changed 2026-11-11: spaces on one line are no longer squeezed
+    // (bug-inline-key-squeezes-spaces-in-code), so those beside a special
+    // space stay as written; a line break beside one still becomes a space.
+    it("spaces beside a special space stay as written, and so does the special space", () => {
+        expect(sanitizeInlineFootnoteContent(`a  ${NoBreak}  b`)).toBe(`a  ${NoBreak}  b`);
+        expect(sanitizeInlineFootnoteContent(`a \n ${NoBreak}\nb`)).toBe(`a ${NoBreak} b`);
     });
 
     it("text of nothing but whitespace, special spaces included, is still empty", () => {
