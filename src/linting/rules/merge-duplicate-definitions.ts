@@ -135,8 +135,15 @@ export function mergeDuplicateFootnoteDefinitions(markdown: string): string {
             let above = base;
             for (const duplicate of group.slice(1)) {
                 const piece: string[] = [];
-                const body = lines[duplicate.start].slice(duplicate.labelEnd).trim();
-                if (body !== "") piece.push(`    ${body}`);
+                // The text after the label, without the space in front of
+                // it. Spaces at its end stay when more lines of the copy
+                // follow, since two of them there are a hard line break
+                // inside the copy; on a copy of one line they broke nothing
+                // and would break against the next copy's text (Kimi
+                // review 2026-11-11, pin bug-merge-duplicate-drops-hard-line-break).
+                const first = lines[duplicate.start].slice(duplicate.labelEnd).trimStart();
+                const body = duplicate.end > duplicate.start ? first : first.trimEnd();
+                if (body.trim() !== "") piece.push(`    ${body}`);
                 for (let i = duplicate.start + 1; i <= duplicate.end; i++) {
                     piece.push(lines[i]);
                 }
