@@ -398,8 +398,11 @@ function parseSavedSettings(saved: unknown): Partial<FootnotePluginSettings> {
     if (expected !== undefined && typeof value !== expected) continue;
     // a string setting with a fixed set of values is trusted only for one
     // of those values: any other string would reach every reader and be
-    // treated as none of them (T5, 2026-09-21)
-    if (key in FIXED_CHOICES && !FIXED_CHOICES[key].includes(value as string)) continue;
+    // treated as none of them (T5, 2026-09-21). Object.hasOwn, not "in":
+    // "in" also finds what every object inherits, so a saved "toString"
+    // key read a function there and stopped the plugin loading
+    // (bug-settings-inherited-key-stops-load, 2026-11-11).
+    if (Object.hasOwn(FIXED_CHOICES, key) && !FIXED_CHOICES[key].includes(value as string)) continue;
     parsed[key] = value;
   }
   return parsed;
