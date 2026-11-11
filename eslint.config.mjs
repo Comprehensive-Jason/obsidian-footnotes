@@ -20,6 +20,12 @@ export default defineConfig([
 				"error",
 				{ allowNumber: true },
 			],
+			// A regex lookbehind, (?<=...) or (?<!...), is a syntax error on
+			// iOS before 16.4, so a plugin holding one does not load there.
+			// remark-obsidian's bundled code holds three, so the plugin
+			// supports iOS 16.4 and later, as the README says, and this
+			// check is off (Jason, 2026-11-10).
+			"obsidianmd/regex-lookbehind": "off",
 		},
 	},
 	{

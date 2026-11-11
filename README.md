@@ -11,7 +11,7 @@ Create, navigate, and edit Obsidian footnotes all from the keyboard:
 - **Rename a footnote** everywhere at once, like renaming a variable in a code editor
 - **Footnote linter** to keep footnote formatting tidy
 - **Per-note footnote prefixes** keep footnotes unique even when multiple chapters are merged into a larger document, such as with the [Longform](https://github.com/kevboh/longform) or [Easy Bake](https://github.com/community-archive/obsidian-easy-bake) plugins
-- Works on Obsidian Mobile
+- Works on Obsidian Mobile (on iPhone and iPad, iOS 16.4 or later)
 
 ![One hotkey opens the popup at the cursor, a named footnote lands at two cursors at once, a right-click renames it everywhere, and the linter tidies up](README/hero.gif)
 
