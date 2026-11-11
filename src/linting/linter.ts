@@ -549,7 +549,12 @@ export function lintRulesAllDisabled(plugin: FootnotePlugin): boolean {
         // lint is off, and the alerts deliberately stay silent too.
         !s.lintDeleteOrphanedReferences &&
         !s.lintDeleteOrphanedDefinitions &&
-        !s.lintMergeDuplicateDefinitions
+        !s.lintMergeDuplicateDefinitions &&
+        // Removing an empty section heading is lint work too, while the
+        // section heading is on; with it off the settings tab greys the
+        // toggle out (Kimi review 2026-11-11, pin
+        // bug-remove-empty-heading-not-counted-as-lint-rule).
+        !(s.removeEmptySectionHeading && s.enableFootnoteSectionHeading)
     );
 }
 
