@@ -48,6 +48,7 @@ const Skip = {
     // the footnote is left for them to sort out (hunt 2026-11-06, cycle 9, finding
     // H30, the triage's choice by analogy with Jason's ruling of 2026-11-05).
     definedInComment: "also defined inside a %% comment",
+    citedInComment: "cited only inside a %% comment",
     listItem: "in a list item",
     quote: "in a quote",
     sharesLine: "shares its line with other text",
@@ -184,13 +185,26 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
     // text (rule E3) and which would nest once converted. A definition's
     // own label is not a reference; a lazy label's "[^x]" is one, as it
     // renders.
-    type Ref = { line: number; start: number; end: number; nested: boolean };
+    //
+    // Each also says whether it sits inside a "%%" comment, block or inline
+    // pair: a footnote cited only there is skipped, since its text would go
+    // where Obsidian never shows it, the reference-side twin of
+    // Skip.definedInComment (DeepSeek review 2026-11-11, pin
+    // bug-convert-inline-moves-text-into-comment).
+    type Ref = { line: number; start: number; end: number; nested: boolean; inComment: boolean };
     const refs = new Map<string, Ref[]>();
     const tableRows = reading.tableRowLines;
+    // where each line starts in the note, as the comments' offsets count
+    const lineStarts: number[] = [];
+    for (let i = 0, at = 0; i < lines.length; at += lines[i].length + 1, i++) lineStarts.push(at);
+    const inComment = (line: number, start: number) => {
+        const at = lineStarts[line] + start;
+        return reading.comments.some((comment) => comment.from <= at && at < comment.to);
+    };
     const inOrder = [...reading.references].sort((a, b) => a.line - b.line || a.start - b.start);
     for (const { name, line, start, end, live } of inOrder) {
         const folded = name.toLowerCase();
-        refs.set(folded, [...(refs.get(folded) ?? []), { line, start, end, nested: insideDefinition[line] || !live }]);
+        refs.set(folded, [...(refs.get(folded) ?? []), { line, start, end, nested: insideDefinition[line] || !live, inComment: inComment(line, start) }]);
     }
 
     // decide each name, in the order its definitions appear
@@ -238,6 +252,10 @@ export function convertNormalFootnotesToInline(markdown: string): ConversionToIn
         }
         if (its.some((ref) => ref.nested)) {
             skip(Skip.referencedFromFootnote);
+            continue;
+        }
+        if (its.every((ref) => ref.inComment)) {
+            skip(Skip.citedInComment);
             continue;
         }
         eligible.push({ block, body: sanitizeInlineFootnoteContent(body), refs: its });
