@@ -629,9 +629,17 @@ export async function openFootnotePopup(
         // section is found the way the rest of the plugin finds a
         // definition, by reading the note as it is now (definitionSection),
         // rather than by its old offset or by matching the old text around
-        // it. Reports false only when the definition is gone from the note,
-        // in which case the embed stays the writer.
-        const writeThroughMainEditor = async (): Promise<boolean> => {
+        // it.
+        //
+        // Reports "written" when the text went in, "gone" when the
+        // definition is no longer in the note, and "unavailable" when
+        // Obsidian's embed does not have the shape this relies on, in which
+        // case the embed stays the writer. A definition that is gone gets
+        // nothing written: the embed's own save would join the popup's text
+        // into the note as the embed last saw it, wiping every edit made
+        // since and bringing the deleted definition back (GLM review
+        // 2026-11-11, pin bug-popup-save-back-resurrects-deleted-definition).
+        const writeThroughMainEditor = async (): Promise<"written" | "gone" | "unavailable"> => {
             const text = embed.editMode?.editor?.getValue?.() ?? embed.text;
             const { before, after } = embed;
             if (
@@ -640,7 +648,7 @@ export async function openFootnotePopup(
                 typeof before !== "string" ||
                 typeof after !== "string"
             ) {
-                return false;
+                return "unavailable";
             }
             await embed.save(text, false);
             const joined = embed.data;
@@ -650,7 +658,7 @@ export async function openFootnotePopup(
                 !joined.startsWith(before) ||
                 !joined.endsWith(after)
             ) {
-                return false;
+                return "unavailable";
             }
             // the definition's new text, continuation indent and all, as
             // Obsidian itself would have written it
@@ -660,7 +668,7 @@ export async function openFootnotePopup(
             // "> [^1]: " inside a quote), which is where the section starts
             const label = before.slice(before.lastIndexOf("\n") + 1);
             const bounds = definitionSection(current, footnoteId, label);
-            if (!bounds) return false;
+            if (!bounds) return "gone";
             // Obsidian's own join, not an edit the plugin works out, so the
             // result gate does not judge it: refusing it would throw away
             // what the user typed in the popup, which the embed's own save
@@ -669,7 +677,7 @@ export async function openFootnotePopup(
             const updated = current.slice(0, bounds.start) + section + current.slice(bounds.end);
             if (updated !== current) replaceMinimal(editor, current, updated, mdView);
             embed.dirty = false;
-            return true;
+            return "written";
         };
 
         void (async () => {
@@ -690,7 +698,14 @@ export async function openFootnotePopup(
             let landed = !embed.dirty;
             if (!landed) {
                 try {
-                    landed = await writeThroughMainEditor();
+                    const written = await writeThroughMainEditor();
+                    landed = written === "written";
+                    if (written === "gone") {
+                        // nothing to write into: the popup's last text is
+                        // dropped, and the embed must not save it either
+                        embed.dirty = false;
+                        landed = true;
+                    }
                 } catch {
                     landed = false;
                 }
