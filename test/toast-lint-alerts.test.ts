@@ -53,7 +53,7 @@ describe("an orphaned definition the lint could not delete", () => {
     });
     it("two", () => {
         expect(alerts(["text", "", ...onTitleLine("o"), ...onTitleLine("p")], OnToggles)).toEqual([
-            'This note has 2 footnote definitions nothing references ("[^o]", "[^p]"). The lint left them as they are, because deleting them would change how Obsidian reads the text around them. Add their references in the text, or delete the definitions by hand.',
+            'This note has 2 footnote definitions nothing references ("[^o]" and "[^p]"). The lint left them as they are, because deleting them would change how Obsidian reads the text around them. Add their references in the text, or delete the definitions by hand.',
         ]);
     });
 });
@@ -73,7 +73,7 @@ describe("an orphaned reference the lint could not delete", () => {
     });
     it("two", () => {
         expect(alerts(["a[^1] b[^2]", "", ...heldOrphan("x", "1"), ...heldOrphan("y", "2")], OrphanReferenceToggle)).toEqual([
-            'This note has 2 footnote references with no definition ("[^x]", "[^y]"). The lint left them as they are, because deleting them would change how Obsidian reads the text around them. Write their definitions or delete the references by hand.',
+            'This note has 2 footnote references with no definition ("[^x]" and "[^y]"). The lint left them as they are, because deleting them would change how Obsidian reads the text around them. Write their definitions or delete the references by hand.',
         ]);
     });
     it("a reference the next lint can delete is not named", () => {
@@ -104,7 +104,7 @@ describe("a duplicate definition the lint could not merge", () => {
     it("two names", () => {
         const note = ["a[^a] b[^b]", "", "- [^a]: in the item", "", "- [^b]: in the item", "", "[^a]: at the top", "[^b]: at the top"];
         expect(alerts(note, OnToggles)).toEqual([
-            'This note defines 2 footnotes more than once ("[^a]", "[^b]"). Obsidian renders only each one\'s last definition. The lint left them as they are, because merging them would change how Obsidian reads the text around them. Merge them by hand.',
+            'This note defines 2 footnotes more than once ("[^a]" and "[^b]"). Obsidian renders only each one\'s last definition. The lint left them as they are, because merging them would change how Obsidian reads the text around them. Merge them by hand.',
         ]);
     });
 });

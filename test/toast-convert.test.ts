@@ -41,7 +41,7 @@ describe("every footnote skipped", () => {
     });
     it("normal to inline names each footnote with its reason", async () => {
         expect(await toInline(["text", "", "[^o]: orphan", "", "> [^q]: quoted"])).toEqual([
-            'Nothing was converted. Every footnote was skipped: "[^o]" (not referenced), "[^q]" (in a quote).',
+            'Nothing was converted. Every footnote was skipped: "[^o]" (not referenced) and "[^q]" (in a quote).',
         ]);
     });
 });
@@ -49,7 +49,7 @@ describe("every footnote skipped", () => {
 describe("the shared skip reasons", () => {
     it("inline to normal: an inline footnote inside a definition, and one whose text holds a footnote", async () => {
         const said = await toNormal(["a[^1] ^[keep] ^[see [^1]]", "", "[^1]: one ^[inner]"]);
-        expect(said[0]).toBe("Converted 1 inline footnote into 1 normal footnote. Skipped: its text holds a footnote (1), inside another footnote (1).");
+        expect(said[0]).toBe("Converted 1 inline footnote into 1 normal footnote. Skipped: its text holds a footnote (1) and inside another footnote (1).");
     });
     it("normal to inline: a definition in a list item", async () => {
         const said = await toInline(["a[^1] b[^i]", "", "[^1]: one", "", "- [^i]: in the item"]);
@@ -66,7 +66,7 @@ describe("the refusals", () => {
     it("one footnote the result gate refuses: the rest convert", async () => {
         const said = await toInline(["Intro[^2].", "", "- a[^1]", "", "[^1]: one", "", "- b", "", "[^2]: two", "", "[^o]: orphan"]);
         expect(said[0]).toBe(
-            'Converted 1 footnote into an inline footnote at 1 reference. Skipped: "[^1]" (would change how Obsidian reads the text around it), "[^o]" (not referenced).',
+            'Converted 1 footnote into an inline footnote at 1 reference. Skipped: "[^1]" (would change how Obsidian reads the text around it) and "[^o]" (not referenced).',
         );
         // the lint alerts still speak after it, as after any conversion
         expect(said[1]).toBe('This note has a footnote definition nothing references ("[^o]"). Add a "[^o]" reference in the text, or delete the definition.');

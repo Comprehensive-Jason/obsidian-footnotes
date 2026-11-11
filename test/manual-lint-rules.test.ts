@@ -116,7 +116,7 @@ describe("section A: every rule on, the defaults", () => {
         // is "3" by then, not the "9" the fixture was written with
         noticeLintAlerts(fakePlugin({}), once);
         expect(messages()).toContain(
-            'This note has 2 footnote definitions nothing references ("[^3]", "[^lost]"). Add their references in the text, or delete the definitions.',
+            'This note has 2 footnote definitions nothing references ("[^3]" and "[^lost]"). Add their references in the text, or delete the definitions.',
         );
     });
 });

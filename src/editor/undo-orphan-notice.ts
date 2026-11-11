@@ -4,7 +4,7 @@ import { Notice } from "obsidian";
 import { quotedReference } from "../parsing/footnote-grammar";
 import { readNote } from "../parsing/note-reading";
 
-import { showNotice } from "./notice";
+import { andList, showNotice } from "./notice";
 // Feedback for a PARTIAL undo (Jason's report 2026-08-27; the notice is
 // always on, his call).
 //
@@ -176,7 +176,7 @@ export function undoOrphanNoticeExtension() {
         if (orphaned.length === 0) return;
         // wrapped in quotes, like every other toast that names a footnote
         // (2026-09-04)
-        const refs = orphaned.map(quotedReference).join(", ");
+        const refs = andList(orphaned.map(quotedReference));
         standing?.notice.hide();
         standing = {
             notice: showNotice(undoOrphanMessage(orphaned, refs, update.state.doc.toString()), 8000),

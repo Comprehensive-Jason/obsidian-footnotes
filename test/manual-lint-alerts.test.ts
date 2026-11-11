@@ -90,7 +90,7 @@ beforeEach(resetNotices);
 describe("orphans, strays, and empties", () => {
     it("an alert names the definitions nothing references, and they stay in the note", () => {
         expect(alertsAfterLint()).toContain(
-            'This note has 2 footnote definitions nothing references ("[^lost]", "[^31]"). Add their references in the text, or delete the definitions.',
+            'This note has 2 footnote definitions nothing references ("[^lost]" and "[^31]"). Add their references in the text, or delete the definitions.',
         );
         const after = lintFootnotes(NOTE, SETTINGS);
         expect(after).toContain("[^lost]: named orphan, nothing uses it");
@@ -102,7 +102,7 @@ describe("orphans, strays, and empties", () => {
         // definitions either, but a definition could never bind to them,
         // so the invalid-name alert owns them (Jason's ruling 2026-09-20)
         expect(alertsAfterLint()).toContain(
-            'This note has 6 footnote references with no definition ("[^99]", "[^o1]", "[^o2]", "[^o3]", "[^o4]", "[^o5]"). Write their definitions or delete the references.',
+            'This note has 6 footnote references with no definition ("[^99]", "[^o1]", "[^o2]", "[^o3]", "[^o4]", and "[^o5]"). Write their definitions or delete the references.',
         );
     });
 
@@ -160,7 +160,7 @@ describe("a definition one blank line short", () => {
 describe("invalid names", () => {
     it("the alert lists six names and ends with the one rule about characters", () => {
         expect(alertsAfterLint()).toContain(
-            `This note has 6 footnotes with invalid names ("[^bad name]", "[^c#d]", "[^#jump]", "[^aa${BT}a]", "[^bb#b]", "[^cc${BT}c]"). Footnote names can't contain spaces, backticks, brackets, or "#".`,
+            `This note has 6 footnotes with invalid names ("[^bad name]", "[^c#d]", "[^#jump]", "[^aa${BT}a]", "[^bb#b]", and "[^cc${BT}c]"). Footnote names can't contain spaces, backticks, brackets, or "#".`,
         );
     });
 

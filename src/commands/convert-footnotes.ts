@@ -5,7 +5,7 @@ import { Editor, EditorChange, MarkdownView } from "obsidian";
 
 import type FootnotePlugin from "../main";
 import { docContext, listExistingFootnoteDefinitions } from "../editor/doc-context";
-import { everyFootnoteSkipped, showNotice } from "../editor/notice";
+import { andList, everyFootnoteSkipped, showNotice } from "../editor/notice";
 import { CreatedFootnote, judgeEdit } from "../editor/result-gate";
 import { runOutsideTableCell } from "../editor/table-cursor";
 import { lineKey } from "../editor/document-diff";
@@ -556,9 +556,9 @@ function bodyHoldsFootnote(body: string): boolean {
     return reading.references.some((reference) => reference.live) || reading.inlineNotesOn(0).length > 0;
 }
 
-/** "empty (1), inside another footnote (2)": each reason with how many it skipped */
+/** "empty (1) and inside another footnote (2)": each reason with how many it skipped */
 function skippedList(skipped: { reason: string; count: number }[]): string {
-    return skipped.map((s) => `${s.reason} (${s.count})`).join(", ");
+    return andList(skipped.map((s) => `${s.reason} (${s.count})`));
 }
 
 /**
@@ -612,7 +612,7 @@ export async function convertNormalToInlineCommand(plugin: FootnotePlugin) {
         runOutsideTableCell(doc, () => {
             const before = doc.getValue();
             const result = convertNormalFootnotesToInline(before);
-            const named = (skipped: ConversionToInline["skipped"]) => skipped.map((s) => `${quotedReference(s.name)} (${s.reason})`).join(", ");
+            const named = (skipped: ConversionToInline["skipped"]) => andList(skipped.map((s) => `${quotedReference(s.name)} (${s.reason})`));
             if (result.converted === 0) {
                 showNotice(result.skipped.length === 0 ? "This note has no footnotes to convert." : everyFootnoteSkipped(named(result.skipped)), 8000);
                 return;

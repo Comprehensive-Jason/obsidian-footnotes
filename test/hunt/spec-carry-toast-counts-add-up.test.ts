@@ -77,7 +77,7 @@ describe("spec question: the paste toast's counts", () => {
         const total = Number(/Pasted with (\d+)/.exec(toast)?.[1]);
         const parts = [...toast.matchAll(/(\d+) (added|reused|renamed|matched)/g)].reduce((n, m) => n + Number(m[1]), 0);
         // Before: "Pasted with 4 footnote definitions: 4 added, 1 renamed." (parts 5).
-        expect(toast).toBe("Pasted with 4 footnote definitions: 3 added, 1 renamed.");
+        expect(toast).toBe("Pasted with 4 footnote definitions: 3 added and 1 renamed.");
         expect({ toast, parts }).toEqual({ toast, parts: total });
     });
 });

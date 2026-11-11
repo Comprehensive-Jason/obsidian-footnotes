@@ -81,6 +81,6 @@ describe("orphan deletion unblocks a merge the same lint does not make", () => {
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS, lintDeleteOrphanedDefinitions: true, lintMergeDuplicateDefinitions: true }), once);
         // Today: no alert names [^a].
         // the duplicate alert says what is wrong as well since 2026-11-05 (Jason)
-        expect(messages()).toContain('This note defines 2 footnotes more than once ("[^a]", "[^2]"). Obsidian renders only each one\'s last definition. The lint left them as they are, because merging them would change how Obsidian reads the text around them. Merge them by hand.');
+        expect(messages()).toContain('This note defines 2 footnotes more than once ("[^a]" and "[^2]"). Obsidian renders only each one\'s last definition. The lint left them as they are, because merging them would change how Obsidian reads the text around them. Merge them by hand.');
     });
 });

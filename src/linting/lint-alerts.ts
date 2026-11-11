@@ -145,7 +145,8 @@ function noticeEmptyReferences(markdown: string, prefix: string) {
 }
 
 /**
- * Format names for a notice as `"[^a]", "[^b]", "[^c]"`, and an inline
+ * Format names for a notice as `"[^a]", "[^b]", and "[^c]"` (andList: a
+ * list inside a sentence takes the Oxford comma), and an inline
  * footnote, which has no name, by its text: `"^[a note]"`.
  *
  * EVERY name is spelled out, each in quotes, matching every other notice
@@ -154,7 +155,7 @@ function noticeEmptyReferences(markdown: string, prefix: string) {
  * them to go and fix them (his L-series pass, 2026-09-08).
  */
 function referenceList(names: string[]): string {
-    return names.map(quotedName).join(", ");
+    return andList(names.map(quotedName));
 }
 
 /** One name as referenceList spells it. */
@@ -163,11 +164,11 @@ function quotedName(name: string): string {
 }
 
 /**
- * The same list in label form, `"[^a]:", "[^b]:"`. Used by the one alert
+ * The same list in label form, `"[^a]:" and "[^b]:"`. Used by the one alert
  * whose fix is made on the label LINE itself.
  */
 function labelList(names: string[]): string {
-    return names.map(quotedDefinitionLabel).join(", ");
+    return andList(names.map(quotedDefinitionLabel));
 }
 
 // A label line Obsidian does not read as a definition gets one alert, in

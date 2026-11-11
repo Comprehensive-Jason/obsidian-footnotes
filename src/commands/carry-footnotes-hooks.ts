@@ -5,7 +5,7 @@ import type FootnotePlugin from "../main";
 import { contextOfLines, docLines, insideDefinition } from "../editor/doc-context";
 import { lineDiffChanges } from "../editor/document-diff";
 import { simulateChanges } from "../editor/insertion-liveness";
-import { Reason, refusal, showNotice } from "../editor/notice";
+import { andList, Reason, refusal, showNotice } from "../editor/notice";
 import { CreatedFootnote, EditIntent, judgeEdit, NoteRange } from "../editor/result-gate";
 import { codeMirrorViewOf, readingViewActive, viewEditor } from "../editor/obsidian-internals";
 import { mainEditorTextHolds, nestedSubEditorOwnsFocus } from "../editor/table-cursor";
@@ -436,7 +436,7 @@ function landOrNameMissing(
     const missing = missingWhereLanded(doc, from, to, body, carried, known);
     if (one && (carried.length > 0 || definesFootnotes(body)) && landCarriedText(plugin, doc, from, to, text, body, carried, missing, beforeWrite)) return true;
     if (carried.length === 0 && missing.length > 0) {
-        showNotice(`${missing.map(quotedReference).join(", ")} ${missing.length === 1 ? "has" : "have"} no definition to carry.`, 8000);
+        showNotice(`${andList(missing.map(quotedReference))} ${missing.length === 1 ? "has" : "have"} no definition to carry.`, 8000);
     }
     return false;
 }
@@ -738,16 +738,16 @@ function landCarriedText(
         [matched, `matched ${matched === 1 ? "an existing footnote" : "existing footnotes"} (same definition, different name)`],
         [plan.renamed, "renamed"],
     ];
-    const said = counts
+    const saidItems = counts
         .filter(([count]) => count > 0)
-        .map(([count, what]) => `${count} ${what}`)
-        .join(", ");
+        .map(([count, what]) => `${count} ${what}`);
+    const said = andList(saidItems);
     let notice = `Pasted with ${total} footnote definition${total === 1 ? "" : "s"}: ${said}.`;
     if (missing.length > 0) {
         // a reference renamed out of the way of a footnote the note defines
         // is named by its new name (Jason's ruling X10, 2026-10-07)
         const named = missing.map((name) => plan.renamedCites.get(name.toLowerCase()) ?? name);
-        notice += ` ${named.map(quotedReference).join(", ")} ${named.length === 1 ? "has" : "have"} no definition to carry.`;
+        notice += ` ${andList(named.map(quotedReference))} ${named.length === 1 ? "has" : "have"} no definition to carry.`;
     }
     showNotice(notice, missing.length > 0 ? 8000 : undefined);
     // the note as the paste left it, which in the popup is not the editor's text

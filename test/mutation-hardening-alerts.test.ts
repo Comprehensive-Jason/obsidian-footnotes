@@ -154,7 +154,7 @@ describe("the orphaned-reference alert", () => {
         noticeLintAlerts(fakePlugin({}), "see [^a] [^b] [^c]");
         expect(
             messageShown(
-                'This note has 3 footnote references with no definition ("[^a]", "[^b]", "[^c]"). Write their definitions or delete the references.',
+                'This note has 3 footnote references with no definition ("[^a]", "[^b]", and "[^c]"). Write their definitions or delete the references.',
             ),
         ).toBe(true);
     });
@@ -163,7 +163,7 @@ describe("the orphaned-reference alert", () => {
         noticeLintAlerts(fakePlugin({}), "see [^a] [^b] [^c] [^d] [^e]");
         expect(
             messageShown(
-                'This note has 5 footnote references with no definition ("[^a]", "[^b]", "[^c]", "[^d]", "[^e]"). Write their definitions or delete the references.',
+                'This note has 5 footnote references with no definition ("[^a]", "[^b]", "[^c]", "[^d]", and "[^e]"). Write their definitions or delete the references.',
             ),
         ).toBe(true);
     });
@@ -191,7 +191,7 @@ describe("the orphaned-definition alert", () => {
         noticeLintAlerts(fakePlugin({}), "[^u1]: a\n[^u2]: b");
         expect(
             messageShown(
-                'This note has 2 footnote definitions nothing references ("[^u1]", "[^u2]"). Add their references in the text, or delete the definitions.',
+                'This note has 2 footnote definitions nothing references ("[^u1]" and "[^u2]"). Add their references in the text, or delete the definitions.',
             ),
         ).toBe(true);
     });
@@ -222,7 +222,7 @@ describe("the duplicate-definition alert", () => {
         );
         expect(
             messageShown(
-                'This note defines 2 footnotes more than once ("[^d]", "[^e]"). Obsidian renders only each one\'s last definition. Merge them, or turn on "Merge duplicate definitions".',
+                'This note defines 2 footnotes more than once ("[^d]" and "[^e]"). Obsidian renders only each one\'s last definition. Merge them, or turn on "Merge duplicate definitions".',
             ),
         ).toBe(true);
     });
@@ -283,7 +283,7 @@ describe("the invalid-name alert", () => {
         noticeLintAlerts(fakePlugin({}), "see [^a b] [^c#d] [^e`f]");
         expect(
             messageShown(
-                `This note has 3 footnotes with invalid names ("[^a b]", "[^c#d]", "[^e\`f]"). ${InvalidNameCharacters}`,
+                `This note has 3 footnotes with invalid names ("[^a b]", "[^c#d]", and "[^e\`f]"). ${InvalidNameCharacters}`,
             ),
         ).toBe(true);
     });
@@ -297,7 +297,7 @@ describe("the invalid-name alert", () => {
         noticeLintAlerts(fakePlugin({}), "x [^aa`a] [^bb#b] [^cc`c] y");
         expect(
             messageShown(
-                `This note has 3 footnotes with invalid names ("[^aa\`a]", "[^bb#b]", "[^cc\`c]"). ${InvalidNameCharacters}`,
+                `This note has 3 footnotes with invalid names ("[^aa\`a]", "[^bb#b]", and "[^cc\`c]"). ${InvalidNameCharacters}`,
             ),
         ).toBe(true);
     });

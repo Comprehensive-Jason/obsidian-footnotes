@@ -91,7 +91,7 @@ describe("the orphaned-definition alert and the chain it stands in for (Jason's 
 
     it("speaks in the plural when several orphans take something", () => {
         expect(orphanAlert("text\n\n[^a]: uses[^b]\n[^b]: chained\n[^x]: uses[^y]\n[^y]: chained\n[^z]: alone")).toBe(
-            'This note has 3 footnote definitions nothing references ("[^a]", "[^x]", "[^z]"), and deleting them also takes "[^b]" and "[^y]", which only they cite. Add their references in the text, or delete the definitions.',
+            'This note has 3 footnote definitions nothing references ("[^a]", "[^x]", and "[^z]"), and deleting them also takes "[^b]" and "[^y]", which only they cite. Add their references in the text, or delete the definitions.',
         );
     });
 

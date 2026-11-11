@@ -48,7 +48,7 @@ describe("the Skipped sentence names what the note holds after the lint", () => 
 
     it("two definitions that swap numbers keep their own reasons", async () => {
         expect(await toInline("x[^3] b[^2] a[^1]\n\n[^1]: first\n    second\n> [^2]: quoted\n\n[^3]: one")).toBe("x^[one] b[^1] a[^2]\n\n> [^1]: quoted\n\n[^2]: first\n    second");
-        expect(messages()[0]).toBe('Converted 1 footnote into an inline footnote at 1 reference. Skipped: "[^2]" (more than one line), "[^1]" (in a quote).');
+        expect(messages()[0]).toBe('Converted 1 footnote into an inline footnote at 1 reference. Skipped: "[^2]" (more than one line) and "[^1]" (in a quote).');
     });
 
     it("a definition the lint goes on to delete is not called skipped", async () => {

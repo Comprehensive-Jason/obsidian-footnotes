@@ -74,12 +74,12 @@ describe("inline to normal", () => {
 
     it("joins the other reasons in the Skipped sentence", () => {
         toNormal(["^[note]: more", "", "a^[] b^[fine]"]);
-        expect(messages()).toEqual([`Converted 1 inline footnote into 1 normal footnote. Skipped: empty (1), ${Reason} (1).`]);
+        expect(messages()).toEqual([`Converted 1 inline footnote into 1 normal footnote. Skipped: empty (1) and ${Reason} (1).`]);
     });
 
     it("a footnote the skips already took out and one the gate refuses: every footnote was skipped", () => {
         toNormal(["^[note]: more", "", "a^[]"]);
-        expect(messages()).toEqual([`Nothing was converted. Every footnote was skipped: empty (1), ${Reason} (1).`]);
+        expect(messages()).toEqual([`Nothing was converted. Every footnote was skipped: empty (1) and ${Reason} (1).`]);
     });
 
     it("a toast with something skipped stays up as long as the refusal did", () => {
@@ -117,7 +117,7 @@ describe("normal to inline, the command", () => {
     it("joins the other reasons in the Skipped sentence, in the note's order", async () => {
         const doc = editor([...refusedFirst, "", "[^o]: orphan"]);
         await convertNormalToInlineCommand(fakePlugin(NoLint, doc));
-        expect(messages()[0]).toBe(`Converted 1 footnote into an inline footnote at 1 reference. Skipped: "[^1]" (${Reason}), "[^o]" (not referenced).`);
+        expect(messages()[0]).toBe(`Converted 1 footnote into an inline footnote at 1 reference. Skipped: "[^1]" (${Reason}) and "[^o]" (not referenced).`);
     });
 
     it("every footnote refused: nothing is written and the toast says so", async () => {

@@ -100,7 +100,7 @@ describe("with merging on, a command that runs no lint names the duplicate it le
     it("two footnotes defined twice: the plural, with the same advice", () => {
         noticeLintAlerts(fakePlugin(merging), "x[^a] y[^b]\n\n[^a]: 1\n\n[^a]: 2\n\n[^b]: 3\n\n[^b]: 4", false);
         expect(duplicateAlerts()).toEqual([
-            'This note defines 2 footnotes more than once ("[^a]", "[^b]"). Obsidian renders only each one\'s last definition. Merge them.',
+            'This note defines 2 footnotes more than once ("[^a]" and "[^b]"). Obsidian renders only each one\'s last definition. Merge them.',
         ]);
     });
 });

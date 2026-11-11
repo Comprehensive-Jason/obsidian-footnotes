@@ -72,7 +72,7 @@ describe('a label in a "%%" comment keeps its alert', () => {
 
     it("names several of them by the same words", () => {
         noticeLintAlerts(fakePlugin({ ...DEFAULT_SETTINGS }), "%%\n[^j]: one\n[^k]: two\n%%");
-        expect(messages()).toContain('This note has 2 footnote definitions inside %% comments ("[^j]:", "[^k]:"), where Obsidian never shows them. Move them out of the comments.');
+        expect(messages()).toContain('This note has 2 footnote definitions inside %% comments ("[^j]:" and "[^k]:"), where Obsidian never shows them. Move them out of the comments.');
     });
 
     it("keeps the reference from Delete orphaned references", () => {
