@@ -15,6 +15,7 @@ Put the caret inside the word "bravo" in each sentence below and press the numbe
 - [ ] Before punctuation: This is "some bravo". The reference lands after the closing quote and in front of the full stop
 - [ ] Before punctuation, Chinese: 这是一个句子，引用来源。 with the caret in 来源: the reference lands in front of the 。 and Reading view shows the superscript before the full stop
 - [ ] Before punctuation, quoted Chinese: 他说「引用来源。」 with the caret in 来源: the reference lands after the 」 (outside the quote)
+- [ ] After punctuation, Chinese with the next sentence right after it: 中文，英文。第三句。 with the caret in 英文: the line reads `中文，英文。[^1]第三句。`, and Reading view shows the superscript after the 。 and right before 第三句. With the caret in 中文 instead: `中文，[^1]英文。第三句。`
 - [ ] Don't move: in Settings > Linting, **Fix footnote reference placement** is greyed out. This is "some bravo". The reference lands right after `bravo`, inside the closing quote, and running **Lint footnotes** afterwards moves nothing. Set the placement back to After punctuation
 
 ## Inline footnotes and the punctuation rule

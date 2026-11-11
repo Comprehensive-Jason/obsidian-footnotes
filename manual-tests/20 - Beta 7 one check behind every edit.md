@@ -64,9 +64,25 @@ Block id fixture:
 
 See [[#^i1]] for the item.
 
+Block id over two lines fixture:
+
+- The tide rose early
+  and fell late ^tide1
+- next
+
+See [[#^tide1]] for the tide item.
+
+Block id with spaces after it fixture (the next line ends in two spaces):
+
+Para one ^id1  
+
+See [[#^id1]] for the paragraph.
+
 - [ ] Brackets: put the caret right after the `5` in the Brackets fixture and press the numbered key: the line reads `as noted [see p. 5[^1]] here.` In Reading view the superscript sits inside the brackets, right after the 5, and footnote 1 is listed at the bottom
 - [ ] Email: put the caret at the very end of the Email fixture (after the full stop) and press the numbered key: the line reads `Write to me@example.com[^1].` In Reading view the address is still a link, the link stops at the end of `com` without taking the full stop, and the superscript and then the full stop follow it
 - [ ] Block id: triple-click `- An item ^i1` in the Block id fixture (the whole line) and press the numbered key: the line becomes `- [^1] ^i1`, and the definition reads `[^1]: An item`. In Reading view the bullet shows the superscript with the `^i1` hidden, and clicking the `^i1` link in the line under the list jumps to that bullet, not into the footnote
+- [ ] Block id over two lines: in the Block id over two lines fixture, select from `rose early` through the end of `and fell late ^tide1` and press the numbered key: the item reads `- The tide[^1] ^tide1`, and clicking the `^tide1` link jumps to that bullet, not into the footnote
+- [ ] Block id with spaces after it: click the `^id1` link: it jumps to `Para one`. Put the caret at the very end of the `Para one ^id1` line (after its two spaces) and press the numbered key: clicking the `^id1` link still jumps to the paragraph
 
 List fixture:
 

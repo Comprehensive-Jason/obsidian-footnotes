@@ -7,6 +7,7 @@ Settings: `Edit footnotes in a popup` ON, defaults otherwise. Undo between check
 - [ ] Insert a footnote into this sentence: the popup appears AT the caret, not somewhere else on screen
 - [ ] With the popup open, click somewhere else in the note: the popup closes
 - [ ] Open this note in a new window (right-click its tab, "Open in new window"). There, insert a footnote and click somewhere else in the note: the popup closes. Insert another and press Esc: it closes
+- [ ] In that window, insert a footnote, type a few words into the popup, and close the window within two seconds. In the main window, press the numbered hotkey in any note: a footnote is created, and no "Saving the previous footnote…" toast stays up
 
 ## Persistence and edge cases
 

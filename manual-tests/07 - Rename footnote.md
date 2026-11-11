@@ -18,5 +18,13 @@ Run **Rename footnote** from the command palette with the caret in each spot:
 - [ ] Right-click ON `[^menu]` above: the menu shows **Rename footnote** with the pencil icon, where the native "Rename this heading" item sits on a heading line
 - [ ] Choosing it opens the same modal as the command, prefilled with `menu`
 
+## Folds and split panes
+
+- [ ] Fold the `### Fold me` heading below, open this note in a second pane (split right), and in the first pane rename `[^alpha]` (caret in the reference at the top) to `delta`: the heading stays folded, unfolding it shows `[^delta]` in its line, and the second pane's caret and scroll stay where they were. Undo
+
+### Fold me
+
+A line inside the fold that cites [^alpha] again.
+
 [^alpha]: first definition
 [^menu]: the definition to rename

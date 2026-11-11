@@ -32,6 +32,10 @@ Settings: **Preferred footnote naming style** on Keep as written unless a check 
 
 - [ ] In a scratch note with **Enable section heading** on, one footnote under `# Footnotes`, and **Remove empty section heading** on (it is greyed out until the heading toggle is on), run **Convert normal footnotes to inline footnotes**: the heading and the blank lines above it go with the definition, and one undo brings all of it back. The same with **Delete footnote everywhere** on that footnote, and with Ctrl+X on a selection holding the footnote's only reference. With the setting off (the default), all three leave the heading standing. Turn both settings back off and delete the scratch note
 
+## A footnote cited only inside a comment
+
+- [ ] In a scratch note holding `Hidden %%see [^hid]%% text.` and, after a blank line, `[^hid]: hidden one`, run **Convert normal footnotes to inline footnotes**: the note is unchanged, and the toast reads "Nothing was converted. Every footnote was skipped: "[^hid]" (cited only inside a %% comment)." Delete the scratch note
+
 [^twice]: cited twice, one line
 [^single]: one line
 [^long]: first line
