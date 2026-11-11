@@ -98,7 +98,12 @@ export function footnotePrefix(markdownText: string): string {
             // Obsidian (both probed 2026-09-21)
             if (line.replace(/^\ufeff/, "") !== "---") return "";
             first = false;
-        } else if (/^---\s*$/.test(line)) {
+        } else if (line.startsWith("---")) {
+            // Any later line that starts with three dashes closes the
+            // block, as it does for Obsidian, whatever follows them on the
+            // line: "--- # Chapter" closes it and starts a heading
+            // (docs/obsidian-reading-rules.md D2;
+            // bug-prefix-reader-misses-frontmatter-closer-with-text).
             return value ?? "";
         } else if (value === null) {
             // YAML wants a space after the colon. Written without one,
@@ -139,7 +144,7 @@ export function footnotePrefixFromEditor(doc: Editor): string {
     for (let i = 1; i < doc.lineCount(); i++) {
         const line = stripCrLine(doc.getLine(i));
         lines.push(line);
-        if (/^---\s*$/.test(line)) break;
+        if (line.startsWith("---")) break;
     }
     return footnotePrefix(lines.join("\n"));
 }
