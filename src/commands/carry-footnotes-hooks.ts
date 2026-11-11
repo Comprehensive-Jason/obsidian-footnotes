@@ -918,7 +918,14 @@ interface EditorCommand {
  */
 export function wrapClipboardCommands(plugin: FootnotePlugin): void {
     const registry = (plugin.app as unknown as { commands?: { commands?: Record<string, EditorCommand | undefined> } }).commands?.commands;
-    const carries = (doc: Editor) => plugin.settings.carryFootnotesOnCopy && !nestedSubEditorOwnsFocus(doc);
+    // In Reading view the editor's buffer is hidden, and the plugin never
+    // edits it, as the hooks hold (carryableSelection; GLM review
+    // 2026-11-11, pin bug-phone-clipboard-commands-in-reading-view).
+    const readingView = () => {
+        const mdView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+        return mdView !== null && readingViewActive(mdView);
+    };
+    const carries = (doc: Editor) => plugin.settings.carryFootnotesOnCopy && !nestedSubEditorOwnsFocus(doc) && !readingView();
     wrapCommand(plugin, registry?.["editor:copy"], async (doc, wrote) => {
         const range = carries(doc) ? singleSelection(doc) : null;
         const text = range && carriedCopyText(doc, range.from, range.to);
