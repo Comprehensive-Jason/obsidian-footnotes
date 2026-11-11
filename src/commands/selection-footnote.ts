@@ -461,8 +461,18 @@ export function selectionPressHandled(
     // whole blocks, and the id goes with them as before: left behind, it
     // would stand alone where the item or the heading was, and the result
     // gate would refuse the line for losing its formatting.
+    //
+    // A selection over several lines that starts in a paragraph's text and
+    // ends in the same paragraph takes no marker either, though its last
+    // line starts with the item's indent or a quote's "> ": that is the
+    // paragraph's container carrying on, not a marker of its own (Fable
+    // review 2026-11-11, pin bug-selection-in-list-item-moves-block-id).
     const blockId = ctx.lines[trimmed.to.line].search(TrailingBlockId);
-    const keepsMarker = ctx.reading().blockSyntaxEnd(trimmed.to.line) <= (trimmed.from.line === trimmed.to.line ? trimmed.from.ch : 0);
+    const keepsMarker =
+        trimmed.from.line === trimmed.to.line
+            ? ctx.reading().blockSyntaxEnd(trimmed.to.line) <= trimmed.from.ch
+            : ctx.reading().blockSyntaxEnd(trimmed.to.line) <= 0 ||
+              (ctx.reading().blockSyntaxEnd(trimmed.from.line) <= trimmed.from.ch && carriesOnParagraph(ctx.reading(), trimmed.from.line, trimmed.to.line));
     if (blockId !== -1 && keepsMarker && trimmed.to.ch > blockId && comparePositions(trimmed.from, { line: trimmed.to.line, ch: blockId }) < 0) {
         trimmed.to = { line: trimmed.to.line, ch: blockId };
     }
@@ -983,6 +993,21 @@ function selectionTouchesFootnote(
         }
     }
     return false;
+}
+
+/**
+ * Whether every line after `first`, through `last`, carries on the
+ * paragraph that line `first` is in: no block starts on any of them, and
+ * none is blank. The reading marks the line a block starts on with a "^"
+ * in front of the block's kind ("list ^listItem ^paragraph"); a line that
+ * carries the paragraph on has none ("list listItem paragraph").
+ */
+function carriesOnParagraph(reading: NoteReading, first: number, last: number): boolean {
+    for (let line = first + 1; line <= last; line++) {
+        const kinds = reading.lineBlocks[line] ?? "";
+        if (!kinds.endsWith("paragraph") || kinds.split(" ").some((kind) => kind.startsWith("^"))) return false;
+    }
+    return true;
 }
 
 /** The text between `from` and `to`, lines joined with "\n". This is a stand-in for the editor's own getRange that also works against the fake editor the tests use. */
