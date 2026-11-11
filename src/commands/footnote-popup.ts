@@ -11,6 +11,7 @@ import {
 } from "../editor/obsidian-internals";
 import { popupCanBind, PopupWaitingNotice, retryUntilShown } from "./popup-retry";
 import { replaceMinimal } from "../editor/write-back";
+import { eventTargetElement, eventTargetNode } from "../editor/event-target";
 import { readNote } from "../parsing/note-reading";
 
 import { showNotice } from "../editor/notice";
@@ -522,8 +523,9 @@ export async function openFootnotePopup(
         // outside the popup and must still dismiss it, and a target that is
         // not an Element at all (none has been seen from the UI) must not
         // make closest() throw. The keydown handler below checks its target
-        // the same way (review A8).
-        const target = evt.target instanceof Element ? evt.target : null;
+        // the same way (review A8). The check works for a note popped out
+        // into a window of its own (see event-target.ts).
+        const target = eventTargetElement(evt);
         if (!target) return;
         if (containerEl.contains(target)) return;
         // taps that launch a command (the mobile navbar or toolbar, the
@@ -556,7 +558,7 @@ export async function openFootnotePopup(
     // "close me".
     const onDocKeydown = (evt: KeyboardEvent) => {
         if (evt.key !== "Escape") return;
-        const target = evt.target instanceof Node ? evt.target : null;
+        const target = eventTargetNode(evt);
         const inPopup = !!target && containerEl.contains(target);
         if (!inPopup && !(target && mdView.containerEl.contains(target))) return;
         const focused = inPopup
