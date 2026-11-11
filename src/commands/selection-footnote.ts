@@ -487,13 +487,18 @@ export function selectionPressHandled(
     if (blockId !== -1 && keepsMarker && trimmed.to.ch > blockId && comparePositions(trimmed.from, { line: trimmed.to.line, ch: blockId }) < 0) {
         trimmed.to = { line: trimmed.to.line, ch: blockId };
     }
-    // Over several lines of one paragraph, the footnote takes the words
-    // without the "> " that each later line of a quote or callout starts
-    // with: those are the quote's markers, not the user's text, and kept
-    // they drew a quote box around half a sentence in the footnote (Fable
-    // review 2026-11-11, pin bug-selection-in-quote-carries-quote-markers).
+    // Over several lines of one paragraph, a selection that starts in the
+    // text takes the words without the "> " that each later line of a
+    // quote or callout starts with: those are the quote's markers, not the
+    // user's text, and kept they drew a quote box around half a sentence
+    // in the footnote (Fable review 2026-11-11, pin
+    // bug-selection-in-quote-carries-quote-markers). A selection that
+    // takes the first line's "> " too takes the quote whole, markers and
+    // all (bug-block-first-line-on-label).
     const text =
-        trimmed.from.line !== trimmed.to.line && carriesOnParagraph(ctx.reading(), trimmed.from.line, trimmed.to.line)
+        trimmed.from.line !== trimmed.to.line &&
+        ctx.reading().blockSyntaxEnd(trimmed.from.line) <= trimmed.from.ch &&
+        carriesOnParagraph(ctx.reading(), trimmed.from.line, trimmed.to.line)
             ? paragraphText(ctx.lines, ctx.reading(), trimmed.from, trimmed.to)
             : rangeText(ctx.lines, trimmed.from, trimmed.to);
     const notices = selectionNotices(selected);
