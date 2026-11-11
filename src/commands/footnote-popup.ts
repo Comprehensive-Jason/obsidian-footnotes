@@ -156,6 +156,35 @@ function definitionSection(text: string, name: string, label: string): { start: 
     return { start: lineStart(block.start) + label.length, end: lineStart(block.end) + lines[block.end].length };
 }
 
+/**
+ * Runs `fn` once, `ms` milliseconds from now, on the timers of `win`, the
+ * window the popup's note is in.
+ *
+ * The note's own window keeps the delays short while the main window is
+ * hidden, since a hidden window's timers are slowed (E37, in table-cursor.ts).
+ * But a note popped out into a window of its own can be closed while a
+ * delay waits there, and a closed window's timers never fire: the popup's
+ * teardown then never finished, and every footnote command, which waits
+ * for it, stopped for good behind a toast that never hides (GLM review
+ * 2026-11-11, pin bug-popup-teardown-hangs-on-closed-window). So a delay on
+ * another window is backed by one on the main window a second later, and a
+ * window already closed is not asked at all.
+ */
+function laterIn(win: Window, fn: () => void, ms: number): void {
+    let ran = false;
+    const once = () => {
+        if (ran) return;
+        ran = true;
+        fn();
+    };
+    if (win === window || win.closed) {
+        window.setTimeout(once, ms);
+        return;
+    }
+    win.setTimeout(once, ms);
+    window.setTimeout(once, ms + 1000);
+}
+
 export function popupEditingAvailable(plugin: FootnotePlugin): boolean {
     // embedRegistry is undocumented Obsidian API. If it ever changes shape,
     // fall back to the old jump-to-bottom behavior rather than breaking.
@@ -341,7 +370,9 @@ export async function openFootnotePopup(
     // report 2026-08-26, ground-truthed with a live gesture watcher).
     let pollDelay = 0;
     while (!popupClosed() && mdView.data !== editor.getValue() && Date.now() < dataDeadline) {
-        await new Promise((resolve) => win.setTimeout(resolve, pollDelay));
+        await new Promise<void>((resolve) => {
+            laterIn(win, resolve, pollDelay);
+        });
         pollDelay = pollDelay === 0 ? 10 : 50;
     }
     if (popupClosed()) return;
@@ -371,7 +402,7 @@ export async function openFootnotePopup(
             const ref = plugin.app.metadataCache.on("changed", (changed) => {
                 if (changed.path === file.path) finish();
             });
-            win.setTimeout(finish, 2000);
+            laterIn(win, finish, 2000);
         });
         await mdView.save();
         await reindexed;
@@ -681,7 +712,10 @@ export async function openFootnotePopup(
         };
 
         void (async () => {
-            const pause = (ms: number) => new Promise<void>((resolve) => win.setTimeout(resolve, ms));
+            const pause = (ms: number) =>
+                new Promise<void>((resolve) => {
+                    laterIn(win, resolve, ms);
+                });
             // A save the embed already had in flight lands on disk whatever
             // happens here, so wait for it, and then give Obsidian one beat
             // to fold the written file back into the view; the edit below
@@ -753,7 +787,7 @@ export async function openFootnotePopup(
             // back into the main view before anyone edits it. A timer on
             // purpose, not requestAnimationFrame: rAF stalls completely
             // while the window is hidden.
-            if (wroteToDisk) win.setTimeout(finish, 50);
+            if (wroteToDisk) laterIn(win, finish, 50);
             else finish();
         })();
     };
@@ -837,7 +871,10 @@ export async function openFootnotePopup(
             },
             closed: popupClosed,
             now: () => Date.now(),
-            delay: (ms) => new Promise<void>((resolve) => win.setTimeout(resolve, ms)),
+            delay: (ms) =>
+                new Promise<void>((resolve) => {
+                    laterIn(win, resolve, ms);
+                }),
             onCacheChange: (listener) => {
                 const ref = plugin.app.metadataCache.on("changed", (changedFile) => {
                     if (changedFile === mdView.file) listener();
