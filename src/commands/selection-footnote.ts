@@ -445,6 +445,17 @@ export function selectionPressHandled(
         showNotice(PartOfQuoteNotice, 8000);
         return true;
     }
+    // A selection that starts in the "> " of a quote's later line takes the
+    // marker and leaves the rest of the line behind, as ruling B3 refuses
+    // on a quote's first line. There the result gate sees the line stop
+    // being a quote; on a later line the rest reads on as the quote's lazy
+    // text, so the gate passes it, and the footnote's text was a quote of
+    // its own (Fable review 2026-11-11, pin
+    // bug-selection-in-quote-carries-quote-markers).
+    if (selected === null && startsInLaterQuoteMarker(ctx.reading(), ctx.lines, trimmed.from)) {
+        showNotice(SelectionFormattingNotice, 8000);
+        return true;
+    }
     // A selection that ends with the line's block id converts the text in
     // front of the id, and the id stays at the line's end. A block id is
     // the " ^i1" that Obsidian writes at the end of a line when the user
@@ -476,7 +487,15 @@ export function selectionPressHandled(
     if (blockId !== -1 && keepsMarker && trimmed.to.ch > blockId && comparePositions(trimmed.from, { line: trimmed.to.line, ch: blockId }) < 0) {
         trimmed.to = { line: trimmed.to.line, ch: blockId };
     }
-    const text = rangeText(ctx.lines, trimmed.from, trimmed.to);
+    // Over several lines of one paragraph, the footnote takes the words
+    // without the "> " that each later line of a quote or callout starts
+    // with: those are the quote's markers, not the user's text, and kept
+    // they drew a quote box around half a sentence in the footnote (Fable
+    // review 2026-11-11, pin bug-selection-in-quote-carries-quote-markers).
+    const text =
+        trimmed.from.line !== trimmed.to.line && carriesOnParagraph(ctx.reading(), trimmed.from.line, trimmed.to.line)
+            ? paragraphText(ctx.lines, ctx.reading(), trimmed.from, trimmed.to)
+            : rangeText(ctx.lines, trimmed.from, trimmed.to);
     const notices = selectionNotices(selected);
     // The new reference sits snug against the text in front of the
     // selection, so the run of whitespace before it is replaced along with
@@ -1008,6 +1027,30 @@ function carriesOnParagraph(reading: NoteReading, first: number, last: number): 
         if (!kinds.endsWith("paragraph") || kinds.split(" ").some((kind) => kind.startsWith("^"))) return false;
     }
     return true;
+}
+
+/** Whether `from` sits inside the quote markers of a line that carries on a paragraph begun above it. */
+function startsInLaterQuoteMarker(reading: NoteReading, lines: readonly string[], from: EditorPosition): boolean {
+    const syntax = reading.blockSyntaxEnd(from.line);
+    if (from.ch >= syntax || !(lines[from.line] ?? "").slice(0, syntax).includes(">")) return false;
+    return from.line > 0 && carriesOnParagraph(reading, from.line - 1, from.line);
+}
+
+/**
+ * The text between `from` and `to` in one paragraph, as rangeText gives it
+ * but without the quote markers ("> ", "> > ") in front of each later
+ * line. A list item's indent stays: in the footnote it is only more
+ * indentation, which draws nothing.
+ */
+function paragraphText(lines: readonly string[], reading: NoteReading, from: EditorPosition, to: EditorPosition): string {
+    const parts = [(lines[from.line] ?? "").slice(from.ch)];
+    for (let line = from.line + 1; line <= to.line; line++) {
+        const whole = lines[line] ?? "";
+        const end = line === to.line ? to.ch : whole.length;
+        const syntax = reading.blockSyntaxEnd(line);
+        parts.push(whole.slice(0, syntax).includes(">") ? whole.slice(Math.min(syntax, end), end) : whole.slice(0, end));
+    }
+    return parts.join("\n");
 }
 
 /** The text between `from` and `to`, lines joined with "\n". This is a stand-in for the editor's own getRange that also works against the fake editor the tests use. */
