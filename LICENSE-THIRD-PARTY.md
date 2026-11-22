@@ -4,11 +4,11 @@
 
 ## The packages in `main.js`
 
-Each row was checked on 2026-11-10 in the package's own published files, for remark-obsidian 2.2.1. Some packages come from this plugin's own `node_modules`, at the versions its `package-lock.json` pins; the rest are bundled inside remark-obsidian's `dist/index.js`, at the versions remark-obsidian's own `package-lock.json` pins for v2.2.1. A package in both places shows both versions when they differ. `format` has no `license` field in its `package.json`: it uses the older `licenses` list, and it says MIT there, in its readme, and at the top of its source.
+Each row was checked on 2026-11-10 in the package's own published files, for remark-obsidian 2.2.1, and holds for 2.2.2 (2026-11-21), whose `dist/index.js`, `LICENSE`, and `LICENSE-THIRD-PARTY.md` are unchanged from 2.2.1. Some packages come from this plugin's own `node_modules`, at the versions its `package-lock.json` pins; the rest are bundled inside remark-obsidian's `dist/index.js`, at the versions remark-obsidian's own `package-lock.json` pins for v2.2.1. A package in both places shows both versions when they differ. `format` has no `license` field in its `package.json`: it uses the older `licenses` list, and it says MIT there, in its readme, and at the top of its source.
 
 | Package | Version | Licence | Copyright |
 | --- | --- | --- | --- |
-| `@quartz-community/remark-obsidian` | 2.2.1 | MIT | Copyright (c) 2026 Quartz Community |
+| `@quartz-community/remark-obsidian` | 2.2.2 | MIT | Copyright (c) 2026 Quartz Community |
 | `bail` | 2.0.2 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
 | `character-entities` | 2.0.2 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
 | `character-entities-legacy` | 3.0.0 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
@@ -67,7 +67,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## `@quartz-community/remark-obsidian` 2.2.1: its `LICENSE`, as published
+## `@quartz-community/remark-obsidian` 2.2.2: its `LICENSE`, as published
 
 ```
 
@@ -94,7 +94,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## `@quartz-community/remark-obsidian` 2.2.1: its `LICENSE-THIRD-PARTY.md`, as published
+## `@quartz-community/remark-obsidian` 2.2.2: its `LICENSE-THIRD-PARTY.md`, as published
 
 Everything below this line is that file, word for word.
 
