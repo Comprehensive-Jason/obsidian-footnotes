@@ -4,46 +4,18 @@
 
 ## The packages in `main.js`
 
-Each row was checked on 2026-11-10 in the package's own published files, for remark-obsidian 2.2.1, and holds for 2.2.2 (2026-11-21), whose `dist/index.js`, `LICENSE`, and `LICENSE-THIRD-PARTY.md` are unchanged from 2.2.1. Some packages come from this plugin's own `node_modules`, at the versions its `package-lock.json` pins; the rest are bundled inside remark-obsidian's `dist/index.js`, at the versions remark-obsidian's own `package-lock.json` pins for v2.2.1. A package in both places shows both versions when they differ. `format` has no `license` field in its `package.json`: it uses the older `licenses` list, and it says MIT there, in its readme, and at the top of its source.
+Each row was checked on 2026-11-21 for remark-obsidian 2.2.2. The plugin reads notes through that package's `legacy` entry, `dist/legacy.js`, which is the only code its own `node_modules` puts into `main.js`. The other packages are bundled inside `dist/legacy.js`, at the versions remark-obsidian's own `package-lock.json` pins for v2.2.1; its `dist` code did not change in 2.2.2.
 
 | Package | Version | Licence | Copyright |
 | --- | --- | --- | --- |
 | `@quartz-community/remark-obsidian` | 2.2.2 | MIT | Copyright (c) 2026 Quartz Community |
-| `bail` | 2.0.2 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
 | `character-entities` | 2.0.2 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
-| `character-entities-legacy` | 3.0.0 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
 | `decode-named-character-reference` | 1.3.0 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
-| `devlop` | 1.1.0 | MIT | Copyright (c) 2023 Titus Wormer <tituswormer@gmail.com> |
-| `escape-string-regexp` | 5.0.0 | MIT | Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com) |
-| `extend` | 3.0.2 | MIT | Copyright (c) 2014 Stefan Thomas |
-| `fault` | 2.0.1 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
-| `format` | 0.2.2 | MIT | Copyright 2010 - 2014 Sami Samhuri sami@samhuri.net |
-| `is-plain-obj` | 4.1.0 | MIT | Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com) |
-| `longest-streak` | 3.1.0 | MIT | Copyright (c) 2015 Titus Wormer <mailto:tituswormer@gmail.com> |
-| `mdast-util-frontmatter` | 2.0.1 | MIT | Copyright (c) 2020 Titus Wormer <tituswormer@gmail.com> |
-| `mdast-util-math` | 3.0.0 | MIT | Copyright (c) 2020 Titus Wormer <tituswormer@gmail.com> |
-| `mdast-util-phrasing` | 4.1.0 | MIT | Copyright (c) 2017 Titus Wormer <tituswormer@gmail.com> |
-| `mdast-util-to-markdown` | 2.2.3 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
-| `mdast-util-to-string` | 4.0.0 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
-| `micromark-core-commonmark` | 2.0.4 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
-| `micromark-extension-frontmatter` | 2.0.0 | MIT | Copyright (c) 2020 Titus Wormer <tituswormer@gmail.com> |
-| `micromark-extension-math` | 3.1.0 | MIT | Copyright (c) 2020 Titus Wormer <tituswormer@gmail.com> |
-| `micromark-factory-space` | 2.1.0 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
-| `micromark-util-character` | 2.1.1 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
-| `micromark-util-classify-character` | 2.0.1 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
 | `micromark-util-decode-numeric-character-reference` | 2.0.2 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
 | `micromark-util-decode-string` | 2.0.1 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
-| `micromark-util-html-tag-name` | 2.0.1 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
 | `micromark-util-normalize-identifier` | 2.0.1 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
-| `micromark-util-symbol` | 2.0.1 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
-| `trough` | 2.2.0 | MIT | Copyright (c) 2016 Titus Wormer <tituswormer@gmail.com> |
-| `unified` | 11.0.5 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
 | `unist-util-is` | 6.0.1 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
-| `unist-util-stringify-position` | 4.0.0 | MIT | Copyright (c) 2016 Titus Wormer <tituswormer@gmail.com> |
-| `unist-util-visit` | 5.1.0 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
 | `unist-util-visit-parents` | 6.0.2 | MIT | Copyright (c) 2016 Titus Wormer <tituswormer@gmail.com> |
-| `vfile` | 6.0.3 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
-| `vfile-message` | 4.0.3 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
 
 Each is under this text, with its own copyright line above:
 

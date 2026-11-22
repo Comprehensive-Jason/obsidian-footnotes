@@ -15,8 +15,13 @@
 //   item, a footnote reference, and so on, with its position in the note.
 // - An "offset" is a character index into the note's text, counted from 0.
 
-import remarkObsidian from "@quartz-community/remark-obsidian";
-import { unified } from "unified";
+// The package's "legacy" entry: the same reader as the main entry's default
+// preset, as one plain function. The main entry also holds the other preset
+// and every writer, which the plugin never runs, and a bundler cannot drop
+// them from it. Taking this entry instead keeps them, and unified, out of
+// main.js, and Obsidian reads and compiles all of main.js at every start
+// (startup-time research, 2026-11-21).
+import { parse as parseLegacy } from "@quartz-community/remark-obsidian/legacy";
 
 /** A place in the note as the parser reports it: line and column count from 1, the offset from 0. */
 interface Point {
@@ -46,12 +51,6 @@ export interface MarkdownNode {
 
 /** What the package adds on the root node: the column table (see parseObsidianNote). */
 type RootNode = MarkdownNode & { data?: { lineOffsets?: Record<number, number> } };
-
-/** The parser for a whole note, built once. Freezing it stops anyone changing its settings later. */
-const wholeNoteParser = unified().use(remarkObsidian).freeze();
-
-/** The parser for a later part of a note: frontmatter can only open the note itself. */
-const laterPartParser = unified().use(remarkObsidian, { frontmatter: false }).freeze();
 
 /** A point further along the note, walking its text from a point before it. */
 function pointAt(doc: string, from: Point, offset: number): Point {
@@ -439,8 +438,9 @@ export function frontmatterEnd(doc: string): number {
  */
 export function parseObsidianNote(text: string, startsNote = true): { tree: MarkdownNode; containerColumns: Readonly<Record<number, number>>; readsPastEnd: boolean } {
     const doc = normalizeLineBreaks(text);
-    const parser = startsNote ? wholeNoteParser : laterPartParser;
-    const tree = parser.parse(doc) as unknown as RootNode;
+    // a later part of a note never reads frontmatter: that can only open
+    // the note itself
+    const tree = (startsNote ? parseLegacy(doc) : parseLegacy(doc, { frontmatter: false })) as unknown as RootNode;
     const containerColumns = tree.data?.lineOffsets ?? {};
     if (doc.charCodeAt(0) === 0xfeff) {
         shiftPastByteOrderMark(tree);
