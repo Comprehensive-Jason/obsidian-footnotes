@@ -93,7 +93,7 @@ interface DefinitionNode {
 
 function lintingPage(settings: Partial<FootnotePlugin["settings"]> = {}): DefinitionNode[] {
     const app = { plugins: { plugins: {} } };
-    const plugin = { settings: { ...DEFAULT_SETTINGS, ...settings } } as FootnotePlugin;
+    const plugin = { settings: { ...DEFAULT_SETTINGS, ...settings } } as unknown as FootnotePlugin;
     const tab = new FootnotePluginSettingTab(app as never, plugin);
     // the mocked PluginSettingTab base does no constructor wiring
     Object.assign(tab, { app, plugin });

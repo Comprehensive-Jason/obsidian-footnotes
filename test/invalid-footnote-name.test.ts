@@ -81,7 +81,7 @@ describe("createMatchingFootnoteDefinition with an invalid name", () => {
         const handled = createMatchingFootnoteDefinition(
             line,
             { line: 0, ch: 7 }, // cursor inside [^my note]
-            {} as FootnotePlugin,
+            {} as unknown as FootnotePlugin,
             doc,
         );
         expect(handled).toBe(true);
@@ -97,7 +97,7 @@ describe("createMatchingFootnoteDefinition with an invalid name", () => {
         const handled = createMatchingFootnoteDefinition(
             line,
             { line: 0, ch: 8 }, // cursor inside [^`c`]
-            {} as FootnotePlugin,
+            {} as unknown as FootnotePlugin,
             doc,
         );
         expect(handled).toBe(true);

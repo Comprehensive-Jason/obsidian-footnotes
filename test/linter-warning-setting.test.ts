@@ -24,7 +24,7 @@ function makeTab(withLinter: boolean): FootnotePluginSettingTab {
             plugins: withLinter ? { "obsidian-linter": {} } : {},
         },
     };
-    const plugin = { settings: { ...DEFAULT_SETTINGS } } as FootnotePlugin;
+    const plugin = { settings: { ...DEFAULT_SETTINGS } } as unknown as FootnotePlugin;
     const tab = new FootnotePluginSettingTab(app as never, plugin);
     // the mocked PluginSettingTab base has no constructor wiring
     Object.assign(tab, { app, plugin });
