@@ -29,14 +29,14 @@
     "@codemirror/view": "^6.38.6",
     "@stryker-mutator/core": "^10.1.1",
     "@stryker-mutator/vitest-runner": "^10.1.1",
-    "@types/node": "^22.20.5",
-    "@vitest/coverage-v8": "^5.1.1",
+    "@types/node": "^22.20.7",
+    "@vitest/coverage-v8": "^5.1.2",
     "cross-env": "^10.1.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.15.0",
     "eslint-plugin-obsidianmd": "^0.6.0",
     "fast-check": "^4.11.0",
-    "knip": "^6.47.0",
+    "knip": "^6.48.0",
     "mdast-util-from-markdown": "^2.1.0",
     "mdast-util-gfm-footnote": "^2.1.0",
     "mdast-util-math": "^3.0.0",
@@ -44,8 +44,8 @@
     "micromark-extension-math": "^3.1.0",
     "obsidian": "^1.13.1",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.73.0",
-    "vitest": "^5.1.1"
+    "typescript-eslint": "^8.74.0",
+    "vitest": "^5.1.2"
   },
   "knip": {
     "entry": [
