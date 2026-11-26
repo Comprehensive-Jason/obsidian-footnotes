@@ -4,11 +4,11 @@
 
 ## The packages in `main.js`
 
-Each row was checked on 2026-11-21 for remark-obsidian 2.2.2. The plugin reads notes through that package's `legacy` entry, `dist/legacy.js`, which is the only code its own `node_modules` puts into `main.js`. The other packages are bundled inside `dist/legacy.js`, at the versions remark-obsidian's own `package-lock.json` pins for v2.2.1; its `dist` code did not change in 2.2.2.
+Each row was checked on 2026-11-26 for remark-obsidian 2.2.3. The plugin reads notes through that package's `legacy` entry, `dist/legacy.js`, which is the only code its own `node_modules` puts into `main.js`. The other packages are bundled inside `dist/legacy.js`, at the versions remark-obsidian's own `package-lock.json` pins for v2.2.1; its `dist` code did not change in 2.2.2, and 2.2.3 changed only remark-obsidian's own reader code, not those packages.
 
 | Package | Version | Licence | Copyright |
 | --- | --- | --- | --- |
-| `@quartz-community/remark-obsidian` | 2.2.2 | MIT | Copyright (c) 2026 Quartz Community |
+| `@quartz-community/remark-obsidian` | 2.2.3 | MIT | Copyright (c) 2026 Quartz Community |
 | `character-entities` | 2.0.2 | MIT | Copyright (c) 2015 Titus Wormer <tituswormer@gmail.com> |
 | `decode-named-character-reference` | 1.3.0 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
 | `micromark-util-decode-numeric-character-reference` | 2.0.2 | MIT | Copyright (c) Titus Wormer <tituswormer@gmail.com> |
@@ -39,7 +39,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## `@quartz-community/remark-obsidian` 2.2.2: its `LICENSE`, as published
+## `@quartz-community/remark-obsidian` 2.2.3: its `LICENSE`, as published
 
 ```
 
@@ -66,7 +66,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-## `@quartz-community/remark-obsidian` 2.2.2: its `LICENSE-THIRD-PARTY.md`, as published
+## `@quartz-community/remark-obsidian` 2.2.3: its `LICENSE-THIRD-PARTY.md`, as published
 
 Everything below this line is that file, word for word.
 
