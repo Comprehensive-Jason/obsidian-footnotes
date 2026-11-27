@@ -12,6 +12,12 @@
 # LICENSE-THIRD-PARTY.md: a pull request that changes what main.js bundles
 # needs the notices table updated by hand.
 #
+# The grouped pull request merges itself once CI passes; the others wait for
+# Jason (workflows/dependabot-auto-merge.yml, 2026-11-26). This repo is a
+# GitHub fork, and GitHub runs version updates on a fork only after its owner
+# turns them on in Settings, Advanced Security, so none ran from 2026-11-10
+# until that was done.
+#
 # The obsidian typings and the CodeMirror packages stay at what the oldest
 # supported Obsidian (minAppVersion in manifest.json) ships, so the compiler
 # rejects an API those users lack; they move by hand when minAppVersion moves
@@ -23,6 +29,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # A release has to be 3 days old before Dependabot offers it, so a burst
+    # of quick fixes (remark-obsidian 2.2.3 and 2.2.4 came out the same day)
+    # arrives as one update. Security fixes skip the wait.
+    cooldown:
+      default-days: 3
     ignore:
       - dependency-name: "obsidian"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]

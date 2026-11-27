@@ -1,0 +1,42 @@
+# Merges Dependabot's weekly dev-tooling pull request by itself once CI
+# passes (Jason chose this, 2026-11-26). It acts only on the
+# "everything-else" group from dependabot.yml, which holds minor and patch
+# releases and leaves out remark-obsidian. Every other Dependabot pull
+# request waits for Jason: remark-obsidian, since a parser release can change
+# how notes are read and needs LICENSE-THIRD-PARTY.md updated; any major
+# release; and security fixes, which Dependabot opens outside the groups.
+#
+# The workflow only turns on GitHub's auto-merge. GitHub then merges when
+# the "Require CI before merging PRs" ruleset is satisfied, so a pull request
+# whose CI fails stays open.
+#
+# pull_request_target runs this file as it stands on master, with a token
+# that can merge. It never checks out the pull request's code, which is what
+# keeps that token away from anything a dependency could run.
+name: Dependabot auto-merge
+
+on: pull_request_target
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'Comprehensive-Jason/obsidian-footnotes'
+    steps:
+      - name: Read what the pull request updates
+        id: metadata
+        # pinned to the v3.1.0 commit, since this step runs with a token
+        # that can merge
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Turn on auto-merge for the dev-tooling group
+        if: steps.metadata.outputs.dependency-group == 'everything-else' && steps.metadata.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
