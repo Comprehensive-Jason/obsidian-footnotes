@@ -22,7 +22,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@quartz-community/remark-obsidian": "2.2.5"
+    "@quartz-community/remark-obsidian": "2.2.6"
   },
   "devDependencies": {
     "@codemirror/state": "^6.5.0",
