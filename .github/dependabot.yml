@@ -16,13 +16,19 @@
 # Jason (workflows/dependabot-auto-merge.yml, 2026-11-26). This repo is a
 # GitHub fork, and GitHub runs version updates on a fork only after its owner
 # turns them on in Settings, Advanced Security, so none ran from 2026-11-10
-# until that was done.
+# until Jason did, on 2026-11-26.
 #
 # The obsidian typings and the CodeMirror packages stay at what the oldest
 # supported Obsidian (minAppVersion in manifest.json) ships, so the compiler
 # rejects an API those users lack; they move by hand when minAppVersion moves
-# (Jason, 2026-11-10). @types/node stays on the Node that CI runs (22); the
-# plugin's own code uses no Node API.
+# (Jason, 2026-11-10). The CodeMirror packages are skipped even for patch
+# releases, because the obsidian typings require their exact versions and npm
+# refuses any other (pull request #70, 2026-11-27). @types/node stays on the
+# Node that CI runs (22); the plugin's own code uses no Node API.
+#
+# TypeScript stays on 6 until typescript-eslint supports 7: it accepts only
+# TypeScript below 6.1, so npm refuses to install 7 beside it (pull request
+# #71; Jason, 2026-11-27).
 version: 2
 updates:
   - package-ecosystem: "npm"
@@ -38,8 +44,9 @@ updates:
       - dependency-name: "obsidian"
         update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "@codemirror/*"
-        update-types: ["version-update:semver-minor", "version-update:semver-major"]
       - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
     groups:
       # remark-obsidian is left out of the group, so it gets its own PR
